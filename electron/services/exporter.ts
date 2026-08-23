@@ -1,5 +1,5 @@
 // 将生成结果导出为 Markdown 文件
-import { dialog } from 'electron'
+import { BrowserWindow, dialog } from 'electron'
 import fs from 'node:fs'
 import type { FollowUp, InterviewResult } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
@@ -69,14 +69,20 @@ export function resultToMarkdown(result: InterviewResult): string {
   return lines.join('\n')
 }
 
-/** 弹出保存对话框并写入文件 */
-export async function exportMarkdownDialog(result: InterviewResult): Promise<{ ok: boolean; path?: string; message: string }> {
+/** 弹出保存对话框并写入文件（挂父窗口成为应用模态，与 issue #1 同类问题的预防性修复） */
+export async function exportMarkdownDialog(
+  result: InterviewResult,
+  parent?: BrowserWindow
+): Promise<{ ok: boolean; path?: string; message: string }> {
   const defaultName = `${result.projectName}-面试题-${new Date(result.createdAt).toISOString().slice(0, 10)}.md`
-  const { canceled, filePath } = await dialog.showSaveDialog({
+  const options: Electron.SaveDialogOptions = {
     title: '导出面试题为 Markdown',
     defaultPath: defaultName,
     filters: [{ name: 'Markdown', extensions: ['md'] }]
-  })
+  }
+  const { canceled, filePath } = parent
+    ? await dialog.showSaveDialog(parent, options)
+    : await dialog.showSaveDialog(options)
   if (canceled || !filePath) return { ok: false, message: '已取消导出' }
   try {
     fs.writeFileSync(filePath, resultToMarkdown(result), 'utf-8')

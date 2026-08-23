@@ -76,11 +76,15 @@ function send(channel: string, payload: unknown): void {
 
 // ---------- 对话框与项目 ----------
 
-ipcMain.handle(IPC.selectFolder, async (): Promise<string | null> => {
-  const r = await dialog.showOpenDialog({
+ipcMain.handle(IPC.selectFolder, async (e): Promise<string | null> => {
+  // 挂父窗口使对话框为应用模态：弹窗存在期间主窗口不可交互，
+  // 避免残留弹窗在其他页面完成选择后引发意外导航（见 issue #1）
+  const win = BrowserWindow.fromWebContents(e.sender)
+  const options: Electron.OpenDialogOptions = {
     title: '选择要分析的项目文件夹',
     properties: ['openDirectory']
-  })
+  }
+  const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
   return r.canceled || !r.filePaths.length ? null : r.filePaths[0]
 })
 
@@ -194,7 +198,9 @@ ipcMain.handle(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile)
 
 ipcMain.handle(IPC.llmListModels, (_e, profile: LlmProfile) => listModels(profile))
 
-ipcMain.handle(IPC.exportMarkdown, (_e, result: InterviewResult) => exportMarkdownDialog(result))
+ipcMain.handle(IPC.exportMarkdown, (e, result: InterviewResult) =>
+  exportMarkdownDialog(result, BrowserWindow.fromWebContents(e.sender) ?? undefined)
+)
 
 // 便于排查：开发模式下输出一条就绪日志
 console.log(`[ProjectLens] main ready, devUrl=${process.env['ELECTRON_RENDERER_URL'] ?? '(none)'}, randomId=${randomUUID().slice(0, 8)}`)

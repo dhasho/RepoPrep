@@ -40,9 +40,18 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
   }
 
   const chooseFolder = async () => {
+    // 防重入：对话框弹出前的窗口期内重复点击不应触发多次
+    if (opening) return
     setError('')
-    const path = await api.selectFolder()
-    if (path) await open(path)
+    setOpening('dialog')
+    try {
+      const path = await api.selectFolder()
+      if (path) await open(path)
+    } catch (e) {
+      setError(`打开项目失败：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setOpening(null)
+    }
   }
 
   const removeRecent = async (path: string) => {
@@ -69,8 +78,9 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
       )}
 
       <button
-        className="mt-8 flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-3.5 text-[15px] font-medium text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 active:scale-[0.98]"
+        className="mt-8 flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-3.5 text-[15px] font-medium text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
         onClick={chooseFolder}
+        disabled={opening === 'dialog'}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
