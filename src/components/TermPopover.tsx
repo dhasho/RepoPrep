@@ -1,0 +1,187 @@
+// 飞书风格名词解释弹卡：术语表解释 + AI 流式详细解释
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { api } from '../lib/ipc'
+import MarkdownView from './MarkdownView'
+
+export interface TermPopoverProps {
+  term: string
+  anchor: DOMRect
+  question: string
+  snippet: string
+  glossaryHint?: string
+  projectSummary: string
+  profileId: string
+  onClose: () => void
+}
+
+const POPOVER_WIDTH = 380
+
+export default function TermPopover(props: TermPopoverProps) {
+  const { term, anchor, question, snippet, glossaryHint, projectSummary, profileId, onClose } = props
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  const [explainState, setExplainState] = useState<'idle' | 'streaming' | 'done' | 'error'>('idle')
+  const [explainText, setExplainText] = useState('')
+  const [explainError, setExplainError] = useState('')
+  const requestIdRef = useRef('')
+
+  // 定位：优先显示在词条下方，空间不足放上方，最后夹在视口内
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const h = el.offsetHeight
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const left = Math.min(Math.max(anchor.left, 12), vw - POPOVER_WIDTH - 12)
+    let top = anchor.bottom + 10
+    if (top + h > vh - 12) top = Math.max(anchor.top - 10 - h, 12)
+    setPos({ left, top })
+  }, [anchor, explainState, explainText])
+
+  const startExplain = () => {
+    const requestId = crypto.randomUUID()
+    requestIdRef.current = requestId
+    setExplainText('')
+    setExplainError('')
+    setExplainState('streaming')
+    void api
+      .explain({ requestId, term, profileId, projectSummary, question, snippet, glossaryHint })
+      .catch((e) => {
+        setExplainError(e instanceof Error ? e.message : String(e))
+        setExplainState('error')
+      })
+  }
+
+  // 订阅流式事件
+  useEffect(() => {
+    const off = api.onExplainEvent((e) => {
+      if (e.requestId !== requestIdRef.current) return
+      if (e.type === 'delta') {
+        setExplainText((t) => t + e.data)
+      } else if (e.type === 'done') {
+        setExplainState('done')
+      } else {
+        setExplainError(e.data)
+        setExplainState('error')
+      }
+    })
+    return off
+  }, [])
+
+  // 无术语表解释时自动请求 AI 解释
+  useEffect(() => {
+    if (!glossaryHint) startExplain()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 关闭时机：外部点击 / Esc / 滚动（弹卡跟随不了滚动，直接关闭）
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    const onScroll = () => onClose()
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [onClose])
+
+  // 流式输出时自动滚到底部
+  useEffect(() => {
+    const el = contentRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [explainText])
+
+  const stopExplain = () => {
+    if (requestIdRef.current) void api.cancelExplain(requestIdRef.current)
+  }
+
+  return createPortal(
+    <div
+      ref={boxRef}
+      className="fixed z-50 flex max-h-[55vh] w-[380px] flex-col rounded-xl border border-slate-200 bg-white shadow-xl"
+      style={{
+        left: pos?.left ?? anchor.left,
+        top: pos?.top ?? anchor.bottom + 10,
+        visibility: pos ? 'visible' : 'hidden'
+      }}
+    >
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-xs rounded bg-indigo-50 px-1.5 py-0.5 font-medium text-indigo-600">名词</span>
+          <span className="truncate text-[15px] font-semibold text-slate-900">{term}</span>
+        </div>
+        <button className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" onClick={onClose} title="关闭">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {glossaryHint && (
+          <div className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[13px] leading-6 text-slate-600">
+            <span className="mr-1 font-medium text-slate-500">术语表：</span>
+            {glossaryHint}
+          </div>
+        )}
+
+        {explainState === 'idle' && (
+          <div className="py-2 text-center">
+            <button
+              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+              onClick={startExplain}
+            >
+              ✨ 让 AI 结合本项目详细解释
+            </button>
+          </div>
+        )}
+
+        {(explainState === 'streaming' || explainText) && explainState !== 'error' && (
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-400">AI 解释{explainState === 'streaming' ? '（生成中…）' : ''}</span>
+              {explainState === 'streaming' && (
+                <button className="text-xs text-slate-400 hover:text-slate-600" onClick={stopExplain}>
+                  停止
+                </button>
+              )}
+            </div>
+            <MarkdownView markdown={explainText || '…'} />
+            {explainState === 'done' && (
+              <button
+                className="mt-2 w-full rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+                onClick={startExplain}
+              >
+                重新解释
+              </button>
+            )}
+          </div>
+        )}
+
+        {explainState === 'error' && (
+          <div className="py-2 text-center text-sm text-rose-600">
+            <p className="mb-2">解释失败：{explainError}</p>
+            <button
+              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              onClick={startExplain}
+            >
+              重试
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
+}

@@ -1,0 +1,16 @@
+appId: com.projectlens.app
+productName: ProjectLens
+directories:
+  buildResources: build
+files:
+  - out/**
+  - "!**/node_modules/**/.*"
+  - package.json
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: ProjectLens
