@@ -1,8 +1,10 @@
 // 按颗粒度组装送入大模型的项目上下文（字符预算控制 + 细粒度分批）
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { Granularity } from '@shared/types'
+import type { Granularity } from '../../shared/types'
 import type { ScanResult } from './scanner'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
 
 // 字符预算：token ≈ 字符/3，以下数值对应约 20k–80k 输入 token，主流模型均可承受
 const BUDGET_CHARS: Record<Granularity, number> = {
@@ -28,6 +30,14 @@ export interface ContextFile {
   relPath: string
   content: string
   truncated: boolean
+  redacted: boolean
+  redactionMatches: number
+}
+
+export interface ContentSecuritySummary {
+  redactedFiles: number
+  redactionMatches: number
+  matchesByCategory: Partial<Record<SensitiveCategory, number>>
 }
 
 export interface ContextBatch {
@@ -39,6 +49,7 @@ export interface ContextBatch {
 export interface BuiltContext {
   headerText: string // 项目名 + 语言分布 + 文件树（每批都带）
   batches: ContextBatch[]
+  contentSecurity: ContentSecuritySummary
 }
 
 function scoreFile(relPath: string, size: number): number {
@@ -57,7 +68,24 @@ function scoreFile(relPath: string, size: number): number {
   return score
 }
 
-async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars: number): Promise<ContextFile[]> {
+interface PickedFiles {
+  files: ContextFile[]
+  contentSecurity: ContentSecuritySummary
+}
+
+function emptyContentSecurity(): ContentSecuritySummary {
+  return { redactedFiles: 0, redactionMatches: 0, matchesByCategory: {} }
+}
+
+function addContentSecurity(target: ContentSecuritySummary, source: ContentSecuritySummary): void {
+  target.redactedFiles += source.redactedFiles
+  target.redactionMatches += source.redactionMatches
+  for (const [category, count] of Object.entries(source.matchesByCategory) as Array<[SensitiveCategory, number]>) {
+    target.matchesByCategory[category] = (target.matchesByCategory[category] ?? 0) + count
+  }
+}
+
+async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars: number): Promise<PickedFiles> {
   const candidates = scan.files
     .filter((f) => f.isContentCandidate)
     .filter((f) => {
@@ -72,26 +100,42 @@ async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars
     .sort((a, b) => b.score - a.score)
 
   const out: ContextFile[] = []
+  const contentSecurity = emptyContentSecurity()
   let used = 0
   const headerReserve = 6000 // 预留文件树等头部文本
   for (const { f } of candidates) {
     if (used >= budgetChars - headerReserve) break
     try {
-      const content = await fs.readFile(f.absPath, 'utf-8')
+      // Redact before applying the budget: placeholders must be the only form
+      // of matched secrets that can enter ContextFile, batches, or renderBatch.
+      const redaction = redactSensitiveContent(await fs.readFile(f.absPath, 'utf-8'))
+      const content = redaction.content
       const remaining = budgetChars - headerReserve - used
+      if (remaining <= 0) break
       const truncated = content.length > remaining
+      const selectedContent = truncated ? content.slice(0, remaining) : content
       out.push({
         relPath: f.relPath,
-        content: truncated ? content.slice(0, remaining) : content,
-        truncated
+        content: selectedContent,
+        truncated,
+        redacted: redaction.totalMatches > 0,
+        redactionMatches: redaction.totalMatches
       })
-      used += Math.min(content.length, remaining)
+      used += selectedContent.length
+      if (redaction.totalMatches > 0) {
+        contentSecurity.redactedFiles++
+        contentSecurity.redactionMatches += redaction.totalMatches
+        for (const match of redaction.matches) {
+          contentSecurity.matchesByCategory[match.category] =
+            (contentSecurity.matchesByCategory[match.category] ?? 0) + match.count
+        }
+      }
       if (truncated) break
     } catch {
       /* 读取失败跳过 */
     }
   }
-  return out
+  return { files: out, contentSecurity }
 }
 
 export async function buildContext(scan: ScanResult, granularity: Granularity): Promise<BuiltContext> {
@@ -110,19 +154,25 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   ].join('\n')
 
   const batches: ContextBatch[] = []
+  const contentSecurity = emptyContentSecurity()
 
   if (granularity !== 'fine') {
-    const files = await pickFiles(scan, granularity, BUDGET_CHARS[granularity])
+    const picked = await pickFiles(scan, granularity, BUDGET_CHARS[granularity])
+    addContentSecurity(contentSecurity, picked.contentSecurity)
+    const files = picked.files
     batches.push({
       label: granularity === 'coarse' ? '项目整体分析' : '项目整体与核心模块分析',
       files,
       totalChars: files.reduce((a, f) => a + f.content.length, 0)
     })
-    return { headerText, batches }
+    return { headerText, batches, contentSecurity }
   }
 
   // 细粒度：全局批（文档+配置）+ 各模块批（按顶层目录分组）
-  const globalFiles = await pickFiles(scan, 'coarse', BUDGET_CHARS.fine)
+  // 全局批与模块批分别代表实际请求；同一文件若出现在多个批次，按请求次数分别计数。
+  const globalPicked = await pickFiles(scan, 'coarse', BUDGET_CHARS.fine)
+  addContentSecurity(contentSecurity, globalPicked.contentSecurity)
+  const globalFiles = globalPicked.files
   batches.push({
     label: '全局概览（架构与选型）',
     files: globalFiles,
@@ -151,7 +201,9 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     if (moduleBatches >= MAX_MODULE_BATCHES) break
     // 复用 pickFiles 的打分与预算逻辑：构造仅含该模块的临时 ScanResult 子集
     const subScan: ScanResult = { ...scan, files: groupFiles }
-    const files = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine)
+    const picked = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine)
+    addContentSecurity(contentSecurity, picked.contentSecurity)
+    const files = picked.files
     if (!files.length) continue
     moduleBatches++
     batches.push({
@@ -161,7 +213,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     })
   }
 
-  return { headerText, batches }
+  return { headerText, batches, contentSecurity }
 }
 
 /** 把批次渲染为完整的用户消息文本 */

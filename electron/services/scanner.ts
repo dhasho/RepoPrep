@@ -3,7 +3,9 @@ import fs from 'node:fs/promises'
 import fsSync from 'node:fs'
 import path from 'node:path'
 import ignore from 'ignore'
-import type { FileNode, KeyFileInfo, LanguageStat, ProjectOverview } from '@shared/types'
+import type { FileNode, KeyFileInfo, LanguageStat, ProjectOverview, SecurityProtectionSummary } from '../../shared/types'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { classifySensitivePath } from './sensitive.ts'
 
 /** 始终忽略的目录/文件（无论有没有 .gitignore） */
 const ALWAYS_IGNORE = [
@@ -107,6 +109,7 @@ export interface ScannedFile {
   size: number
   ext: string
   isContentCandidate: boolean // 是否可作为源码内容送入大模型
+  sensitive?: { category: string; reason: string }
 }
 
 export interface ScanResult extends ProjectOverview {
@@ -133,6 +136,7 @@ export async function scanProject(root: string): Promise<ScanResult> {
   const keyFiles: KeyFileInfo[] = []
   let totalBytes = 0
   let treeNodes = 0
+  const security: SecurityProtectionSummary = { excludedFiles: 0, redactedFiles: 0, redactionMatches: 0, categories: {} }
 
   async function walk(absDir: string, relDir: string, depth: number): Promise<FileNode[]> {
     let entries: fsSync.Dirent[]
@@ -170,13 +174,19 @@ export async function scanProject(root: string): Promise<ScanResult> {
 
         const ext = path.extname(entry.name).slice(1).toLowerCase()
         const isBinary = BINARY_EXT.has(ext)
+        const sensitive = classifySensitivePath(rel)
+        if (sensitive) {
+          security.excludedFiles++
+          security.categories[sensitive.category] = (security.categories[sensitive.category] ?? 0) + 1
+        }
         if (!isBinary) {
           const sf: ScannedFile = {
             relPath: rel,
             absPath: path.join(absDir, entry.name),
             size,
             ext,
-            isContentCandidate: size <= MAX_CONTENT_FILE_BYTES && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel))
+            isContentCandidate: !sensitive && size <= MAX_CONTENT_FILE_BYTES && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel)),
+            ...(sensitive ? { sensitive } : {})
           }
           files.push(sf)
           totalBytes += size
@@ -206,6 +216,7 @@ export async function scanProject(root: string): Promise<ScanResult> {
     languages,
     tree,
     keyFiles,
+    security,
     files
   }
 }
@@ -220,6 +231,7 @@ export function treeToText(node: FileNode, maxLines = 4000): string {
         lines.push(`${prefix}…（已截断）`)
         return
       }
+      if (classifySensitivePath(n.path)) continue
       if (n.type === 'dir') {
         lines.push(`${prefix}${n.name}/`)
         render(n.children ?? [], `${prefix}  `)

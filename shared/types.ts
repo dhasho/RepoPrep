@@ -50,6 +50,13 @@ export interface KeyFileInfo {
   reason: string
 }
 
+export interface SecurityProtectionSummary {
+  excludedFiles: number
+  redactedFiles: number
+  redactionMatches: number
+  categories: Record<string, number>
+}
+
 export interface ProjectOverview {
   root: string
   name: string
@@ -58,6 +65,7 @@ export interface ProjectOverview {
   languages: LanguageStat[]
   tree: FileNode
   keyFiles: KeyFileInfo[]
+  security: SecurityProtectionSummary
 }
 
 /** 追问（支持嵌套） */
@@ -93,6 +101,7 @@ export interface InterviewResult {
   projectSummary: string
   sections: Section[]
   glossary: Record<string, string>
+  security?: SecurityProtectionSummary
 }
 
 export interface RecentProject {

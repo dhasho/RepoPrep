@@ -167,6 +167,11 @@ export default function ResultPage({ result, settings, onRegenerate }: Props) {
                 <span>{result.modelUsed}</span>
                 <span>{new Date(result.createdAt).toLocaleString('zh-CN')}</span>
               </p>
+              {result.security && (result.security.excludedFiles > 0 || result.security.redactedFiles > 0) && (
+                <div className="mt-2 inline-flex rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                  安全保护：排除 {result.security.excludedFiles} / 脱敏 {result.security.redactedFiles} 文件（{result.security.redactionMatches} 处）
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 gap-2">
               <button

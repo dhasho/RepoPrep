@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test:security": "node --test --experimental-strip-types electron/services/sensitive.test.ts electron/services/security-integration.test.ts",
     "dist": "electron-vite build && electron-builder --win"
   },
   "dependencies": {

@@ -72,6 +72,11 @@ export default function ConfigurePage({ overview, existingResult, settings, onSt
                   ))}
                 </div>
               )}
+              {overview.security.excludedFiles > 0 && (
+                <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                  已安全排除 {overview.security.excludedFiles} 个敏感文件，不会读取或发送其内容
+                </div>
+              )}
             </div>
 
             <div>

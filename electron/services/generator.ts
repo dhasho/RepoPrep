@@ -225,7 +225,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   const treeText = treeToText(scan.tree)
   onProgress(
     '上下文就绪',
-    `${built.batches.length} 个分析批次，共 ${Math.round(built.batches.reduce((a, b) => a + b.totalChars, 0) / 1000)}k 字符`,
+    `${built.batches.length} 个分析批次，共 ${Math.round(built.batches.reduce((a, b) => a + b.totalChars, 0) / 1000)}k 字符；已排除 ${scan.security.excludedFiles} 个敏感文件，脱敏 ${built.contentSecurity.redactedFiles} 个文件（${built.contentSecurity.redactionMatches} 处）`,
     15
   )
 
@@ -274,7 +274,21 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     modelUsed: `${profile.name} / ${profile.model}`,
     projectSummary: merged.projectSummary,
     sections: merged.sections,
-    glossary: merged.glossary
+    glossary: merged.glossary,
+    security: {
+      excludedFiles: scan.security.excludedFiles,
+      redactedFiles: built.contentSecurity.redactedFiles,
+      redactionMatches: built.contentSecurity.redactionMatches,
+      categories: Object.fromEntries([
+        ...Object.entries(scan.security.categories),
+        ...Object.entries(built.contentSecurity.matchesByCategory)
+      ].reduce((entries, [category, count]) => {
+        const existing = entries.find(([name]) => name === category)
+        if (existing) existing[1] += Number(count)
+        else entries.push([category, Number(count)])
+        return entries
+      }, [] as Array<[string, number]>))
+    }
   }
   onProgress('完成', undefined, 100)
   return result
