@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
 import type { ExplainRequest, GenerateOptions, InterviewResult, LlmProfile, Settings } from '@shared/types'
-import { scanProject, type ScanResult } from './services/scanner'
+import { ProjectScanCache } from './services/scan-cache'
 import { generateInterview, buildExplainMessages } from './services/generator'
 import { chatCompletionStream, listModels, testConnection } from './services/llm'
 import { exportMarkdownDialog } from './services/exporter'
@@ -142,11 +142,10 @@ handle(IPC.selectFolder, async (e): Promise<string | null> => {
   return selectedPath
 })
 
-const scanCache = new Map<string, ScanResult>()
+const scanCache = new ProjectScanCache()
 
 handle(IPC.scanProject, async (_e, projectPath: string) => {
-  const scan = await scanProject(projectPath)
-  scanCache.set(projectPath, scan)
+  const { scan } = await scanCache.refresh(projectPath)
   addRecentProject({ path: projectPath, name: scan.name })
   return scan
 })
@@ -157,9 +156,11 @@ handle(IPC.recentProjects, () => {
   return recent
 })
 
-handle(IPC.removeRecent, (_e, projectPath: string) => {
-  removeRecentProject(projectPath)
+handle(IPC.removeRecent, async (_e, projectPath: string) => {
+  await removeRecentProject(projectPath)
+  // 撤销授权与显式失效缓存必须一起做：否则被移除的项目仍可复用旧扫描结果。
   authorizedProjects.removeRecent(projectPath)
+  await scanCache.invalidate(projectPath)
 })
 
 handle(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
@@ -174,17 +175,30 @@ let currentGenerateAbort: AbortController | null = null
 
 handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
   if (currentGenerateAbort) throw new Error('已有生成任务在进行中')
-  const settings = getSettings()
-  const profile = settings.profiles.find((p) => p.id === options.profileId)
-  if (!profile) throw new Error('未找到指定的大模型配置，请先到设置页完成配置')
-
-  const scan = scanCache.get(options.projectPath) ?? (await scanProject(options.projectPath))
   const abort = new AbortController()
   currentGenerateAbort = abort
 
   try {
+    const settings = getSettings()
+    const profile = settings.profiles.find((p) => p.id === options.profileId)
+    if (!profile) throw new Error('未找到指定的大模型配置，请先到设置页完成配置')
+
+    send(IPC.generateProgress, { step: '校验项目扫描', detail: '检查项目扫描缓存', percent: 2 })
+    const cached = await scanCache.getFresh(options.projectPath)
+    if (abort.signal.aborted) throw new Error('已取消生成')
+    const scanDetail = cached.status === 'reused'
+      ? '使用未变化的项目扫描结果'
+      : cached.reason === 'changed'
+        ? '检测到项目文件变化，重新扫描'
+        : '没有可复用的扫描结果，重新扫描'
+    send(IPC.generateProgress, {
+      step: cached.status === 'reused' ? '复用扫描缓存' : '重新扫描项目',
+      detail: scanDetail,
+      percent: 5
+    })
+
     const result = await generateInterview({
-      scan,
+      scan: cached.scan,
       granularity: options.granularity,
       roleFocus: options.roleFocus,
       profile,
@@ -192,7 +206,7 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
       onProgress: (step, detail, percent) => send(IPC.generateProgress, { step, detail, percent })
     })
     saveResult(options.projectPath, result)
-    addRecentProject({ path: options.projectPath, name: scan.name, granularity: options.granularity })
+    addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
     return result
   } catch (err) {
     if (abort.signal.aborted) throw new Error('已取消生成')

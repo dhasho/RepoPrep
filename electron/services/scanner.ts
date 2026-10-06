@@ -5,6 +5,8 @@ import path from 'node:path'
 import ignore from 'ignore'
 import type { FileNode, KeyFileInfo, LanguageStat, ProjectOverview, SecurityProtectionSummary } from '../../shared/types'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { recordProjectSnapshot, resolveProjectIdentity, type ProjectSnapshot, type SnapshotEntry } from './project-snapshot.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { classifySensitivePath } from './sensitive.ts'
 
 /** 始终忽略的目录/文件（无论有没有 .gitignore） */
@@ -119,15 +121,26 @@ export interface ScanResult extends ProjectOverview {
 export async function scanProject(root: string): Promise<ScanResult> {
   const rootStat = await fs.stat(root)
   if (!rootStat.isDirectory()) throw new Error('所选路径不是目录')
+  const snapshotEntries: SnapshotEntry[] = [{ path: '', type: 'dir', size: rootStat.size, mtimeMs: rootStat.mtimeMs, ctimeMs: rootStat.ctimeMs }]
+  let snapshotValid = true
 
   // 解析根目录 .gitignore
   const ig = ignore().add(ALWAYS_IGNORE)
   const gitignorePath = path.join(root, '.gitignore')
+  try {
+    const ignoreStat = await fs.stat(gitignorePath)
+    if (!ignoreStat.isFile()) snapshotValid = false
+    snapshotEntries.push({ path: '.gitignore', type: 'file', size: ignoreStat.size, mtimeMs: ignoreStat.mtimeMs, ctimeMs: ignoreStat.ctimeMs })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') snapshotEntries.push({ path: '.gitignore', type: 'missing' })
+    else snapshotValid = false
+  }
   if (fsSync.existsSync(gitignorePath)) {
     try {
       ig.add(await fs.readFile(gitignorePath, 'utf-8'))
     } catch {
-      /* 解析失败则忽略 */
+      snapshotValid = false
+      /* 解析失败则忽略；快照不可缓存，因为实际忽略策略不确定 */
     }
   }
 
@@ -139,11 +152,23 @@ export async function scanProject(root: string): Promise<ScanResult> {
   const security: SecurityProtectionSummary = { excludedFiles: 0, redactedFiles: 0, redactionMatches: 0, categories: {} }
 
   async function walk(absDir: string, relDir: string, depth: number): Promise<FileNode[]> {
+    let dirStat: Awaited<ReturnType<typeof fs.stat>>
+    try {
+      dirStat = await fs.stat(absDir)
+      if (!dirStat.isDirectory()) { snapshotValid = false; return [] }
+    } catch { snapshotValid = false; return [] }
     let entries: fsSync.Dirent[]
     try {
       entries = await fs.readdir(absDir, { withFileTypes: true })
     } catch {
+      snapshotValid = false
       return [] // 无权限等错误直接跳过
+    }
+    const names = entries.map((entry) => entry.name).sort()
+    if (relDir === '') {
+      snapshotEntries[0].names = names
+    } else {
+      snapshotEntries.push({ path: relDir, type: 'dir', size: dirStat.size, mtimeMs: dirStat.mtimeMs, ctimeMs: dirStat.ctimeMs, names })
     }
     const nodes: FileNode[] = []
     // 目录优先、其余按名称排序，保证树稳定
@@ -163,12 +188,15 @@ export async function scanProject(root: string): Promise<ScanResult> {
         const children = await walk(path.join(absDir, entry.name), rel, depth + 1)
         nodes.push({ name: entry.name, path: rel, type: 'dir', children })
       } else if (entry.isFile()) {
-        let size = 0
+        let fileStat: Awaited<ReturnType<typeof fs.stat>>
         try {
-          size = (await fs.stat(path.join(absDir, entry.name))).size
+          fileStat = await fs.stat(path.join(absDir, entry.name))
         } catch {
+          snapshotValid = false
           continue
         }
+        const size = fileStat.size
+        snapshotEntries.push({ path: rel, type: 'file', size, mtimeMs: fileStat.mtimeMs, ctimeMs: fileStat.ctimeMs })
         treeNodes++
         nodes.push({ name: entry.name, path: rel, type: 'file', size })
 
@@ -208,7 +236,7 @@ export async function scanProject(root: string): Promise<ScanResult> {
     .sort((a, b) => b.files - a.files)
     .slice(0, 10)
 
-  return {
+  const result: ScanResult = {
     root,
     name: path.basename(root),
     totalFiles: files.length,
@@ -219,6 +247,13 @@ export async function scanProject(root: string): Promise<ScanResult> {
     security,
     files
   }
+  try {
+    const snapshot: ProjectSnapshot = { identity: await resolveProjectIdentity(root), entries: snapshotEntries, valid: snapshotValid }
+    recordProjectSnapshot(result, snapshot)
+  } catch {
+    recordProjectSnapshot(result, { identity: { realPath: root, key: root }, entries: snapshotEntries, valid: false })
+  }
+  return result
 }
 
 /** 将文件树渲染为缩进文本（供大模型阅读） */
