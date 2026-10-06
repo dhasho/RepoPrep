@@ -1,6 +1,7 @@
 // Electron 主进程：窗口管理 + IPC 注册
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
 import type { ExplainRequest, GenerateOptions, InterviewResult, LlmProfile, Settings } from '@shared/types'
@@ -8,6 +9,7 @@ import { scanProject, type ScanResult } from './services/scanner'
 import { generateInterview, buildExplainMessages } from './services/generator'
 import { chatCompletionStream, listModels, testConnection } from './services/llm'
 import { exportMarkdownDialog } from './services/exporter'
+import { getTrustedDevUrl, installPermissionDenials, installWindowSecurity, isTrustedIpcSender } from './window-security'
 import {
   addRecentProject,
   deleteResult,
@@ -22,6 +24,27 @@ import {
 process.on('uncaughtException', (err) => console.error('[main] uncaughtException:', err))
 
 let mainWindow: BrowserWindow | null = null
+let trustedAppEntryUrl: string | null = null
+
+function handleTrustedIpc(
+  channel: string,
+  handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown
+): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    const senderFrame = event.senderFrame
+    if (
+      !isTrustedIpcSender(
+        event.sender === mainWindow?.webContents,
+        !!senderFrame && senderFrame === event.sender.mainFrame,
+        senderFrame?.url ?? null,
+        trustedAppEntryUrl
+      )
+    ) {
+      throw new Error('拒绝来自非可信页面或子框架的 IPC 请求')
+    }
+    return handler(event, ...args)
+  })
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -34,9 +57,10 @@ function createWindow(): void {
     title: 'ProjectLens',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webviewTag: false
     }
   })
   mainWindow.on('ready-to-show', () => mainWindow?.show())
@@ -52,14 +76,33 @@ function createWindow(): void {
   })
 
   // electron-vite：开发模式加载 dev server，生产加载打包产物
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  const entryPath = path.join(__dirname, '../renderer/index.html')
+  const localEntryUrl = pathToFileURL(entryPath).href
+  let entryUrl = localEntryUrl
+  try {
+    entryUrl = getTrustedDevUrl(process.env['ELECTRON_RENDERER_URL'], app.isPackaged) ?? localEntryUrl
+  } catch (error) {
+    // 回退本身是安全的（不信任不合规的 URL），但静默回退会让 `npm run dev` 表现成
+    // 白屏或加载到过期的构建产物。这里在未打包时把配置错误直接弹出来，避免开发
+    // 者把“配置写错”误判成“dev 环境坏了”。
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[ProjectLens] ${message}; 已回退至本地页面`)
+    if (!app.isPackaged) {
+      // 诊断提示本身不能成为新的失败点：弹窗失败也必须继续创建窗口。
+      try {
+        dialog.showErrorBox('ELECTRON_RENDERER_URL 不被信任', `已回退至本地页面。\n\n${message}`)
+      } catch (dialogError) {
+        console.error('[ProjectLens] 无法显示配置错误提示:', dialogError)
+      }
+    }
   }
+  trustedAppEntryUrl = entryUrl
+  installWindowSecurity(mainWindow, entryUrl)
+  void mainWindow.loadURL(entryUrl)
 }
 
 app.whenReady().then(() => {
+  installPermissionDenials(session.defaultSession)
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -76,7 +119,7 @@ function send(channel: string, payload: unknown): void {
 
 // ---------- 对话框与项目 ----------
 
-ipcMain.handle(IPC.selectFolder, async (e): Promise<string | null> => {
+handleTrustedIpc(IPC.selectFolder, async (e): Promise<string | null> => {
   // 挂父窗口使对话框为应用模态：弹窗存在期间主窗口不可交互，
   // 避免残留弹窗在其他页面完成选择后引发意外导航（见 issue #1）
   const win = BrowserWindow.fromWebContents(e.sender)
@@ -90,22 +133,22 @@ ipcMain.handle(IPC.selectFolder, async (e): Promise<string | null> => {
 
 const scanCache = new Map<string, ScanResult>()
 
-ipcMain.handle(IPC.scanProject, async (_e, projectPath: string) => {
+handleTrustedIpc(IPC.scanProject, async (_e, projectPath: string) => {
   const scan = await scanProject(projectPath)
   scanCache.set(projectPath, scan)
   addRecentProject({ path: projectPath, name: scan.name })
   return scan
 })
 
-ipcMain.handle(IPC.recentProjects, () => getRecentProjects())
+handleTrustedIpc(IPC.recentProjects, () => getRecentProjects())
 
-ipcMain.handle(IPC.removeRecent, (_e, projectPath: string) => {
+handleTrustedIpc(IPC.removeRecent, (_e, projectPath: string) => {
   removeRecentProject(projectPath)
 })
 
-ipcMain.handle(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
+handleTrustedIpc(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
 
-ipcMain.handle(IPC.deleteResult, (_e, projectPath: string) => {
+handleTrustedIpc(IPC.deleteResult, (_e, projectPath: string) => {
   deleteResult(projectPath)
 })
 
@@ -113,7 +156,7 @@ ipcMain.handle(IPC.deleteResult, (_e, projectPath: string) => {
 
 let currentGenerateAbort: AbortController | null = null
 
-ipcMain.handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
+handleTrustedIpc(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
   if (currentGenerateAbort) throw new Error('已有生成任务在进行中')
   const settings = getSettings()
   const profile = settings.profiles.find((p) => p.id === options.profileId)
@@ -143,7 +186,7 @@ ipcMain.handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<In
   }
 })
 
-ipcMain.handle(IPC.generateCancel, () => {
+handleTrustedIpc(IPC.generateCancel, () => {
   currentGenerateAbort?.abort()
 })
 
@@ -151,7 +194,7 @@ ipcMain.handle(IPC.generateCancel, () => {
 
 const explainAborts = new Map<string, AbortController>()
 
-ipcMain.handle(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
+handleTrustedIpc(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
   const settings = getSettings()
   const profile = settings.profiles.find((p) => p.id === req.profileId)
   if (!profile) {
@@ -182,23 +225,23 @@ ipcMain.handle(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> 
   }
 })
 
-ipcMain.handle(IPC.explainCancel, (_e, requestId: string) => {
+handleTrustedIpc(IPC.explainCancel, (_e, requestId: string) => {
   explainAborts.get(requestId)?.abort()
 })
 
 // ---------- 设置与工具 ----------
 
-ipcMain.handle(IPC.settingsGet, () => getSettings())
+handleTrustedIpc(IPC.settingsGet, () => getSettings())
 
-ipcMain.handle(IPC.settingsSave, (_e, settings: Settings) => {
+handleTrustedIpc(IPC.settingsSave, (_e, settings: Settings) => {
   saveSettings(settings)
 })
 
-ipcMain.handle(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile))
+handleTrustedIpc(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile))
 
-ipcMain.handle(IPC.llmListModels, (_e, profile: LlmProfile) => listModels(profile))
+handleTrustedIpc(IPC.llmListModels, (_e, profile: LlmProfile) => listModels(profile))
 
-ipcMain.handle(IPC.exportMarkdown, (e, result: InterviewResult) =>
+handleTrustedIpc(IPC.exportMarkdown, (e, result: InterviewResult) =>
   exportMarkdownDialog(result, BrowserWindow.fromWebContents(e.sender) ?? undefined)
 )
 
