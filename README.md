@@ -20,11 +20,31 @@ Electron 桌面应用：选择本地项目文件夹，AI 面试官通读代码�
 
 ## 快速开始
 
+> 需要 Node.js **>= 22.12.0**（Electron 42 与 Vite 7 的下限，已写入 `package.json` 的 `engines`）。
+
 ```bash
-npm install    # 首次安装（已配置 npmmirror 的 Electron 镜像）
+npm install    # 首次安装（约 620 个包，不含 Electron 二进制）
 npm run dev    # 开发模式（热更新）
 npm run build  # 生产构建（输出到 out/）
 npm run dist   # 打包 Windows 安装包（electron-builder）
+```
+
+> **注意**：Electron 42 起官方不再通过 `postinstall` 下载二进制。二进制会在**首次通过
+> Electron CLI 运行**时（`npm run dev`、`npm run test:smoke`、`npx electron .`）自动下载，
+> 体积约 142MB，缓存在 `%LOCALAPPDATA%\electron\Cache` 供后续复用，因此只需下载一次。
+> `npm run dist` 的下载是另一条路径（由 electron-builder 管理），与上面的缓存无关。
+> `npm run build` 与 `npm run typecheck` 不需要该二进制。
+> 如需提前下载：`node node_modules/electron/install.js`
+
+自检与测试：
+
+```bash
+npm run typecheck      # TypeScript 类型检查
+npm run test:security  # 敏感信息过滤 + 窗口安全策略（含构建产物 CSP 断言）
+npm run test:ipc       # IPC 发送方校验 / 运行时 schema / 项目授权
+npm run test:scan-cache# 扫描缓存与快照校验
+npm run test:smoke     # 构建产物冒烟：窗口能否加载、React 能否渲染、IPC 能否往返
+npm run audit:deps     # 依赖公告审计（查 GitHub Advisory，需 gh CLI 已登录）
 ```
 
 打包后直接运行：`npx electron .`
@@ -51,10 +71,24 @@ npm run dist   # 打包 Windows 安装包（electron-builder）
 │       ├── exporter.ts         # Markdown 导出（保存对话框）
 │       └── store.ts            # 设置与结果持久化（userData 目录）
 ├── shared/                 # 主进程/渲染进程共享类型与 IPC 契约
+├── tests/
+│   ├── security.test.mjs   # 窗口安全策略与构建产物 CSP 断言
+│   └── smoke.cjs           # 构建产物冒烟（窗口加载 / React 渲染 / IPC 往返）
 └── src/                    # React 渲染进程
     ├── pages/              # 选择项目 / 配置 / 生成中 / 结果 / 设置
     └── components/         # MarkdownView（[[名词]]→下划线词条）、TermPopover（解释弹卡）等
 ```
+
+工具链版本（升级策略与残留风险见 [docs/toolchain-upgrade.md](docs/toolchain-upgrade.md)）：
+
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| Electron | 42.x | 官方支持最近 3 个稳定大版本（当前 44/43/42） |
+| electron-builder | 26.x | 打包链 |
+| electron-vite | 5.x | 构建编排 |
+| Vite | 7.x | electron-vite 5 的 peer 上限是 Vite 7，暂不能升到 8 |
+| TypeScript | 5.9.x | 暂不升 TS 7（原生编译器为独立大版本） |
+| @types/node | 24.x | 对齐 Electron 42 内嵌的 Node 24 |
 
 关键设计：
 
@@ -67,4 +101,13 @@ npm run dist   # 打包 Windows 安装包（electron-builder）
 
 - **模型输出的 JSON 解析失败**：应用会自动重试一次；仍失败请换用能力更强的模型（如 deepseek-chat / GLM-4 系列）
 - **大项目生成慢**：细粒度会分批多次调用；可先用粗/中粒度出稿，再针对重点模块单独细分析
-- **Electron 下载慢**：项目 `.npmrc` 已配置 npmmirror 镜像；如仍失败可手动执行 `cd node_modules/electron && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js`
+- **Electron 二进制下载慢或失败**：用官方支持的环境变量指定镜像。项目 `.npmrc` 里刻意不再写
+  `electron_mirror` 这类旧式配置 —— 它们目前仍生效，但 npm 提示下个大版本起失效，留着会变成静默失效：
+  ```bash
+  # Windows PowerShell
+  $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+  node node_modules/electron/install.js
+  ```
+  打包时若还需下载 electron-builder 的辅助二进制，同理设置 `ELECTRON_BUILDER_BINARIES_MIRROR`
+- **`npm audit` 报 registry 错误**：本机若使用第三方 registry，其安全公告接口可能未实现；可临时指定官方源：
+  `npm audit --registry=https://registry.npmjs.org/`
