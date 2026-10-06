@@ -87,7 +87,7 @@ export async function exportMarkdownDialog(
   try {
     fs.writeFileSync(filePath, resultToMarkdown(result), 'utf-8')
     return { ok: true, path: filePath, message: `已导出到 ${filePath}` }
-  } catch (err) {
-    return { ok: false, message: `导出失败：${err instanceof Error ? err.message : String(err)}` }
+  } catch {
+    return { ok: false, message: '导出失败，请检查目标位置是否可写并重试。' }
   }
 }

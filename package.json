@@ -11,6 +11,7 @@
     "preview": "electron-vite preview",
     "test:security": "npm run build && node --test --experimental-strip-types tests/security.test.mjs electron/services/sensitive.test.ts electron/services/security-integration.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test:ipc": "node --experimental-strip-types --test electron/services/ipc-validation.test.ts electron/services/ipc-authority.test.ts electron/services/ipc-handler-guards.test.ts electron/services/llm-safe-results.test.ts",
     "dist": "electron-vite build && electron-builder --win"
   },
   "dependencies": {

@@ -65,16 +65,9 @@ export function isAllowedAppUrl(candidate: string, appEntryUrl: string): boolean
     actual.search === expected.search
 }
 
-/** Pure sender policy shared by IPC registration and unit tests. */
-export function isTrustedIpcSender(
-  isMainWindow: boolean,
-  isMainFrame: boolean,
-  senderFrameUrl: string | null,
-  appEntryUrl: string | null
-): boolean {
-  return isMainWindow && isMainFrame && !!senderFrameUrl && !!appEntryUrl &&
-    isAllowedAppUrl(senderFrameUrl, appEntryUrl)
-}
+// IPC 发送方判定不在这里：它已经统一到 services/ipc-authority.ts 的
+// assertTrustedIpcSender / isTrustedIpcSender，与通道白名单、运行时 schema 和项目授权
+// 同处一层守卫（见 services/ipc-handler-guards.ts）。本模块只负责窗口与导航本身的策略。
 
 export function installWindowSecurity(window: BrowserWindow, appEntryUrl: string): void {
   const contents: WebContents = window.webContents

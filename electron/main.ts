@@ -9,7 +9,7 @@ import { scanProject, type ScanResult } from './services/scanner'
 import { generateInterview, buildExplainMessages } from './services/generator'
 import { chatCompletionStream, listModels, testConnection } from './services/llm'
 import { exportMarkdownDialog } from './services/exporter'
-import { getTrustedDevUrl, installPermissionDenials, installWindowSecurity, isTrustedIpcSender } from './window-security'
+import { getTrustedDevUrl, installPermissionDenials, installWindowSecurity } from './window-security'
 import {
   addRecentProject,
   deleteResult,
@@ -20,30 +20,35 @@ import {
   saveResult,
   saveSettings
 } from './services/store'
+import { AuthorizedProjectRegistry } from './services/ipc-authority'
+import { ExplainAbortRegistry, registerGuardedIpcHandler } from './services/ipc-handler-guards'
 
 process.on('uncaughtException', (err) => console.error('[main] uncaughtException:', err))
 
 let mainWindow: BrowserWindow | null = null
+/** 由 createWindow 在确定入口后写入；null 表示还没有可信入口，此时拒绝一切 IPC。 */
 let trustedAppEntryUrl: string | null = null
+const authorizedProjects = new AuthorizedProjectRegistry()
 
-function handleTrustedIpc(
+/**
+ * 注册 IPC handler。发送方校验、运行时 schema 校验与项目授权都在
+ * registerGuardedIpcHandler 这一层完成，这里不再单独包一层守卫。
+ * 信任入口由 trustedAppEntryUrl 提供，因此窗口安全策略只有一处定义。
+ */
+function handle(
   channel: string,
-  handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown
+  listener: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown
 ): void {
-  ipcMain.handle(channel, (event, ...args) => {
-    const senderFrame = event.senderFrame
-    if (
-      !isTrustedIpcSender(
-        event.sender === mainWindow?.webContents,
-        !!senderFrame && senderFrame === event.sender.mainFrame,
-        senderFrame?.url ?? null,
-        trustedAppEntryUrl
-      )
-    ) {
-      throw new Error('拒绝来自非可信页面或子框架的 IPC 请求')
-    }
-    return handler(event, ...args)
-  })
+  registerGuardedIpcHandler(
+    ipcMain,
+    channel,
+    {
+      getExpectedWebContents: () => mainWindow?.webContents ?? null,
+      getTrustedRendererUrl: () => trustedAppEntryUrl,
+      projects: authorizedProjects
+    },
+    listener
+  )
 }
 
 function createWindow(): void {
@@ -96,6 +101,7 @@ function createWindow(): void {
       }
     }
   }
+  // 先确定信任入口再建页面：窗口一旦开始加载，IPC 守卫就必须能拿到它。
   trustedAppEntryUrl = entryUrl
   installWindowSecurity(mainWindow, entryUrl)
   void mainWindow.loadURL(entryUrl)
@@ -103,6 +109,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   installPermissionDenials(session.defaultSession)
+  // 最近项目在启动时登记，使 refresh 后直接打开历史项目也能通过授权检查。
+  authorizedProjects.registerRecent(getRecentProjects().map((project) => project.path))
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -119,7 +127,7 @@ function send(channel: string, payload: unknown): void {
 
 // ---------- 对话框与项目 ----------
 
-handleTrustedIpc(IPC.selectFolder, async (e): Promise<string | null> => {
+handle(IPC.selectFolder, async (e): Promise<string | null> => {
   // 挂父窗口使对话框为应用模态：弹窗存在期间主窗口不可交互，
   // 避免残留弹窗在其他页面完成选择后引发意外导航（见 issue #1）
   const win = BrowserWindow.fromWebContents(e.sender)
@@ -128,27 +136,35 @@ handleTrustedIpc(IPC.selectFolder, async (e): Promise<string | null> => {
     properties: ['openDirectory']
   }
   const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
-  return r.canceled || !r.filePaths.length ? null : r.filePaths[0]
+  if (r.canceled || !r.filePaths.length) return null
+  const selectedPath = r.filePaths[0]
+  authorizedProjects.registerSelected(selectedPath)
+  return selectedPath
 })
 
 const scanCache = new Map<string, ScanResult>()
 
-handleTrustedIpc(IPC.scanProject, async (_e, projectPath: string) => {
+handle(IPC.scanProject, async (_e, projectPath: string) => {
   const scan = await scanProject(projectPath)
   scanCache.set(projectPath, scan)
   addRecentProject({ path: projectPath, name: scan.name })
   return scan
 })
 
-handleTrustedIpc(IPC.recentProjects, () => getRecentProjects())
-
-handleTrustedIpc(IPC.removeRecent, (_e, projectPath: string) => {
-  removeRecentProject(projectPath)
+handle(IPC.recentProjects, () => {
+  const recent = getRecentProjects()
+  authorizedProjects.registerRecent(recent.map((project) => project.path))
+  return recent
 })
 
-handleTrustedIpc(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
+handle(IPC.removeRecent, (_e, projectPath: string) => {
+  removeRecentProject(projectPath)
+  authorizedProjects.removeRecent(projectPath)
+})
 
-handleTrustedIpc(IPC.deleteResult, (_e, projectPath: string) => {
+handle(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
+
+handle(IPC.deleteResult, (_e, projectPath: string) => {
   deleteResult(projectPath)
 })
 
@@ -156,7 +172,7 @@ handleTrustedIpc(IPC.deleteResult, (_e, projectPath: string) => {
 
 let currentGenerateAbort: AbortController | null = null
 
-handleTrustedIpc(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
+handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
   if (currentGenerateAbort) throw new Error('已有生成任务在进行中')
   const settings = getSettings()
   const profile = settings.profiles.find((p) => p.id === options.profileId)
@@ -186,23 +202,23 @@ handleTrustedIpc(IPC.generateRun, async (_e, options: GenerateOptions): Promise<
   }
 })
 
-handleTrustedIpc(IPC.generateCancel, () => {
+handle(IPC.generateCancel, () => {
   currentGenerateAbort?.abort()
 })
 
 // ---------- 名词 AI 解释（流式） ----------
 
-const explainAborts = new Map<string, AbortController>()
+const explainAborts = new ExplainAbortRegistry()
 
-handleTrustedIpc(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
+handle(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
   const settings = getSettings()
   const profile = settings.profiles.find((p) => p.id === req.profileId)
   if (!profile) {
     send(IPC.explainEvent, { requestId: req.requestId, type: 'error', data: '未找到大模型配置' })
     return
   }
-  const abort = new AbortController()
-  explainAborts.set(req.requestId, abort)
+  const abort = explainAborts.begin(req.requestId)
+  if (!abort) throw new Error('已有相同名词解释请求在进行中')
   try {
     await chatCompletionStream(
       profile,
@@ -218,32 +234,35 @@ handleTrustedIpc(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void
     )
     send(IPC.explainEvent, { requestId: req.requestId, type: 'done', data: '' })
   } catch (err) {
-    const msg = abort.signal.aborted ? '已取消' : err instanceof Error ? err.message : String(err)
+    const msg = abort.signal.aborted ? '已取消' : '请求处理失败，请稍后重试'
     send(IPC.explainEvent, { requestId: req.requestId, type: 'error', data: msg })
   } finally {
-    explainAborts.delete(req.requestId)
+    explainAborts.finish(req.requestId, abort)
   }
 })
 
-handleTrustedIpc(IPC.explainCancel, (_e, requestId: string) => {
-  explainAborts.get(requestId)?.abort()
+handle(IPC.explainCancel, (_e, requestId: string) => {
+  explainAborts.cancel(requestId)
 })
 
 // ---------- 设置与工具 ----------
 
-handleTrustedIpc(IPC.settingsGet, () => getSettings())
+handle(IPC.settingsGet, () => getSettings())
 
-handleTrustedIpc(IPC.settingsSave, (_e, settings: Settings) => {
+handle(IPC.settingsSave, (_e, settings: Settings) => {
   saveSettings(settings)
 })
 
-handleTrustedIpc(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile))
+handle(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile))
 
-handleTrustedIpc(IPC.llmListModels, (_e, profile: LlmProfile) => listModels(profile))
+handle(IPC.llmListModels, (_e, profile: LlmProfile) => listModels(profile))
 
-handleTrustedIpc(IPC.exportMarkdown, (e, result: InterviewResult) =>
+handle(IPC.exportMarkdown, (e, result: InterviewResult) =>
   exportMarkdownDialog(result, BrowserWindow.fromWebContents(e.sender) ?? undefined)
 )
+
+// 通道清单与 schema 覆盖率自检在 services/ipc-validation.ts 中随模块加载执行，
+// 那里是通道定义的唯一下游，不再需要在这里维护通道数量。
 
 // 便于排查：开发模式下输出一条就绪日志
 console.log(`[ProjectLens] main ready, devUrl=${process.env['ELECTRON_RENDERER_URL'] ?? '(none)'}, randomId=${randomUUID().slice(0, 8)}`)

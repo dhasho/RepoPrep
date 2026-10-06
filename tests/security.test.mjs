@@ -12,7 +12,7 @@ const javascript = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
 }).outputText
 const securityUrl = `data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`
-const { getTrustedDevUrl, isAllowedAppUrl, isTrustedIpcSender, installWindowSecurity, installPermissionDenials } = await import(securityUrl)
+const { getTrustedDevUrl, isAllowedAppUrl, installWindowSecurity, installPermissionDenials } = await import(securityUrl)
 
 test('development renderer URL only trusts unpackaged loopback origins at the expected path', () => {
   for (const url of [
@@ -69,25 +69,6 @@ test('file entry permits the same entry and fragment but rejects other files and
   assert.equal(isAllowedAppUrl(new URL('../out/renderer/other.html', import.meta.url).href, entry), false)
   assert.equal(isAllowedAppUrl('file://remote-host/out/renderer/index.html', entry), false)
   assert.equal(isAllowedAppUrl('https://example.com/', entry), false)
-})
-
-test('IPC trusts only the main window main frame at the exact app entry', () => {
-  const entry = 'http://localhost:5173/index.html?mode=app'
-  assert.equal(isTrustedIpcSender(true, true, entry, entry), true)
-  assert.equal(isTrustedIpcSender(true, true, `${entry}#section`, entry), true)
-
-  for (const [isMainWindow, isMainFrame, frameUrl, appUrl] of [
-    [true, true, 'about:blank', entry],
-    [true, true, 'https://attacker.example/', entry],
-    [true, true, 'http://localhost:5173/index.html?mode=other', entry],
-    [false, true, entry, entry],
-    [true, false, entry, entry],
-    [true, true, null, entry],
-    [true, true, entry, null]
-  ]) {
-    assert.equal(isTrustedIpcSender(isMainWindow, isMainFrame, frameUrl, appUrl), false,
-      `${isMainWindow}/${isMainFrame}/${frameUrl}/${appUrl}`)
-  }
 })
 
 test('installed WebContents handlers prevent every navigation path except app entry', () => {

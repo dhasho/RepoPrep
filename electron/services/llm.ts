@@ -127,7 +127,7 @@ export function chatCompletionStream(
 /** 测试配置连通性：发送一句极短的提问 */
 export async function testConnection(profile: LlmProfile): Promise<TestConnectionResult> {
   try {
-    const reply = await chatCompletion(
+    await chatCompletion(
       profile,
       [
         { role: 'system', content: '你是连通性测试助手。' },
@@ -135,10 +135,10 @@ export async function testConnection(profile: LlmProfile): Promise<TestConnectio
       ],
       { timeoutMs: 30_000, maxOutputTokens: 16 }
     )
-    return { ok: true, message: `连接成功，模型「${profile.model}」可用，示例回复：${reply.slice(0, 50)}` }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, message: `连接失败：${msg}` }
+    // A connectivity check must never reflect model-generated text to the renderer.
+    return { ok: true, message: '连接成功，配置可用。' }
+  } catch {
+    return { ok: false, message: '连接失败，请检查网络、服务地址和配置后重试。' }
   }
 }
 
@@ -154,11 +154,11 @@ export async function listModels(profile: LlmProfile): Promise<ListModelsResult>
       signal: controller.signal
     })
     if (!res.ok) {
-      const text = await res.text().catch(() => '')
+      // Do not surface provider response bodies; they may contain secrets or URLs.
       return {
         ok: false,
         models: [],
-        message: `接口返回 ${res.status}：${text.slice(0, 200) || res.statusText}。该服务商可能不支持模型列表接口，可手动填写模型名。`
+        message: `接口返回 HTTP ${res.status}。该服务可能不支持模型列表接口，可手动填写模型名。`
       }
     }
     const json = (await res.json()) as unknown
@@ -179,9 +179,8 @@ export async function listModels(profile: LlmProfile): Promise<ListModelsResult>
       )
     ).sort((a, b) => a.localeCompare(b))
     return { ok: true, models: ids, message: `检测到 ${ids.length} 个可用模型，点击即可选择` }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, models: [], message: `获取模型列表失败：${msg}` }
+  } catch {
+    return { ok: false, models: [], message: '获取模型列表失败，请检查网络、服务地址和配置后重试。' }
   } finally {
     clearTimeout(timer)
   }
