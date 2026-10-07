@@ -2,9 +2,13 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { Granularity } from '../../shared/types'
-import type { ScanResult } from './scanner'
+import type { ScannedFile, ScanResult } from './scanner'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { MAX_CONTENT_FILE_BYTES } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { batchWeight, MIN_GLOBAL_WEIGHT } from './question-budget.ts'
 
 // 字符预算：token ≈ 字符/3，以下数值对应约 20k–80k 输入 token，主流模型均可承受
 const BUDGET_CHARS: Record<Granularity, number> = {
@@ -44,12 +48,21 @@ export interface ContextBatch {
   label: string // 批次名（如"全局概览"、模块名）
   files: ContextFile[]
   totalChars: number
+  /** 批次类型：global=全局批（架构/选型），module=单个模块批。配额规划按类型施加不同下限。 */
+  kind: 'global' | 'module'
+  /**
+   * 相对权重，由模块体量（文件数 × 内容量）合成，用于把总题量预算按权重分配到各批次。
+   * 全局批按"最重要的单个模块"量级参与分配，避免模块多时全局题量被摊薄。
+   */
+  weight: number
 }
 
 export interface BuiltContext {
   headerText: string // 项目名 + 语言分布 + 文件树（每批都带）
   batches: ContextBatch[]
   contentSecurity: ContentSecuritySummary
+  /** 模块批的数量（0 表示没有按模块分批）。进度提示用它区分"全局+模块"与"仅全局"。 */
+  moduleCount: number
 }
 
 function scoreFile(relPath: string, size: number): number {
@@ -138,6 +151,15 @@ async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars
   return { files: out, contentSecurity }
 }
 
+/** 模块体量估计：文件数与内容量（按单文件上限截断，避免个别大文件垄断权重） */
+function moduleMass(files: readonly ScannedFile[]): { fileCount: number; contentBytes: number } {
+  let contentBytes = 0
+  for (const f of files) {
+    contentBytes += Math.min(f.textBytes ?? f.size, MAX_CONTENT_FILE_BYTES)
+  }
+  return { fileCount: files.length, contentBytes }
+}
+
 export async function buildContext(scan: ScanResult, granularity: Granularity): Promise<BuiltContext> {
   const langText = scan.languages.length
     ? scan.languages.map((l) => `${l.lang} ${l.percent}%`).join('、')
@@ -163,9 +185,12 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     batches.push({
       label: granularity === 'coarse' ? '项目整体分析' : '项目整体与核心模块分析',
       files,
-      totalChars: files.reduce((a, f) => a + f.content.length, 0)
+      totalChars: files.reduce((a, f) => a + f.content.length, 0),
+      kind: 'global',
+      // 单批即全部：权重恒为 1，配额必然等于该颗粒度的总题量目标
+      weight: 1
     })
-    return { headerText, batches, contentSecurity }
+    return { headerText, batches, contentSecurity, moduleCount: 0 }
   }
 
   // 细粒度：全局批（文档+配置）+ 各模块批（按顶层目录分组）
@@ -173,13 +198,16 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const globalPicked = await pickFiles(scan, 'coarse', BUDGET_CHARS.fine)
   addContentSecurity(contentSecurity, globalPicked.contentSecurity)
   const globalFiles = globalPicked.files
-  batches.push({
+  const globalBatch: ContextBatch = {
     label: '全局概览（架构与选型）',
     files: globalFiles,
-    totalChars: globalFiles.reduce((a, f) => a + f.content.length, 0)
-  })
+    totalChars: globalFiles.reduce((a, f) => a + f.content.length, 0),
+    kind: 'global',
+    weight: 1 // 占位，下面按模块体量定稿
+  }
+  batches.push(globalBatch)
 
-  const groups = new Map<string, typeof scan.files>()
+  const groups = new Map<string, ScannedFile[]>()
   for (const f of scan.files) {
     if (!f.isContentCandidate) continue
     if (!CODE_EXTS.has(f.ext)) continue
@@ -190,14 +218,16 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     groups.set(group, list)
   }
 
-  const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
-    const scoreOf = (files: typeof scan.files) => files.reduce((s, f) => s + scoreFile(f.relPath, f.size), 0)
-    return scoreOf(b[1]) - scoreOf(a[1])
-  })
+  const sortedGroups = Array.from(groups.entries())
+    .map(([group, groupFiles]) => ({ group, groupFiles, mass: moduleMass(groupFiles) }))
+    .sort((a, b) => {
+      const scoreOf = (m: { fileCount: number; contentBytes: number }) => m.fileCount + m.contentBytes / 1000
+      return scoreOf(b.mass) - scoreOf(a.mass)
+    })
 
   const MAX_MODULE_BATCHES = 10
   let moduleBatches = 0
-  for (const [group, groupFiles] of sortedGroups) {
+  for (const { group, groupFiles, mass } of sortedGroups) {
     if (moduleBatches >= MAX_MODULE_BATCHES) break
     // 复用 pickFiles 的打分与预算逻辑：构造仅含该模块的临时 ScanResult 子集
     const subScan: ScanResult = { ...scan, files: groupFiles }
@@ -209,11 +239,21 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     batches.push({
       label: `模块「${group}」`,
       files,
-      totalChars: files.reduce((a, f) => a + f.content.length, 0)
+      totalChars: files.reduce((a, f) => a + f.content.length, 0),
+      kind: 'module',
+      weight: batchWeight(mass.fileCount, mass.contentBytes)
     })
   }
 
-  return { headerText, batches, contentSecurity }
+  // 全局批权重 = 模块批数量，这样全局批的按比例份额与"所有模块加起来"相当，
+  // 保证它在任何模块数下都稳定拿到 MIN_QUESTIONS_GLOBAL(6) 以上；
+  // 若只给 1 份权重，模块多于 5 个时全局批会被摊薄到 3 题左右、再被下限硬抬到 6，
+  // 反而挤占模块题量。
+  // 注意：这里不存在"权重下限"判断——moduleBatches ≥ 1 时它必然 ≥ MIN_GLOBAL_WEIGHT(0.5)，
+  // 所以 MIN_GLOBAL_WEIGHT 只在 0 个模块的退化分支里作为语义常量使用。
+  globalBatch.weight = moduleBatches === 0 ? MIN_GLOBAL_WEIGHT : moduleBatches
+
+  return { headerText, batches, contentSecurity, moduleCount: moduleBatches }
 }
 
 /** 把批次渲染为完整的用户消息文本 */

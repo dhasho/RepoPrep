@@ -103,7 +103,8 @@ const KEY_FILE_RULES: { match: (base: string, relDir: string) => boolean; reason
 
 const MAX_WALK_FILES = 8000
 const MAX_TREE_NODES = 4000
-const MAX_CONTENT_FILE_BYTES = 256 * 1024
+/** 单文件送入模型的上限（同时用于题量配额的模块体量估计，故导出） */
+export const MAX_CONTENT_FILE_BYTES = 256 * 1024
 
 export interface ScannedFile {
   relPath: string
@@ -111,6 +112,12 @@ export interface ScannedFile {
   size: number
   ext: string
   isContentCandidate: boolean // 是否可作为源码内容送入大模型
+  /**
+   * 文本文件的字节数（stat 结果，仅对非二进制文件设置）。
+   * 供题量配额按模块"体量"分配权重使用：不需要真实读文件，
+   * UTF-8 源码下字节数与字符数同阶，作为相对权重的代理足够。
+   */
+  textBytes?: number
   sensitive?: { category: string; reason: string }
 }
 
@@ -213,6 +220,7 @@ export async function scanProject(root: string): Promise<ScanResult> {
             absPath: path.join(absDir, entry.name),
             size,
             ext,
+            textBytes: size,
             isContentCandidate: !sensitive && size <= MAX_CONTENT_FILE_BYTES && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel)),
             ...(sensitive ? { sensitive } : {})
           }

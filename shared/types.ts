@@ -144,6 +144,26 @@ export interface GenerateRunError {
   message: string
 }
 
+/**
+ * 各颗粒度的题量预算。这是题量的**单一事实来源**：
+ * 界面文案（GRANULARITY_META.count 由它生成）、生成时的配额规划（question-budget.ts）
+ * 都以它为准，避免出现「承诺 25–40 题、实际出 70 题」这类不一致。
+ */
+export const GRANULARITY_QUESTION_BUDGET: Record<
+  Granularity,
+  { min: number; target: number; max: number }
+> = {
+  coarse: { min: 8, target: 10, max: 12 },
+  medium: { min: 15, target: 20, max: 25 },
+  fine: { min: 25, target: 32, max: 40 }
+}
+
+/** 由预算生成界面文案，例如「约 25–40 题」 */
+export function questionCountLabel(granularity: Granularity): string {
+  const { min, max } = GRANULARITY_QUESTION_BUDGET[granularity]
+  return `约 ${min}–${max} 题`
+}
+
 export const GRANULARITY_META: Record<
   Granularity,
   { label: string; sub: string; desc: string; count: string; note: string }
@@ -152,21 +172,21 @@ export const GRANULARITY_META: Record<
     label: '粗粒度',
     sub: '架构级',
     desc: '整体架构、技术选型、模块职责与设计权衡，不深入代码细节',
-    count: '约 8–12 题',
+    count: questionCountLabel('coarse'),
     note: '仅分析文件树、README 与配置文件，速度最快'
   },
   medium: {
     label: '中粒度',
     sub: '模块级',
     desc: '模块功能实现、数据流转、接口设计与模块间协作',
-    count: '约 15–25 题',
+    count: questionCountLabel('medium'),
     note: '附带核心源码一起分析'
   },
   fine: {
     label: '细粒度',
     sub: '实现级',
     desc: '函数实现细节、算法与数据结构、边界处理、性能与错误处理',
-    count: '约 25–40 题',
+    count: questionCountLabel('fine'),
     note: '按模块分批多次调用大模型，耗时较长、消耗 Token 较多'
   }
 }
