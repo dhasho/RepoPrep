@@ -6,8 +6,11 @@
 // 既有的直跑测试因此都刻意避开了这些模块；本文件补上这层解析，
 // 使得端到端测试可以直接调用真实的 generator / context-builder，而不必改动生产 import。
 //
-// 用法（见 package.json 的 test:question-budget）：
+// 用法（见 package.json 的 test:renderer 和 test:question-budget）：
 //   node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test ...
+//
+// 依赖 Node 的同步解析钩子 registerHooks，需要 Node >= 22.15（或 >= 23.5）——
+// 比 --experimental-strip-types 本身的 >= 22.6 更高；package.json 的 engines 已声明该下限。
 import { existsSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'

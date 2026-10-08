@@ -1,8 +1,9 @@
 // 结果页：大纲导航 + 问题卡片（答案/追问）+ 名词解释弹卡 + 搜索 + 导出
 import { useMemo, useState } from 'react'
-import type { FollowUp, InterviewResult, QuestionItem, Settings } from '@shared/types'
+import type { FollowUp, InterviewResult, QuestionItem, Section, Settings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
 import { api } from '../lib/ipc'
+import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf } from '../lib/question-numbering'
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
 import TermPopover from '../components/TermPopover'
 
@@ -10,6 +11,8 @@ interface Props {
   result: InterviewResult
   settings: Settings
   onRegenerate: () => void
+  /** 仅用于测试：设置搜索框初始值（生产调用方不传，行为不变） */
+  initialSearch?: string
 }
 
 interface TermTarget {
@@ -20,6 +23,10 @@ interface TermTarget {
   glossaryHint?: string
 }
 
+/** 过滤后的条目：问题自带原始下标，用于取稳定题号（过滤不改变题号） */
+type QuestionEntry = QuestionItem & { sectionIndex: number; questionIndex: number }
+type QuestionSection = Omit<Section, 'questions'> & { sectionIndex: number; questions: QuestionEntry[] }
+
 /** 从答案中截取术语附近的片段，作为 AI 解释的上下文 */
 function snippetAround(answer: string, term: string): string {
   const text = stripTermMarks(answer)
@@ -29,8 +36,8 @@ function snippetAround(answer: string, term: string): string {
   return (start > 0 ? '…' : '') + text.slice(start, idx + term.length + 110)
 }
 
-export default function ResultPage({ result, settings, onRegenerate }: Props) {
-  const [search, setSearch] = useState('')
+export default function ResultPage({ result, settings, onRegenerate, initialSearch = '' }: Props) {
+  const [search, setSearch] = useState(initialSearch)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeId, setActiveId] = useState('')
   const [popover, setPopover] = useState<TermTarget | null>(null)
@@ -50,9 +57,24 @@ export default function ResultPage({ result, settings, onRegenerate }: Props) {
     }
 
   const query = search.trim().toLowerCase()
-  const filtered = useMemo(() => {
-    if (!query) return result.sections
-    return result.sections
+  /**
+   * 过滤后的条目自带**原始下标**。
+   *
+   * 这一点很关键：过滤只应改变"哪些项可见"，因此题号必须用原始下标去查
+   * （issue #11）。若渲染时用过滤后数组的下标，被过滤掉的前置问题会让后面问题的
+   * 题号整体前移 —— 实测：搜索"数据流"时 q4 在过滤后是第 0 个，会被算成 Q03 而不是 Q04。
+   * 顺带这里也省掉了"用 section id 反查原始下标"的额外 Map。
+   */
+  const filtered = useMemo<QuestionSection[]>(() => {
+    const withIndex = result.sections.map((s, sectionIndex) => ({
+      ...s,
+      sectionIndex,
+      questions: s.questions.map((q, questionIndex) => ({ ...q, sectionIndex, questionIndex }))
+    }))
+    // 空 section 一律不渲染：它没有可见问题，渲染出来只会得到一个无意义的序号（00）。
+    // 注意这不会改变题号——序号来自原始下标，与可见集合无关。
+    if (!query) return withIndex.filter((s) => s.questions.length > 0)
+    return withIndex
       .map((s) => ({
         ...s,
         questions: s.questions.filter((q) => {
@@ -72,16 +94,10 @@ export default function ResultPage({ result, settings, onRegenerate }: Props) {
   const totalQuestions = result.sections.reduce((a, s) => a + s.questions.length, 0)
   const shownQuestions = filtered.reduce((a, s) => a + s.questions.length, 0)
 
-  const globalIndex = (sectionIdx: number, qIdx: number): number => {
-    let n = 0
-    for (let i = 0; i < result.sections.length; i++) {
-      for (let j = 0; j < result.sections[i].questions.length; j++) {
-        if (i === sectionIdx && j === qIdx) return n + 1
-        n++
-      }
-    }
-    return 0
-  }
+  // 题号一律取原始结果的稳定序号（在过滤之前算好），
+  // 因此无论怎么搜索，同一个问题显示的题号都相同，也不会出现 Q0。
+  // 用 Map 查表，渲染期间不再遍历全部问题。
+  const questionNumbers = useMemo(() => buildQuestionNumbers(result.sections), [result.sections])
 
   const toggle = (id: string) => {
     setExpanded((s) => {
@@ -92,11 +108,11 @@ export default function ResultPage({ result, settings, onRegenerate }: Props) {
     })
   }
 
-  const jumpTo = (id: string) => {
-    setExpanded((s) => new Set(s).add(id))
-    setActiveId(id)
+  const jumpTo = (question: QuestionItem) => {
+    setExpanded((s) => new Set(s).add(question.id))
+    setActiveId(question.id)
     requestAnimationFrame(() => {
-      document.getElementById(`q-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      document.getElementById(`q-${question.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
 
@@ -130,15 +146,23 @@ export default function ResultPage({ result, settings, onRegenerate }: Props) {
               <div className="mb-1 px-2 py-1 text-xs font-semibold text-slate-400" title={s.title}>
                 {s.title}
               </div>
-              {s.questions.map((q) => (
+              {s.questions.map((q, qi) => (
                 <button
-                  key={q.id}
-                  className={`mb-0.5 block w-full rounded-lg px-2 py-1.5 text-left text-[13px] leading-5 ${
+                  key={q.id ?? `${s.id}-${q.questionIndex}-${qi}`}
+                  className={`mb-0.5 flex w-full gap-1.5 rounded-lg px-2 py-1.5 text-left text-[13px] leading-5 ${
                     activeId === q.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
                   }`}
-                  onClick={() => jumpTo(q.id)}
+                  onClick={() => jumpTo(q)}
                 >
-                  <span className="mr-1 text-[11px] text-slate-400">Q</span>
+                  <span
+                    className={`shrink-0 text-[11px] tabular-nums ${
+                      activeId === q.id ? 'text-indigo-400' : 'text-slate-400'
+                    }`}
+                  >
+                    {formatQuestionNumber(
+                      numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })
+                    )}
+                  </span>
                   <span className="line-clamp-2">{stripTermMarks(q.question)}</span>
                 </button>
               ))}
@@ -202,22 +226,22 @@ export default function ResultPage({ result, settings, onRegenerate }: Props) {
               </div>
             )}
 
-            {filtered.map((s, si) => (
+            {filtered.map((s) => (
               <section key={s.id} className="mb-8">
                 <div className="mb-3 border-b border-slate-200 pb-2">
                   <h2 className="text-base font-semibold text-slate-900">
-                    <span className="mr-2 text-slate-300">{String(si + 1).padStart(2, '0')}</span>
+                    <span className="mr-2 text-slate-300">{String(s.sectionIndex + 1).padStart(2, '0')}</span>
                     {s.title}
                   </h2>
                   {s.summary && <p className="mt-0.5 pl-8 text-xs text-slate-400">{s.summary}</p>}
                 </div>
 
                 <div className="space-y-3">
-                  {s.questions.map((q) => (
+                  {s.questions.map((q, qi) => (
                     <QuestionCard
-                      key={q.id}
+                      key={q.id ?? `${s.id}-${q.questionIndex}-${qi}`}
                       q={q}
-                      index={globalIndex(si, s.questions.indexOf(q))}
+                      index={numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })}
                       expanded={expanded.has(q.id)}
                       onToggle={() => toggle(q.id)}
                       onTerm={onTerm(q)}
@@ -290,8 +314,8 @@ function QuestionCard({
   return (
     <div id={`q-${q.id}`} className="scroll-mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
       <button className="flex w-full items-start gap-3 px-4 py-3.5 text-left hover:bg-slate-50/60" onClick={onToggle}>
-        <span className="mt-0.5 shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
-          Q{index}
+        <span className="mt-0.5 shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-500">
+          {formatQuestionNumber(index)}
         </span>
         <span className="min-w-0 flex-1 text-[15px] font-medium leading-6 text-slate-900">
           <TermText text={q.question} onTerm={onTerm} />
