@@ -1,12 +1,12 @@
 {
   "name": "projectlens",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
   "author": "ProjectLens",
   "license": "MIT",
   "engines": {
-    "node": ">=22.15.0"
+    "node": "^22.15.0 || >=24.0.0"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -19,7 +19,7 @@
     "test:smoke": "npm run build && electron tests/smoke.cjs",
     "audit:deps": "node scripts/audit-deps.cjs package-lock.json",
     "dist": "electron-vite build && electron-builder --win",
-    "test:renderer": "node scripts/build-render-test.mjs .render-test/result-page.cjs && node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test src/lib/question-numbering.test.ts",
+    "test:renderer": "node scripts/build-render-test.mjs && node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test src/lib/question-numbering.test.ts src/lib/explain-stream.test.ts src/components/TermPopover.test.ts",
     "test:question-budget": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test electron/services/question-budget.test.ts electron/services/question-budget-integration.test.ts electron/services/generator-merge.test.ts"
   },
   "dependencies": {
@@ -32,6 +32,7 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@types/jsdom": "28.0.3",
     "@types/node": "^24.19.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -40,6 +41,8 @@
     "electron": "^42.11.10",
     "electron-builder": "^26.17.0",
     "electron-vite": "^5.0.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "29.1.1",
     "postcss": "^8.4.49",
     "source-map-js": "^1.2.2",
     "tailwindcss": "^3.4.17",

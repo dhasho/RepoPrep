@@ -10,7 +10,7 @@
 //   node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test ...
 //
 // 依赖 Node 的同步解析钩子 registerHooks，需要 Node >= 22.15（或 >= 23.5）——
-// 比 --experimental-strip-types 本身的 >= 22.6 更高；package.json 的 engines 已声明该下限。
+// 比 --experimental-strip-types 本身的 >= 22.6 更高；package.json 的 engines 声明了受支持范围。
 import { existsSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'

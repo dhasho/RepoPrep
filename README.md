@@ -25,7 +25,7 @@ Electron 桌面应用：选择本地项目文件夹，AI 面试官通读代码�
 
 ## 快速开始
 
-> 需要 Node.js **>= 22.12.0**（Electron 42 与 Vite 7 的下限，已写入 `package.json` 的 `engines`）。
+> 开发与测试支持 **Node.js 22.x（最低 22.15.0）或 Node.js 24.0.0 及以上**，以 `package.json` 的 `engines` 为准。Node.js 23 不在支持范围内；组件测试使用兼容这些开发版本的 JSDOM 29。
 
 ```bash
 npm install    # 首次安装（约 620 个包，不含 Electron 二进制）
@@ -48,6 +48,8 @@ npm run typecheck      # TypeScript 类型检查
 npm run test:security  # 敏感信息过滤 + 窗口安全策略（含构建产物 CSP 断言）
 npm run test:ipc       # IPC 发送方校验 / 运行时 schema / 项目授权
 npm run test:scan-cache# 扫描缓存与快照校验
+npm run test:renderer  # 组件渲染、解释流与弹卡真实挂载测试
+npm run test:question-budget # 题量预算与生成合并测试
 npm run test:smoke     # 构建产物冒烟：窗口能否加载、React 能否渲染、IPC 能否往返
 npm run audit:deps     # 依赖公告审计（查 GitHub Advisory，需 gh CLI 已登录）
 ```

@@ -1,7 +1,8 @@
 // 飞书风格名词解释弹卡：术语表解释 + AI 流式详细解释
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../lib/ipc'
+import { ExplainStreamController } from '../lib/explain-stream'
 import MarkdownView from './MarkdownView'
 
 export interface TermPopoverProps {
@@ -23,10 +24,31 @@ export default function TermPopover(props: TermPopoverProps) {
   const boxRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  const [explainState, setExplainState] = useState<'idle' | 'streaming' | 'done' | 'error'>('idle')
-  const [explainText, setExplainText] = useState('')
-  const [explainError, setExplainError] = useState('')
-  const requestIdRef = useRef('')
+  // 流式请求的生命周期交给控制器统一管理：
+  // 切换词条会先取消旧请求，卸载/离开页面会取消进行中的请求
+  // （issue #12：此前关闭弹窗后主进程仍在跑、继续消耗模型额度）。
+  const controller = useMemo(
+    () =>
+      new ExplainStreamController({
+        explain: api.explain,
+        cancelExplain: api.cancelExplain,
+        onExplainEvent: api.onExplainEvent
+      }),
+    []
+  )
+  const explain = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
+  const explainState = explain.status
+  const explainText = explain.text
+  const explainError = explain.error
+
+  const startExplain = useCallback(() => {
+    controller.start({ term, profileId, projectSummary, question, snippet, glossaryHint })
+  }, [controller, term, profileId, projectSummary, question, snippet, glossaryHint])
+
+  const stopExplain = useCallback(() => controller.stop(), [controller])
+
+  // 卸载时务必终止主进程里的流式请求
+  useEffect(() => () => controller.dispose(), [controller])
 
   // 定位：优先显示在词条下方，空间不足放上方，最后夹在视口内
   useLayoutEffect(() => {
@@ -40,36 +62,6 @@ export default function TermPopover(props: TermPopoverProps) {
     if (top + h > vh - 12) top = Math.max(anchor.top - 10 - h, 12)
     setPos({ left, top })
   }, [anchor, explainState, explainText])
-
-  const startExplain = () => {
-    const requestId = crypto.randomUUID()
-    requestIdRef.current = requestId
-    setExplainText('')
-    setExplainError('')
-    setExplainState('streaming')
-    void api
-      .explain({ requestId, term, profileId, projectSummary, question, snippet, glossaryHint })
-      .catch((e) => {
-        setExplainError(e instanceof Error ? e.message : String(e))
-        setExplainState('error')
-      })
-  }
-
-  // 订阅流式事件
-  useEffect(() => {
-    const off = api.onExplainEvent((e) => {
-      if (e.requestId !== requestIdRef.current) return
-      if (e.type === 'delta') {
-        setExplainText((t) => t + e.data)
-      } else if (e.type === 'done') {
-        setExplainState('done')
-      } else {
-        setExplainError(e.data)
-        setExplainState('error')
-      }
-    })
-    return off
-  }, [])
 
   // 无术语表解释时自动请求 AI 解释
   useEffect(() => {
@@ -101,10 +93,6 @@ export default function TermPopover(props: TermPopoverProps) {
     const el = contentRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [explainText])
-
-  const stopExplain = () => {
-    if (requestIdRef.current) void api.cancelExplain(requestIdRef.current)
-  }
 
   return createPortal(
     <div
@@ -147,10 +135,13 @@ export default function TermPopover(props: TermPopoverProps) {
           </div>
         )}
 
-        {(explainState === 'streaming' || explainText) && explainState !== 'error' && (
+        {(explainState === 'streaming' ||
+          (explainText && explainState !== 'error' && explainState !== 'stopped')) && (
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-400">AI 解释{explainState === 'streaming' ? '（生成中…）' : ''}</span>
+              <span className="text-xs font-medium text-slate-400">
+                AI 解释{explainState === 'streaming' ? '（生成中…）' : ''}
+              </span>
               {explainState === 'streaming' && (
                 <button className="text-xs text-slate-400 hover:text-slate-600" onClick={stopExplain}>
                   停止
@@ -178,6 +169,26 @@ export default function TermPopover(props: TermPopoverProps) {
             >
               重试
             </button>
+          </div>
+        )}
+
+        {/* 用户主动停止：中性提示 + 继续按钮，并保留已经生成的部分（不显示成失败） */}
+        {explainState === 'stopped' && (
+          <div>
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+              <span className="text-xs text-slate-500">已停止生成</span>
+              <button
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                onClick={startExplain}
+              >
+                继续解释
+              </button>
+            </div>
+            {explainText && (
+              <div className="mt-3">
+                <MarkdownView markdown={explainText} />
+              </div>
+            )}
           </div>
         )}
       </div>
