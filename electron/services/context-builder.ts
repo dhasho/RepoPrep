@@ -22,14 +22,6 @@ const CODE_EXTS = new Set([
   'cs','rb','php','swift','kt','kts','scala','dart','lua','vue','svelte','astro','sql','proto','graphql','prisma'
 ])
 
-const CONFIG_BASENAMES = new Set([
-  'package.json','tsconfig.json','jsconfig.json','vite.config.ts','webpack.config.js','next.config.js',
-  'nuxt.config.ts','vue.config.js','babel.config.js','.eslintrc.js','.eslintrc.json','.prettierrc',
-  'pom.xml','build.gradle','build.gradle.kts','settings.gradle','go.mod','Cargo.toml','Makefile',
-  'CMakeLists.txt','requirements.txt','pyproject.toml','setup.py','composer.json','Gemfile','mix.exs',
-  'docker-compose.yml','docker-compose.yaml','Dockerfile'
-])
-
 export interface ContextFile {
   relPath: string
   content: string
@@ -65,12 +57,33 @@ export interface BuiltContext {
   moduleCount: number
 }
 
-function scoreFile(relPath: string, size: number): number {
+/**
+ * 常见关键配置文件名。比较统一用小写（构造时归一化）——此前集合里是
+ * Dockerfile / Makefile / Cargo.toml 等混合大小写原值，而比较前 basename
+ * 已被转小写，导致这些关键配置拿不到配置分（issue #18）。
+ */
+const CONFIG_BASENAMES = new Set(
+  [
+    'package.json', 'tsconfig.json', 'jsconfig.json', 'vite.config.ts', 'vite.config.js', 'webpack.config.js', 'next.config.js',
+    'nuxt.config.ts', 'vue.config.js', 'babel.config.js', '.eslintrc', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json', '.eslintrc.yml', '.prettierrc', '.prettierrc.json',
+    'electron.vite.config.ts', 'electron.vite.config.js', 'electron-builder.yml', 'electron-builder.yaml', 'electron-builder.json',
+    'tailwind.config.js', 'tailwind.config.ts', 'tailwind.config.cjs', 'postcss.config.js', 'postcss.config.cjs', 'postcss.config.mjs', 'postcss.config.ts',
+    'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'go.mod', 'Cargo.toml', 'Makefile',
+    'CMakeLists.txt', 'requirements.txt', 'pyproject.toml', 'setup.py', 'composer.json', 'Gemfile', 'mix.exs',
+    'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile'
+  ].map((n) => n.toLowerCase())
+)
+
+/** 配置分基准：根目录配置满分；子目录同名配置递减，避免深层普通同名文件冒充根配置 */
+const CONFIG_SCORE = 900
+const CONFIG_DEPTH_PENALTY = 50
+
+export function scoreFile(relPath: string, size: number): number {
   const base = path.basename(relPath).toLowerCase()
   const depth = relPath.split('/').length
   let score = 0
   if (/^readme\.(md|txt|rst)$/.test(base)) score = 1000
-  else if (CONFIG_BASENAMES.has(base)) score = 900
+  else if (CONFIG_BASENAMES.has(base)) score = CONFIG_SCORE - (depth - 1) * CONFIG_DEPTH_PENALTY
   else if (/^(main|index|app|server|cli)\.(ts|tsx|js|jsx|py|go|rs|java)$/.test(base) && depth <= 3) score = 800
   else if (CODE_EXTS.has(path.extname(relPath).slice(1).toLowerCase())) score = 500 - depth * 20
   else if (/\.(md|json|ya?ml|toml)$/i.test(relPath)) score = 300 - depth * 10
@@ -79,6 +92,12 @@ function scoreFile(relPath: string, size: number): number {
   if (size < 200) score -= 30
   if (size > 100_000) score -= 100
   return score
+}
+
+/** 粗粒度只保留文档/配置类文件（导出便于测试大小写与目录策略） */
+export function isCoarseCandidate(relPath: string): boolean {
+  const base = path.basename(relPath).toLowerCase()
+  return /^readme\./.test(base) || CONFIG_BASENAMES.has(base) || /\.(md|json|ya?ml|toml|txt)$/i.test(relPath)
 }
 
 interface PickedFiles {
@@ -114,8 +133,7 @@ async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars
     .filter((f) => {
       if (granularity === 'coarse') {
         // 粗粒度只要文档/配置/入口，不看业务源码
-        const base = path.basename(f.relPath).toLowerCase()
-        return /^readme\./.test(base) || CONFIG_BASENAMES.has(base) || /\.(md|json|ya?ml|toml|txt)$/i.test(f.relPath)
+        return isCoarseCandidate(f.relPath)
       }
       return true
     })

@@ -1,6 +1,6 @@
 {
   "name": "projectlens",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
   "author": "ProjectLens",
@@ -14,7 +14,7 @@
     "preview": "electron-vite preview",
     "test:security": "npm run build && node --test --experimental-strip-types tests/security.test.mjs electron/services/sensitive.test.ts electron/services/security-integration.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test:ipc": "node --experimental-strip-types --test electron/services/ipc-validation.test.ts electron/services/ipc-authority.test.ts electron/services/ipc-handler-guards.test.ts electron/services/llm-safe-results.test.ts",
+    "test:ipc": "node --experimental-strip-types --test electron/services/ipc-validation.test.ts electron/services/ipc-authority.test.ts electron/services/ipc-handler-guards.test.ts electron/services/llm-safe-results.test.ts electron/services/config-score.test.ts",
     "test:scan-cache": "node --test --experimental-strip-types electron/services/project-snapshot.test.ts electron/services/scan-cache.test.ts electron/services/scanner-gitignore.test.ts electron/services/scan-limits.test.ts",
     "test:lib": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test src/lib/log-time.test.ts src/lib/model-detection.test.ts src/lib/settings-save.test.ts src/lib/scan-limit-input.test.ts",
     "test:smoke": "npm run build && electron tests/smoke.cjs",
