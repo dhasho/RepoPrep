@@ -1,7 +1,7 @@
 // 按颗粒度组装送入大模型的项目上下文（字符预算控制 + 细粒度分批）
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { Granularity } from '../../shared/types'
+import type { Granularity, ScanTruncation } from '../../shared/types'
 import type { ScannedFile, ScanResult } from './scanner'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { MAX_CONTENT_FILE_BYTES } from './scanner.ts'
@@ -86,6 +86,16 @@ interface PickedFiles {
   contentSecurity: ContentSecuritySummary
 }
 
+export function renderScanWarnings(t: ScanTruncation): string {
+  const reasons: string[] = []
+  if (t.byFileCount) reasons.push(`文件数达到上限（${t.limits.maxFiles}）`)
+  if (t.byTreeNodes) reasons.push(`树节点数达到上限（${t.limits.maxTreeNodes}）`)
+  if (t.oversizedFiles > 0) reasons.push(`${t.oversizedFiles} 个文件超过单文件大小上限（${Math.round(t.limits.maxContentFileBytes / 1024)}KB）而未纳入阅读`)
+  if (!reasons.length) return ''
+  const skipped = t.estimatedSkipped > 0 ? `，估计至少还有 ${t.estimatedSkipped} 项未扫描` : ''
+  return `⚠️ 警告：本次扫描不完整（${reasons.join('；')}${skipped}）。以下分析仅基于扫描到的部分，结论可能遗漏未扫描的内容。`
+}
+
 function emptyContentSecurity(): ContentSecuritySummary {
   return { redactedFiles: 0, redactionMatches: 0, matchesByCategory: {} }
 }
@@ -164,16 +174,23 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const langText = scan.languages.length
     ? scan.languages.map((l) => `${l.lang} ${l.percent}%`).join('、')
     : '未识别出常见编程语言'
-  const headerText = [
+  const headerLines = [
     `项目根目录：${scan.name}`,
     `主要语言：${langText}`,
-    `文件总数（不含忽略项）：${scan.totalFiles}`,
+    `文件总数（不含忽略项）：${scan.totalFiles}`
+  ]
+  if (scan.truncation) {
+    const warning = renderScanWarnings(scan.truncation)
+    if (warning) headerLines.push(warning)
+  }
+  headerLines.push(
     '',
     '## 项目文件树',
     '```',
     '（见下方文件树）',
     '```'
-  ].join('\n')
+  )
+  const headerText = headerLines.join('\n')
 
   const batches: ContextBatch[] = []
   const contentSecurity = emptyContentSecurity()

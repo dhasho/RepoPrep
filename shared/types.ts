@@ -16,6 +16,21 @@ export interface LlmProfile {
 export interface Settings {
   profiles: LlmProfile[]
   defaultProfileId: string | null
+  /** 扫描安全上限（高级设置）；缺省字段使用内置默认值 */
+  scanLimits?: Partial<ScanLimits>
+}
+
+/** 扫描安全上限的合法区间（设置校验与扫描器夹取共用同一份） */
+export const SCAN_LIMIT_BOUNDS = {
+  maxFiles: { min: 1, max: 20_000 },
+  maxTreeNodes: { min: 1, max: 10_000 },
+  maxContentFileBytes: { min: 1024, max: 512 * 1024 }
+} as const
+
+export const DEFAULT_SCAN_LIMITS: ScanLimits = {
+  maxFiles: 8000,
+  maxTreeNodes: 4000,
+  maxContentFileBytes: 256 * 1024
 }
 
 export interface TestConnectionResult {
@@ -66,6 +81,31 @@ export interface ProjectOverview {
   tree: FileNode
   keyFiles: KeyFileInfo[]
   security: SecurityProtectionSummary
+  /** 触发任一扫描安全上限时才有值；界面与模型提示据此说明"分析不完整" */
+  truncation?: ScanTruncation
+}
+
+/** 扫描安全上限（可在设置的"高级设置"中调整，主进程会再做夹取） */
+export interface ScanLimits {
+  /** 最多纳入扫描的文件数（口径与 totalFiles 一致，不含二进制文件） */
+  maxFiles: number
+  /** 最多记录的树节点数（文件 + 目录） */
+  maxTreeNodes: number
+  /** 纳入模型阅读的单文件大小上限（字节） */
+  maxContentFileBytes: number
+}
+
+export interface ScanTruncation {
+  /** 触发文件数上限 */
+  byFileCount: boolean
+  /** 触发树节点上限 */
+  byTreeNodes: boolean
+  /** 因超过单文件大小上限而未纳入内容阅读的文件数 */
+  oversizedFiles: number
+  /** 触发数量上限时在断点处统计到的未处理条目数（下界估计，不含更深层目录内部） */
+  estimatedSkipped: number
+  /** 本次扫描实际生效的上限（便于提示里展示） */
+  limits: ScanLimits
 }
 
 /** 追问（支持嵌套） */

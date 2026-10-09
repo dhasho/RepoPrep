@@ -59,6 +59,16 @@ export default function ConfigurePage({ overview, existingResult, settings, onSt
                   <div className="text-xs text-slate-400">文本总量</div>
                 </div>
               </div>
+              {overview.truncation && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                  ⚠️ 扫描不完整：
+                  {overview.truncation.byFileCount && `文件数达到上限 ${overview.truncation.limits.maxFiles}；`}
+                  {overview.truncation.byTreeNodes && `树节点数达到上限 ${overview.truncation.limits.maxTreeNodes}；`}
+                  {overview.truncation.oversizedFiles > 0 && `${overview.truncation.oversizedFiles} 个文件超过单文件大小上限未纳入阅读；`}
+                  {overview.truncation.estimatedSkipped > 0 && `估计至少还有 ${overview.truncation.estimatedSkipped} 项未扫描；`}
+                  生成结果可能遗漏内容。可在「设置 → 高级设置」调整扫描上限后重新扫描。
+                </div>
+              )}
               {overview.languages.length > 0 && (
                 <div className="space-y-1.5">
                   {overview.languages.slice(0, 6).map((l) => (

@@ -1,11 +1,13 @@
 import path from 'node:path'
 // @ts-ignore TS5097 -- Node executes this module through the direct TypeScript runner.
+import type { ScanLimits } from '../../shared/types'
+// @ts-ignore TS5097 -- Node executes this module through the direct TypeScript runner.
 import { captureProjectSnapshot, isProjectSnapshotCurrent, resolveProjectIdentity } from './project-snapshot.ts'
 // @ts-ignore TS5097 -- Node executes this module through the direct TypeScript runner.
-import { scanProject, type ScanResult } from './scanner.ts'
+import { resolveScanLimits, scanLimitsKey, scanProject, type ScanResult } from './scanner.ts'
 
 type Snapshot = Awaited<ReturnType<typeof captureProjectSnapshot>>
-type CacheEntry = { scan: ScanResult; snapshot: Snapshot }
+type CacheEntry = { scan: ScanResult; snapshot: Snapshot; identityKey: string }
 export type ProjectScanCacheResult = {
   scan: ScanResult
   status: 'reused' | 'scanned'
@@ -15,6 +17,17 @@ export type ProjectScanCacheResult = {
 function lexicalKey(input: string): string {
   const normalized = path.resolve(input)
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+/**
+ * 缓存键 = 项目身份 + 生效扫描上限（issue #17）：
+ * 上限不同的扫描结果不同（截断状态不同），必须分开存放，否则改上限后
+ * 会一直复用旧上限的扫描结果，截断提示也随之失真。
+ * 分隔符用 '\\0'：路径里不可能出现，因此按 `${identityKey}\\0` 前缀清理
+ * 某项目的全部上限变体时，绝不会误扫到身份键恰好以它为前缀的兄弟项目。
+ */
+function composedKey(identityKey: string, limits?: Partial<ScanLimits>): string {
+  return `${identityKey}\0${scanLimitsKey(resolveScanLimits(limits))}`
 }
 
 export class ProjectScanCache {
@@ -30,9 +43,9 @@ export class ProjectScanCache {
 
   get size(): number { return this.entries.size }
 
-  async getFresh(projectPath: string): Promise<ProjectScanCacheResult> {
+  async getFresh(projectPath: string, limits?: Partial<ScanLimits>): Promise<ProjectScanCacheResult> {
     return this.withIdentity(projectPath, async (identity) => {
-      const key = identity.key
+      const key = composedKey(identity.key, limits)
       const cached = this.entries.get(key)
       if (cached) {
         if (await isProjectSnapshotCurrent(cached.snapshot)) {
@@ -40,16 +53,16 @@ export class ProjectScanCache {
           return { scan: cached.scan, status: 'reused' }
         }
         this.entries.delete(key)
-        return this.scanAndStore(key, identity.realPath, 'changed')
+        return this.scanAndStore(key, identity.key, identity.realPath, 'changed', limits)
       }
-      return this.scanAndStore(key, identity.realPath, 'missing')
+      return this.scanAndStore(key, identity.key, identity.realPath, 'missing', limits)
     })
   }
 
-  async refresh(projectPath: string): Promise<ProjectScanCacheResult> {
+  async refresh(projectPath: string, limits?: Partial<ScanLimits>): Promise<ProjectScanCacheResult> {
     return this.withIdentity(projectPath, async (identity) => {
-      this.entries.delete(identity.key)
-      return this.scanAndStore(identity.key, identity.realPath, 'forced')
+      this.dropAllLimits(identity.key)
+      return this.scanAndStore(composedKey(identity.key, limits), identity.key, identity.realPath, 'forced', limits)
     })
   }
 
@@ -62,9 +75,17 @@ export class ProjectScanCache {
       this.linkAlias(lexical, key)
     } catch { /* A deleted path is still invalidated by its lexical identity. */ }
     await this.withKey(key, async () => {
-      this.entries.delete(key)
+      this.dropAllLimits(key)
       this.clearAliases(key)
     })
+  }
+
+  /** 删除某项目身份下所有上限变体的缓存条目 */
+  private dropAllLimits(identityKey: string): void {
+    this.entries.delete(identityKey)
+    for (const existing of [...this.entries.keys()]) {
+      if (existing.startsWith(`${identityKey}\0`)) this.entries.delete(existing)
+    }
   }
 
   private async withIdentity<T>(projectPath: string, operation: (identity: Awaited<ReturnType<typeof resolveProjectIdentity>>) => Promise<T>): Promise<T> {
@@ -75,7 +96,8 @@ export class ProjectScanCache {
     } catch (error) {
       const oldKey = this.aliases.get(lexical) ?? lexical
       await this.withKey(oldKey, async () => {
-        this.entries.delete(oldKey)
+        // 项目目录已删除等情况：连同所有上限变体的缓存一起清掉
+        this.dropAllLimits(oldKey)
         this.entries.delete(lexical)
         this.clearAliases(oldKey)
       })
@@ -109,8 +131,9 @@ export class ProjectScanCache {
     while (this.entries.size > this.capacity) {
       const oldest = this.entries.keys().next().value as string | undefined
       if (oldest === undefined) break
+      const entry = this.entries.get(oldest)
       this.entries.delete(oldest)
-      this.clearAliases(oldest)
+      if (entry) this.clearAliases(entry.identityKey)
     }
   }
 
@@ -122,31 +145,37 @@ export class ProjectScanCache {
    * 的缓存，同样要付这个代价。这是为换取「不复用中途发生变化的扫描结果」而做的
    * 有意取舍，取舍的细节记在 project-snapshot.ts 的 isProjectSnapshotCurrent 上。
    */
-  private async scanAndStore(key: string, realPath: string, reason: 'missing' | 'changed' | 'forced'): Promise<ProjectScanCacheResult> {
+  private async scanAndStore(
+    key: string,
+    identityKey: string,
+    realPath: string,
+    reason: 'missing' | 'changed' | 'forced',
+    limits?: Partial<ScanLimits>
+  ): Promise<ProjectScanCacheResult> {
     this.entries.delete(key)
     for (let attempt = 0; attempt < 2; attempt++) {
       let scan: ScanResult
       let snapshot: Snapshot
       try {
-        scan = await scanProject(realPath)
+        scan = await scanProject(realPath, limits)
         snapshot = await captureProjectSnapshot(scan)
       } catch (error) {
         this.entries.delete(key)
-        this.clearAliases(key)
+        this.clearAliases(identityKey)
         throw error
       }
       if (!snapshot.valid) {
         this.entries.delete(key)
-        this.clearAliases(key)
+        this.clearAliases(identityKey)
         return { scan, status: 'scanned', reason }
       }
       if (!(await isProjectSnapshotCurrent(snapshot))) continue
-      this.entries.set(key, { scan, snapshot })
+      this.entries.set(key, { scan, snapshot, identityKey })
       this.enforceCapacity()
       return { scan, status: 'scanned', reason }
     }
     this.entries.delete(key)
-    this.clearAliases(key)
+    this.clearAliases(identityKey)
     throw new Error(`项目在扫描期间持续变化，请稍后重试：${realPath}`)
   }
 

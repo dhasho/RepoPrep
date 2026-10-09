@@ -145,7 +145,7 @@ handle(IPC.selectFolder, async (e): Promise<string | null> => {
 const scanCache = new ProjectScanCache()
 
 handle(IPC.scanProject, async (_e, projectPath: string) => {
-  const { scan } = await scanCache.refresh(projectPath)
+  const { scan } = await scanCache.refresh(projectPath, getSettings().scanLimits)
   addRecentProject({ path: projectPath, name: scan.name })
   return scan
 })
@@ -190,7 +190,7 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
     if (!profile) throw new Error('未找到指定的大模型配置，请先到设置页完成配置')
 
     sendProgress('校验项目扫描', '检查项目扫描缓存', 2)
-    const cached = await scanCache.getFresh(options.projectPath)
+    const cached = await scanCache.getFresh(options.projectPath, settings.scanLimits)
     if (abort.signal.aborted) throw new Error('已取消生成')
     const scanDetail = cached.status === 'reused'
       ? '使用未变化的项目扫描结果'

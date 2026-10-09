@@ -2,6 +2,8 @@ import path from 'node:path'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import type { GenerateOptions, Granularity, InterviewResult, LlmProfile, RoleFocus, Settings } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
+import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
+// @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { IPC } from '../../shared/ipc.ts'
 
 const messages = {
@@ -62,12 +64,23 @@ function profile(value: unknown): asserts value is LlmProfile {
   string(value.apiKey, 4096, 0); string(value.model, 256)
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 2)) fail()
 }
+function scanLimits(value: unknown): void {
+  if (!record(value)) fail()
+  exactKeys(value, ['maxFiles', 'maxTreeNodes', 'maxContentFileBytes'])
+  const int = (v: unknown, bound: { min: number; max: number }): void => {
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < bound.min || v > bound.max) fail()
+  }
+  if (value.maxFiles !== undefined) int(value.maxFiles, SCAN_LIMIT_BOUNDS.maxFiles)
+  if (value.maxTreeNodes !== undefined) int(value.maxTreeNodes, SCAN_LIMIT_BOUNDS.maxTreeNodes)
+  if (value.maxContentFileBytes !== undefined) int(value.maxContentFileBytes, SCAN_LIMIT_BOUNDS.maxContentFileBytes)
+}
 function settings(value: unknown): asserts value is Settings {
   if (!record(value) || !Array.isArray(value.profiles) || value.profiles.length > 32) fail()
-  exactKeys(value, ['profiles', 'defaultProfileId'])
+  exactKeys(value, ['profiles', 'defaultProfileId', 'scanLimits'])
   if (value.defaultProfileId !== null) string(value.defaultProfileId, 128)
   for (const item of value.profiles) profile(item)
   if (value.defaultProfileId !== null && !value.profiles.some((p) => record(p) && p.id === value.defaultProfileId)) fail()
+  if (value.scanLimits !== undefined) scanLimits(value.scanLimits)
 }
 
 const GRANULARITIES = ['coarse', 'medium', 'fine'] as const satisfies readonly Granularity[]

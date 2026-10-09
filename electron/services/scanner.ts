@@ -4,6 +4,9 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import ignore from 'ignore'
 import type { FileNode, KeyFileInfo, LanguageStat, ProjectOverview, SecurityProtectionSummary } from '../../shared/types'
+import type { ScanLimits, ScanTruncation } from '../../shared/types'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { recordProjectSnapshot, resolveProjectIdentity, type ProjectSnapshot, type SnapshotEntry } from './project-snapshot.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
@@ -101,10 +104,24 @@ const KEY_FILE_RULES: { match: (base: string, relDir: string) => boolean; reason
   { match: (b, d) => d.split('/').length <= 1 && /^(main|index|app|server|cli)\.(ts|tsx|js|jsx|py|go|rs|java)$/i.test(b), reason: '可能的入口文件' }
 ]
 
-const MAX_WALK_FILES = 8000
-const MAX_TREE_NODES = 4000
 /** 单文件送入模型的上限（同时用于题量配额的模块体量估计，故导出） */
 export const MAX_CONTENT_FILE_BYTES = 256 * 1024
+
+export function scanLimitsKey(limits: ScanLimits): string {
+  return `${limits.maxFiles}/${limits.maxTreeNodes}/${limits.maxContentFileBytes}`
+}
+
+export function resolveScanLimits(partial?: Partial<ScanLimits>): ScanLimits {
+  const clamp = (value: unknown, bound: { min: number; max: number }, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+    return Math.min(bound.max, Math.max(bound.min, Math.floor(value)))
+  }
+  return {
+    maxFiles: clamp(partial?.maxFiles, SCAN_LIMIT_BOUNDS.maxFiles, DEFAULT_SCAN_LIMITS.maxFiles),
+    maxTreeNodes: clamp(partial?.maxTreeNodes, SCAN_LIMIT_BOUNDS.maxTreeNodes, DEFAULT_SCAN_LIMITS.maxTreeNodes),
+    maxContentFileBytes: clamp(partial?.maxContentFileBytes, SCAN_LIMIT_BOUNDS.maxContentFileBytes, DEFAULT_SCAN_LIMITS.maxContentFileBytes)
+  }
+}
 
 export interface ScannedFile {
   relPath: string
@@ -168,7 +185,7 @@ export function prefixGitignoreRules(content: string, relDir: string): string[] 
   return rules
 }
 
-export async function scanProject(root: string): Promise<ScanResult> {
+export async function scanProject(root: string, limits?: Partial<ScanLimits>): Promise<ScanResult> {
   const rootStat = await fs.stat(root)
   if (!rootStat.isDirectory()) throw new Error('所选路径不是目录')
   const snapshotEntries: SnapshotEntry[] = [{ path: '', type: 'dir', size: rootStat.size, mtimeMs: rootStat.mtimeMs, ctimeMs: rootStat.ctimeMs }]
@@ -210,6 +227,11 @@ export async function scanProject(root: string): Promise<ScanResult> {
   const keyFiles: KeyFileInfo[] = []
   let totalBytes = 0
   let treeNodes = 0
+  const eff = resolveScanLimits(limits)
+  let byFileCount = false
+  let byTreeNodes = false
+  let oversizedFiles = 0
+  let estimatedSkipped = 0
   const security: SecurityProtectionSummary = { excludedFiles: 0, redactedFiles: 0, redactionMatches: 0, categories: {} }
 
   async function walk(absDir: string, relDir: string, depth: number): Promise<FileNode[]> {
@@ -266,7 +288,12 @@ export async function scanProject(root: string): Promise<ScanResult> {
     for (const entry of entries) {
       const rel = relDir ? `${relDir}/${entry.name}` : entry.name
       if (isIgnored(rel, entry.isDirectory())) continue
-      if (files.length >= MAX_WALK_FILES || treeNodes >= MAX_TREE_NODES) break
+      if (files.length >= eff.maxFiles || treeNodes >= eff.maxTreeNodes) {
+        if (files.length >= eff.maxFiles) byFileCount = true
+        if (treeNodes >= eff.maxTreeNodes) byTreeNodes = true
+        estimatedSkipped++
+        continue
+      }
 
       if (entry.isDirectory()) {
         treeNodes++
@@ -293,13 +320,15 @@ export async function scanProject(root: string): Promise<ScanResult> {
           security.categories[sensitive.category] = (security.categories[sensitive.category] ?? 0) + 1
         }
         if (!isBinary) {
+          const overSize = size > eff.maxContentFileBytes
+          if (overSize && !sensitive && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel))) oversizedFiles++
           const sf: ScannedFile = {
             relPath: rel,
             absPath: path.join(absDir, entry.name),
             size,
             ext,
             textBytes: size,
-            isContentCandidate: !sensitive && size <= MAX_CONTENT_FILE_BYTES && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel)),
+            isContentCandidate: !sensitive && !overSize && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel)),
             ...(sensitive ? { sensitive } : {})
           }
           files.push(sf)
@@ -332,6 +361,10 @@ export async function scanProject(root: string): Promise<ScanResult> {
     keyFiles,
     security,
     files
+  }
+  if (byFileCount || byTreeNodes || oversizedFiles > 0) {
+    const truncation: ScanTruncation = { byFileCount, byTreeNodes, oversizedFiles, estimatedSkipped, limits: eff }
+    result.truncation = truncation
   }
   try {
     const snapshot: ProjectSnapshot = { identity: await resolveProjectIdentity(root), entries: snapshotEntries, valid: snapshotValid }

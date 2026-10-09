@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
 import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
+import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
+// @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
 import { INVOKE_CHANNELS, IpcValidationError, validateIpcArgs } from './ipc-validation.ts'
 
 const profile = { id: 'p1', name: '本地', baseUrl: 'https://api.example.com/v1', apiKey: '', model: 'model-x' }
@@ -52,6 +54,41 @@ test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', 
     rejects(IPC.llmTest, { ...profile, baseUrl })
   }
   rejects(IPC.settingsSave, { profiles: Array.from({ length: 33 }, (_, i) => ({ ...profile, id: String(i) })), defaultProfileId: null })
+})
+
+test('settingsSave 的扫描上限契约接受旧形状、partial 与边界整数并拒绝非法值', () => {
+  const save = (scanLimits?: unknown) => validateIpcArgs(IPC.settingsSave, [
+    scanLimits === undefined
+      ? { profiles: [profile], defaultProfileId: 'p1' }
+      : { profiles: [profile], defaultProfileId: 'p1', scanLimits }
+  ])
+
+  assert.doesNotThrow(() => save(), '旧版 Settings 形状保持兼容')
+  assert.doesNotThrow(() => save({}))
+  assert.doesNotThrow(() => save({ maxFiles: 42 }), '合法 partial 设置应可保存')
+  assert.doesNotThrow(() => save({
+    maxFiles: SCAN_LIMIT_BOUNDS.maxFiles.min,
+    maxTreeNodes: SCAN_LIMIT_BOUNDS.maxTreeNodes.max,
+    maxContentFileBytes: SCAN_LIMIT_BOUNDS.maxContentFileBytes.min
+  }))
+  assert.doesNotThrow(() => save({
+    maxFiles: SCAN_LIMIT_BOUNDS.maxFiles.max,
+    maxTreeNodes: SCAN_LIMIT_BOUNDS.maxTreeNodes.min,
+    maxContentFileBytes: SCAN_LIMIT_BOUNDS.maxContentFileBytes.max
+  }))
+
+  for (const invalid of [
+    { maxFiles: '10' }, { maxFiles: 1.5 }, { maxFiles: Number.NaN }, { maxFiles: Number.POSITIVE_INFINITY },
+    { maxFiles: SCAN_LIMIT_BOUNDS.maxFiles.min - 1 }, { maxFiles: SCAN_LIMIT_BOUNDS.maxFiles.max + 1 },
+    { maxTreeNodes: '10' }, { maxTreeNodes: 1.5 }, { maxTreeNodes: Number.NaN }, { maxTreeNodes: Number.NEGATIVE_INFINITY },
+    { maxTreeNodes: SCAN_LIMIT_BOUNDS.maxTreeNodes.min - 1 }, { maxTreeNodes: SCAN_LIMIT_BOUNDS.maxTreeNodes.max + 1 },
+    { maxContentFileBytes: '1024' }, { maxContentFileBytes: 1.5 }, { maxContentFileBytes: Number.NaN }, { maxContentFileBytes: Number.POSITIVE_INFINITY },
+    { maxContentFileBytes: SCAN_LIMIT_BOUNDS.maxContentFileBytes.min - 1 },
+    { maxContentFileBytes: SCAN_LIMIT_BOUNDS.maxContentFileBytes.max + 1 },
+    null, [], 'invalid', { extra: 1 }
+  ]) {
+    rejects(IPC.settingsSave, { profiles: [profile], defaultProfileId: 'p1', scanLimits: invalid })
+  }
 })
 
 test('闭合输入对象拒绝额外或循环字段，requestId 仅接受 UUID', () => {

@@ -107,15 +107,23 @@ test('SettingsPage preserves newer edits when an older save completes, then save
     await act(async () => root!.render(render()))
 
     const nameInput = () => rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
+    const contentLimit = () => rootElement.querySelector<HTMLInputElement>('#scan-limit-maxContentFileBytes')!
     const saveButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.startsWith('保存'))!
     const backButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('返回') && !button.textContent?.includes('放弃'))!
 
     await act(async () => setInput(nameInput(), 'A'))
+    for (const digit of ['1', '0', '2', '4']) {
+      const currentValue = contentLimit().value
+      await act(async () => setInput(contentLimit(), currentValue + digit))
+      assert.equal(contentLimit().value, currentValue + digit, '输入草稿应保留每次键入的原文')
+    }
     await act(async () => saveButton().click())
     assert.equal(saves.length, 1)
+    assert.equal(saves[0].settings.scanLimits?.maxContentFileBytes, 1024)
     assert.equal(saveButton().disabled, true, '保存进行中按钮应禁用')
     await act(async () => saveButton().click())
     await act(async () => setInput(nameInput(), 'B'))
+    await act(async () => setInput(contentLimit(), '1'))
     assert.equal(saves.length, 1, '保存进行中再次点击不能重复提交')
 
     await act(async () => {
@@ -125,11 +133,17 @@ test('SettingsPage preserves newer edits when an older save completes, then save
     assert.equal(saves[0].settings.profiles[0].name, 'A')
     assert.equal(parentSettings.profiles[0].name, 'A', '成功写盘的快照应回调给父组件')
     assert.equal(nameInput().value, 'B', '保存窗口中新编辑的草稿应继续显示')
+    assert.equal(contentLimit().value, '1', '父组件收到已保存快照后不应覆盖未完成的输入')
     assert.match(saveButton().textContent ?? '', /\*$/, '新草稿仍应标记未保存')
     assert.equal(rootElement.textContent?.includes('✓ 已保存'), false)
     await act(async () => backButton().click())
     assert.equal(rootElement.textContent?.includes('有未保存的修改'), true, '返回应要求确认未保存修改')
 
+    let callsBeforeInvalidSave = saves.length
+    await act(async () => saveButton().click())
+    assert.equal(saves.length, callsBeforeInvalidSave, '未失焦的非法值也必须阻止保存')
+    assert.equal(rootElement.querySelector('#scan-limit-maxContentFileBytes-error')?.textContent?.includes('1024'), true)
+    await act(async () => setInput(contentLimit(), '1024'))
     await act(async () => saveButton().click())
     assert.equal(saves.length, 2)
     assert.equal(saves[1].settings.profiles[0].name, 'B')
@@ -210,6 +224,75 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
     saves[1].control.resolve()
     await React.act(async () => saves[1].promise)
     assert.equal(rootElement.textContent?.includes('✓ 已保存'), true)
+  } finally {
+    if (root) {
+      const React = require('react') as typeof import('react')
+      await React.act(async () => root!.unmount())
+    }
+    dom.window.close()
+    restoreGlobals()
+  }
+})
+
+test('SettingsPage validates blurred scan limits, converts boundary values, and clears one override', async () => {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
+  const restoreGlobals = installDomGlobals(dom)
+  const saves: Settings[] = []
+  dom.window.api = {
+    saveSettings: async (settings: Settings) => { saves.push(structuredClone(settings)) },
+    listModels: async () => ({ ok: true, models: [], message: '' }),
+    testLlm: async () => ({ ok: true, message: 'ok' })
+  } as unknown as typeof dom.window.api
+
+  let root: import('react-dom/client').Root | undefined
+  try {
+    const React = require('react') as typeof import('react')
+    const { createRoot } = require('react-dom/client') as typeof import('react-dom/client')
+    delete require.cache[require.resolve(bundlePath)]
+    const SettingsPage = require(bundlePath).default as typeof import('./SettingsPage').default
+    const rootElement = dom.window.document.getElementById('root')!
+    root = createRoot(rootElement)
+    const initial: Settings = {
+      ...initialSettings,
+      scanLimits: { maxFiles: 100, maxTreeNodes: 200, maxContentFileBytes: 2048 }
+    }
+    let savedCalls = 0
+    await React.act(async () => root!.render(React.createElement(SettingsPage, {
+      settings: initial, onSaved: () => { savedCalls++ }, onBack: () => {}
+    })))
+    const field = (name: string) => rootElement.querySelector<HTMLInputElement>(`#scan-limit-${name}`)!
+    const saveButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.startsWith('保存'))!
+
+    await React.act(async () => {
+      const input = field('maxContentFileBytes')
+      input.focus()
+      setInput(input, '0')
+      input.blur()
+    })
+    assert.equal(field('maxContentFileBytes').value, '0', '失焦验证不得改写原始输入')
+    assert.equal(field('maxContentFileBytes').getAttribute('aria-invalid'), 'true')
+    assert.match(rootElement.querySelector('#scan-limit-maxContentFileBytes-error')?.textContent ?? '', /1024/)
+    await React.act(async () => saveButton().click())
+    assert.equal(saves.length, 0, '非法上限应阻止 IPC 保存')
+    assert.equal(savedCalls, 0, '非法上限应阻止 onSaved')
+
+    await React.act(async () => {
+      setInput(field('maxFiles'), '1')
+      setInput(field('maxTreeNodes'), '10000')
+      setInput(field('maxContentFileBytes'), '524288')
+    })
+    await React.act(async () => saveButton().click())
+    assert.equal(saves.length, 1)
+    assert.deepEqual(saves[0].scanLimits, { maxFiles: 1, maxTreeNodes: 10000, maxContentFileBytes: 524288 })
+    assert.equal(savedCalls, 1)
+
+    await React.act(async () => setInput(field('maxFiles'), ''))
+    await React.act(async () => saveButton().click())
+    assert.equal(saves.length, 2)
+    assert.equal(Object.hasOwn(saves[1].scanLimits ?? {}, 'maxFiles'), false, '清空覆盖项应省略该字段')
+    assert.equal(saves[1].scanLimits?.maxTreeNodes, 10000, '清空一项应保留其他覆盖项')
+    assert.equal(saves[1].scanLimits?.maxContentFileBytes, 524288)
+    assert.equal(savedCalls, 2)
   } finally {
     if (root) {
       const React = require('react') as typeof import('react')

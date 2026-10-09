@@ -1,9 +1,12 @@
 // 设置页：大模型配置管理（OpenAI 兼容接口，支持检测 Key 可用模型列表）
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { LlmProfile, Settings, TestConnectionResult } from '@shared/types'
+import type { ScanLimits } from '@shared/types'
+import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '@shared/types'
 import { api } from '../lib/ipc'
 import { SettingsSaveFlow } from '../lib/settings-save'
 import { ModelDetectionController, modelStateOf } from '../lib/model-detection'
+import { parseScanLimitDraft, scanLimitDraftOf, type ScanLimitDraft, type ScanLimitErrors } from '../lib/scan-limit-input'
 
 interface Props {
   settings: Settings
@@ -40,6 +43,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const [test, setTest] = useState<TestConnectionResult | null>(null)
   const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [scanLimitDraft, setScanLimitDraft] = useState<ScanLimitDraft>(() => scanLimitDraftOf(settings.scanLimits))
+  const [scanLimitErrors, setScanLimitErrors] = useState<ScanLimitErrors>({})
   // 保存必须等待主进程写盘结果（issue #15）：保存中防重复提交；
   // 失败时不清除 dirty、显示可操作错误；带未保存修改返回时先提示
   const saveFlow = useMemo(() => new SettingsSaveFlow(api), [])
@@ -103,12 +108,15 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
       setTest({ ok: false, message: '名称、接口地址、模型名不能为空' })
       return
     }
+    const parsedLimits = parseScanLimitDraft(scanLimitDraft)
+    setScanLimitErrors(parsedLimits.errors)
+    if (!parsedLimits.value) return
     setSaving(true)
     setSaved(false)
     setSaveError(null)
     setConfirmDiscard(false)
     try {
-      const next: Settings = { profiles, defaultProfileId: defaultId ?? profiles[0]?.id ?? null }
+      const next: Settings = { profiles, defaultProfileId: defaultId ?? profiles[0]?.id ?? null, scanLimits: parsedLimits.value }
       const result = await saveFlow.save(next)
       if (result.outcome === 'saved') {
         onSaved(next)
@@ -428,6 +436,42 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
           </div>
         )}
       </div>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="scan-limit-heading">
+        <h2 id="scan-limit-heading" className="text-sm font-semibold text-slate-800">扫描安全上限</h2>
+        <p className="mt-1 text-xs text-slate-500">项目较大时，扫描会在达到上限后停止并提示扫描不完整。留空使用默认值，修改后在下一次扫描或生成时生效。</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {([
+            ['maxFiles', '最多扫描文件数'],
+            ['maxTreeNodes', '最多树节点数'],
+            ['maxContentFileBytes', '单文件内容上限（字节）']
+          ] as Array<[keyof ScanLimits, string]>).map(([key, label]) => {
+            const bounds = SCAN_LIMIT_BOUNDS[key]
+            const id = `scan-limit-${key}`
+            const errorId = `${id}-error`
+            return <div key={key}>
+              <label htmlFor={id} className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+              <input id={id} name={key} type="text" inputMode="numeric" className={inputCls}
+                value={scanLimitDraft[key]} aria-invalid={Boolean(scanLimitErrors[key])}
+                aria-describedby={scanLimitErrors[key] ? errorId : undefined}
+                onChange={(e) => {
+                  setScanLimitDraft((draft) => ({ ...draft, [key]: e.target.value }))
+                  setScanLimitErrors((errors) => ({ ...errors, [key]: undefined }))
+                  setDirty(true)
+                  setSaved(false)
+                  saveFlow.markLocalEdit()
+                }}
+                onBlur={() => {
+                  const result = parseScanLimitDraft(scanLimitDraft)
+                  setScanLimitErrors((errors) => ({ ...errors, [key]: result.errors[key] }))
+                }}
+                placeholder={`默认 ${DEFAULT_SCAN_LIMITS[key]}`} />
+              {scanLimitErrors[key] && <p id={errorId} className="mt-1 text-xs text-rose-600">{scanLimitErrors[key]}</p>}
+              <p className="mt-1 text-[11px] text-slate-400">整数，范围 {bounds.min}–{bounds.max}</p>
+            </div>
+          })}
+        </div>
+      </section>
 
       <p className="mt-5 text-xs leading-5 text-slate-400">
         说明：API Key 仅保存在本机用户数据目录，用于本应用直接调用对应服务商接口，不会上传到任何第三方。
