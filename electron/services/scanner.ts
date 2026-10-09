@@ -125,14 +125,68 @@ export interface ScanResult extends ProjectOverview {
   files: ScannedFile[] // 扁平文件列表（供上下文构建使用）
 }
 
+/**
+ * 转义路径里的 glob/模式元字符：目录名形如 a[1]、!foo、#foo 时，
+ * 不转义会把目录名当成字符类 / 否定 / 注释解析，导致规则错位
+ * （既可能漏掉本应忽略的子树，也可能误伤兄弟目录）。
+ */
+function escapeGitignoreSegment(segment: string): string {
+  return segment.replace(/([\\*?[\]!#])/g, '\\$1')
+}
+
+/** Git 会去掉 .gitignore 开头的 UTF-8 BOM；ignore 包不会，需自行剥离 */
+function stripBom(content: string): string {
+  return content.replace(/^\uFEFF/, '')
+}
+
+/**
+ * 把子目录 .gitignore 的规则改写成相对扫描根目录的形式（issue #16），
+ * 以便叠加进全局规则集。改写规则与 Git 语义对应：
+ * - 内嵌 '/' 的模式在 Git 里锚定到该 .gitignore 所在目录 → 前缀化后仍锚定到原目录；
+ * - 纯 basename 模式在所在目录的任意层级匹配 → prefix/**\/pattern（** 可匹配零层，
+ *   覆盖 prefix 下的直接子项）；
+ * - 否定 '!'、目录限定行尾 '/'、注释与空行语义保持不变。
+ * 注意：Git 中"父目录被排除时无法重新包含其中的文件"由遍历顺序天然保证——
+ * 被排除的目录根本不会进入，其内层 .gitignore 不会被加载。
+ */
+export function prefixGitignoreRules(content: string, relDir: string): string[] {
+  const prefix = escapeGitignoreSegment(relDir)
+  const rules: string[] = []
+  for (const rawLine of stripBom(content).split(/\r?\n/)) {
+    // Git 会修剪未转义的行尾空白（行尾是反斜杠转义的空格则保留）
+    const line = rawLine.replace(/(?<!\\)[ \t]+$/, '')
+    if (!line || line.startsWith('#')) continue
+    const negated = line.startsWith('!')
+    const pattern = negated ? line.slice(1) : line
+    if (!pattern || pattern === '/') continue
+    const hasEmbeddedSlash = pattern.slice(0, -1).includes('/')
+    const prefixed = hasEmbeddedSlash
+      ? `${prefix}/${pattern.startsWith('/') ? pattern.slice(1) : pattern}`
+      : `${prefix}/**/${pattern}`
+    rules.push(negated ? `!${prefixed}` : prefixed)
+  }
+  return rules
+}
+
 export async function scanProject(root: string): Promise<ScanResult> {
   const rootStat = await fs.stat(root)
   if (!rootStat.isDirectory()) throw new Error('所选路径不是目录')
   const snapshotEntries: SnapshotEntry[] = [{ path: '', type: 'dir', size: rootStat.size, mtimeMs: rootStat.mtimeMs, ctimeMs: rootStat.ctimeMs }]
   let snapshotValid = true
 
+  // 两套规则集（issue #16）：内置 ALWAYS_IGNORE 优先级最高，任何 .gitignore 的
+  // 否定规则都不能把它们重新纳入；.gitignore 规则（根目录 + 遍历时叠加的嵌套
+  // 目录规则）在另一套实例里，后加载的内层规则优先于外层，与 Git 的层级语义一致。
+  const alwaysIg = ignore().add(ALWAYS_IGNORE)
+  const gitIg = ignore()
+
+  /** 目录与文件使用唯一规范路径，保留行尾斜杠的目录限定语义。 */
+  const isIgnored = (rel: string, isDir: boolean): boolean => {
+    const candidate = isDir ? `${rel}/` : rel
+    return alwaysIg.ignores(candidate) || gitIg.ignores(candidate)
+  }
+
   // 解析根目录 .gitignore
-  const ig = ignore().add(ALWAYS_IGNORE)
   const gitignorePath = path.join(root, '.gitignore')
   try {
     const ignoreStat = await fs.stat(gitignorePath)
@@ -144,7 +198,7 @@ export async function scanProject(root: string): Promise<ScanResult> {
   }
   if (fsSync.existsSync(gitignorePath)) {
     try {
-      ig.add(await fs.readFile(gitignorePath, 'utf-8'))
+      gitIg.add(stripBom(await fs.readFile(gitignorePath, 'utf-8')))
     } catch {
       snapshotValid = false
       /* 解析失败则忽略；快照不可缓存，因为实际忽略策略不确定 */
@@ -177,6 +231,32 @@ export async function scanProject(root: string): Promise<ScanResult> {
     } else {
       snapshotEntries.push({ path: relDir, type: 'dir', size: dirStat.size, mtimeMs: dirStat.mtimeMs, ctimeMs: dirStat.ctimeMs, names })
     }
+
+    // Git 语义：进入目录时叠加该目录的 .gitignore（作用于本目录及整个子树，
+    // 后加载的内层规则优先于外层）。被排除的目录根本不会进入，其内层规则
+    // 自然不生效——与 Git"父目录被排除时无法重新包含其中文件"的行为一致。
+    const nestedGitignorePath = path.join(absDir, '.gitignore')
+    if (relDir !== '' && names.includes('.gitignore')) {
+      try {
+        gitIg.add(prefixGitignoreRules(await fs.readFile(nestedGitignorePath, 'utf-8'), relDir))
+        // 嵌套 .gitignore 本身也可能被忽略规则排除（此时 entry 循环不会为它
+        // 记录快照）——但它的内容影响扫描结果，必须记录，否则它后续变更
+        // 不会使扫描缓存失效，会一直返回陈旧扫描。
+        if (isIgnored(`${relDir}/.gitignore`, false)) {
+          try {
+            const nestedStat = await fs.stat(nestedGitignorePath)
+            snapshotEntries.push({ path: `${relDir}/.gitignore`, type: 'file', size: nestedStat.size, mtimeMs: nestedStat.mtimeMs, ctimeMs: nestedStat.ctimeMs })
+          } catch {
+            snapshotValid = false
+          }
+        }
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== 'ENOENT' && code !== 'EISDIR') snapshotValid = false
+        /* 无 .gitignore（ENOENT）/ 是目录（EISDIR）：按无额外规则处理；其他读取失败使快照不可缓存 */
+      }
+    }
+
     const nodes: FileNode[] = []
     // 目录优先、其余按名称排序，保证树稳定
     entries.sort((a, b) => {
@@ -185,12 +265,10 @@ export async function scanProject(root: string): Promise<ScanResult> {
     })
     for (const entry of entries) {
       const rel = relDir ? `${relDir}/${entry.name}` : entry.name
-      if (ig.ignores(rel)) continue
+      if (isIgnored(rel, entry.isDirectory())) continue
       if (files.length >= MAX_WALK_FILES || treeNodes >= MAX_TREE_NODES) break
 
       if (entry.isDirectory()) {
-        // ignore 包对 'dir/' 规则需用带斜杠的路径形式测试目录本身
-        if (ig.ignores(rel) || ig.ignores(`${rel}/`)) continue
         treeNodes++
         const children = await walk(path.join(absDir, entry.name), rel, depth + 1)
         nodes.push({ name: entry.name, path: rel, type: 'dir', children })

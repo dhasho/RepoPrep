@@ -42,16 +42,20 @@ describe('project snapshot', () => {
     assert.equal(await isProjectSnapshotCurrent(snapshot), false)
   })
 
-  it('detects same-size edits and changes made after scan before capture', async () => {
+  it('detects same-size edits with explicit mtime changes before and after capture', async () => {
     const root = await makeProject()
     const scan = await makeScan(root)
-    await fs.writeFile(path.join(root, 'src', 'one.ts'), 'two')
+    const filePath = path.join(root, 'src', 'one.ts')
+    await fs.writeFile(filePath, 'two')
+    // Explicit mtime avoids relying on the filesystem timestamp tick for equal-size edits.
+    await fs.utimes(filePath, new Date('2021-01-01T00:00:00Z'), new Date('2021-01-01T00:00:00Z'))
     const snapshot = await captureProjectSnapshot(scan)
     assert.equal(await isProjectSnapshotCurrent(snapshot), false)
 
     const scan2 = await makeScan(root)
     const snapshot2 = await captureProjectSnapshot(scan2)
-    await fs.writeFile(path.join(root, 'src', 'one.ts'), 'six')
+    await fs.writeFile(filePath, 'six')
+    await fs.utimes(filePath, new Date('2022-01-01T00:00:00Z'), new Date('2022-01-01T00:00:00Z'))
     assert.equal(await isProjectSnapshotCurrent(snapshot2), false)
   })
 
@@ -82,6 +86,8 @@ describe('project snapshot', () => {
     assert.equal(await isProjectSnapshotCurrent(snapshot), true)
 
     await fs.writeFile(path.join(root, 'src', 'a', 'b', 'deep.ts'), 'deep two\n')
+    // Explicit mtime ensures this equal-size edit is observable on coarse-tick filesystems.
+    await fs.utimes(path.join(root, 'src', 'a', 'b', 'deep.ts'), new Date('2021-01-01T00:00:00Z'), new Date('2021-01-01T00:00:00Z'))
     assert.equal(await isProjectSnapshotCurrent(snapshot), false)
   })
 
