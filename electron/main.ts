@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
 import type { ExplainRequest, GenerateOptions, InterviewResult, LlmProfile, Settings } from '@shared/types'
 import { ProjectScanCache } from './services/scan-cache'
+import { GenerationTaskRegistry } from './services/generation-tasks'
 import { generateInterview, buildExplainMessages } from './services/generator'
 import { chatCompletionStream, listModels, testConnection } from './services/llm'
 import { exportMarkdownDialog } from './services/exporter'
@@ -118,6 +119,8 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // 窗口全部关闭时中止生成；槽位由旧 handler 的 finally 释放（issue #20）
+  generationTasks.cancelAll()
   if (process.platform !== 'darwin') app.quit()
 })
 
@@ -171,18 +174,27 @@ handle(IPC.deleteResult, (_e, projectPath: string) => {
 
 // ---------- 生成 ----------
 
-let currentGenerateAbort: AbortController | null = null
+// 生成槽位注册表（issue #20）：begin() 同步占用，杜绝并发生成；
+// runId 用于防止陈旧的 finish 误清新任务的锁。
+const generationTasks = new GenerationTaskRegistry()
 
-// 进度事件在发送瞬间打上时间戳，渲染层保存并显示这个时间，
-// 而不是渲染时另取当前时间（issue #13：否则所有历史日志显示同一个漂移时间）
-const sendProgress = (step: string, detail: string | undefined, percent: number): void => {
-  send(IPC.generateProgress, { step, detail, percent, ts: Date.now() })
-}
-
-handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
-  if (currentGenerateAbort) throw new Error('已有生成任务在进行中')
-  const abort = new AbortController()
-  currentGenerateAbort = abort
+handle(IPC.generateRun, async (event, options: GenerateOptions): Promise<InterviewResult> => {
+  // 任何 await 之前同步占用槽位：重复请求在这里被拒绝，不会并发扫描/生成
+  const task = generationTasks.begin()
+  if (!task) throw new Error('已有生成任务在进行中')
+  const { runId, controller: abort } = task
+  const sender = event.sender
+  const isCurrentTask = (): boolean =>
+    generationTasks.active?.runId === runId && !abort.signal.aborted && !sender.isDestroyed()
+  const ensureCurrentTask = (): void => {
+    if (!isCurrentTask()) throw new Error('已取消生成')
+  }
+  // 进度绑定到发起请求的 webContents，并在发送时检查任务和取消状态。
+  // ts 保留主进程产生时刻，runId 供 renderer 做任务隔离。
+  const sendProgress = (step: string, detail: string | undefined, percent: number): void => {
+    if (!isCurrentTask()) return
+    sender.send(IPC.generateProgress, { step, detail, percent, ts: Date.now(), runId })
+  }
 
   try {
     const settings = getSettings()
@@ -191,7 +203,7 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
 
     sendProgress('校验项目扫描', '检查项目扫描缓存', 2)
     const cached = await scanCache.getFresh(options.projectPath, settings.scanLimits)
-    if (abort.signal.aborted) throw new Error('已取消生成')
+    ensureCurrentTask()
     const scanDetail = cached.status === 'reused'
       ? '使用未变化的项目扫描结果'
       : cached.reason === 'changed'
@@ -211,19 +223,21 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
       signal: abort.signal,
       onProgress: sendProgress
     })
+    ensureCurrentTask()
     saveResult(options.projectPath, result)
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
     return result
   } catch (err) {
-    if (abort.signal.aborted) throw new Error('已取消生成')
+    if (!isCurrentTask()) throw new Error('已取消生成')
     throw err instanceof Error ? err : new Error(String(err))
   } finally {
-    currentGenerateAbort = null
+    // runId 守卫：陈旧的 finish 不会清掉新任务的锁
+    generationTasks.finish(runId)
   }
 })
 
 handle(IPC.generateCancel, () => {
-  currentGenerateAbort?.abort()
+  generationTasks.cancelCurrent()
 })
 
 // ---------- 名词 AI 解释（流式） ----------

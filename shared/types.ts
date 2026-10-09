@@ -155,6 +155,8 @@ export interface GenerateProgress {
   step: string
   detail?: string
   percent: number // 0-100
+  /** 产生该进度的生成任务 runId（主进程生成时创建；用于隔离不同任务的进度，issue #20/#21） */
+  runId?: string
   /** 事件产生的时刻（epoch 毫秒）。由主进程发送时写入，渲染层只读它，避免历史日志时间漂移 */
   ts: number
 }
