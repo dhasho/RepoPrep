@@ -35,7 +35,8 @@ const portalShim = {
 
 const entries = [
   { name: 'result-page', entry: 'src/pages/ResultPage.tsx' },
-  { name: 'term-popover', entry: 'src/components/TermPopover.tsx' }
+  { name: 'term-popover', entry: 'src/components/TermPopover.tsx' },
+  { name: 'settings-page', entry: 'src/pages/SettingsPage.tsx' }
 ]
 
 for (const { name, entry } of entries) {

@@ -269,8 +269,24 @@ handle(IPC.explainCancel, (_e, requestId: string) => {
 
 handle(IPC.settingsGet, () => getSettings())
 
-handle(IPC.settingsSave, (_e, settings: Settings) => {
-  saveSettings(settings)
+/**
+ * 把设置写盘失败的 errno 翻译成可操作、不含敏感信息（不含路径/密钥）的提示
+ * （issue #15）。消息须在 ipc-handler-guards.ts 的 SAFE_BUSINESS_ERRORS
+ * 白名单内才能原样到达渲染进程。
+ */
+function describeSettingsWriteError(err: unknown): string {
+  const code = err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined
+  if (code === 'ENOSPC' || code === 'EDQUOT') return '磁盘空间不足，无法保存设置。请清理磁盘空间后重试。'
+  if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return '没有写入权限，无法保存设置。请检查应用数据目录权限后重试。'
+  return '保存设置失败，请重试；若持续失败请检查磁盘状态。'
+}
+
+handle(IPC.settingsSave, async (_e, settings: Settings): Promise<void> => {
+  try {
+    saveSettings(settings)
+  } catch (err) {
+    throw new Error(describeSettingsWriteError(err))
+  }
 })
 
 handle(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile))

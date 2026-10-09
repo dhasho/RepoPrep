@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { LlmProfile, Settings, TestConnectionResult } from '@shared/types'
 import { api } from '../lib/ipc'
+import { SettingsSaveFlow } from '../lib/settings-save'
 import { ModelDetectionController, modelStateOf } from '../lib/model-detection'
 
 interface Props {
@@ -39,6 +40,12 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const [test, setTest] = useState<TestConnectionResult | null>(null)
   const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
+  // 保存必须等待主进程写盘结果（issue #15）：保存中防重复提交；
+  // 失败时不清除 dirty、显示可操作错误；带未保存修改返回时先提示
+  const saveFlow = useMemo(() => new SettingsSaveFlow(api), [])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   // 模型列表检测：状态按 profile 隔离、竞态由控制器统一处理（issue #14）。
   // 响应只写回发起它的配置；换 Base URL / API Key 或快速重复检测时，
@@ -54,6 +61,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
       setProfiles([p])
       setSelectedId(p.id)
       setDirty(true)
+      saveFlow.markLocalEdit()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -64,6 +72,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setProfiles((l) => l.map((p) => (p.id === selectedId ? { ...p, ...patch } : p)))
     setDirty(true)
     setSaved(false)
+    saveFlow.markLocalEdit()
     // 换了接口地址或 Key：取消（失效）进行中的检测并清空旧列表（issue #14）
     if (patch.baseUrl !== undefined || patch.apiKey !== undefined) {
       detection.invalidate(selectedId)
@@ -82,17 +91,46 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     return q ? modelState.models.filter((m) => m.toLowerCase().includes(q)) : modelState.models
   }, [modelState.models, modelFilter])
 
-  const save = () => {
+  /**
+   * 保存设置：等待主进程确认写盘成功后才更新本地"已保存"状态（issue #15）。
+   * 写盘失败时保留 dirty 与未保存提示，展示主进程返回的可操作错误；
+   * 保存期间又发生了本地修改（hasEditsDuringSave）时这些修改未持久化，dirty 保持 true。
+   */
+  const save = async () => {
     if (!selected) return
+    if (saving) return // 防重复提交（按钮同时禁用，流程控制器也会拒绝并发保存）
     if (!selected.name.trim() || !selected.baseUrl.trim() || !selected.model.trim()) {
       setTest({ ok: false, message: '名称、接口地址、模型名不能为空' })
       return
     }
-    const next: Settings = { profiles, defaultProfileId: defaultId ?? profiles[0]?.id ?? null }
-    void api.saveSettings(next)
-    onSaved(next)
-    setDirty(false)
-    setSaved(true)
+    setSaving(true)
+    setSaved(false)
+    setSaveError(null)
+    setConfirmDiscard(false)
+    try {
+      const next: Settings = { profiles, defaultProfileId: defaultId ?? profiles[0]?.id ?? null }
+      const result = await saveFlow.save(next)
+      if (result.outcome === 'saved') {
+        onSaved(next)
+        const currentDraftSaved = !result.hasEditsDuringSave
+        setSaved(currentDraftSaved)
+        if (currentDraftSaved) setDirty(false)
+      }
+    } catch (e) {
+      setSaved(false)
+      setSaveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** 带未保存修改时第一次点击先提示，确认后才真正返回（issue #15） */
+  const handleBack = () => {
+    if (!dirty || confirmDiscard) {
+      onBack()
+      return
+    }
+    setConfirmDiscard(true)
   }
 
   const addProfile = () => {
@@ -102,7 +140,9 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setDirty(true)
     setSaved(false)
     setTest(null)
+    saveFlow.markLocalEdit()
     setModelFilter('')
+    detection.hideList(selectedId)
   }
 
   const removeProfile = () => {
@@ -115,6 +155,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setDirty(true)
     setSaved(false)
     setTest(null)
+    saveFlow.markLocalEdit()
     setModelFilter('')
   }
 
@@ -140,10 +181,30 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             兼容所有 OpenAI 接口规范的服务商（DeepSeek / 智谱 GLM / 通义千问 / Kimi / OpenAI / Ollama 等）。
           </p>
         </div>
-        <button className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" onClick={onBack}>
+        <button className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" onClick={handleBack}>
           ← 返回
         </button>
       </div>
+
+      {confirmDiscard && dirty && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <span className="text-sm text-amber-700">有未保存的修改，直接返回将丢失这些修改。</span>
+          <div className="flex gap-2">
+            <button
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-100"
+              onClick={() => setConfirmDiscard(false)}
+            >
+              继续编辑
+            </button>
+            <button
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+              onClick={onBack}
+            >
+              放弃修改并返回
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-[220px_1fr] gap-5">
         {/* 配置列表 */}
@@ -316,10 +377,11 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
 
               <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
                 <button
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
                   onClick={save}
+                  disabled={saving}
                 >
-                  保存{dirty ? ' *' : ''}
+                  {saving ? '保存中…' : `保存${dirty ? ' *' : ''}`}
                 </button>
                 <button
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
@@ -333,7 +395,12 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                     type="checkbox"
                     className="accent-indigo-600"
                     checked={defaultId === selected.id}
-                    onChange={(e) => setDefaultId(e.target.checked ? selected.id : (profiles[0]?.id ?? null))}
+                    onChange={(e) => {
+                      setDefaultId(e.target.checked ? selected.id : (profiles[0]?.id ?? null))
+                      setDirty(true)
+                      setSaved(false)
+                      saveFlow.markLocalEdit()
+                    }}
                   />
                   设为默认
                 </label>
@@ -346,6 +413,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
               </div>
 
               {saved && <p className="text-sm text-emerald-600">✓ 已保存</p>}
+              {saveError && <p className="text-sm text-rose-600">✗ {saveError}</p>}
               {test && (
                 <p className={`text-sm ${test.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {test.ok ? '✓ ' : '✗ '}

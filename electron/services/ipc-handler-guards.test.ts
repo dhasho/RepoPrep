@@ -161,3 +161,29 @@ test('名词解释拒绝重复活动 requestId，并将取消绑定到正确的�
   registry.finish(requestId, next)
   assert.ok(registry.begin(requestId), 'requestId can be reused after its active request finishes')
 })
+
+test('设置持久化失败：白名单内的静态业务错误原样透传给渲染进程（issue #15）', async () => {
+  const messages = [
+    '磁盘空间不足，无法保存设置。请清理磁盘空间后重试。',
+    '没有写入权限，无法保存设置。请检查应用数据目录权限后重试。',
+    '保存设置失败，请重试；若持续失败请检查磁盘状态。'
+  ]
+  for (const message of messages) {
+    const { deps, event } = context()
+    await assert.rejects(
+      createGuardedIpcHandler(IPC.settingsSave, deps, () => {
+        throw new Error(message)
+      })(event, ...(inputs.get(IPC.settingsSave)!)),
+      (err: unknown) => err instanceof Error && err.message === message
+    )
+  }
+
+  // 非白名单错误仍被替换为通用文案，不泄露底层细节
+  const { deps, event } = context()
+  await assert.rejects(
+    createGuardedIpcHandler(IPC.settingsSave, deps, () => {
+      throw new Error('EACCES: permission denied, open /home/user/.config/settings.json')
+    })(event, ...(inputs.get(IPC.settingsSave)!)),
+    (err: unknown) => err instanceof Error && err.message === '请求处理失败，请稍后重试'
+  )
+})
