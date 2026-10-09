@@ -57,7 +57,7 @@ export default function App() {
     setGenOptions(options)
     setGenError(null)
     setGenLogs([])
-    setGenProgress({ step: '准备中…', percent: 1 })
+    setGenProgress({ step: '准备中…', percent: 1, ts: Date.now() })
     setView('generating')
     api
       .generate(options)

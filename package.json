@@ -1,6 +1,6 @@
 {
   "name": "projectlens",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
   "author": "ProjectLens",
@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:ipc": "node --experimental-strip-types --test electron/services/ipc-validation.test.ts electron/services/ipc-authority.test.ts electron/services/ipc-handler-guards.test.ts electron/services/llm-safe-results.test.ts",
     "test:scan-cache": "node --test --experimental-strip-types electron/services/project-snapshot.test.ts electron/services/scan-cache.test.ts",
+    "test:lib": "node --experimental-strip-types --test src/lib/log-time.test.ts",
     "test:smoke": "npm run build && electron tests/smoke.cjs",
     "audit:deps": "node scripts/audit-deps.cjs package-lock.json",
     "dist": "electron-vite build && electron-builder --win",

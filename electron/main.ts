@@ -173,6 +173,12 @@ handle(IPC.deleteResult, (_e, projectPath: string) => {
 
 let currentGenerateAbort: AbortController | null = null
 
+// 进度事件在发送瞬间打上时间戳，渲染层保存并显示这个时间，
+// 而不是渲染时另取当前时间（issue #13：否则所有历史日志显示同一个漂移时间）
+const sendProgress = (step: string, detail: string | undefined, percent: number): void => {
+  send(IPC.generateProgress, { step, detail, percent, ts: Date.now() })
+}
+
 handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewResult> => {
   if (currentGenerateAbort) throw new Error('已有生成任务在进行中')
   const abort = new AbortController()
@@ -183,7 +189,7 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
     const profile = settings.profiles.find((p) => p.id === options.profileId)
     if (!profile) throw new Error('未找到指定的大模型配置，请先到设置页完成配置')
 
-    send(IPC.generateProgress, { step: '校验项目扫描', detail: '检查项目扫描缓存', percent: 2 })
+    sendProgress('校验项目扫描', '检查项目扫描缓存', 2)
     const cached = await scanCache.getFresh(options.projectPath)
     if (abort.signal.aborted) throw new Error('已取消生成')
     const scanDetail = cached.status === 'reused'
@@ -191,11 +197,11 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
       : cached.reason === 'changed'
         ? '检测到项目文件变化，重新扫描'
         : '没有可复用的扫描结果，重新扫描'
-    send(IPC.generateProgress, {
-      step: cached.status === 'reused' ? '复用扫描缓存' : '重新扫描项目',
-      detail: scanDetail,
-      percent: 5
-    })
+    sendProgress(
+      cached.status === 'reused' ? '复用扫描缓存' : '重新扫描项目',
+      scanDetail,
+      5
+    )
 
     const result = await generateInterview({
       scan: cached.scan,
@@ -203,7 +209,7 @@ handle(IPC.generateRun, async (_e, options: GenerateOptions): Promise<InterviewR
       roleFocus: options.roleFocus,
       profile,
       signal: abort.signal,
-      onProgress: (step, detail, percent) => send(IPC.generateProgress, { step, detail, percent })
+      onProgress: sendProgress
     })
     saveResult(options.projectPath, result)
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })

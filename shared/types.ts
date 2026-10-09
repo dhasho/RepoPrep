@@ -115,6 +115,8 @@ export interface GenerateProgress {
   step: string
   detail?: string
   percent: number // 0-100
+  /** 事件产生的时刻（epoch 毫秒）。由主进程发送时写入，渲染层只读它，避免历史日志时间漂移 */
+  ts: number
 }
 
 export interface GenerateOptions {

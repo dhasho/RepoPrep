@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import type { GenerateOptions, GenerateProgress, ProjectOverview } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
+import { formatLogTime } from '../lib/log-time'
 
 interface Props {
   overview: ProjectOverview | null
@@ -73,7 +74,7 @@ export default function GeneratingPage({ overview, options, progress, logs, erro
               {logs.map((l, i) => (
                 <div key={i} className="flex gap-2 py-0.5 text-xs text-slate-500">
                   <span className="shrink-0 text-slate-400">
-                    {new Date().toLocaleTimeString('zh-CN', { hour12: false })}
+                    {formatLogTime(l.ts)}
                   </span>
                   <span className="shrink-0 font-medium text-slate-600">{l.step}</span>
                   {l.detail && <span className="min-w-0 truncate">{l.detail}</span>}
