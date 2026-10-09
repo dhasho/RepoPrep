@@ -1,5 +1,5 @@
 // 结果页：大纲导航 + 问题卡片（答案/追问）+ 名词解释弹卡 + 搜索 + 导出
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FollowUp, InterviewResult, QuestionItem, Section, Settings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
 import { api } from '../lib/ipc'
@@ -42,6 +42,18 @@ export default function ResultPage({ result, settings, onRegenerate, initialSear
   const [activeId, setActiveId] = useState('')
   const [popover, setPopover] = useState<TermTarget | null>(null)
   const [toast, setToast] = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /** 统一的 toast 展示：重置旧定时器，避免上一次的定时器把新 toast 提前清掉 */
+  const showToast = (message: string) => {
+    setToast(message)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 4000)
+  }
+
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+  }, [])
 
   const profileId = result.profileId || settings.defaultProfileId || settings.profiles[0]?.id || ''
 
@@ -116,11 +128,16 @@ export default function ResultPage({ result, settings, onRegenerate, initialSear
     })
   }
 
+  // 导出必须捕获 IPC 异常（取消 / 写盘失败 / 校验拒绝），否则 toast 会停在"正在导出…"（issue #19）
   const doExport = async () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast('正在导出…')
-    const r = await api.exportMarkdown(result)
-    setToast(r.message)
-    setTimeout(() => setToast(''), 4000)
+    try {
+      const r = await api.exportMarkdown(result)
+      showToast(r.message)
+    } catch (e) {
+      showToast(`导出失败：${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   return (

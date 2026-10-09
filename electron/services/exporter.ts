@@ -1,73 +1,9 @@
-// 将生成结果导出为 Markdown 文件
+// 将生成结果导出为 Markdown 文件（对话框与写盘；渲染逻辑在 markdown-export.ts）
 import { BrowserWindow, dialog } from 'electron'
 import fs from 'node:fs'
-import type { FollowUp, InterviewResult } from '@shared/types'
-import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
-
-function renderFollowUps(followUps: FollowUp[], depth: number): string {
-  const indent = '  '.repeat(depth)
-  const lines: string[] = []
-  for (const f of followUps) {
-    lines.push(`${indent}- **追问：**${stripTermMarks(f.question)}`)
-    lines.push('')
-    const answerLines = stripTermMarks(f.answer)
-      .split('\n')
-      .map((l) => `${indent}  ${l}`)
-    lines.push(...answerLines)
-    lines.push('')
-    if (f.followUps?.length) lines.push(renderFollowUps(f.followUps, depth + 1))
-  }
-  return lines.join('\n')
-}
-
-export function resultToMarkdown(result: InterviewResult): string {
-  const lines: string[] = []
-  lines.push(`# ${result.projectName} · 项目面试题`)
-  lines.push('')
-  lines.push(
-    `> 颗粒度：${GRANULARITY_META[result.granularity].label}（${GRANULARITY_META[result.granularity].sub}）｜方向：${ROLE_META[result.roleFocus].label}｜模型：${result.modelUsed}｜生成时间：${new Date(result.createdAt).toLocaleString('zh-CN')}`
-  )
-  lines.push('')
-  if (result.projectSummary) {
-    lines.push('## 项目概览')
-    lines.push('')
-    lines.push(stripTermMarks(result.projectSummary))
-    lines.push('')
-  }
-
-  for (const section of result.sections) {
-    lines.push(`## ${section.title}`)
-    lines.push('')
-    if (section.summary) {
-      lines.push(`*${section.summary}*`)
-      lines.push('')
-    }
-    section.questions.forEach((q, idx) => {
-      lines.push(`### Q${idx + 1}. ${stripTermMarks(q.question)}`)
-      lines.push('')
-      lines.push(stripTermMarks(q.answer))
-      lines.push('')
-      if (q.followUps.length) {
-        lines.push(`**追问：**`)
-        lines.push('')
-        lines.push(renderFollowUps(q.followUps, 0))
-      }
-    })
-  }
-
-  const terms = Object.entries(result.glossary)
-  if (terms.length) {
-    lines.push('## 附录：专业名词表')
-    lines.push('')
-    lines.push('| 名词 | 解释 |')
-    lines.push('| --- | --- |')
-    for (const [term, def] of terms) {
-      lines.push(`| ${term} | ${def.replace(/\n/g, ' ')} |`)
-    }
-    lines.push('')
-  }
-  return lines.join('\n')
-}
+import type { InterviewResult } from '@shared/types'
+// @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
+import { resultToMarkdown } from './markdown-export.ts'
 
 /** 弹出保存对话框并写入文件（挂父窗口成为应用模态，与 issue #1 同类问题的预防性修复） */
 export async function exportMarkdownDialog(
