@@ -1,7 +1,8 @@
 // 设置页：大模型配置管理（OpenAI 兼容接口，支持检测 Key 可用模型列表）
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { LlmProfile, Settings, TestConnectionResult } from '@shared/types'
 import { api } from '../lib/ipc'
+import { ModelDetectionController, modelStateOf } from '../lib/model-detection'
 
 interface Props {
   settings: Settings
@@ -39,21 +40,13 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  // 模型列表检测
-  const [modelList, setModelList] = useState<string[]>([])
-  const [modelLoading, setModelLoading] = useState(false)
-  const [modelMsg, setModelMsg] = useState('')
-  const [modelMsgOk, setModelMsgOk] = useState(false)
+  // 模型列表检测：状态按 profile 隔离、竞态由控制器统一处理（issue #14）。
+  // 响应只写回发起它的配置；换 Base URL / API Key 或快速重复检测时，
+  // 过期的响应（无论成败）都会被丢弃，不会显示误导性内容。
+  const detection = useMemo(() => new ModelDetectionController({ listModels: api.listModels }), [])
+  const modelSlots = useSyncExternalStore(detection.subscribe, detection.getSnapshot, detection.getSnapshot)
+  const modelState = modelStateOf(modelSlots, selectedId)
   const [modelFilter, setModelFilter] = useState('')
-  const [showModelList, setShowModelList] = useState(false)
-
-  const resetModelState = () => {
-    setModelList([])
-    setModelMsg('')
-    setModelMsgOk(false)
-    setShowModelList(false)
-    setModelFilter('')
-  }
 
   useEffect(() => {
     if (!profiles.length && !selectedId) {
@@ -71,45 +64,23 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setProfiles((l) => l.map((p) => (p.id === selectedId ? { ...p, ...patch } : p)))
     setDirty(true)
     setSaved(false)
-    // 换了接口地址或 Key，之前检测到的模型列表已失效
+    // 换了接口地址或 Key：取消（失效）进行中的检测并清空旧列表（issue #14）
     if (patch.baseUrl !== undefined || patch.apiKey !== undefined) {
-      setModelList([])
-      setModelMsg('')
-      setShowModelList(false)
+      detection.invalidate(selectedId)
     }
   }
 
-  /** 调用主进程 GET /models 检测该 Key 可用的模型 */
-  const detectModels = async () => {
+  /** 调用主进程 GET /models 检测该 Key 可用的模型（竞态处理见 model-detection.ts） */
+  const detectModels = () => {
     if (!selected) return
-    if (!selected.baseUrl.trim()) {
-      setModelMsg('请先填写接口地址（Base URL）')
-      setModelMsgOk(false)
-      return
-    }
-    setModelLoading(true)
-    setModelMsg('')
-    const pid = selected.id
-    try {
-      const r = await api.listModels(selected)
-      if (pid !== selectedId) return // 期间切换了配置，丢弃过期结果
-      setModelList(r.models)
-      setModelMsg(r.message)
-      setModelMsgOk(r.ok)
-      setShowModelList(r.ok && r.models.length > 0)
-      setModelFilter('')
-    } catch (e) {
-      setModelMsg(`获取失败：${e instanceof Error ? e.message : String(e)}`)
-      setModelMsgOk(false)
-    } finally {
-      setModelLoading(false)
-    }
+    setModelFilter('')
+    detection.detect(selected)
   }
 
   const filteredModels = useMemo(() => {
     const q = modelFilter.trim().toLowerCase()
-    return q ? modelList.filter((m) => m.toLowerCase().includes(q)) : modelList
-  }, [modelList, modelFilter])
+    return q ? modelState.models.filter((m) => m.toLowerCase().includes(q)) : modelState.models
+  }, [modelState.models, modelFilter])
 
   const save = () => {
     if (!selected) return
@@ -131,18 +102,20 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setDirty(true)
     setSaved(false)
     setTest(null)
-    resetModelState()
+    setModelFilter('')
   }
 
   const removeProfile = () => {
     if (!selected) return
     const rest = profiles.filter((p) => p.id !== selected.id)
+    detection.invalidate(selected.id) // 该配置已删除，进行中的检测作废
     setProfiles(rest)
     if (defaultId === selected.id) setDefaultId(rest[0]?.id ?? null)
     setSelectedId(rest[0]?.id ?? '')
     setDirty(true)
     setSaved(false)
     setTest(null)
+    setModelFilter('')
   }
 
   const runTest = async () => {
@@ -186,7 +159,10 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                   setSelectedId(p.id)
                   setTest(null)
                   setSaved(false)
-                  resetModelState()
+                  // 检测状态按 profile 隔离，切回时各自恢复；只重置过滤词，
+                  // 并收起上一次展开的列表（避免下拉带着 autoFocus 抢焦点）
+                  setModelFilter('')
+                  detection.hideList(p.id)
                 }}
               >
                 <span className="min-w-0 flex-1 truncate">{p.name}</span>
@@ -246,10 +222,10 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                     if (
                       selected.apiKey.trim() &&
                       selected.baseUrl.trim() &&
-                      modelList.length === 0 &&
-                      !modelLoading
+                      modelState.models.length === 0 &&
+                      !modelState.loading
                     ) {
-                      void detectModels()
+                      detectModels()
                     }
                   }}
                   placeholder="sk-…（本地保存于本机，仅用于调用接口；Ollama 等本地服务可留空）"
@@ -267,18 +243,18 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                     <button
                       className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-100 disabled:opacity-60"
                       onClick={detectModels}
-                      disabled={modelLoading}
+                      disabled={modelState.loading}
                     >
-                      {modelLoading ? '检测中…' : '🔍 检测可用模型'}
+                      {modelState.loading ? '检测中…' : '🔍 检测可用模型'}
                     </button>
                   </div>
-                  {modelMsg && (
-                    <p className={`mt-1.5 text-xs ${modelMsgOk ? 'text-emerald-600' : 'text-slate-500'}`}>
-                      {modelMsgOk ? '✓ ' : ''}
-                      {modelMsg}
+                  {modelState.message && (
+                    <p className={`mt-1.5 text-xs ${modelState.messageOk ? 'text-emerald-600' : 'text-slate-500'}`}>
+                      {modelState.messageOk ? '✓ ' : ''}
+                      {modelState.message}
                     </p>
                   )}
-                  {showModelList && modelList.length > 0 && (
+                  {modelState.showList && modelState.models.length > 0 && (
                     <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
                       <div className="flex items-center gap-2 border-b border-slate-100 p-2">
                         <input
@@ -290,14 +266,14 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && filteredModels[0]) {
                               patchSelected({ model: filteredModels[0] })
-                              setShowModelList(false)
+                              detection.hideList(selectedId)
                             }
                           }}
                         />
                         <button
                           className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                           title="收起列表"
-                          onClick={() => setShowModelList(false)}
+                          onClick={() => detection.hideList(selectedId)}
                         >
                           ✕
                         </button>
@@ -311,7 +287,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                             }`}
                             onClick={() => {
                               patchSelected({ model: m })
-                              setShowModelList(false)
+                              detection.hideList(selectedId)
                             }}
                           >
                             <span className="truncate font-mono text-[13px]">{m}</span>
