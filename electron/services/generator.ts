@@ -10,6 +10,7 @@ import type {
   Section
 } from '@shared/types'
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
+import { assertInterviewResultContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, type ContextBatch } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, truncateToQuota, type QuestionPlan } from './question-budget'
@@ -327,6 +328,11 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         return entries
       }, [] as Array<[string, number]>))
     }
+  }
+  try {
+    assertInterviewResultContract(result)
+  } catch {
+    throw new Error(RESULT_CONTRACT_MESSAGES.generated)
   }
   onProgress('完成', undefined, 100)
   return result

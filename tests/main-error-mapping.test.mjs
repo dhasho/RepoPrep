@@ -6,6 +6,7 @@ import ts from 'typescript'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc.ts'
 import * as sharedTypes from '../shared/types.ts'
+import * as resultContract from '../shared/result-contract.ts'
 import { buildExplainMessages, generateInterview } from '../electron/services/generator.ts'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError } from '../electron/services/llm.ts'
 import { readFile } from 'node:fs/promises'
@@ -96,6 +97,7 @@ async function createHarness() {
   modules.set('@shared/types', sharedTypes)
   modules.set('../../shared/ipc.ts', { IPC })
   modules.set('../../shared/types.ts', sharedTypes)
+  modules.set('../../shared/result-contract.ts', resultContract)
   modules.set('./services/scan-cache', {
     ProjectScanCache: class {
       async getFresh() { return { status: 'reused', scan } }

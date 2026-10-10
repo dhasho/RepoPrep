@@ -11,6 +11,8 @@ import { INVOKE_CHANNELS } from './ipc-validation.ts'
 import { AuthorizedProjectRegistry } from './ipc-authority.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { createGuardedIpcHandler, ExplainAbortRegistry } from './ipc-handler-guards.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { RESULT_CONTRACT_MESSAGES } from '../../shared/result-contract.ts'
 
 const requestId = '4f22d0a1-3e0f-4f4e-8c1d-1c9f9036bc17'
 const profile = { id: 'p1', name: 'Demo', baseUrl: 'https://example.com', apiKey: '', model: 'test' }
@@ -194,4 +196,17 @@ test('设置持久化失败：白名单内的静态业务错误原样透传给�
     })(event, ...(inputs.get(IPC.settingsSave)!)),
     (err: unknown) => err instanceof Error && err.message === '请求处理失败，请稍后重试'
   )
+})
+
+test('生成结果与历史结果的静态契约错误可安全透传给 renderer', async () => {
+  for (const [channel, message, args] of [
+    [IPC.generateRun, RESULT_CONTRACT_MESSAGES.generated, inputs.get(IPC.generateRun)!],
+    [IPC.loadResult, RESULT_CONTRACT_MESSAGES.history, inputs.get(IPC.loadResult)!]
+  ] as Array<[string, string, unknown[]]>) {
+    const { deps, event } = context()
+    await assert.rejects(
+      createGuardedIpcHandler(channel, deps, () => { throw new Error(message) })(event, ...args),
+      (error: unknown) => error instanceof Error && error.message === message
+    )
+  }
 })

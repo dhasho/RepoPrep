@@ -14,6 +14,8 @@ import { randomUUID } from 'node:crypto'
 import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import * as resultContract from '../../shared/result-contract.ts'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -36,8 +38,8 @@ function loadTypescriptModule(filename: string, requireModule: (id: string) => u
     process: { on() {}, platform: 'win32', env: {} },
     ...context
   }
-  vm.runInNewContext(`(function(exports, require, module, __filename, __dirname) { ${js}\n})`, sandbox)(
-    module.exports, requireModule, module, absolutePath, path.dirname(absolutePath)
+  vm.runInThisContext(`(function(exports, require, module, __filename, __dirname, process) { ${js}\n})`, { filename: absolutePath })(
+    module.exports, requireModule, module, absolutePath, path.dirname(absolutePath), sandbox.process
   )
   return module.exports
 }
@@ -57,7 +59,7 @@ function loadStore(userDataPath: string) {
     __dirname: path.dirname(filename),
     __filename: filename
   }
-  vm.runInNewContext(`(function(exports, require, module, __filename, __dirname) { ${js}\n})`, sandbox)(
+  vm.runInThisContext(`(function(exports, require, module, __filename, __dirname) { ${js}\n})`, { filename })(
     module.exports, sandbox.require, module, filename, path.dirname(filename)
   )
   return module.exports as unknown as {
@@ -67,6 +69,29 @@ function loadStore(userDataPath: string) {
     loadResult(projectPath: string): { sections: Array<{ id: string }> } | null
     saveResult(projectPath: string, result: unknown): void
   }
+}
+
+function savedResult(projectPath: string) {
+  return {
+    version: 1,
+    createdAt: '2026-10-10T00:00:00.000Z',
+    projectName: 'Demo',
+    projectPath,
+    granularity: 'medium',
+    roleFocus: 'general',
+    profileId: 'fixture',
+    modelUsed: 'Fixture / mock',
+    projectSummary: 'Previously saved material',
+    sections: [{ id: 'preserved', title: 'Saved section', questions: [] }],
+    glossary: {}
+  }
+}
+
+function cleanupFixture(userDataPath: string): void {
+  const resolved = path.resolve(userDataPath)
+  assert.ok(resolved.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`))
+  assert.ok(path.basename(resolved).startsWith('projectlens-recent-'))
+  rmSync(resolved, { recursive: true, force: true })
 }
 
 async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath: string) {
@@ -128,6 +153,7 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
     if (id === 'node:crypto') return { randomUUID }
     if (id === '../../shared/types.ts') return { SCAN_LIMIT_BOUNDS }
+    if (id === '../../shared/result-contract.ts') return resultContract
     if (id === './ipc-validation.ts') {
       const loaded = loadTypescriptModule('electron/services/ipc-validation.ts', requireModule)
       moduleCache.set(id, loaded)
@@ -163,10 +189,9 @@ test('main registered recent relocation handlers remove one exact key and retain
     const sourceKey = 'C:\\Demo'
     const remainingAlias = 'c:/demo'
     const targetKey = 'D:\\MovedDemo'
-    const savedResult = { projectPath: sourceKey, sections: [{ id: 'preserved' }] }
     store.addRecentProject({ path: sourceKey, name: 'Demo' })
     store.addRecentProject({ path: remainingAlias, name: 'Demo alias' })
-    store.saveResult(sourceKey, savedResult)
+    store.saveResult(sourceKey, savedResult(sourceKey))
 
     const harness = await loadMainHarness(store, targetKey)
     const window = harness.windows[0]
@@ -192,7 +217,7 @@ test('main registered recent relocation handlers remove one exact key and retain
     )
     assert.deepEqual([...store.getRecentProjects()].map((entry) => entry.path).sort(), beforeRejectedRemoval, 'untrusted sender cannot mutate recent storage')
   } finally {
-    rmSync(userDataPath, { recursive: true, force: true })
+    cleanupFixture(userDataPath)
   }
 })
 
@@ -203,7 +228,7 @@ test('main removeRecent preserves a newly selected same-canonical recent key', a
     const sourceKey = 'C:\\Demo'
     const selectedKey = 'c:/demo'
     store.addRecentProject({ path: sourceKey, name: 'Demo' })
-    store.saveResult(sourceKey, { projectPath: sourceKey, sections: [{ id: 'preserved' }] })
+    store.saveResult(sourceKey, savedResult(sourceKey))
 
     const harness = await loadMainHarness(store, selectedKey)
     const window = harness.windows[0]
@@ -218,6 +243,6 @@ test('main removeRecent preserves a newly selected same-canonical recent key', a
     assert.equal(await harness.handlers.get(IPC.loadResult)!(event, selectedKey), null, 'the selected authorization remains valid after old-key removal')
     assert.equal(store.loadResult(sourceKey)?.sections[0].id, 'preserved', 'old result file is not migrated or deleted')
   } finally {
-    rmSync(userDataPath, { recursive: true, force: true })
+    cleanupFixture(userDataPath)
   }
 })

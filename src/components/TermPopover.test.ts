@@ -195,3 +195,101 @@ test('组件级（真实挂载）：卸载时取消进行中的解释请求并�
     g.IS_REACT_ACT_ENVIRONMENT = prevActEnv
   }
 })
+
+async function mountAndRequest(props: Record<string, unknown>): Promise<{ requests: Array<Record<string, unknown>>; html: string }> {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const bundlePath = path.join(here, '..', '..', '.render-test', 'term-popover.cjs')
+  const { JSDOM } = await import('jsdom')
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
+  const requests: Array<Record<string, unknown>> = []
+  ;(dom.window as unknown as Record<string, unknown>).api = {
+    explain: async (req: Record<string, unknown>) => { requests.push(req) },
+    cancelExplain: noop,
+    onExplainEvent: () => noop
+  }
+
+  const g = globalThis as unknown as Record<string, unknown>
+  const prevWindow = g.window
+  const prevDocument = g.document
+  const prevActEnv = g.IS_REACT_ACT_ENVIRONMENT
+  g.window = dom.window
+  g.document = dom.window.document
+  g.IS_REACT_ACT_ENVIRONMENT = true
+  try {
+    const { createRequire } = await import('node:module')
+    const requireBundle = createRequire(import.meta.url)
+    const resolved = requireBundle.resolve(bundlePath)
+    if (requireBundle.cache?.[resolved]) delete requireBundle.cache[resolved]
+    const mod = requireBundle(bundlePath) as { default?: React.ComponentType<Record<string, unknown>> }
+    assert.ok(mod.default)
+    const React = await import('react')
+    const { createRoot } = await import('react-dom/client')
+    const act = (React as unknown as { act: (fn: () => Promise<void>) => Promise<void> }).act
+    const container = dom.window.document.createElement('div')
+    dom.window.document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(React.createElement(mod.default!, {
+        term: '依赖注入', anchor: { left: 10, top: 10, bottom: 30, right: 10, width: 0, height: 20 },
+        question: '为什么这样设计？', snippet: '片段', projectSummary: '摘要', profileId: 'p1',
+        onClose: noop, ...props
+      }))
+    })
+    const button = [...container.querySelectorAll('button')].find((item) => item.textContent?.includes('让 AI 结合本项目详细解释'))
+    assert.ok(button, 'manual explain button should be present')
+    await act(async () => { button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    const html = container.textContent ?? ''
+    await act(async () => { root.unmount() })
+    return { requests, html }
+  } finally {
+    g.window = prevWindow
+    g.document = prevDocument
+    g.IS_REACT_ACT_ENVIRONMENT = prevActEnv
+    dom.window.close()
+  }
+}
+
+test('真实 TermPopover 将长解释上下文压到 IPC 预算并保留术语及 profile 身份', async (t) => {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const bundlePath = path.join(here, '..', '..', '.render-test', 'term-popover.cjs')
+  const fs = await import('node:fs/promises')
+  try { await fs.access(bundlePath) } catch {
+    t.skip('未生成 .render-test/term-popover.cjs（请用 npm run test:renderer 运行）')
+    return
+  }
+
+  // @ts-ignore TS5097 -- extension is required by direct Node test runner.
+  const { validateIpcArgs } = await import('../../electron/services/ipc-validation.ts')
+  // @ts-ignore TS5097 -- extension is required by direct Node test runner.
+  const { IPC } = await import('../../shared/ipc.ts')
+  // @ts-ignore TS5097 -- extension is required by direct Node test runner.
+  const { EXPLAIN_CONTEXT_LIMITS } = await import('../../shared/result-contract.ts')
+  const term = 'T'.repeat(500)
+  const profileId = 'profile-preserved'
+  const { requests, html } = await mountAndRequest({
+    term, profileId, projectSummary: 'S'.repeat(50_000), question: 'Q'.repeat(12_000),
+    snippet: 'N'.repeat(25_000), glossaryHint: 'G'.repeat(12_000)
+  })
+  assert.equal(requests.length, 1)
+  assert.doesNotThrow(() => validateIpcArgs(IPC.explainStart, [requests[0]]))
+  assert.equal(requests[0].term, term, 'term identity is preserved')
+  assert.equal(requests[0].profileId, profileId, 'profile identity is preserved')
+  assert.equal((requests[0].projectSummary as string).length, EXPLAIN_CONTEXT_LIMITS.projectSummary)
+  assert.equal((requests[0].question as string).length, EXPLAIN_CONTEXT_LIMITS.question)
+  assert.equal((requests[0].snippet as string).length, EXPLAIN_CONTEXT_LIMITS.snippet)
+  assert.equal((requests[0].glossaryHint as string).length, EXPLAIN_CONTEXT_LIMITS.glossaryHint)
+  assert.ok(html.includes('本次解释将使用部分上下文'))
+})
+
+test('TermPopover blocks an oversized term locally before explain IPC', async (t) => {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const bundlePath = path.join(here, '..', '..', '.render-test', 'term-popover.cjs')
+  const fs = await import('node:fs/promises')
+  try { await fs.access(bundlePath) } catch {
+    t.skip('未生成 .render-test/term-popover.cjs（请用 npm run test:renderer 运行）')
+    return
+  }
+  const { requests, html } = await mountAndRequest({ term: 'T'.repeat(513), glossaryHint: 'defined' })
+  assert.deepEqual(requests, [])
+  assert.ok(html.includes('术语或模型配置无效，无法发起解释。'))
+})

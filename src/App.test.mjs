@@ -54,6 +54,7 @@ function makeApi({
   selectedPath: initialSelectedPath = 'C:\\ProjectA',
   recent: initialRecent = [],
   savedResults: initialSavedResults = new Map(),
+  loadFailures: initialLoadFailures = new Map(),
   scanOverview,
   profiles = [{ id: 'profile-1', name: 'Mock', baseUrl: 'https://example.test/v1', apiKey: '', model: 'mock-model' }],
   defaultProfileId = profiles[0]?.id ?? null
@@ -90,6 +91,11 @@ function makeApi({
     const value = values.shift()
     if (!values.length) map.delete(projectPath)
     return value
+  }
+  if (initialLoadFailures instanceof Map) {
+    for (const [projectPath, error] of initialLoadFailures) queue(loadFailures, projectPath, error)
+  } else {
+    for (const [projectPath, error] of Object.entries(initialLoadFailures)) queue(loadFailures, projectPath, error)
   }
   const api = {
     selectFolder: async () => { selectCalls++; return selectedPath },
@@ -302,6 +308,63 @@ async function openProject(harness, projectPath) {
   await act(harness, () => button(harness.host, '选择项目文件夹').click())
   assert.ok(harness.host.textContent.includes(projectPath.split(/[\\/]/).filter(Boolean).at(-1)), '应进入目标项目配置页')
 }
+
+test('invalid stored history lets recent reanalysis and folder selection regenerate the project', async () => {
+  const projectPath = 'C:\\InvalidHistory'
+  for (const entry of ['recent', 'folder']) {
+    const h = await mountApp({
+      recent: [{ path: projectPath, name: 'InvalidHistory', lastUsedAt: '2026-10-10T00:00:00.000Z' }],
+      loadFailures: new Map([[projectPath, new Error(`Error invoking remote method 'result:load': Error: 历史结果格式无效或超出支持范围，请重新生成。`)]])
+    })
+    try {
+      h.mock.failNextLoad(projectPath, new Error(`Error invoking remote method 'result:load': Error: 历史结果格式无效或超出支持范围，请重新生成。`))
+      if (entry === 'recent') await openRecentProject(h, projectPath)
+      else await openProject(h, projectPath)
+      assert.ok(h.host.textContent.includes('历史结果格式无效或超出支持范围，请重新生成。'), `${entry} recovery shows a safe notice`)
+      assert.ok(!button(h.host, '查看上次生成结果'), 'invalid history is not offered for viewing')
+      const request = await startGeneration(h)
+      await act(h, () => request.resolve({ runId: request.request.runId, result: makeResult(projectPath) }))
+      assert.ok(h.host.textContent.includes('InvalidHistory · 面试题'), `${entry} recovery can finish regeneration`)
+      assert.deepEqual(h.mock.deletions, [], 'recovery preserves the invalid history file')
+    } finally { await cleanupAndUnmount(h) }
+  }
+})
+
+test('unknown history load failures still block entering project configuration', async () => {
+  const projectPath = 'C:\\ProjectA'
+  const h = await mountApp({
+    recent: [{ path: projectPath, name: 'ProjectA', lastUsedAt: '2026-10-10T00:00:00.000Z' }],
+    loadFailures: new Map([[projectPath, new Error('storage unavailable')]])
+  })
+  try {
+    h.mock.failNextLoad(projectPath, new Error('storage unavailable'))
+    await openRecentProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('选择项目文件夹'), 'unexpected storage failure leaves the app on project selection')
+    assert.ok(h.host.textContent.includes('打开项目失败：storage unavailable'))
+    assert.ok(!button(h.host, '开始生成面试题'), 'unexpected storage failure must not enter project configuration')
+  } finally { await cleanupAndUnmount(h) }
+})
+
+test('late invalid-history load failure cannot replace the newer project configuration', async () => {
+  const pathA = 'C:\\ProjectA'
+  const pathB = 'C:\\ProjectB'
+  const h = await mountApp({
+    recent: [pathA, pathB].map((projectPath) => ({
+      path: projectPath, name: projectPath.split('\\').at(-1), lastUsedAt: '2026-10-10T00:00:00.000Z'
+    })),
+    savedResults: new Map([[pathB, makeResult(pathB)]])
+  })
+  const delayed = h.mock.delayLoad(pathA)
+  try {
+    h.mock.setSelectedPath(pathA)
+    await act(h, () => button(h.host, '选择项目文件夹').click())
+    await openRecentProject(h, pathB)
+    delayed.reject(new Error('Error invoking remote method \'result:load\': Error: 历史结果格式无效或超出支持范围，请重新生成。'))
+    await act(h, () => {})
+    assert.ok(h.host.textContent.includes('ProjectB'), 'project B remains the active configuration')
+    assert.ok(!h.host.textContent.includes('历史结果格式无效或超出支持范围，请重新生成。'), 'stale A failure cannot set a notice on B')
+  } finally { await cleanupAndUnmount(h) }
+})
 
 async function startGeneration(harness) {
   const start = [...harness.host.querySelectorAll('button')].find((item) => (item.textContent || '').includes('开始生成面试题'))
@@ -1005,6 +1068,27 @@ test('resuming a background task wins navigation over a pending history scan suc
       assert.ok(background.request.runId)
     } finally { await cleanupAndUnmount(h) }
   }
+})
+
+test('an invalid recent result does not prevent a valid neighboring history result from opening', async () => {
+  const invalidPath = 'C:\\InvalidHistory'
+  const validPath = 'C:\\ValidHistory'
+  const h = await mountApp({
+    recent: [invalidPath, validPath].map((projectPath) => ({
+      path: projectPath,
+      name: projectPath.split('\\').at(-1),
+      lastUsedAt: '2026-10-10T00:00:00.000Z'
+    })),
+    savedResults: new Map([[validPath, makeResult(validPath)]]),
+    loadFailures: new Map([[invalidPath, new Error('历史结果格式无效或超出支持范围，请重新生成。')]])
+  })
+  try {
+    await act(h, () => {})
+    assert.ok(h.host.textContent.includes('历史结果格式无效或超出支持范围，请重新生成。'))
+    assert.ok(recentButton(h.host, validPath, '查看结果'), 'valid neighbor keeps its history action available')
+    await viewRecentResult(h, validPath)
+    assert.ok(h.host.textContent.includes('ValidHistory · 面试题'), 'valid neighbor remains usable')
+  } finally { await cleanupAndUnmount(h) }
 })
 
 test('history recovery never cancels an active background run and restored configuration stays busy', async () => {

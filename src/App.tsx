@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { GenerateOptions, InterviewResult, ProjectOverview, Settings } from '@shared/types'
+import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { api } from './lib/ipc'
 import { GenerationSession, type GenerationTask } from './lib/generation-session'
 import SelectPage from './pages/SelectPage'
@@ -21,6 +22,12 @@ interface HistoryRecoveryState {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isInvalidHistoryLoadError(error: unknown): boolean {
+  const message = errorMessage(error)
+  const escaped = RESULT_CONTRACT_MESSAGES.history.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|: )(?:Error: )?${escaped}$`).test(message)
 }
 
 export default function App() {
@@ -176,13 +183,22 @@ export default function App() {
     historyRecoveryAttempt.current = null
     const nextOverview = await api.scanProject(path)
     if (ticket !== navigationEpoch.current) return
-    const nextResult = await api.loadResult(nextOverview.storagePath ?? path)
+    let nextResult: InterviewResult | null
+    let notice: string | null = null
+    try {
+      nextResult = await api.loadResult(nextOverview.storagePath ?? path)
+    } catch (error) {
+      if (ticket !== navigationEpoch.current) return
+      if (!isInvalidHistoryLoadError(error)) throw error
+      nextResult = null
+      notice = RESULT_CONTRACT_MESSAGES.history
+    }
     if (ticket !== navigationEpoch.current) return
     setOverview(nextOverview)
     setProjectStoragePath(nextOverview.storagePath ?? path)
     setExistingResult(nextResult)
     setConfigureInitialOptions(undefined)
-    setConfigureNotice(null)
+    setConfigureNotice(notice)
     setConfigureRevision((revision) => revision + 1)
     setHistoryRecovery(null)
     setView('configure')

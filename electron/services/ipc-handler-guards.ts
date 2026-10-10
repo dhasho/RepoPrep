@@ -6,6 +6,8 @@ import { assertTrustedIpcSender, isTrustedIpcSender, AuthorizedProjectRegistry }
 import type { IpcEventLike, IpcWebContentsLike } from './ipc-authority.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { IPC } from '../../shared/ipc.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { RESULT_CONTRACT_MESSAGES } from '../../shared/result-contract.ts'
 
 export type IpcHandler<E extends IpcEventLike = IpcEventLike> = (event: E, ...args: any[]) => unknown
 export interface IpcGuardDependencies {
@@ -31,6 +33,8 @@ const SAFE_BUSINESS_ERRORS = new Set([
   '已有相同名词解释请求在进行中',
   '生成面试题时模型请求超时，请检查网络或稍后重试。',
   '未找到指定的大模型配置，请先到设置页完成配置',
+  RESULT_CONTRACT_MESSAGES.generated,
+  RESULT_CONTRACT_MESSAGES.history,
   // 设置持久化失败（issue #15）：主进程按 errno 静态映射，不含路径等敏感细节
   '磁盘空间不足，无法保存设置。请清理磁盘空间后重试。',
   '没有写入权限，无法保存设置。请检查应用数据目录权限后重试。',

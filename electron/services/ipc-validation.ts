@@ -1,10 +1,12 @@
 import path from 'node:path'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
-import type { GenerateRequest, Granularity, InterviewResult, LlmProfile, RoleFocus, Settings } from '../../shared/types.ts'
+import type { GenerateRequest, Granularity, LlmProfile, RoleFocus, Settings } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { IPC } from '../../shared/ipc.ts'
+// @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
+import { assertInterviewResultContract, EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS, ResultContractError } from '../../shared/result-contract.ts'
 
 const messages = {
   unknown: '不允许的 IPC 请求。',
@@ -30,11 +32,6 @@ function exactKeys(value: Record<string, unknown>, allowed: readonly string[]): 
   const keys = Reflect.ownKeys(value)
   if (keys.length > allowed.length || keys.some((key) => typeof key !== 'string' || !allowed.includes(key))) fail()
 }
-function plainDictionary(value: Record<string, unknown>, maxKeys: number): void {
-  const prototype = Object.getPrototypeOf(value)
-  const keys = Reflect.ownKeys(value)
-  if ((prototype !== Object.prototype && prototype !== null) || keys.length > maxKeys || keys.some((key) => typeof key !== 'string')) fail()
-}
 function exactArgs(args: unknown[], count: number): void {
   if (!Array.isArray(args) || args.length !== count) fail(messages.args)
 }
@@ -52,7 +49,7 @@ function enumValue<T extends string>(value: unknown, choices: readonly T[]): ass
   if (typeof value !== 'string' || !choices.includes(value as T)) fail()
 }
 function url(value: unknown): asserts value is string {
-  string(value, 2048)
+  string(value, LLM_PROFILE_LIMITS.baseUrl)
   let parsed: URL
   try { parsed = new URL(value) } catch { return fail() }
   if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname || parsed.username || parsed.password) fail()
@@ -60,8 +57,8 @@ function url(value: unknown): asserts value is string {
 function profile(value: unknown): asserts value is LlmProfile {
   if (!record(value)) fail()
   exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature'])
-  string(value.id, 128); string(value.name, 256); url(value.baseUrl)
-  string(value.apiKey, 4096, 0); string(value.model, 256)
+  string(value.id, LLM_PROFILE_LIMITS.id); string(value.name, LLM_PROFILE_LIMITS.name); url(value.baseUrl)
+  string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0); string(value.model, LLM_PROFILE_LIMITS.model)
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 2)) fail()
 }
 function scanLimits(value: unknown): void {
@@ -97,100 +94,17 @@ function requestId(value: unknown): asserts value is string {
 function explain(value: unknown): void {
   if (!record(value)) fail()
   exactKeys(value, ['requestId', 'term', 'profileId', 'projectSummary', 'question', 'snippet', 'glossaryHint'])
-  requestId(value.requestId); string(value.term, 512); string(value.profileId, 128)
-  string(value.projectSummary, 20_000, 0); string(value.question, 12_000); string(value.snippet, 24_000, 0)
-  if (value.glossaryHint !== undefined) string(value.glossaryHint, 4_000, 0)
+  requestId(value.requestId); string(value.term, EXPLAIN_CONTEXT_LIMITS.term); string(value.profileId, EXPLAIN_CONTEXT_LIMITS.profileId)
+  string(value.projectSummary, EXPLAIN_CONTEXT_LIMITS.projectSummary, 0); string(value.question, EXPLAIN_CONTEXT_LIMITS.question); string(value.snippet, EXPLAIN_CONTEXT_LIMITS.snippet, 0)
+  if (value.glossaryHint !== undefined) string(value.glossaryHint, EXPLAIN_CONTEXT_LIMITS.glossaryHint, 0)
 }
 
-/** 对传入树做有界遍历，避免 stringify、循环引用及超大/深层对象造成无界工作。 */
-function boundedTree(root: unknown, limits = { nodes: 20_000, depth: 32, string: 1_000_000, array: 5000, keys: 256 }): void {
-  const stack: Array<{ value: unknown; depth: number }> = [{ value: root, depth: 0 }]
-  const seen = new WeakSet<object>()
-  let nodes = 0; let chars = 0
-  while (stack.length) {
-    const { value, depth } = stack.pop()!
-    if (++nodes > limits.nodes || depth > limits.depth) fail(messages.oversized)
-    if (typeof value === 'string') {
-      chars += value.length
-      if (value.length > limits.string || chars > limits.string) fail(messages.oversized)
-    } else if (value === null || typeof value === 'boolean' || typeof value === 'number') {
-      if (typeof value === 'number' && !Number.isFinite(value)) fail()
-    } else if (typeof value === 'object') {
-      if (seen.has(value)) fail()
-      seen.add(value)
-      if (Array.isArray(value)) {
-        if (value.length > limits.array) fail(messages.oversized)
-        if (Object.getPrototypeOf(value) !== Array.prototype) fail()
-        const keys = Reflect.ownKeys(value)
-        if (keys.length !== value.length + 1 || keys.some((key) => key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))) fail()
-        for (let i = 0; i < value.length; i++) {
-          if (!Object.prototype.hasOwnProperty.call(value, i)) fail()
-          stack.push({ value: value[i], depth: depth + 1 })
-        }
-      } else {
-        let count = 0
-        for (const key in value) {
-          if (!Object.prototype.hasOwnProperty.call(value, key)) continue
-          if (++count > limits.keys) fail(messages.oversized)
-          chars += key.length
-          if (chars > limits.string) fail(messages.oversized)
-          stack.push({ value: (value as Record<string, unknown>)[key], depth: depth + 1 })
-        }
-      }
-    } else fail()
-  }
-}
-function interviewResult(value: unknown): asserts value is InterviewResult {
-  boundedTree(value)
-  if (!record(value)) fail()
-  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security'])
-  if (value.version !== 1 || !text(value.createdAt, 128) || !Number.isFinite(Date.parse(value.createdAt)) || !text(value.projectName, 256)) fail()
-  if (/[\\/\x00-\x1f\x7f]/.test(value.projectName)) fail()
-  absolutePath(value.projectPath); enumValue(value.granularity, GRANULARITIES); enumValue(value.roleFocus, ROLES)
-  string(value.profileId, 128); string(value.modelUsed, 256); string(value.projectSummary, 50_000, 0)
-  if (!Array.isArray(value.sections) || value.sections.length > 200 || !record(value.glossary)) fail()
-  plainDictionary(value.glossary, 2000)
-  if (value.security !== undefined) {
-    if (!record(value.security)) fail()
-    exactKeys(value.security, ['excludedFiles', 'redactedFiles', 'redactionMatches', 'categories'])
-    for (const key of ['excludedFiles', 'redactedFiles', 'redactionMatches'] as const) {
-      const count = value.security[key]
-      if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) fail()
-    }
-    if (!record(value.security.categories)) fail()
-    plainDictionary(value.security.categories, 256)
-    for (const category of Reflect.ownKeys(value.security.categories) as string[]) {
-      const count = value.security.categories[category]
-      string(category, 128)
-      if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) fail()
-    }
-  }
-  let questions = 0; let follows = 0
-  const checkFollow = (f: unknown, depth: number): void => {
-    if (++follows > 5000 || depth > 16 || !record(f)) fail(messages.oversized)
-    exactKeys(f, ['question', 'answer', 'followUps'])
-    string(f.question, 12_000); string(f.answer, 50_000, 0)
-    if (f.followUps !== undefined) {
-      if (!Array.isArray(f.followUps) || f.followUps.length > 100) fail()
-      for (const child of f.followUps) checkFollow(child, depth + 1)
-    }
-  }
-  for (const section of value.sections) {
-    if (!record(section)) fail()
-    exactKeys(section, ['id', 'title', 'summary', 'questions'])
-    string(section.id, 128); string(section.title, 512)
-    if (section.summary !== undefined) string(section.summary, 12_000, 0)
-    if (!Array.isArray(section.questions) || section.questions.length > 500) fail()
-    for (const question of section.questions) {
-      if (++questions > 5000 || !record(question) || !Array.isArray(question.followUps) || question.followUps.length > 100) fail(messages.oversized)
-      exactKeys(question, ['id', 'question', 'answer', 'followUps'])
-      string(question.id, 128); string(question.question, 12_000); string(question.answer, 50_000, 0)
-      for (const child of question.followUps) checkFollow(child, 1)
-    }
-  }
-  for (const key of Reflect.ownKeys(value.glossary) as string[]) {
-    string(key, 512)
-    string(value.glossary[key], 12_000, 0)
+function interviewResult(value: unknown): void {
+  try {
+    assertInterviewResultContract(value, path.isAbsolute)
+  } catch (error) {
+    if (error instanceof ResultContractError && error.kind === 'oversized') fail(messages.oversized)
+    fail()
   }
 }
 

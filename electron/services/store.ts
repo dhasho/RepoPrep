@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { InterviewResult, RecentProject, Settings } from '@shared/types'
+import { assertInterviewResultContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 
 function userDataFile(name: string): string {
   return path.join(app.getPath('userData'), name)
@@ -43,11 +44,28 @@ function resultFile(projectPath: string): string {
 }
 
 export function saveResult(projectPath: string, result: InterviewResult): void {
+  try {
+    assertInterviewResultContract(result, path.isAbsolute)
+  } catch {
+    throw new Error(RESULT_CONTRACT_MESSAGES.generated)
+  }
   writeJson(resultFile(projectPath), result)
 }
 
 export function loadResult(projectPath: string): InterviewResult | null {
-  return readJson<InterviewResult | null>(resultFile(projectPath), null)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(fs.readFileSync(resultFile(projectPath), 'utf-8'))
+  } catch {
+    return null
+  }
+  if (parsed === null) return null
+  try {
+    assertInterviewResultContract(parsed, path.isAbsolute)
+  } catch {
+    throw new Error(RESULT_CONTRACT_MESSAGES.history)
+  }
+  return parsed
 }
 
 export function deleteResult(projectPath: string): void {

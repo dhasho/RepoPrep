@@ -1,0 +1,106 @@
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import test, { after } from 'node:test'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import vm from 'node:vm'
+import ts from 'typescript'
+import { fileURLToPath } from 'node:url'
+
+const fixtureRoots: string[] = []
+after(async () => {
+  const allowedRoot = path.resolve(os.tmpdir())
+  for (const root of fixtureRoots.splice(0)) {
+    const resolved = path.resolve(root)
+    assert.ok(resolved.startsWith(`${allowedRoot}${path.sep}`), `fixture cleanup must stay under temp directory: ${resolved}`)
+    assert.ok(path.basename(resolved).startsWith('issue70-store-'), `unexpected fixture cleanup target: ${resolved}`)
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
+async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) => any>; root: string; userData: string }> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue70-store-'))
+  fixtureRoots.push(root)
+  const userData = path.join(root, 'user-data')
+  await fs.mkdir(userData)
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const contractPath = path.resolve(here, '..', '..', 'shared', 'result-contract.ts')
+  const storePath = path.resolve(here, 'store.ts')
+  const options = { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }
+  const contractCode = ts.transpileModule(await fs.readFile(contractPath, 'utf8'), options).outputText
+  const contractModule = { exports: {} as Record<string, unknown> }
+  const evalModule = (code: string, filename: string, suppliedRequire: (id: string) => unknown): Record<string, any> => {
+    const module = { exports: {} as Record<string, any> }
+    const wrapper = vm.runInThisContext(`(function (exports, require, module, __filename, __dirname) { ${code}\n})`, { filename }) as Function
+    wrapper(module.exports, suppliedRequire, module, filename, path.dirname(filename))
+    return module.exports
+  }
+  Object.assign(contractModule.exports, evalModule(contractCode, contractPath, () => { throw new Error('contract must not load runtime dependencies') }))
+
+  const storeCode = ts.transpileModule(await fs.readFile(storePath, 'utf8'), options).outputText
+  const nativeRequire = (await import('node:module')).createRequire(import.meta.url)
+  const store = evalModule(storeCode, storePath, (id) => {
+    if (id === 'electron') return { app: { getPath: (name: string) => {
+      assert.equal(name, 'userData')
+      return userData
+    } } }
+    if (id === '@shared/result-contract') return contractModule.exports
+    return nativeRequire(id)
+  })
+  return { store, root, userData }
+}
+
+function legacyAffectedResult(projectPath: string): Record<string, any> {
+  return {
+    version: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    projectName: 'legacy-project',
+    projectPath,
+    granularity: 'fine',
+    roleFocus: 'backend',
+    profileId: 'p1',
+    modelUsed: `${'n'.repeat(256)} / ${'m'.repeat(256)}`,
+    projectSummary: '',
+    sections: [{ id: 's1', title: 'Legacy', questions: [{ id: 'q1', question: 'Q', answer: '', followUps: [] }] }],
+    glossary: Object.fromEntries(Array.from({ length: 257 }, (_, i) => [`term-${i}`, `definition-${i}`]))
+  }
+}
+
+function storedResultFile(userData: string, projectPath: string): string {
+  const hash = createHash('sha1').update(projectPath).digest('hex')
+  return path.join(userData, 'projects', `${hash}.json`)
+}
+
+test('real store module loads old wide-glossary/profile result without migrating or rewriting it', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'legacy-project')
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const raw = JSON.stringify(legacyAffectedResult(projectPath), null, 2)
+  await fs.writeFile(file, raw, 'utf8')
+
+  const loaded = store.loadResult(projectPath)
+  assert.equal(loaded.modelUsed.length, 515)
+  assert.equal(Object.keys(loaded.glossary).length, 257)
+  assert.equal(await fs.readFile(file, 'utf8'), raw, 'loading old result must not migrate or rewrite the historical file')
+})
+
+test('invalid save cannot overwrite prior result; invalid history is controlled and remains byte-identical', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'project')
+  const file = storedResultFile(userData, projectPath)
+  const valid = legacyAffectedResult(projectPath)
+  store.saveResult(projectPath, valid)
+  const before = await fs.readFile(file, 'utf8')
+
+  assert.throws(() => store.saveResult(projectPath, { ...valid, invalidExtra: true }), /生成结果格式无效或超出支持范围，请重新生成。/)
+  assert.equal(await fs.readFile(file, 'utf8'), before, 'invalid replacement must not overwrite the last valid result')
+
+  const invalidRaw = JSON.stringify({ ...valid, invalidExtra: 'legacy payload' }, null, 2)
+  await fs.writeFile(file, invalidRaw, 'utf8')
+  assert.throws(() => store.loadResult(projectPath), /历史结果格式无效或超出支持范围，请重新生成。/)
+  assert.equal(await fs.readFile(file, 'utf8'), invalidRaw, 'invalid history remains unmodified for controlled recovery')
+})

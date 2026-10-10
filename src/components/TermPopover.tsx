@@ -1,6 +1,7 @@
 // 飞书风格名词解释弹卡：术语表解释 + AI 流式详细解释
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { EXPLAIN_CONTEXT_LIMITS } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 import { ExplainStreamController } from '../lib/explain-stream'
 import MarkdownView from './MarkdownView'
@@ -18,9 +19,18 @@ export interface TermPopoverProps {
 
 const POPOVER_WIDTH = 380
 
+function clipContext(value: string, limit: number): { value: string; clipped: boolean } {
+  if (value.length <= limit) return { value, clipped: false }
+  let end = limit - 1
+  const last = value.charCodeAt(end - 1)
+  if (last >= 0xd800 && last <= 0xdbff) end--
+  return { value: `${value.slice(0, end)}…`, clipped: true }
+}
+
 export default function TermPopover(props: TermPopoverProps) {
   const { term, anchor, question, snippet, glossaryHint, projectSummary, profileId, onClose } = props
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const [requestHint, setRequestHint] = useState('')
   const boxRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -42,7 +52,29 @@ export default function TermPopover(props: TermPopoverProps) {
   const explainError = explain.error
 
   const startExplain = useCallback(() => {
-    controller.start({ term, profileId, projectSummary, question, snippet, glossaryHint })
+    if (
+      !term.trim() || term.length > EXPLAIN_CONTEXT_LIMITS.term ||
+      !profileId.trim() || profileId.length > EXPLAIN_CONTEXT_LIMITS.profileId
+    ) {
+      setRequestHint('术语或模型配置无效，无法发起解释。')
+      return
+    }
+    const bounded = {
+      projectSummary: clipContext(projectSummary, EXPLAIN_CONTEXT_LIMITS.projectSummary),
+      question: clipContext(question, EXPLAIN_CONTEXT_LIMITS.question),
+      snippet: clipContext(snippet, EXPLAIN_CONTEXT_LIMITS.snippet),
+      glossaryHint: clipContext(glossaryHint ?? '', EXPLAIN_CONTEXT_LIMITS.glossaryHint)
+    }
+    const clipped = Object.values(bounded).some((context) => context.clipped)
+    setRequestHint(clipped ? '项目背景较长，本次解释将使用部分上下文。' : '')
+    controller.start({
+      term,
+      profileId,
+      projectSummary: bounded.projectSummary.value,
+      question: bounded.question.value,
+      snippet: bounded.snippet.value,
+      glossaryHint: bounded.glossaryHint.value
+    })
   }, [controller, term, profileId, projectSummary, question, snippet, glossaryHint])
 
   const stopExplain = useCallback(() => controller.stop(), [controller])
@@ -123,6 +155,8 @@ export default function TermPopover(props: TermPopoverProps) {
             {glossaryHint}
           </div>
         )}
+
+        {requestHint && <p className="mb-2 text-xs text-amber-700">{requestHint}</p>}
 
         {explainState === 'idle' && (
           <div className="py-2 text-center">

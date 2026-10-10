@@ -6,6 +6,8 @@ import { IPC } from '../../shared/ipc.ts'
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
 import { INVOKE_CHANNELS, IpcValidationError, validateIpcArgs } from './ipc-validation.ts'
+// @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
+import { EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS } from '../../shared/result-contract.ts'
 
 const profile = { id: 'p1', name: '本地', baseUrl: 'https://api.example.com/v1', apiKey: '', model: 'model-x' }
 const requestId = '4f22d0a1-3e0f-4f4e-8c1d-1c9f9036bc17'
@@ -62,6 +64,39 @@ test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', 
     rejects(IPC.llmTest, { ...profile, baseUrl })
   }
   rejects(IPC.settingsSave, { profiles: Array.from({ length: 33 }, (_, i) => ({ ...profile, id: String(i) })), defaultProfileId: null })
+})
+
+test('profile 与 explain IPC 使用共享上限，并接受每个字段的合法边界', () => {
+  const maximumProfile = {
+    ...profile,
+    id: 'i'.repeat(LLM_PROFILE_LIMITS.id),
+    name: 'n'.repeat(LLM_PROFILE_LIMITS.name),
+    model: 'm'.repeat(LLM_PROFILE_LIMITS.model),
+    apiKey: 'k'.repeat(LLM_PROFILE_LIMITS.apiKey),
+    baseUrl: `https://example.com/${'x'.repeat(LLM_PROFILE_LIMITS.baseUrl - 'https://example.com/'.length)}`
+  }
+  assert.doesNotThrow(() => validateIpcArgs(IPC.llmTest, [maximumProfile]))
+  rejects(IPC.llmTest, { ...maximumProfile, id: `${maximumProfile.id}x` })
+  rejects(IPC.llmTest, { ...maximumProfile, name: `${maximumProfile.name}x` })
+  rejects(IPC.llmTest, { ...maximumProfile, model: `${maximumProfile.model}x` })
+  rejects(IPC.llmTest, { ...maximumProfile, apiKey: `${maximumProfile.apiKey}x` })
+  rejects(IPC.llmTest, { ...maximumProfile, baseUrl: `${maximumProfile.baseUrl}x` })
+
+  const request = {
+    requestId,
+    term: 't'.repeat(EXPLAIN_CONTEXT_LIMITS.term),
+    profileId: 'p'.repeat(EXPLAIN_CONTEXT_LIMITS.profileId),
+    projectSummary: 's'.repeat(EXPLAIN_CONTEXT_LIMITS.projectSummary),
+    question: 'q'.repeat(EXPLAIN_CONTEXT_LIMITS.question),
+    snippet: 'n'.repeat(EXPLAIN_CONTEXT_LIMITS.snippet),
+    glossaryHint: 'g'.repeat(EXPLAIN_CONTEXT_LIMITS.glossaryHint)
+  }
+  assert.doesNotThrow(() => validateIpcArgs(IPC.explainStart, [request]))
+  for (const [field, max] of Object.entries(EXPLAIN_CONTEXT_LIMITS)) {
+    if (field === 'profileId') continue
+    rejects(IPC.explainStart, { ...request, [field]: `${'x'.repeat(max)}x` })
+  }
+  rejects(IPC.explainStart, { ...request, profileId: `${request.profileId}x` })
 })
 
 test('settingsSave 的扫描上限契约接受旧形状、partial 与边界整数并拒绝非法值', () => {

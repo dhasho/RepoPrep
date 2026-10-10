@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import type { InterviewResult, RecentProject, Settings } from '@shared/types'
 import { GRANULARITY_META } from '@shared/types'
+import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 
 interface Props {
@@ -14,17 +15,33 @@ interface Props {
 export default function SelectPage({ settings, openProject, viewExisting, openSettings }: Props) {
   const [recent, setRecent] = useState<RecentProject[]>([])
   const [results, setResults] = useState<Record<string, InterviewResult | null>>({})
+  const [resultIssues, setResultIssues] = useState<Record<string, boolean>>({})
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.getRecentProjects().then(async (list) => {
+    let mounted = true
+    void api.getRecentProjects().then(async (list) => {
+      if (!mounted) return
       setRecent(list)
       const entries = await Promise.all(
-        list.map(async (p) => [p.path, await api.loadResult(p.path)] as const)
+        list.map(async (p) => {
+          try {
+            return { path: p.path, result: await api.loadResult(p.path), failed: false }
+          } catch {
+            return { path: p.path, result: null, failed: true }
+          }
+        })
       )
-      setResults(Object.fromEntries(entries))
+      if (!mounted) return
+      setResults(Object.fromEntries(entries.map(({ path, result }) => [path, result])))
+      setResultIssues(Object.fromEntries(entries.filter((entry) => entry.failed).map(({ path }) => [path, true])))
+    }).catch(() => {
+      // Recent-project failures are handled by the page's existing empty state.
     })
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const open = async (path: string) => {
@@ -114,6 +131,9 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
                     <div className="truncate text-xs text-slate-400" title={p.path}>
                       {p.path}
                     </div>
+                    {resultIssues[p.path] && (
+                      <div className="mt-1 text-xs text-amber-700">{RESULT_CONTRACT_MESSAGES.history}</div>
+                    )}
                   </div>
                   {r && (
                     <button
