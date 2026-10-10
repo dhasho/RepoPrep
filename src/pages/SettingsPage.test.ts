@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { JSDOM } from 'jsdom'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import type { Settings } from '../../shared/types.ts'
+import type { LlmProfile, Settings, TestConnectionResult } from '../../shared/types.ts'
 
 interface Deferred {
   resolve: () => void
@@ -427,6 +427,174 @@ test('SettingsPage normalizes the default after deleting the selected default am
     assert.deepEqual(writes[0].profiles.map((profile) => profile.id), ['second', 'third'])
     assert.equal(writes[0].defaultProfileId, 'second', 'deleting the default should select a surviving profile as default')
     assert.deepEqual(page.savedSettings, writes[0])
+  } finally {
+    await page.unmount()
+  }
+})
+
+function deferredConnection() {
+  let resolve!: (result: TestConnectionResult) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<TestConnectionResult>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+async function mountConnectionSettingsPage(settings: Settings) {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
+  const restoreGlobals = installDomGlobals(dom)
+  const requests: Array<{ profile: LlmProfile; pending: ReturnType<typeof deferredConnection> }> = []
+  dom.window.api = {
+    saveSettings: async () => {},
+    listModels: async () => ({ ok: true, models: [], message: '' }),
+    testLlm(profile: LlmProfile) {
+      const pending = deferredConnection()
+      requests.push({ profile: structuredClone(profile), pending })
+      return pending.promise
+    }
+  } as unknown as typeof dom.window.api
+
+  const React = require('react') as typeof import('react')
+  const { createRoot } = require('react-dom/client') as typeof import('react-dom/client')
+  delete require.cache[require.resolve(bundlePath)]
+  const SettingsPage = require(bundlePath).default as typeof import('./SettingsPage').default
+  const rootElement = dom.window.document.getElementById('root')!
+  const root = createRoot(rootElement)
+  await React.act(async () => root.render(React.createElement(SettingsPage, {
+    settings,
+    onSaved: () => {},
+    onBack: () => {}
+  })))
+
+  return {
+    React,
+    root,
+    rootElement,
+    requests,
+    testButton: () => [...rootElement.querySelectorAll('button')].find((button) =>
+      button.textContent?.trim() === '测试连接' || button.textContent?.trim() === '测试中…')!,
+    async unmount() {
+      await React.act(async () => root.unmount())
+      dom.window.close()
+      restoreGlobals()
+    }
+  }
+}
+
+test('SettingsPage ignores a late result from A after selection moves to B and shows B result', async () => {
+  const settings: Settings = {
+    profiles: [
+      { ...initialSettings.profiles[0], id: 'A', name: 'Profile A', apiKey: 'synthetic-A-secret' },
+      { ...initialSettings.profiles[0], id: 'B', name: 'Profile B', apiKey: 'synthetic-B-secret' }
+    ],
+    defaultProfileId: 'A'
+  }
+  const page = await mountConnectionSettingsPage(settings)
+  try {
+    await page.React.act(async () => page.testButton().click())
+    assert.equal(page.requests.length, 1)
+    assert.equal(page.requests[0].profile.id, 'A')
+    assert.equal(page.testButton().textContent?.trim(), '测试中…')
+
+    const profileB = [...page.rootElement.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Profile B'))!
+    await page.React.act(async () => profileB.click())
+    assert.equal(page.testButton().textContent?.trim(), '测试连接', 'selecting B should release A loading state')
+    await page.React.act(async () => page.testButton().click())
+    assert.equal(page.requests.length, 2)
+    assert.equal(page.requests[1].profile.id, 'B')
+    assert.equal(page.testButton().textContent?.trim(), '测试中…')
+
+    await page.React.act(async () => {
+      page.requests[0].pending.resolve({ ok: true, message: 'late A success' })
+      await page.requests[0].pending.promise
+    })
+    assert.equal(page.testButton().textContent?.trim(), '测试中…', 'A finally must not clear B loading')
+    assert.equal(page.rootElement.textContent?.includes('late A success'), false)
+
+    await page.React.act(async () => {
+      page.requests[1].pending.resolve({ ok: true, message: 'B connected' })
+      await page.requests[1].pending.promise
+    })
+    assert.equal(page.rootElement.textContent?.includes('B connected'), true)
+    assert.equal(page.rootElement.textContent?.includes('late A success'), false)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage invalidates in-flight tests for edits to each request configuration field', async () => {
+  const edits: Array<{
+    field: 'baseUrl' | 'apiKey' | 'model'
+    selector: string
+    value: string
+  }> = [
+    { field: 'baseUrl', selector: 'input[placeholder="https://api.deepseek.com/v1"]', value: 'https://edited.invalid/v2' },
+    { field: 'apiKey', selector: 'input[type="password"]', value: 'synthetic-edited-key' },
+    { field: 'model', selector: 'input[placeholder="deepseek-chat，或点右侧按钮检测"]', value: 'edited-model' }
+  ]
+
+  for (const edit of edits) {
+    const settings: Settings = {
+      profiles: [{ ...initialSettings.profiles[0], id: 'A', apiKey: 'synthetic-A-secret' }],
+      defaultProfileId: 'A'
+    }
+    const page = await mountConnectionSettingsPage(settings)
+    try {
+      await page.React.act(async () => page.testButton().click())
+      assert.equal(page.requests.length, 1)
+
+      const field = page.rootElement.querySelector<HTMLInputElement>(edit.selector)!
+      await page.React.act(async () => setInput(field, edit.value))
+      await page.React.act(async () => page.testButton().click())
+      assert.equal(page.requests.length, 2, `${edit.field} edit should allow a request with the new configuration`)
+      assert.equal(page.requests[0].profile[edit.field], settings.profiles[0][edit.field])
+      assert.equal(page.requests[1].profile[edit.field], edit.value, `${edit.field} should be captured in the new request`)
+      assert.equal(page.testButton().textContent?.trim(), '测试中…')
+
+      await page.React.act(async () => {
+        page.requests[0].pending.resolve({ ok: false, message: `stale ${edit.field} failure` })
+        await page.requests[0].pending.promise
+      })
+      assert.equal(page.testButton().textContent?.trim(), '测试中…', 'old finally must not clear the new request loading state')
+      assert.equal(page.rootElement.textContent?.includes(`stale ${edit.field} failure`), false,
+        'the old result must not be shown against the edited profile')
+
+      await page.React.act(async () => {
+        page.requests[1].pending.resolve({ ok: true, message: `edited ${edit.field} connected` })
+        await page.requests[1].pending.promise
+      })
+      assert.equal(page.rootElement.textContent?.includes(`edited ${edit.field} connected`), true)
+    } finally {
+      await page.unmount()
+    }
+  }
+})
+
+test('SettingsPage ignores a deferred connection response after deleting the only profile', async () => {
+  const settings: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], id: 'A', apiKey: 'synthetic-A-secret' }],
+    defaultProfileId: 'A'
+  }
+  const page = await mountConnectionSettingsPage(settings)
+  try {
+    await page.React.act(async () => page.testButton().click())
+    assert.equal(page.requests.length, 1)
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) =>
+      button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    assert.equal([...page.rootElement.querySelectorAll('button')].some((button) =>
+      button.textContent?.trim() === '测试连接' || button.textContent?.trim() === '测试中…'), false)
+    assert.equal(page.rootElement.textContent?.includes('Profile A'), false)
+
+    await page.React.act(async () => {
+      page.requests[0].pending.resolve({ ok: true, message: 'deleted A response' })
+      await page.requests[0].pending.promise
+    })
+    assert.equal(page.rootElement.textContent?.includes('deleted A response'), false)
+    assert.equal(page.rootElement.textContent?.includes('deleted A'), false)
   } finally {
     await page.unmount()
   }

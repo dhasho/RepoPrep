@@ -1,11 +1,12 @@
 // 设置页：大模型配置管理（OpenAI 兼容接口，支持检测 Key 可用模型列表）
-import { useMemo, useState, useSyncExternalStore } from 'react'
-import type { LlmProfile, Settings, TestConnectionResult } from '@shared/types'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import type { LlmProfile, Settings } from '@shared/types'
 import type { ScanLimits } from '@shared/types'
 import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '@shared/types'
 import { api } from '../lib/ipc'
 import { SettingsSaveFlow } from '../lib/settings-save'
 import { ModelDetectionController, modelStateOf } from '../lib/model-detection'
+import { ConnectionTestController } from '../lib/connection-test'
 import { parseScanLimitDraft, scanLimitDraftOf, type ScanLimitDraft, type ScanLimitErrors } from '../lib/scan-limit-input'
 
 interface Props {
@@ -40,8 +41,6 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     settings.defaultProfileId ?? settings.profiles[0]?.id ?? ''
   )
   const [dirty, setDirty] = useState(false)
-  const [test, setTest] = useState<TestConnectionResult | null>(null)
-  const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
   const [scanLimitDraft, setScanLimitDraft] = useState<ScanLimitDraft>(() => scanLimitDraftOf(settings.scanLimits))
   const [scanLimitErrors, setScanLimitErrors] = useState<ScanLimitErrors>({})
@@ -58,11 +57,24 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const detection = useMemo(() => new ModelDetectionController({ listModels: api.listModels }), [])
   const modelSlots = useSyncExternalStore(detection.subscribe, detection.getSnapshot, detection.getSnapshot)
   const modelState = modelStateOf(modelSlots, selectedId)
+  const connectionTest = useMemo(() => new ConnectionTestController({ testLlm: api.testLlm }), [])
+  const connectionTestState = useSyncExternalStore(
+    connectionTest.subscribe,
+    connectionTest.getSnapshot,
+    connectionTest.getSnapshot
+  )
+  const currentTest = connectionTestState.profileId === selectedId ? connectionTestState : null
   const [modelFilter, setModelFilter] = useState('')
+
+  useEffect(() => {
+    connectionTest.activate()
+    return () => connectionTest.dispose()
+  }, [connectionTest])
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null
 
   const patchSelected = (patch: Partial<LlmProfile>) => {
+    connectionTest.invalidate()
     setProfiles((l) => l.map((p) => (p.id === selectedId ? { ...p, ...patch } : p)))
     setDirty(true)
     setSaved(false)
@@ -103,7 +115,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setSaving(true)
     setSaved(false)
     setSaveError(null)
-    setTest(null)
+    connectionTest.invalidate()
     setConfirmDiscard(false)
     try {
       const next: Settings = {
@@ -141,7 +153,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setSelectedId(p.id)
     setDirty(true)
     setSaved(false)
-    setTest(null)
+    connectionTest.invalidate()
     saveFlow.markLocalEdit()
     setModelFilter('')
     detection.hideList(selectedId)
@@ -150,28 +162,20 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const removeProfile = () => {
     if (!selected) return
     const rest = profiles.filter((p) => p.id !== selected.id)
+    connectionTest.invalidate()
     detection.invalidate(selected.id) // 该配置已删除，进行中的检测作废
     setProfiles(rest)
     if (defaultId === selected.id) setDefaultId(rest[0]?.id ?? null)
     setSelectedId(rest[0]?.id ?? '')
     setDirty(true)
     setSaved(false)
-    setTest(null)
     saveFlow.markLocalEdit()
     setModelFilter('')
   }
 
   const runTest = async () => {
     if (!selected) return
-    setTesting(true)
-    setTest(null)
-    try {
-      setTest(await api.testLlm(selected))
-    } catch (e) {
-      setTest({ ok: false, message: e instanceof Error ? e.message : String(e) })
-    } finally {
-      setTesting(false)
-    }
+    await connectionTest.run(selected)
   }
 
   return (
@@ -219,8 +223,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                   i > 0 ? 'border-t border-slate-100' : ''
                 } ${p.id === selectedId ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
                 onClick={() => {
+                  connectionTest.invalidate()
                   setSelectedId(p.id)
-                  setTest(null)
                   setSaved(false)
                   // 检测状态按 profile 隔离，切回时各自恢复；只重置过滤词，
                   // 并收起上一次展开的列表（避免下拉带着 autoFocus 抢焦点）
@@ -381,9 +385,9 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                 <button
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   onClick={runTest}
-                  disabled={testing}
+                  disabled={Boolean(currentTest?.testing)}
                 >
-                  {testing ? '测试中…' : '测试连接'}
+                  {currentTest?.testing ? '测试中…' : '测试连接'}
                 </button>
                 <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
                   <input
@@ -407,10 +411,10 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                 </button>
               </div>
 
-              {test && (
-                <p className={`text-sm ${test.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {test.ok ? '✓ ' : '✗ '}
-                  {test.message}
+              {currentTest?.result && (
+                <p className={`text-sm ${currentTest.result.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {currentTest.result.ok ? '✓ ' : '✗ '}
+                  {currentTest.result.message}
                 </p>
               )}
             </div>
