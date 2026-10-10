@@ -23,8 +23,8 @@ test('每个 invoke 通道全部登记且各自接受合法参数形状', () => 
   const valid = new Map<string, unknown[]>([
     [IPC.selectFolder, []], [IPC.scanProject, ['C:\\demo']], [IPC.recentProjects, []],
     [IPC.removeRecent, ['C:\\demo']], [IPC.loadResult, ['C:\\demo']], [IPC.deleteResult, ['C:\\demo']],
-    [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1' }]],
-    [IPC.generateCancel, []], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
+    [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
+    [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
     [IPC.explainCancel, [requestId]], [IPC.settingsGet, []], [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]],
     [IPC.llmTest, [profile]], [IPC.llmListModels, [profile]], [IPC.exportMarkdown, [result]]
   ])
@@ -32,6 +32,14 @@ test('每个 invoke 通道全部登记且各自接受合法参数形状', () => 
     assert.ok(valid.has(channel), `缺少 ${channel} schema`)
     assert.doesNotThrow(() => validateIpcArgs(channel, valid.get(channel)!))
   }
+})
+
+test('生成请求与取消接受大小写不同但格式合法的 UUIDv4', () => {
+  const runId = requestId.toUpperCase()
+  assert.doesNotThrow(() => validateIpcArgs(IPC.generateRun, [
+    { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId }
+  ]))
+  assert.doesNotThrow(() => validateIpcArgs(IPC.generateCancel, [runId]))
 })
 
 test('拒绝未知通道、参数缺失/多余及事件通道', () => {
@@ -98,6 +106,12 @@ test('闭合输入对象拒绝额外或循环字段，requestId 仅接受 UUID',
   cyclic.extra = cyclic
   rejects(IPC.settingsSave, { profiles: [cyclic], defaultProfileId: 'p1' })
   rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', injected: true })
+  rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1' })
+  rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', runId: 'not-a-uuid' })
+  rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', runId: `${requestId} ` })
+  rejects(IPC.generateCancel)
+  rejects(IPC.generateCancel, 'not-a-uuid')
+  rejects(IPC.generateCancel, requestId, 'extra')
   rejects(IPC.explainStart, { requestId: 'r1\nforged', term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' })
   rejects(IPC.explainCancel, ['r1\0'])
 })

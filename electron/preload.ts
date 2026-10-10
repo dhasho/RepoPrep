@@ -9,8 +9,8 @@ const api: ProjectLensApi = {
   removeRecent: (path) => ipcRenderer.invoke(IPC.removeRecent, path),
   loadResult: (projectPath) => ipcRenderer.invoke(IPC.loadResult, projectPath),
   deleteResult: (projectPath) => ipcRenderer.invoke(IPC.deleteResult, projectPath),
-  generate: (options) => ipcRenderer.invoke(IPC.generateRun, options),
-  cancelGenerate: () => ipcRenderer.invoke(IPC.generateCancel),
+  generate: (request) => ipcRenderer.invoke(IPC.generateRun, request),
+  cancelGenerate: (runId) => ipcRenderer.invoke(IPC.generateCancel, runId),
   onGenerateProgress: (cb) => {
     const listener = (_e: Electron.IpcRendererEvent, p: Parameters<typeof cb>[0]): void => cb(p)
     ipcRenderer.on(IPC.generateProgress, listener)

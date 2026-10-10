@@ -21,8 +21,8 @@ const result = {
 const inputs = new Map<string, unknown[]>([
   [IPC.selectFolder, []], [IPC.scanProject, ['C:\\demo']], [IPC.recentProjects, []],
   [IPC.removeRecent, ['C:\\demo']], [IPC.loadResult, ['C:\\demo']], [IPC.deleteResult, ['C:\\demo']],
-  [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1' }]],
-  [IPC.generateCancel, []], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
+  [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
+  [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
   [IPC.explainCancel, [requestId]], [IPC.settingsGet, []],
   [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]], [IPC.llmTest, [profile]],
   [IPC.llmListModels, [profile]], [IPC.exportMarkdown, [result]]

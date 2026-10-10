@@ -84,11 +84,15 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
 
 const options = { projectPath: '/authorized/demo', granularity: 'coarse', roleFocus: 'general', profileId: 'p' }
 const result = { projectName: 'demo' }
+const request = (runId) => ({ ...options, runId })
 
 test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污染重开的窗口', async () => {
   const generation = deferred()
   let onProgress
   let calls = 0
+  const firstRunId = randomUUID().toUpperCase()
+  const nextRunId = randomUUID().toUpperCase()
+  const canonicalNextRunId = nextRunId.toLowerCase()
   const harness = await createHarness({ generate: async (args) => {
     calls += 1
     if (calls === 1) { onProgress = args.onProgress; return generation.promise }
@@ -96,14 +100,15 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
     return result
   } })
   const oldWindow = harness.windows[0]
-  const pending = harness.handlers.get(harness.IPC.generateRun)({ sender: oldWindow.webContents }, options)
+  const pending = harness.handlers.get(harness.IPC.generateRun)({ sender: oldWindow.webContents }, request(firstRunId))
   await new Promise((resolve) => setImmediate(resolve))
   oldWindow.destroy()
   harness.appEvents.get('window-all-closed')()
   harness.appEvents.get('activate')()
   const newWindow = harness.windows[1]
-  await assert.rejects(harness.handlers.get(harness.IPC.generateRun)({ sender: newWindow.webContents }, options), /已有生成任务在进行中/)
+  await assert.rejects(harness.handlers.get(harness.IPC.generateRun)({ sender: newWindow.webContents }, request(randomUUID())), /已有生成任务在进行中/)
   const oldRunId = oldWindow.sent[0].payload.runId
+  assert.equal(oldRunId, firstRunId.toLowerCase(), '大小写不同的 UUID 应统一为规范小写 runId')
   assert.equal(harness.saves.length, 0)
   assert.equal(harness.recents.length, 0)
   onProgress('上下文就绪', undefined, 70)
@@ -111,12 +116,15 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
   generation.resolve(result)
   await assert.rejects(pending, /已取消生成/)
   assert.equal(harness.saves.length, 0)
-  assert.equal(await harness.handlers.get(harness.IPC.generateRun)({ sender: newWindow.webContents }, options), result)
+  const response = await harness.handlers.get(harness.IPC.generateRun)({ sender: newWindow.webContents }, request(nextRunId))
+  assert.equal(response.runId, canonicalNextRunId)
+  assert.equal(response.result, result)
   const progress = newWindow.sent.filter((event) => event.channel === harness.IPC.generateProgress)
   assert.equal(progress.length, 3)
   assert.equal(progress[0].payload.ts > 0, true)
   assert.equal(typeof progress[0].payload.runId, 'string')
-  assert.notEqual(progress[0].payload.runId, oldRunId)
+  assert.equal(progress[0].payload.runId, canonicalNextRunId)
+  assert.equal(progress[2].payload.runId, canonicalNextRunId)
   assert.equal(progress[2].payload.step, '新任务进度')
   assert.equal(harness.saves.length, 1)
   assert.equal(harness.recents.length, 1)
@@ -126,45 +134,59 @@ test('普通取消后忽略迟到进度和结果，finally 释放任务槽位', 
   const generation = deferred()
   let onProgress
   let calls = 0
+  let activeSignal
+  const canceledRunId = randomUUID()
+  const retryRunId = randomUUID()
   const harness = await createHarness({ generate: async (args) => {
     calls += 1
+    activeSignal = args.signal
     if (calls === 1) { onProgress = args.onProgress; return generation.promise }
     args.onProgress('取消后重试', undefined, 20)
     return result
   } })
   const window = harness.windows[0]
   const sender = window.webContents
-  const pending = harness.handlers.get(harness.IPC.generateRun)({ sender }, options)
+  const pending = harness.handlers.get(harness.IPC.generateRun)({ sender }, request(canceledRunId))
   await new Promise((resolve) => setImmediate(resolve))
-  const canceledRunId = window.sent[0].payload.runId
-  harness.handlers.get(harness.IPC.generateCancel)({ sender })
+  assert.equal(window.sent[0].payload.runId, canceledRunId)
+  harness.handlers.get(harness.IPC.generateCancel)({ sender }, retryRunId)
+  assert.equal(activeSignal.aborted, false, '错 runId 的取消不应中止当前任务')
+  harness.handlers.get(harness.IPC.generateCancel)({ sender }, canceledRunId.toUpperCase())
+  assert.equal(activeSignal.aborted, true, 'runId 大小写差异仍应取消同一任务')
   onProgress('迟到', undefined, 90)
   generation.resolve(result)
   await assert.rejects(pending, /已取消生成/)
   assert.equal(window.sent.some((event) => event.payload.step === '迟到'), false)
   assert.equal(harness.saves.length, 0)
-  assert.equal(await harness.handlers.get(harness.IPC.generateRun)({ sender }, options), result)
+  const response = await harness.handlers.get(harness.IPC.generateRun)({ sender }, request(retryRunId))
+  assert.equal(response.runId, retryRunId)
+  assert.equal(response.result, result)
   const retryProgress = window.sent.filter((event) => event.payload.step === '取消后重试')
   assert.equal(retryProgress.length, 1)
-  assert.notEqual(retryProgress[0].payload.runId, canceledRunId)
+  assert.equal(retryProgress[0].payload.runId, retryRunId)
 })
 
 test('扫描仍在等待时取消会丢弃迟到扫描，生成失败也由 finally 释放槽位', async () => {
   const scanWait = deferred()
   let scanCalls = 0
   let generateCalls = 0
+  const canceledRunId = randomUUID()
+  const failureRunId = randomUUID()
+  const successRunId = randomUUID()
   const harness = await createHarness({
     scan: async () => { scanCalls += 1; return scanCalls === 1 ? scanWait.promise : { status: 'reused', scan: { name: 'demo' } } },
     generate: async () => { generateCalls += 1; if (generateCalls === 1) throw new Error('model failure'); return result }
   })
   const sender = harness.windows[0].webContents
-  const canceled = harness.handlers.get(harness.IPC.generateRun)({ sender }, options)
+  const canceled = harness.handlers.get(harness.IPC.generateRun)({ sender }, request(canceledRunId))
   await new Promise((resolve) => setImmediate(resolve))
-  harness.handlers.get(harness.IPC.generateCancel)({ sender })
+  harness.handlers.get(harness.IPC.generateCancel)({ sender }, canceledRunId)
   scanWait.resolve({ status: 'reused', scan: { name: 'late' } })
   await assert.rejects(canceled, /已取消生成/)
   assert.equal(generateCalls, 0, '取消后的迟到扫描不会继续调用生成器')
-  await assert.rejects(harness.handlers.get(harness.IPC.generateRun)({ sender }, options), /model failure/)
-  assert.equal(await harness.handlers.get(harness.IPC.generateRun)({ sender }, options), result)
+  await assert.rejects(harness.handlers.get(harness.IPC.generateRun)({ sender }, request(failureRunId)), /model failure/)
+  const response = await harness.handlers.get(harness.IPC.generateRun)({ sender }, request(successRunId))
+  assert.equal(response.runId, successRunId)
+  assert.equal(response.result, result)
   assert.equal(harness.saves.length, 1)
 })

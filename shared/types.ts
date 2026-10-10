@@ -155,8 +155,8 @@ export interface GenerateProgress {
   step: string
   detail?: string
   percent: number // 0-100
-  /** 产生该进度的生成任务 runId（主进程生成时创建；用于隔离不同任务的进度，issue #20/#21） */
-  runId?: string
+  /** 产生该进度的生成任务 runId（渲染进程创建；用于隔离不同任务的进度，issue #21） */
+  runId: string
   /** 事件产生的时刻（epoch 毫秒）。由主进程发送时写入，渲染层只读它，避免历史日志时间漂移 */
   ts: number
 }
@@ -166,6 +166,17 @@ export interface GenerateOptions {
   granularity: Granularity
   roleFocus: RoleFocus
   profileId: string
+}
+
+/** 一次生成请求的会话标识；runId 由渲染进程为每次尝试创建。 */
+export interface GenerateRequest extends GenerateOptions {
+  runId: string
+}
+
+/** 生成响应封套；result 保持原有持久化格式与类型。 */
+export interface GenerateResponse {
+  runId: string
+  result: InterviewResult
 }
 
 export interface ExplainRequest {

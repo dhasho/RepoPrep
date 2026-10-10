@@ -1,6 +1,6 @@
 import path from 'node:path'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
-import type { GenerateOptions, Granularity, InterviewResult, LlmProfile, RoleFocus, Settings } from '../../shared/types.ts'
+import type { GenerateRequest, Granularity, InterviewResult, LlmProfile, RoleFocus, Settings } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
@@ -85,10 +85,10 @@ function settings(value: unknown): asserts value is Settings {
 
 const GRANULARITIES = ['coarse', 'medium', 'fine'] as const satisfies readonly Granularity[]
 const ROLES = ['general', 'frontend', 'backend', 'algorithm'] as const satisfies readonly RoleFocus[]
-function generateOptions(value: unknown): asserts value is GenerateOptions {
+function generateRequest(value: unknown): asserts value is GenerateRequest {
   if (!record(value)) fail()
-  exactKeys(value, ['projectPath', 'granularity', 'roleFocus', 'profileId'])
-  absolutePath(value.projectPath); enumValue(value.granularity, GRANULARITIES); enumValue(value.roleFocus, ROLES); string(value.profileId, 128)
+  exactKeys(value, ['projectPath', 'granularity', 'roleFocus', 'profileId', 'runId'])
+  absolutePath(value.projectPath); enumValue(value.granularity, GRANULARITIES); enumValue(value.roleFocus, ROLES); string(value.profileId, 128); requestId(value.runId)
 }
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function requestId(value: unknown): asserts value is string {
@@ -205,13 +205,13 @@ type Validator = (args: unknown[]) => void
 const validators: Record<string, Validator> = {
   [IPC.selectFolder]: (a) => exactArgs(a, 0),
   [IPC.recentProjects]: (a) => exactArgs(a, 0),
-  [IPC.generateCancel]: (a) => exactArgs(a, 0),
+  [IPC.generateCancel]: (a) => { exactArgs(a, 1); requestId(a[0]) },
   [IPC.settingsGet]: (a) => exactArgs(a, 0),
   [IPC.scanProject]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.removeRecent]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.loadResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.deleteResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
-  [IPC.generateRun]: (a) => { exactArgs(a, 1); generateOptions(a[0]) },
+  [IPC.generateRun]: (a) => { exactArgs(a, 1); generateRequest(a[0]) },
   [IPC.explainStart]: (a) => { exactArgs(a, 1); explain(a[0]) },
   [IPC.explainCancel]: (a) => { exactArgs(a, 1); requestId(a[0]) },
   [IPC.settingsSave]: (a) => { exactArgs(a, 1); settings(a[0]) },

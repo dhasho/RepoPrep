@@ -10,6 +10,8 @@ interface Props {
   settings: Settings
   onStart: (options: GenerateOptions) => void
   onViewExisting: (result: InterviewResult) => void
+  busyTask?: { projectName: string; runId: string; cancelling: boolean } | null
+  onResumeTask?: () => void
 }
 
 function formatBytes(n: number): string {
@@ -19,7 +21,7 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)}GB`
 }
 
-export default function ConfigurePage({ overview, existingResult, settings, onStart, onViewExisting }: Props) {
+export default function ConfigurePage({ overview, existingResult, settings, onStart, onViewExisting, busyTask = null, onResumeTask }: Props) {
   const [granularity, setGranularity] = useState<Granularity>('medium')
   const [roleFocus, setRoleFocus] = useState<RoleFocus>('general')
   const profileId = settings.defaultProfileId ?? settings.profiles[0]?.id ?? ''
@@ -113,6 +115,20 @@ export default function ConfigurePage({ overview, existingResult, settings, onSt
 
           {/* 右：生成配置 */}
           <div className="space-y-6">
+            {busyTask && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <div className="text-sm text-amber-800">
+                  {busyTask.cancelling
+                    ? `正在取消「${busyTask.projectName}」的生成…`
+                    : `「${busyTask.projectName}」仍在生成；结束后才能开始另一个任务。`}
+                </div>
+                {onResumeTask && (
+                  <button className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100" onClick={onResumeTask}>
+                    查看任务
+                  </button>
+                )}
+              </div>
+            )}
             <section>
               <h2 className="mb-3 text-[15px] font-semibold text-slate-900">① 问题颗粒度</h2>
               <div className="space-y-2.5">
@@ -195,7 +211,7 @@ export default function ConfigurePage({ overview, existingResult, settings, onSt
 
             <button
               className="w-full rounded-xl bg-indigo-600 py-3.5 text-[15px] font-medium text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-              disabled={!profile}
+              disabled={!profile || Boolean(busyTask)}
               onClick={() =>
                 onStart({
                   projectPath: overview.root,

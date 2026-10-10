@@ -2,8 +2,9 @@
 import type {
   ExplainEvent,
   ExplainRequest,
-  GenerateOptions,
+  GenerateRequest,
   GenerateProgress,
+  GenerateResponse,
   InterviewResult,
   ListModelsResult,
   LlmProfile,
@@ -41,8 +42,8 @@ export interface ProjectLensApi {
   removeRecent(path: string): Promise<void>
   loadResult(projectPath: string): Promise<InterviewResult | null>
   deleteResult(projectPath: string): Promise<void>
-  generate(options: GenerateOptions): Promise<InterviewResult>
-  cancelGenerate(): Promise<void>
+  generate(request: GenerateRequest): Promise<GenerateResponse>
+  cancelGenerate(runId: string): Promise<void>
   onGenerateProgress(cb: (p: GenerateProgress) => void): () => void
   explain(req: ExplainRequest): Promise<void>
   cancelExplain(requestId: string): Promise<void>

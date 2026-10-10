@@ -8,13 +8,14 @@ interface Props {
   overview: ProjectOverview | null
   options: GenerateOptions | null
   progress: GenerateProgress | null
-  logs: GenerateProgress[]
+  logs: readonly GenerateProgress[]
   error: string | null
+  cancelling?: boolean
   onCancel: () => void
   onBack: () => void
 }
 
-export default function GeneratingPage({ overview, options, progress, logs, error, onCancel, onBack }: Props) {
+export default function GeneratingPage({ overview, options, progress, logs, error, cancelling = false, onCancel, onBack }: Props) {
   const logEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -87,8 +88,9 @@ export default function GeneratingPage({ overview, options, progress, logs, erro
               <button
                 className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-500 hover:bg-slate-50"
                 onClick={onCancel}
+                disabled={cancelling}
               >
-                取消生成
+                {cancelling ? '正在取消…' : '取消生成'}
               </button>
             </div>
           </>

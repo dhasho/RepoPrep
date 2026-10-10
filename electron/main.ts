@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
-import type { ExplainRequest, GenerateOptions, InterviewResult, LlmProfile, Settings } from '@shared/types'
+import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, Settings } from '@shared/types'
 import { ProjectScanCache } from './services/scan-cache'
 import { GenerationTaskRegistry } from './services/generation-tasks'
 import { generateInterview, buildExplainMessages } from './services/generator'
@@ -178,11 +178,13 @@ handle(IPC.deleteResult, (_e, projectPath: string) => {
 // runId 用于防止陈旧的 finish 误清新任务的锁。
 const generationTasks = new GenerationTaskRegistry()
 
-handle(IPC.generateRun, async (event, options: GenerateOptions): Promise<InterviewResult> => {
+handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<GenerateResponse> => {
   // 任何 await 之前同步占用槽位：重复请求在这里被拒绝，不会并发扫描/生成
-  const task = generationTasks.begin()
+  const runId = request.runId.toLowerCase()
+  const task = generationTasks.begin(runId)
   if (!task) throw new Error('已有生成任务在进行中')
-  const { runId, controller: abort } = task
+  const { controller: abort } = task
+  const options = request
   const sender = event.sender
   const isCurrentTask = (): boolean =>
     generationTasks.active?.runId === runId && !abort.signal.aborted && !sender.isDestroyed()
@@ -226,7 +228,7 @@ handle(IPC.generateRun, async (event, options: GenerateOptions): Promise<Intervi
     ensureCurrentTask()
     saveResult(options.projectPath, result)
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
-    return result
+    return { runId, result }
   } catch (err) {
     if (!isCurrentTask()) throw new Error('已取消生成')
     throw err instanceof Error ? err : new Error(String(err))
@@ -236,8 +238,8 @@ handle(IPC.generateRun, async (event, options: GenerateOptions): Promise<Intervi
   }
 })
 
-handle(IPC.generateCancel, () => {
-  generationTasks.cancelCurrent()
+handle(IPC.generateCancel, (_event, runId: string) => {
+  generationTasks.cancel(runId)
 })
 
 // ---------- 名词 AI 解释（流式） ----------
