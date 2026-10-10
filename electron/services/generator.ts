@@ -10,7 +10,7 @@ import type {
   Section
 } from '@shared/types'
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
-import { chatCompletion, type ChatMessage } from './llm'
+import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, type ContextBatch } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, truncateToQuota, type QuestionPlan } from './question-budget'
 import { treeToText, type ScanResult } from './scanner'
@@ -445,7 +445,10 @@ export async function mergeWithCompensation(
           `请**再补充 ${ask} 个此前没有覆盖到的考察点**，不要重复已有问题。`
       )
       merged.compensated += absorb(parsed, ask, target)
-    } catch {
+    } catch (error) {
+      // Timeouts need to reach the main IPC layer so it can surface the explicit
+      // timeout state; ordinary compensation failures remain best-effort.
+      if (isLlmTimeoutError(error)) throw error
       // 补偿属于尽力而为：失败不应让整个生成流程失败，已有结果照常返回
       break
     }

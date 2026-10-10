@@ -60,7 +60,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
     './services/scan-cache': { ProjectScanCache: class { async getFresh(...args) { return scan(...args) } async refresh() { return { scan: { name: 'demo' } } } async invalidate() {} } },
     './services/generation-tasks': null,
     './services/generator': { generateInterview: (...args) => generate(...args), buildExplainMessages() {} },
-    './services/llm': { chatCompletionStream: async () => {}, listModels: async () => ({}), testConnection: async () => ({}) },
+    './services/llm': { chatCompletionStream: async () => {}, isLlmTimeoutError: () => false, listModels: async () => ({}), testConnection: async () => ({}) },
     './services/exporter': { exportMarkdownDialog: async () => ({}) },
     './window-security': { getTrustedDevUrl: () => null, installPermissionDenials() {}, installWindowSecurity() {} },
     './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getRecentProjects: () => [], getSettings: () => ({ profiles: [{ id: 'p' }], scanLimits: { maxFiles: 12 } }), loadResult: () => null, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },

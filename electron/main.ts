@@ -8,7 +8,7 @@ import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult
 import { ProjectScanCache } from './services/scan-cache'
 import { GenerationTaskRegistry } from './services/generation-tasks'
 import { generateInterview, buildExplainMessages } from './services/generator'
-import { chatCompletionStream, listModels, testConnection } from './services/llm'
+import { chatCompletionStream, isLlmTimeoutError, listModels, testConnection } from './services/llm'
 import { exportMarkdownDialog } from './services/exporter'
 import { getTrustedDevUrl, installPermissionDenials, installWindowSecurity } from './window-security'
 import {
@@ -231,6 +231,9 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
     return { runId, result }
   } catch (err) {
     if (!isCurrentTask()) throw new Error('已取消生成')
+    if (isLlmTimeoutError(err)) {
+      throw new Error('生成面试题时模型请求超时，请检查网络或稍后重试。')
+    }
     throw err instanceof Error ? err : new Error(String(err))
   } finally {
     // runId 守卫：陈旧的 finish 不会清掉新任务的锁
@@ -270,7 +273,11 @@ handle(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
     )
     send(IPC.explainEvent, { requestId: req.requestId, type: 'done', data: '' })
   } catch (err) {
-    const msg = abort.signal.aborted ? '已取消' : '请求处理失败，请稍后重试'
+    const msg = abort.signal.aborted
+      ? '已取消'
+      : isLlmTimeoutError(err)
+        ? '名词解释请求超时，请检查网络或稍后重试。'
+        : '请求处理失败，请稍后重试'
     send(IPC.explainEvent, { requestId: req.requestId, type: 'error', data: msg })
   } finally {
     explainAborts.finish(req.requestId, abort)

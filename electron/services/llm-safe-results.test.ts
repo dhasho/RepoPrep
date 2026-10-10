@@ -3,7 +3,7 @@ import test from 'node:test'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import assert from 'node:assert/strict'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
-import { listModels, testConnection } from './llm.ts'
+import { chatCompletion, listModels, testConnection } from './llm.ts'
 
 const profile = { id: 'p1', name: 'Demo', baseUrl: 'https://private.example/api', apiKey: 'secret-key', model: 'private-model' }
 
@@ -42,7 +42,22 @@ test('connection failures return actionable generic text without transport detai
   await withFetch(async () => { throw new Error('https://private.example secret-key /private/path') }, async () => {
     const result = await testConnection(profile)
     assert.equal(result.ok, false)
-    assert.match(result.message, /检查网络、服务地址和配置/)
+    assert.match(result.message, /连接测试失败，请检查网络、服务地址和配置后重试/)
     assert.doesNotMatch(result.message, /private\.example|secret-key|private\/path/)
+  })
+})
+
+test('chat HTTP errors never reflect response body, endpoint, or API key', async () => {
+  const secret = 'UPSTREAM_SECRET https://private.example/path secret-key'
+  await withFetch(async () => new Response(secret, { status: 403 }), async () => {
+    await assert.rejects(
+      chatCompletion(profile, [{ role: 'user', content: 'hello' }]),
+      (error: unknown) => {
+        assert.ok(error instanceof Error)
+        assert.match(error.message, /HTTP 403/)
+        assert.doesNotMatch(error.message, /UPSTREAM_SECRET|private\.example|secret-key/)
+        return true
+      }
+    )
   })
 })

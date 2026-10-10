@@ -11,6 +11,8 @@ import assert from 'node:assert/strict'
 import { GRANULARITY_QUESTION_BUDGET, type Section } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { mergeWithCompensation, type MergeInput } from './generator.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { LlmRequestError } from './llm.ts'
 
 const budget = GRANULARITY_QUESTION_BUDGET.fine
 
@@ -121,6 +123,18 @@ test('补偿请求失败时保留已有结果，不让整次生成失败', async
   assert.equal(result.collected, 3, '首轮结果应保留')
   assert.ok(result.compensationRounds >= 1, '应尝试过补偿')
   assert.equal(result.compensated, 0, '补偿失败则补回 0 题')
+})
+
+test('补偿请求超时必须向上传递，不能静默返回部分结果', async () => {
+  const { input } = makeInput(FULL_QUOTAS, ({ isCompensation }) => {
+    if (isCompensation) throw new LlmRequestError('timeout')
+    return 1
+  })
+  await assert.rejects(mergeWithCompensation(input, 2), (error: unknown) => {
+    assert.ok(error instanceof LlmRequestError)
+    assert.equal(error.kind, 'timeout')
+    return true
+  })
 })
 
 test('补偿时挑选"贡献最少"的批次', async () => {
