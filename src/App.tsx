@@ -10,6 +10,18 @@ import SettingsPage from './pages/SettingsPage'
 
 export type View = 'select' | 'configure' | 'generating' | 'result' | 'settings'
 type LeaveTarget = { kind: 'select' | 'settings' } | { kind: 'task'; runId: string }
+type HistoryRecoveryStatus = 'scanning' | 'removing' | 'error'
+interface HistoryRecoveryState {
+  result: InterviewResult
+  sourceRecentPath: string
+  targetPath: string
+  status: HistoryRecoveryStatus
+  error: string
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 export default function App() {
   const [view, setView] = useState<View>('select')
@@ -21,9 +33,16 @@ export default function App() {
   const [taskPanelOpen, setTaskPanelOpen] = useState(false)
   const [foregroundRunId, setForegroundRunId] = useState<string | null>(null)
   const [overview, setOverview] = useState<ProjectOverview | null>(null)
+  const [projectStoragePath, setProjectStoragePath] = useState<string | null>(null)
   const [existingResult, setExistingResult] = useState<InterviewResult | null>(null)
   const [result, setResult] = useState<InterviewResult | null>(null)
+  const [resultStoragePath, setResultStoragePath] = useState<string | null>(null)
   const [settings, setSettings] = useState<Settings>({ profiles: [], defaultProfileId: null })
+  const [configureInitialOptions, setConfigureInitialOptions] = useState<GenerateOptions | undefined>()
+  const [configureNotice, setConfigureNotice] = useState<string | null>(null)
+  const [configureRevision, setConfigureRevision] = useState(0)
+  const [historyRecovery, setHistoryRecovery] = useState<HistoryRecoveryState | null>(null)
+  const historyRecoveryAttempt = useRef<number | null>(null)
 
   const session = useMemo(() => new GenerationSession(api), [])
   const sessionSnapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
@@ -55,17 +74,27 @@ export default function App() {
     const task = foregroundTask
     if (!task || task.mode !== 'foreground' || viewRef.current !== 'generating') return
     if (task.status === 'succeeded' && task.result) {
+      historyRecoveryAttempt.current = null
       setLeaveTarget(null)
+      setHistoryRecovery(null)
       setOverview(task.overview as ProjectOverview)
+      setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setExistingResult(task.result)
       setResult(task.result)
+      setResultStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setForegroundRunId(null)
       navigationEpoch.current++
       setView('result')
     } else if (task.status === 'cancelled') {
+      historyRecoveryAttempt.current = null
       setLeaveTarget(null)
+      setHistoryRecovery(null)
       setOverview(task.overview as ProjectOverview)
+      setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setExistingResult(task.existingResult as InterviewResult | null)
+      setConfigureInitialOptions({ projectPath: task.options.projectPath, granularity: task.options.granularity, roleFocus: task.options.roleFocus, profileId: task.options.profileId })
+      setConfigureNotice(null)
+      setConfigureRevision((revision) => revision + 1)
       setForegroundRunId(null)
       navigationEpoch.current++
       setView('configure')
@@ -74,18 +103,26 @@ export default function App() {
 
   const restoreTask = (task: GenerationTask) => {
     navigationEpoch.current++
+    historyRecoveryAttempt.current = null
+    setHistoryRecovery(null)
     setTaskPanelOpen(false)
     if (task.status === 'succeeded' && task.result) {
       setOverview(task.overview as ProjectOverview)
+      setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setExistingResult(task.result)
       setResult(task.result)
+      setResultStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setForegroundRunId(null)
       setView('result')
       return
     }
     if (task.status === 'cancelled') {
       setOverview(task.overview as ProjectOverview)
+      setProjectStoragePath(task.options.projectPath)
       setExistingResult(task.existingResult as InterviewResult | null)
+      setConfigureInitialOptions({ projectPath: task.options.projectPath, granularity: task.options.granularity, roleFocus: task.options.roleFocus, profileId: task.options.profileId })
+      setConfigureNotice(null)
+      setConfigureRevision((revision) => revision + 1)
       setForegroundRunId(null)
       setView('configure')
       return
@@ -96,13 +133,15 @@ export default function App() {
   }
 
   const commitNavigation = (target: LeaveTarget, from: View) => {
+    navigationEpoch.current++
+    historyRecoveryAttempt.current = null
+    setHistoryRecovery(null)
     setLeaveTarget(null)
     if (target.kind === 'task') {
       const task = session.getTask(target.runId)
       if (task) restoreTask(task)
       return
     }
-    navigationEpoch.current++
     if (target.kind === 'settings') setPrevView(from === 'generating' ? 'select' : from)
     setView(target.kind)
   }
@@ -134,23 +173,32 @@ export default function App() {
   /** Open (scan) a project and enter its configuration page. */
   const openProject = useCallback(async (path: string) => {
     const ticket = ++navigationEpoch.current
+    historyRecoveryAttempt.current = null
     const nextOverview = await api.scanProject(path)
-    const nextResult = await api.loadResult(path)
+    if (ticket !== navigationEpoch.current) return
+    const nextResult = await api.loadResult(nextOverview.storagePath ?? path)
     if (ticket !== navigationEpoch.current) return
     setOverview(nextOverview)
+    setProjectStoragePath(nextOverview.storagePath ?? path)
     setExistingResult(nextResult)
+    setConfigureInitialOptions(undefined)
+    setConfigureNotice(null)
+    setConfigureRevision((revision) => revision + 1)
+    setHistoryRecovery(null)
     setView('configure')
   }, [])
 
   const startGenerate = useCallback((options: GenerateOptions) => {
     if (!overview) return
     const taskExistingResult = existingResult?.projectPath === overview.root ? existingResult : null
-    const runId = session.start(options, overview, taskExistingResult)
+    const runId = session.start({ ...options, projectPath: projectStoragePath ?? options.projectPath }, overview, taskExistingResult)
     if (!runId) return
     navigationEpoch.current++
+    historyRecoveryAttempt.current = null
+    setHistoryRecovery(null)
     setForegroundRunId(runId)
     setView('generating')
-  }, [existingResult, overview, session])
+  }, [existingResult, overview, projectStoragePath, session])
 
   const cancelGenerate = useCallback(() => {
     if (foregroundTask) session.cancel(foregroundTask.runId)
@@ -169,14 +217,132 @@ export default function App() {
     restoreTask(session.getTask(targetTask.runId) ?? targetTask)
   }
 
-  const regenerate = useCallback(() => {
-    navigationEpoch.current++
-    setView(overview ? 'configure' : 'select')
-  }, [overview])
+  const optionsForHistory = (history: InterviewResult, projectPath: string): GenerateOptions => {
+    const profileId = settings.profiles.some((profile) => profile.id === history.profileId)
+      ? history.profileId
+      : settings.profiles.some((profile) => profile.id === settings.defaultProfileId)
+        ? settings.defaultProfileId!
+        : settings.profiles[0]?.id ?? ''
+    return {
+      projectPath,
+      granularity: history.granularity,
+      roleFocus: history.roleFocus,
+      profileId
+    }
+  }
 
-  const viewExisting = useCallback((nextResult: InterviewResult) => {
+  const scanHistoryProject = async (history: InterviewResult, sourceRecentPath: string, targetPath: string, ticket: number): Promise<void> => {
+    const isCurrentAttempt = () => ticket === navigationEpoch.current && historyRecoveryAttempt.current === ticket
+    try {
+      const nextOverview = await api.scanProject(targetPath)
+      if (!isCurrentAttempt()) return
+      const nextResult = await api.loadResult(nextOverview.storagePath ?? targetPath)
+      if (!isCurrentAttempt()) return
+      const storedTargetPath = nextOverview.storagePath ?? targetPath
+
+      let oldRecentNotice: string | null = null
+      if (sourceRecentPath !== storedTargetPath) {
+        try {
+          await api.removeRecent(sourceRecentPath)
+        } catch (error) {
+          if (!isCurrentAttempt()) return
+          oldRecentNotice = `项目已重新定位，但旧项目的最近记录移除失败：${errorMessage(error)}`
+        }
+        if (!isCurrentAttempt()) return
+      }
+
+      navigationEpoch.current++
+      historyRecoveryAttempt.current = null
+      setOverview(nextOverview)
+      setProjectStoragePath(storedTargetPath)
+      setExistingResult(nextResult)
+      setConfigureInitialOptions(optionsForHistory(history, storedTargetPath))
+      setConfigureNotice(oldRecentNotice)
+      setConfigureRevision((revision) => revision + 1)
+      setHistoryRecovery(null)
+      setView('configure')
+    } catch (error) {
+      if (!isCurrentAttempt()) return
+      setHistoryRecovery({ result: history, sourceRecentPath, targetPath, status: 'error', error: errorMessage(error) })
+    } finally {
+      if (historyRecoveryAttempt.current === ticket) historyRecoveryAttempt.current = null
+    }
+  }
+
+  const beginHistoryRecovery = (history: InterviewResult, sourceRecentPath: string) => {
+    if (historyRecoveryAttempt.current !== null) return
+    const ticket = ++navigationEpoch.current
+    historyRecoveryAttempt.current = ticket
+    setHistoryRecovery({ result: history, sourceRecentPath, targetPath: sourceRecentPath, status: 'scanning', error: '' })
+    void scanHistoryProject(history, sourceRecentPath, sourceRecentPath, ticket)
+  }
+
+  const retryHistoryScan = () => {
+    if (!historyRecovery || historyRecovery.status !== 'error') return
+    if (historyRecoveryAttempt.current !== null) return
+    const ticket = ++navigationEpoch.current
+    historyRecoveryAttempt.current = ticket
+    setHistoryRecovery({ ...historyRecovery, status: 'scanning', error: '' })
+    void scanHistoryProject(historyRecovery.result, historyRecovery.sourceRecentPath, historyRecovery.targetPath, ticket)
+  }
+
+  const relocateHistoryProject = async () => {
+    const recovery = historyRecovery
+    if (!recovery || recovery.status !== 'error') return
+    if (historyRecoveryAttempt.current !== null) return
+    const ticket = ++navigationEpoch.current
+    historyRecoveryAttempt.current = ticket
+    setHistoryRecovery({ ...recovery, status: 'scanning', error: '' })
+    try {
+      const selectedPath = await api.selectFolder()
+      if (ticket !== navigationEpoch.current || historyRecoveryAttempt.current !== ticket) return
+      if (!selectedPath) {
+        historyRecoveryAttempt.current = null
+        setHistoryRecovery({ ...recovery, status: 'error', error: '未选择新项目文件夹。' })
+        return
+      }
+      setHistoryRecovery({ ...recovery, targetPath: selectedPath, status: 'scanning', error: '' })
+      void scanHistoryProject(recovery.result, recovery.sourceRecentPath, selectedPath, ticket)
+    } catch (error) {
+      if (ticket !== navigationEpoch.current || historyRecoveryAttempt.current !== ticket) return
+      historyRecoveryAttempt.current = null
+      setHistoryRecovery({ ...recovery, status: 'error', error: errorMessage(error) })
+    }
+  }
+
+  const removeHistoryFromRecent = async () => {
+    const recovery = historyRecovery
+    if (!recovery || recovery.status !== 'error') return
+    if (historyRecoveryAttempt.current !== null) return
+    const ticket = ++navigationEpoch.current
+    historyRecoveryAttempt.current = ticket
+    setHistoryRecovery({ ...recovery, status: 'removing', error: '' })
+    try {
+      await api.removeRecent(recovery.sourceRecentPath)
+      if (ticket !== navigationEpoch.current || historyRecoveryAttempt.current !== ticket) return
+      navigationEpoch.current++
+      historyRecoveryAttempt.current = null
+      setHistoryRecovery(null)
+      setView('select')
+    } catch (error) {
+      if (ticket !== navigationEpoch.current || historyRecoveryAttempt.current !== ticket) return
+      historyRecoveryAttempt.current = null
+      setHistoryRecovery({ ...recovery, status: 'error', error: `从最近项目移除失败：${errorMessage(error)}` })
+    }
+  }
+
+  const keepHistoryResult = () => {
     navigationEpoch.current++
+    historyRecoveryAttempt.current = null
+    setHistoryRecovery(null)
+  }
+
+  const viewExisting = useCallback((nextResult: InterviewResult, sourceRecentPath: string) => {
+    navigationEpoch.current++
+    historyRecoveryAttempt.current = null
+    setHistoryRecovery(null)
     setResult(nextResult)
+    setResultStoragePath(sourceRecentPath)
     setView('result')
   }, [])
 
@@ -215,9 +381,13 @@ export default function App() {
         )}
         {view === 'configure' && overview && (
           <ConfigurePage
+            key={`${overview.root}:${configureRevision}`}
             overview={overview}
+            projectStoragePath={projectStoragePath ?? overview.root}
             existingResult={existingResult}
             settings={settings}
+            initialOptions={configureInitialOptions}
+            notice={configureNotice}
             onStart={startGenerate}
             onViewExisting={viewExisting}
             busyTask={busyForConfigure}
@@ -235,14 +405,30 @@ export default function App() {
             onCancel={cancelGenerate}
             onBack={() => {
               setOverview(foregroundTask.overview as ProjectOverview)
+              setProjectStoragePath(foregroundTask.options.projectPath)
               setExistingResult(foregroundTask.existingResult as InterviewResult | null)
               setForegroundRunId(null)
+              setConfigureInitialOptions({
+                projectPath: foregroundTask.options.projectPath,
+                granularity: foregroundTask.options.granularity,
+                roleFocus: foregroundTask.options.roleFocus,
+                profileId: foregroundTask.options.profileId
+              })
+              setConfigureNotice(null)
+              setConfigureRevision((revision) => revision + 1)
               navigationEpoch.current++
               setView('configure')
             }}
           />
         )}
-        {view === 'result' && result && <ResultPage result={result} settings={settings} onRegenerate={regenerate} />}
+        {view === 'result' && result && (
+          <ResultPage
+            result={result}
+            settings={settings}
+            onRegenerate={() => beginHistoryRecovery(result, resultStoragePath ?? result.projectPath)}
+            regenerating={Boolean(historyRecovery)}
+          />
+        )}
         {view === 'settings' && (
           <SettingsPage
             settings={settings}
@@ -300,6 +486,44 @@ export default function App() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === 'result' && historyRecovery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4" role="dialog" aria-modal="true" aria-labelledby="history-recovery-title">
+          <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
+            <h2 id="history-recovery-title" className="text-base font-semibold text-slate-900">
+              {historyRecovery.status === 'scanning'
+                ? '正在重新扫描历史项目…'
+                : historyRecovery.status === 'removing'
+                  ? '正在从最近项目移除…'
+                  : '原项目无法读取'}
+            </h2>
+            <p className="mt-2 break-all text-xs text-slate-500">{historyRecovery.targetPath}</p>
+            {historyRecovery.error && (
+              <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+                {historyRecovery.error}
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              {historyRecovery.status === 'error' && (
+                <>
+                  <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600" onClick={retryHistoryScan}>
+                    重试扫描
+                  </button>
+                  <button className="rounded-lg border border-indigo-200 px-3 py-2 text-sm text-indigo-700" onClick={relocateHistoryProject}>
+                    重新定位项目
+                  </button>
+                  <button className="rounded-lg border border-rose-200 px-3 py-2 text-sm text-rose-700" onClick={removeHistoryFromRecent}>
+                    从最近项目移除
+                  </button>
+                </>
+              )}
+              <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-white" onClick={keepHistoryResult}>
+                保留历史结果
+              </button>
             </div>
           </div>
         </div>

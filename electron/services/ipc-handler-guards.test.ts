@@ -84,6 +84,14 @@ test('项目 handler 与导出 handler 收到 registry 中登记的原始路径'
   }
 })
 
+test('removeRecent authorizes the supplied alias but preserves the exact persisted key', async () => {
+  const { deps, event, projects } = context()
+  projects.registerRecent(['C:\\Demo'])
+  projects.registerSelected('c:/demo')
+  const handler = createGuardedIpcHandler(IPC.removeRecent, deps, (_event, path) => path)
+  assert.equal(await handler(event, 'C:\\Demo'), 'C:\\Demo')
+})
+
 test('所有通道拒绝非可信 sender，且拒绝发生在服务调用前', async () => {
   for (const channel of INVOKE_CHANNELS) {
     const { deps, event } = context()

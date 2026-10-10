@@ -83,7 +83,10 @@ export function createGuardedIpcHandler<E extends IpcEventLike>(
       let args = rawArgs
       if (projectArgumentChannels.has(channel)) {
         const projectPath = deps.projects.requireAuthorized(rawArgs[0] as string)
-        args = [projectPath, ...rawArgs.slice(1)]
+        // removeRecent acts on an exact persisted recent.json key. Authorization
+        // still checks the supplied path, while the store must receive that key
+        // unchanged instead of a selected-path alias from the registry.
+        args = [channel === IPC.removeRecent ? rawArgs[0] : projectPath, ...rawArgs.slice(1)]
       } else if (channel === IPC.generateRun) {
         const options = rawArgs[0] as Record<string, unknown>
         args = [{ ...options, projectPath: deps.projects.requireAuthorized(options.projectPath as string) }]

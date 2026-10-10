@@ -74,6 +74,8 @@ export interface SecurityProtectionSummary {
 
 export interface ProjectOverview {
   root: string
+  /** Exact path key used by the main process for recent/result persistence. */
+  storagePath?: string
   name: string
   totalFiles: number
   totalBytes: number
@@ -177,6 +179,8 @@ export interface GenerateRequest extends GenerateOptions {
 export interface GenerateResponse {
   runId: string
   result: InterviewResult
+  /** Exact path key used by the main process for recent/result persistence. */
+  storagePath?: string
 }
 
 export interface ExplainRequest {

@@ -8,8 +8,11 @@ interface Props {
   overview: ProjectOverview
   existingResult: InterviewResult | null
   settings: Settings
+  initialOptions?: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>
+  notice?: string | null
   onStart: (options: GenerateOptions) => void
-  onViewExisting: (result: InterviewResult) => void
+  onViewExisting: (result: InterviewResult, sourceRecentPath: string) => void
+  projectStoragePath: string
   busyTask?: { projectName: string; runId: string; cancelling: boolean } | null
   onResumeTask?: () => void
 }
@@ -21,15 +24,22 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)}GB`
 }
 
-export default function ConfigurePage({ overview, existingResult, settings, onStart, onViewExisting, busyTask = null, onResumeTask }: Props) {
-  const [granularity, setGranularity] = useState<Granularity>('medium')
-  const [roleFocus, setRoleFocus] = useState<RoleFocus>('general')
-  const profileId = settings.defaultProfileId ?? settings.profiles[0]?.id ?? ''
+export default function ConfigurePage({ overview, existingResult, settings, initialOptions, notice = null, onStart, onViewExisting, projectStoragePath, busyTask = null, onResumeTask }: Props) {
+  const [granularity, setGranularity] = useState<Granularity>(initialOptions?.granularity ?? 'medium')
+  const [roleFocus, setRoleFocus] = useState<RoleFocus>(initialOptions?.roleFocus ?? 'general')
+  const preferredProfileId = initialOptions?.profileId
+  const profileId = [preferredProfileId, settings.defaultProfileId, settings.profiles[0]?.id]
+    .find((id) => id && settings.profiles.some((profile) => profile.id === id)) ?? ''
   const profile = settings.profiles.find((p) => p.id === profileId)
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-5xl px-6 py-6">
+        {notice && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
+            {notice}
+          </div>
+        )}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-slate-900">{overview.name}</h1>
@@ -40,7 +50,7 @@ export default function ConfigurePage({ overview, existingResult, settings, onSt
           {existingResult && (
             <button
               className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
-              onClick={() => onViewExisting(existingResult)}
+              onClick={() => onViewExisting(existingResult, projectStoragePath)}
             >
               查看上次生成结果（{new Date(existingResult.createdAt).toLocaleString('zh-CN')}）
             </button>

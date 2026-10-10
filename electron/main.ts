@@ -150,7 +150,7 @@ const scanCache = new ProjectScanCache()
 handle(IPC.scanProject, async (_e, projectPath: string) => {
   const { scan } = await scanCache.refresh(projectPath, getSettings().scanLimits)
   addRecentProject({ path: projectPath, name: scan.name })
-  return scan
+  return { ...scan, storagePath: projectPath }
 })
 
 handle(IPC.recentProjects, () => {
@@ -163,6 +163,7 @@ handle(IPC.removeRecent, async (_e, projectPath: string) => {
   await removeRecentProject(projectPath)
   // 撤销授权与显式失效缓存必须一起做：否则被移除的项目仍可复用旧扫描结果。
   authorizedProjects.removeRecent(projectPath)
+  authorizedProjects.registerRecent(getRecentProjects().map((project) => project.path))
   await scanCache.invalidate(projectPath)
 })
 
@@ -228,7 +229,7 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
     ensureCurrentTask()
     saveResult(options.projectPath, result)
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
-    return { runId, result }
+    return { runId, result, storagePath: options.projectPath }
   } catch (err) {
     if (!isCurrentTask()) throw new Error('已取消生成')
     if (isLlmTimeoutError(err)) {

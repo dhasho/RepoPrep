@@ -18,6 +18,7 @@ export interface GenerationTask {
   progress: GenerateProgress | null
   logs: readonly GenerateProgress[]
   result: InterviewResult | null
+  resultStoragePath?: string
   error: string | null
   startedAt: number
 }
@@ -155,7 +156,13 @@ export class GenerationSession {
       this.finishFailure(runId, new Error('生成响应与当前任务不匹配'))
       return
     }
-    this.replaceTask(runId, { ...task, status: 'succeeded', result: response.result, error: null })
+    this.replaceTask(runId, {
+      ...task,
+      resultStoragePath: response.storagePath ?? task.options.projectPath,
+      status: 'succeeded',
+      result: response.result,
+      error: null
+    })
     this.update({ ...this.snapshot, activeRunId: null })
   }
 

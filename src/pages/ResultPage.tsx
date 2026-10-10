@@ -11,6 +11,7 @@ interface Props {
   result: InterviewResult
   settings: Settings
   onRegenerate: () => void
+  regenerating?: boolean
   /** 仅用于测试：设置搜索框初始值（生产调用方不传，行为不变） */
   initialSearch?: string
 }
@@ -36,7 +37,7 @@ function snippetAround(answer: string, term: string): string {
   return (start > 0 ? '…' : '') + text.slice(start, idx + term.length + 110)
 }
 
-export default function ResultPage({ result, settings, onRegenerate, initialSearch = '' }: Props) {
+export default function ResultPage({ result, settings, onRegenerate, regenerating = false, initialSearch = '' }: Props) {
   const [search, setSearch] = useState(initialSearch)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeId, setActiveId] = useState('')
@@ -222,10 +223,11 @@ export default function ResultPage({ result, settings, onRegenerate, initialSear
                 导出 Markdown
               </button>
               <button
-                className="rounded-lg bg-slate-800 px-3.5 py-2 text-sm text-white hover:bg-slate-700"
+                className="rounded-lg bg-slate-800 px-3.5 py-2 text-sm text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
                 onClick={onRegenerate}
+                disabled={regenerating}
               >
-                重新生成
+                {regenerating ? '重新扫描项目…' : '重新生成'}
               </button>
             </div>
           </div>

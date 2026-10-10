@@ -7,7 +7,7 @@ import { api } from '../lib/ipc'
 interface Props {
   settings: Settings
   openProject: (path: string) => Promise<void>
-  viewExisting: (result: InterviewResult) => void
+  viewExisting: (result: InterviewResult, sourceRecentPath: string) => void
   openSettings: () => void
 }
 
@@ -118,7 +118,7 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
                   {r && (
                     <button
                       className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
-                      onClick={() => viewExisting(r)}
+                      onClick={() => viewExisting(r, p.path)}
                     >
                       查看结果
                     </button>
