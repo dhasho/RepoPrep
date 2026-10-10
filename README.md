@@ -103,7 +103,16 @@ npm run audit:deps     # 依赖公告审计（查 GitHub Advisory，需 gh CLI �
 - **名词标记协议**：生成时要求模型在答案中用 `[[名词]]` 内联标记，并在 `glossary` 中给出解释；渲染层把标记转为可点击词条，解释弹卡优先展示术语表，缺失时自动触发 AI 解释
 - **上下文预算**：按字符预算（token≈字符/3）挑选文件，优先级 README > 配置 > 入口 > 核心源码，超长文件截断；细粒度按顶层模块分批多轮调用后合并
 - **JSON 容错**：剥离代码围栏、截取首尾大括号，解析失败自动携带错误信息让模型重试一次
-- **安全**：contextIsolation 开启、nodeIntegration 关闭；API Key 仅存本机 userData，渲染进程不接触密钥
+- **安全**：contextIsolation 开启、nodeIntegration 关闭；API Key 配置保存在本机 userData。设置页通过受限 IPC 读取和编辑配置，当前存储为普通 JSON，详见项目安全规范
+
+## 项目规范
+
+- [协作入口](AGENTS.md)：Git、worktree 与协作流程
+- [项目架构与实现约束](docs/project-standards.md)
+- [代码审查约定](docs/review.md)
+- [GitHub Review 配置](docs/github-review-setup.md)
+- [验证命令与证据](docs/validation.md)
+- [版本策略](docs/VERSIONING.md)
 
 ## 常见问题
 
