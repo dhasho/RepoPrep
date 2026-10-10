@@ -55,3 +55,131 @@ test('excludes sensitive paths and redacts ordinary source before rendering', as
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test('real scan-to-generation path keeps inline fake credentials out of context, progress, result, and request body', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-security-generation-'))
+  const jsonSource = '{"apiKey":"inline-json-secret","password":"json-password-secret","accessToken":"json-access-secret","clientSecret":"json-client-secret"}'
+  const codeSource = [
+    'const config={apiKey:"inline-api-secret", password:\'inline-password-secret\', accessToken:`inline-access-secret`, clientSecret:"inline-client-secret"};',
+    'const commentObject = { apiKey: /* value follows a comment */ "fake-inline-comment" };',
+    'const password=/* initializer is separated by a comment */\'fake-comment-init\';',
+    'const accessToken =\n  /* trivia before the value on the next line */\n  "fake-comment-newline";',
+    'const apiKey = "prefix" + "fake-concat-inline-secret";',
+    'class Client { OPENAI_API_KEY: string="fake-prefixed-openai-key"; }',
+    'const callConfig={apiKey:getKey("name","fake-colon-call-secret"),safe:"keep-call"};',
+    'const arrayConfig={password:[wrap(() => ({ value: "fake-password-array-secret" })), "fake-password-array-tail-secret"],safe:"keep-array"};',
+    'const nestedPassword = wrap({ password: "fake-equals-nested-secret" }, "fake-equals-tail-secret");',
+    'const runtime = wrap({ nested: { apiKey: "fake-runtime-object-secret" } }, function () { return { password: "fake-function-body-secret" }; });',
+    'const anonymous = function (value: { apiKey: CustomApiKey; nested?: { password: CustomPassword } }) { return value; };',
+    'const arrow = (value: { token: CustomToken; nested?: { clientSecret: CustomClientSecret } }) => value;',
+    'class Safe { method(value: { apiKey: CustomMethodKey; nested?: { password: CustomMethodPassword } }) { return value; } }',
+    'function withDefault(options:{apiKey:CustomDefaultKey;password?:CustomDefaultPassword}={apiKey:"fake-parameter-default-secret"}){return options;}'
+  ].join('\n')
+  const jsonSecrets = [
+    'inline-json-secret', 'json-password-secret', 'json-access-secret', 'json-client-secret',
+  ]
+  const codeSecrets = [
+    'inline-api-secret', 'inline-password-secret', 'inline-access-secret', 'inline-client-secret',
+    'fake-inline-comment', 'fake-comment-init', 'fake-comment-newline', 'fake-concat-inline-secret',
+    'fake-prefixed-openai-key', 'fake-colon-call-secret', 'fake-password-array-secret',
+    'fake-password-array-tail-secret', 'fake-equals-nested-secret', 'fake-equals-tail-secret',
+    'fake-runtime-object-secret', 'fake-function-body-secret', 'fake-parameter-default-secret'
+  ]
+  const fakeSecrets = [...jsonSecrets, ...codeSecrets]
+  const fakeModelResult = {
+    projectSummary: 'Synthetic project summary.',
+    sections: [{
+      title: 'Configuration',
+      summary: 'Configuration handling.',
+      questions: Array.from({ length: 20 }, (_, index) => ({
+        question: `Synthetic question ${index + 1}?`,
+        answer: `Synthetic answer ${index + 1}.`,
+        followUps: []
+      }))
+    }],
+    glossary: {}
+  }
+  const profile = {
+    id: 'synthetic-profile', name: 'Synthetic only', baseUrl: 'https://example.invalid/v1',
+    apiKey: 'synthetic-profile-key', model: 'mock-model'
+  }
+  const originalFetch = globalThis.fetch
+  const capturedBodies: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  try {
+    await fs.mkdir(path.join(root, 'src'), { recursive: true })
+    await fs.writeFile(path.join(root, 'config.json'), jsonSource)
+    await fs.writeFile(path.join(root, 'src', 'config.ts'), codeSource)
+    const scan = await scanProject(root)
+    const candidateFiles = scan.files.filter((file) =>
+      ['config.json', 'src/config.ts'].includes(file.relPath) && file.isContentCandidate
+    )
+    assert.equal(candidateFiles.length, 2)
+
+    const built = await buildContext(scan, 'medium')
+    assert.equal(built.batches.length, 1)
+    assert.equal(built.batches[0].files.length, 2, 'both real files should become ContextFiles in the batch')
+    assert.equal(built.contentSecurity.redactedFiles, 2)
+    const expectedMatches = fakeSecrets.length - 2 // array and nested call assignments each contain a trailing fake value
+    assert.equal(built.contentSecurity.redactionMatches, expectedMatches)
+    assert.equal(built.contentSecurity.matchesByCategory['secret-assignment'], expectedMatches)
+    for (const [filePath, secrets, expectedCount] of [['config.json', jsonSecrets, 4], ['src/config.ts', codeSecrets, 15]] as const) {
+      const file = built.batches[0].files.find((item) => item.relPath === filePath)
+      assert.ok(file, `${filePath} should be present in the real context batch`)
+      assert.equal(file.redactionMatches, expectedCount, `${filePath} should contain the expected replaced values`)
+      assert.equal((file.content.match(/\[REDACTED:secret-assignment\]/g) ?? []).length, expectedCount)
+      for (const secret of secrets) assert.doesNotMatch(file.content, new RegExp(secret))
+    }
+    const typescriptContext = built.batches[0].files.find((item) => item.relPath === 'src/config.ts')?.content ?? ''
+    const preservedTypeNames = ['CustomApiKey', 'CustomPassword', 'CustomToken', 'CustomClientSecret', 'CustomMethodKey', 'CustomMethodPassword', 'CustomDefaultKey', 'CustomDefaultPassword']
+    for (const typeName of preservedTypeNames) {
+      assert.ok(typescriptContext.includes(typeName), `${typeName} should remain in parameter type annotations`)
+    }
+    assert.match(typescriptContext, /options:\{apiKey:CustomDefaultKey;password\?:CustomDefaultPassword\}=\{apiKey:"\[REDACTED:secret-assignment\]"\}/)
+
+    const rendered = renderBatch(built.headerText, treeToText(scan.tree), built.batches[0])
+    assert.match(rendered, /\[REDACTED:secret-assignment\]/)
+    for (const secret of fakeSecrets) assert.doesNotMatch(rendered, new RegExp(secret))
+    for (const safeValue of ['keep-call', 'keep-array']) assert.ok(rendered.includes(safeValue), `${safeValue} should remain in rendered context`)
+    for (const typeName of preservedTypeNames) assert.ok(rendered.includes(typeName), `${typeName} should remain in rendered context`)
+
+    // Register the repo's normal direct-Node import alias before loading the real generator.
+    // @ts-ignore TS5097 -- intentional dynamic Node test imports.
+    await import('../../tests/register-shared-alias.mjs')
+    // @ts-ignore TS5097 -- generator.ts uses the bundler's @shared alias by design.
+    const { generateInterview } = await import('./generator.ts')
+    globalThis.fetch = async (_input, init) => {
+      capturedBodies.push(JSON.parse(String(init?.body)) as typeof capturedBodies[number])
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fakeModelResult) } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
+    const progress: Array<{ step: string; detail?: string }> = []
+    const generated = await generateInterview({
+      scan,
+      granularity: 'medium',
+      roleFocus: 'general',
+      profile,
+      signal: new AbortController().signal,
+      onProgress: (step, detail) => progress.push({ step, detail })
+    })
+    globalThis.fetch = originalFetch
+
+    assert.equal(capturedBodies.length, 1, '20 mocked questions meet the medium-granularity quota without compensation')
+    const serializedRequest = JSON.stringify(capturedBodies[0])
+    for (const secret of fakeSecrets) assert.doesNotMatch(serializedRequest, new RegExp(secret))
+    for (const safeValue of ['keep-call', 'keep-array']) assert.ok(serializedRequest.includes(safeValue), `${safeValue} should remain in request`)
+    for (const typeName of preservedTypeNames) assert.ok(serializedRequest.includes(typeName), `${typeName} should remain in request`)
+    const contextReady = progress.find((item) => item.step === '上下文就绪')
+    assert.ok(contextReady?.detail?.includes(`脱敏 2 个文件（${expectedMatches} 处）`))
+    for (const secret of fakeSecrets) assert.doesNotMatch(JSON.stringify(progress), new RegExp(secret))
+    assert.equal(generated.sections.reduce((sum, section) => sum + section.questions.length, 0), 20)
+    assert.equal(generated.security?.redactedFiles, 2)
+    assert.equal(generated.security?.redactionMatches, expectedMatches)
+    assert.equal(generated.security?.categories['secret-assignment'], expectedMatches)
+    for (const secret of fakeSecrets) assert.doesNotMatch(JSON.stringify(generated), new RegExp(secret))
+  } finally {
+    globalThis.fetch = originalFetch
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
