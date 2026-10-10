@@ -173,7 +173,7 @@ async function createHarness() {
   }
 }
 
-const options = { projectPath: PROJECT_PATH, granularity: 'coarse', roleFocus: 'general', profileId: 'p' }
+const options = { runId: randomUUID(), projectPath: PROJECT_PATH, granularity: 'coarse', roleFocus: 'general', profileId: 'p' }
 const explainRequest = (requestId = randomUUID()) => ({
   requestId,
   term: '超时',
@@ -248,7 +248,7 @@ test('user cancellation takes priority over a timeout that settles after cancel'
   h.setGenerate(async () => { started(); return pending.promise })
   const generation = h.invoke(IPC.generateRun, options)
   await begun
-  await h.invoke(IPC.generateCancel)
+  await h.invoke(IPC.generateCancel, options.runId)
   pending.reject(new h.TimeoutError('timeout', 'timeout with secret'))
   await assert.rejects(generation, (error) => error.message === '已取消生成')
   assert.equal(h.saves.length, 0)

@@ -67,6 +67,56 @@ function setInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+async function mountSettingsPage(
+  settings: Settings,
+  saveSettings: (settings: Settings) => Promise<void>
+) {
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
+  const restoreGlobals = installDomGlobals(dom)
+  dom.window.api = {
+    saveSettings,
+    listModels: async () => ({ ok: true, models: [], message: '' }),
+    testLlm: async () => ({ ok: true, message: 'ok' })
+  } as unknown as typeof dom.window.api
+
+  const React = require('react') as typeof import('react')
+  const { createRoot } = require('react-dom/client') as typeof import('react-dom/client')
+  delete require.cache[require.resolve(bundlePath)]
+  const SettingsPage = require(bundlePath).default as typeof import('./SettingsPage').default
+  const rootElement = dom.window.document.getElementById('root')!
+  const root = createRoot(rootElement)
+  let savedSettings: Settings | null = null
+  let savedCalls = 0
+  let backCalls = 0
+  const render = (current: Settings) => React.createElement(SettingsPage, {
+    settings: current,
+    onSaved: (next: Settings) => {
+      savedSettings = structuredClone(next)
+      savedCalls++
+      root.render(render(next))
+    },
+    onBack: () => { backCalls++ }
+  })
+  await React.act(async () => root.render(render(settings)))
+
+  return {
+    dom,
+    React,
+    root,
+    rootElement,
+    get savedSettings() { return savedSettings },
+    get savedCalls() { return savedCalls },
+    get backCalls() { return backCalls },
+    saveButton: () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.startsWith('保存'))!,
+    limit: (name: string) => rootElement.querySelector<HTMLInputElement>(`#scan-limit-${name}`)!,
+    async unmount() {
+      await React.act(async () => root.unmount())
+      dom.window.close()
+      restoreGlobals()
+    }
+  }
+}
+
 test('SettingsPage preserves newer edits when an older save completes, then saves the current draft', async () => {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://localhost'
@@ -300,5 +350,158 @@ test('SettingsPage validates blurred scan limits, converts boundary values, and 
     }
     dom.window.close()
     restoreGlobals()
+  }
+})
+
+test('SettingsPage saves deletion of the only profile, reads back an empty store, and remounts without a draft', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-issue-68-key' }],
+    defaultProfileId: 'profile-1',
+    scanLimits: { maxFiles: 120, maxTreeNodes: 240, maxContentFileBytes: 4096 }
+  }
+  let backend = structuredClone(initial)
+  const pending = deferred()
+  let submitted: Settings | null = null
+  const saveSettings = async (next: Settings) => {
+    submitted = structuredClone(next)
+    await pending.promise
+    backend = structuredClone(next)
+  }
+  const page = await mountSettingsPage(initial, saveSettings)
+  try {
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    assert.equal(page.rootElement.textContent?.includes('Original'), false)
+    assert.ok(page.saveButton(), 'the Settings-level save control should remain available without a profile')
+    assert.deepEqual(backend, initial, 'deleting is a local draft until the save succeeds')
+
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(page.saveButton().disabled, true)
+    assert.equal(page.saveButton().textContent, '保存中…')
+    assert.equal(backend.profiles[0].apiKey, 'synthetic-issue-68-key', 'the backend remains unchanged while IPC is pending')
+    pending.resolve()
+    await page.React.act(async () => pending.promise)
+
+    assert.deepEqual(submitted, {
+      profiles: [],
+      defaultProfileId: null,
+      scanLimits: { maxFiles: 120, maxTreeNodes: 240, maxContentFileBytes: 4096 }
+    })
+    assert.deepEqual(backend, submitted, 'readback after IPC success should contain the empty profile list and valid limits')
+    assert.equal(JSON.stringify(backend).includes('synthetic-issue-68-key'), false)
+    assert.deepEqual(page.savedSettings, backend)
+    assert.equal(page.savedCalls, 1)
+  } finally {
+    await page.unmount()
+  }
+
+  const remounted = await mountSettingsPage(backend, async () => {})
+  try {
+    assert.equal(remounted.rootElement.textContent?.includes('Original'), false)
+    assert.equal(remounted.rootElement.querySelector('input[placeholder="如：DeepSeek 日常用"]'), null,
+      'remounting legitimately empty settings must not create an implicit profile draft')
+    assert.ok(remounted.saveButton(), 'the global save control remains present for empty settings')
+    assert.equal(remounted.savedCalls, 0)
+  } finally {
+    await remounted.unmount()
+  }
+})
+
+test('SettingsPage normalizes the default after deleting the selected default among multiple profiles', async () => {
+  const initial: Settings = {
+    profiles: [
+      { ...initialSettings.profiles[0], id: 'first', name: 'First', apiKey: '' },
+      { ...initialSettings.profiles[0], id: 'second', name: 'Second', apiKey: '' },
+      { ...initialSettings.profiles[0], id: 'third', name: 'Third', apiKey: '' }
+    ],
+    defaultProfileId: 'first'
+  }
+  const writes: Settings[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    await page.React.act(async () => page.saveButton().click())
+
+    assert.equal(writes.length, 1)
+    assert.deepEqual(writes[0].profiles.map((profile) => profile.id), ['second', 'third'])
+    assert.equal(writes[0].defaultProfileId, 'second', 'deleting the default should select a surviving profile as default')
+    assert.deepEqual(page.savedSettings, writes[0])
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage keeps an empty-list draft after a failed save, blocks duplicate retry, and preserves edits made while retry saves', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-issue-68-key' }],
+    defaultProfileId: 'profile-1'
+  }
+  let backend = structuredClone(initial)
+  const requests: Array<{ snapshot: Settings; control: ReturnType<typeof deferred> }> = []
+  const page = await mountSettingsPage(initial, (next) => {
+    const control = deferred()
+    requests.push({ snapshot: structuredClone(next), control })
+    return control.promise.then(() => { backend = structuredClone(next) })
+  })
+  try {
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(requests.length, 1)
+    await page.React.act(async () => {
+      requests[0].control.reject(new Error('保存失败，请重试'))
+      await requests[0].control.promise.catch(() => {})
+    })
+
+    assert.equal(JSON.stringify(backend).includes('synthetic-issue-68-key'), true, 'a failed save must leave persisted settings intact')
+    assert.equal(page.savedCalls, 0, 'onSaved must run only after IPC success')
+    assert.match(page.saveButton().textContent ?? '', /\*$/, 'the failed deletion remains a dirty draft')
+    assert.equal(page.rootElement.textContent?.includes('✗ 保存失败，请重试'), true, 'the error should remain visible outside the editor')
+
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(requests.length, 2, 'a failed save should be retryable')
+    assert.equal(page.saveButton().disabled, true)
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(requests.length, 2, 'double-clicking during retry must not issue another IPC write')
+    const addButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('新增配置'))!
+    await page.React.act(async () => addButton.click())
+    requests[1].control.resolve()
+    await page.React.act(async () => requests[1].control.promise)
+
+    assert.deepEqual(requests[1].snapshot.profiles, [], 'the pending write is the empty-list snapshot')
+    assert.deepEqual(backend.profiles, [], 'the successful retry persists only its captured snapshot')
+    assert.equal(page.savedCalls, 1)
+    assert.match(page.saveButton().textContent ?? '', /\*$/, 'a new profile created while saving remains dirty')
+    assert.ok(page.rootElement.querySelector('input[placeholder="如：DeepSeek 日常用"]'), 'the new profile draft should remain visible')
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage discard after profile deletion does not write or change persisted settings', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-issue-68-key' }],
+    defaultProfileId: 'profile-1'
+  }
+  let backend = structuredClone(initial)
+  let writes = 0
+  const page = await mountSettingsPage(initial, async (next) => {
+    writes++
+    backend = structuredClone(next)
+  })
+  try {
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    const backButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('返回') && !button.textContent?.includes('放弃'))!
+    await page.React.act(async () => backButton.click())
+    const discardButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('放弃修改并返回'))!
+    await page.React.act(async () => discardButton.click())
+
+    assert.equal(page.backCalls, 1)
+    assert.equal(writes, 0, 'discarding a deletion must not call settings persistence')
+    assert.deepEqual(backend, initial)
+  } finally {
+    await page.unmount()
   }
 })

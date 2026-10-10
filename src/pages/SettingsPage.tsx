@@ -1,5 +1,5 @@
 // 设置页：大模型配置管理（OpenAI 兼容接口，支持检测 Key 可用模型列表）
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import type { LlmProfile, Settings, TestConnectionResult } from '@shared/types'
 import type { ScanLimits } from '@shared/types'
 import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '@shared/types'
@@ -60,17 +60,6 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const modelState = modelStateOf(modelSlots, selectedId)
   const [modelFilter, setModelFilter] = useState('')
 
-  useEffect(() => {
-    if (!profiles.length && !selectedId) {
-      const p = emptyProfile()
-      setProfiles([p])
-      setSelectedId(p.id)
-      setDirty(true)
-      saveFlow.markLocalEdit()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const selected = profiles.find((p) => p.id === selectedId) ?? null
 
   const patchSelected = (patch: Partial<LlmProfile>) => {
@@ -102,10 +91,10 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
    * 保存期间又发生了本地修改（hasEditsDuringSave）时这些修改未持久化，dirty 保持 true。
    */
   const save = async () => {
-    if (!selected) return
     if (saving) return // 防重复提交（按钮同时禁用，流程控制器也会拒绝并发保存）
-    if (!selected.name.trim() || !selected.baseUrl.trim() || !selected.model.trim()) {
-      setTest({ ok: false, message: '名称、接口地址、模型名不能为空' })
+    if (profiles.some((profile) => !profile.name.trim() || !profile.baseUrl.trim() || !profile.model.trim())) {
+      setSaved(false)
+      setSaveError('名称、接口地址、模型名不能为空')
       return
     }
     const parsedLimits = parseScanLimitDraft(scanLimitDraft)
@@ -114,9 +103,14 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setSaving(true)
     setSaved(false)
     setSaveError(null)
+    setTest(null)
     setConfirmDiscard(false)
     try {
-      const next: Settings = { profiles, defaultProfileId: defaultId ?? profiles[0]?.id ?? null, scanLimits: parsedLimits.value }
+      const next: Settings = {
+        profiles,
+        defaultProfileId: profiles.some((profile) => profile.id === defaultId) ? defaultId : profiles[0]?.id ?? null,
+        scanLimits: parsedLimits.value
+      }
       const result = await saveFlow.save(next)
       if (result.outcome === 'saved') {
         onSaved(next)
@@ -385,13 +379,6 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
 
               <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
                 <button
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-                  onClick={save}
-                  disabled={saving}
-                >
-                  {saving ? '保存中…' : `保存${dirty ? ' *' : ''}`}
-                </button>
-                <button
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   onClick={runTest}
                   disabled={testing}
@@ -420,8 +407,6 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                 </button>
               </div>
 
-              {saved && <p className="text-sm text-emerald-600">✓ 已保存</p>}
-              {saveError && <p className="text-sm text-rose-600">✗ {saveError}</p>}
               {test && (
                 <p className={`text-sm ${test.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {test.ok ? '✓ ' : '✗ '}
@@ -472,6 +457,18 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
           })}
         </div>
       </section>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+          onClick={save}
+          disabled={saving}
+        >
+          {saving ? '保存中…' : `保存${dirty ? ' *' : ''}`}
+        </button>
+        {saved && <p className="text-sm text-emerald-600">✓ 已保存</p>}
+        {saveError && <p className="text-sm text-rose-600">✗ {saveError}</p>}
+      </div>
 
       <p className="mt-5 text-xs leading-5 text-slate-400">
         说明：API Key 仅保存在本机用户数据目录，用于本应用直接调用对应服务商接口，不会上传到任何第三方。

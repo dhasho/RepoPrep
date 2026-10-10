@@ -1,6 +1,6 @@
 {
   "name": "projectlens",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
   "author": "ProjectLens",
