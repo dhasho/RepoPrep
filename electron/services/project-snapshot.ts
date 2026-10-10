@@ -2,6 +2,14 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { ScanResult } from './scanner'
 
+export interface FileSystemIdentity {
+  dev: bigint
+  ino: bigint
+  size: bigint
+  mtimeNs: bigint
+  ctimeNs: bigint
+}
+
 export interface ProjectIdentity {
   realPath: string
   key: string
@@ -15,19 +23,42 @@ export interface SnapshotEntry {
   ctimeMs?: number
   /** Exact names returned by readdir when this directory was captured. */
   names?: string[]
+  identity?: FileSystemIdentity
+  contentApproved?: boolean
 }
 
 export interface ProjectSnapshot {
   identity: ProjectIdentity
   entries: SnapshotEntry[]
   valid: boolean
+  /** Whether scan-time policy and identity observations permit approved file reads. */
+  contentReadable?: boolean
+  maxContentFileBytes?: number
 }
 
-const snapshots = new WeakMap<ScanResult, ProjectSnapshot>()
+interface SnapshotIndexes {
+  snapshot: ProjectSnapshot
+  filesByPath: Map<string, SnapshotEntry>
+  approvedFilesByPath: Map<string, SnapshotEntry>
+  directoriesByPath: Map<string, SnapshotEntry>
+}
+
+const snapshots = new WeakMap<ScanResult, SnapshotIndexes>()
 
 /** Called by the scanner with metadata observed during traversal. */
 export function recordProjectSnapshot(scan: ScanResult, snapshot: ProjectSnapshot): void {
-  snapshots.set(scan, snapshot)
+  const filesByPath = new Map<string, SnapshotEntry>()
+  const approvedFilesByPath = new Map<string, SnapshotEntry>()
+  const directoriesByPath = new Map<string, SnapshotEntry>()
+  for (const entry of snapshot.entries) {
+    if (entry.type === 'file') {
+      if (!filesByPath.has(entry.path) || entry.contentApproved) filesByPath.set(entry.path, entry)
+      if (entry.contentApproved) approvedFilesByPath.set(entry.path, entry)
+    } else if (entry.type === 'dir') {
+      directoriesByPath.set(entry.path, entry)
+    }
+  }
+  snapshots.set(scan, { snapshot, filesByPath, approvedFilesByPath, directoriesByPath })
 }
 
 export async function resolveProjectIdentity(inputPath: string): Promise<ProjectIdentity> {
@@ -38,9 +69,45 @@ export async function resolveProjectIdentity(inputPath: string): Promise<Project
 }
 
 export async function captureProjectSnapshot(scan: ScanResult): Promise<ProjectSnapshot> {
-  const snapshot = snapshots.get(scan)
-  if (!snapshot) return { identity: await resolveProjectIdentity(scan.root), entries: [], valid: false }
-  return snapshot
+  const indexes = snapshots.get(scan)
+  if (!indexes) return { identity: await resolveProjectIdentity(scan.root), entries: [], valid: false }
+  return indexes.snapshot
+}
+
+/** Content policy is private scan-time state, separate from cache reusability. */
+export function isProjectContentReadable(scan: ScanResult): boolean {
+  return snapshots.get(scan)?.snapshot.contentReadable === true
+}
+
+/** Private scan-time approval record used by the content reader. */
+export function getProjectContentApproval(scan: ScanResult, relPath: string): {
+  snapshot: ProjectSnapshot
+  file: SnapshotEntry
+  directories: SnapshotEntry[]
+} | undefined {
+  const indexes = snapshots.get(scan)
+  if (indexes?.snapshot.contentReadable !== true) return undefined
+  const indexedFile = indexes.filesByPath.get(relPath)
+  const file = indexes.approvedFilesByPath.get(relPath)
+  if (!indexedFile || !file?.identity) return undefined
+  const segments = relPath.split('/')
+  const directories: SnapshotEntry[] = []
+  for (let depth = 0; depth < segments.length; depth++) {
+    const dirPath = segments.slice(0, depth).join('/')
+    const directory = indexes.directoriesByPath.get(dirPath)
+    if (!directory?.identity) return undefined
+    directories.push(directory)
+  }
+  return { snapshot: indexes.snapshot, file, directories }
+}
+
+export function sameFileSystemIdentity(a: FileSystemIdentity | undefined, b: FileSystemIdentity | undefined): boolean {
+  return Boolean(a && b && a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs)
+}
+
+export function identityFromBigIntStats(stats: import('node:fs').BigIntStats): FileSystemIdentity | undefined {
+  if (stats.dev <= 0n || stats.ino <= 0n || stats.size < 0n) return undefined
+  return { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeNs: stats.mtimeNs, ctimeNs: stats.ctimeNs }
 }
 
 /** 并发上限：校验是纯 I/O，串行等待会让大项目多付一整轮遍历的墙钟时间。 */
@@ -103,9 +170,11 @@ export async function isProjectSnapshotCurrent(snapshot: ProjectSnapshot): Promi
         }
       }
 
-      const stats = await fs.stat(absPath)
+      const stats = await fs.lstat(absPath, { bigint: true })
       if ((entry.type === 'dir' && !stats.isDirectory()) || (entry.type === 'file' && !stats.isFile())) return false
-      if (stats.size !== entry.size || stats.mtimeMs !== entry.mtimeMs || stats.ctimeMs !== entry.ctimeMs) return false
+      const currentIdentity = identityFromBigIntStats(stats)
+      if (!currentIdentity || !sameFileSystemIdentity(entry.identity, currentIdentity)) return false
+      if (Number(stats.size) !== entry.size || Number(stats.mtimeMs) !== entry.mtimeMs || Number(stats.ctimeMs) !== entry.ctimeMs) return false
 
       if (entry.type !== 'dir') return true
       if (!entry.names) return false

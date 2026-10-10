@@ -129,21 +129,22 @@ describe('project snapshot', () => {
 
   it('returns a scan but marks its snapshot invalid when reading .gitignore fails', async () => {
     const root = await makeProject()
-    const originalReadFile = fs.readFile
-    fs.readFile = (async (filePath: string, ...args: unknown[]) => {
+    const originalOpen = fs.open
+    fs.open = (async (filePath: Parameters<typeof fs.open>[0], ...args: [Parameters<typeof fs.open>[1], Parameters<typeof fs.open>[2]?]) => {
       if (String(filePath) === path.join(root, '.gitignore')) {
         const error = Object.assign(new Error('mock EACCES'), { code: 'EACCES' })
         throw error
       }
-      return (originalReadFile as (...params: unknown[]) => Promise<Buffer>)(filePath, ...args)
-    }) as typeof fs.readFile
+      return originalOpen(filePath, ...args)
+    }) as typeof fs.open
     try {
       const scan = await makeScan(root)
       const snapshot = await captureProjectSnapshot(scan)
       assert.equal(scan.root, root)
       assert.equal(await isProjectSnapshotCurrent(snapshot), false)
+      assert.equal(snapshot.contentReadable, false)
     } finally {
-      fs.readFile = originalReadFile
+      fs.open = originalOpen
     }
   })
 })

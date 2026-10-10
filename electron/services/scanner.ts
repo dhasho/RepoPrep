@@ -8,7 +8,7 @@ import type { ScanLimits, ScanTruncation } from '../../shared/types'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { recordProjectSnapshot, resolveProjectIdentity, type ProjectSnapshot, type SnapshotEntry } from './project-snapshot.ts'
+import { identityFromBigIntStats, recordProjectSnapshot, resolveProjectIdentity, sameFileSystemIdentity, type FileSystemIdentity, type ProjectSnapshot, type SnapshotEntry } from './project-snapshot.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { classifySensitivePath } from './sensitive.ts'
 
@@ -156,6 +156,50 @@ function stripBom(content: string): string {
   return content.replace(/^\uFEFF/, '')
 }
 
+async function readVerifiedIgnoreFile(
+  filePath: string,
+  rootPath: string,
+  rootIdentity: FileSystemIdentity | undefined,
+  ancestorEntries: SnapshotEntry[],
+  expectedIdentity: FileSystemIdentity
+): Promise<string> {
+  const checkPaths = async (): Promise<void> => {
+    if (await fs.realpath(rootPath) !== rootPath) throw new Error('changed')
+    const rootStats = await fs.lstat(rootPath, { bigint: true })
+    if (!rootStats.isDirectory() || rootStats.isSymbolicLink() || !sameFileSystemIdentity(rootIdentity, identityFromBigIntStats(rootStats)!)) throw new Error('changed')
+    for (const entry of ancestorEntries) {
+      const absPath = entry.path ? path.join(rootPath, ...entry.path.split('/')) : rootPath
+      const stats = await fs.lstat(absPath, { bigint: true })
+      if (!stats.isDirectory() || stats.isSymbolicLink() || !sameFileSystemIdentity(entry.identity, identityFromBigIntStats(stats)!)) throw new Error('changed')
+    }
+    const stats = await fs.lstat(filePath, { bigint: true })
+    if (!stats.isFile() || stats.isSymbolicLink() || !sameFileSystemIdentity(expectedIdentity, identityFromBigIntStats(stats)!)) throw new Error('changed')
+  }
+
+  await checkPaths()
+  const flags = fsSync.constants.O_RDONLY | (process.platform === 'win32' ? 0 : (fsSync.constants.O_NOFOLLOW ?? 0))
+  const handle = await fs.open(filePath, flags)
+  try {
+    const opened = await handle.stat({ bigint: true })
+    const openedIdentity = identityFromBigIntStats(opened)
+    if (!opened.isFile() || !sameFileSystemIdentity(expectedIdentity, openedIdentity)) throw new Error('changed')
+    if (opened.size > 1024n * 1024n) throw new Error('too large')
+    const buffer = Buffer.alloc(Number(opened.size))
+    let offset = 0
+    while (offset < buffer.length) {
+      const result = await handle.read(buffer, offset, Math.min(64 * 1024, buffer.length - offset), offset)
+      if (result.bytesRead <= 0) throw new Error('short read')
+      offset += result.bytesRead
+    }
+    const afterRead = await handle.stat({ bigint: true })
+    if (!sameFileSystemIdentity(expectedIdentity, identityFromBigIntStats(afterRead))) throw new Error('changed')
+    await checkPaths()
+    return buffer.toString('utf-8')
+  } finally {
+    await handle.close()
+  }
+}
+
 /**
  * 把子目录 .gitignore 的规则改写成相对扫描根目录的形式（issue #16），
  * 以便叠加进全局规则集。改写规则与 Git 语义对应：
@@ -186,10 +230,14 @@ export function prefixGitignoreRules(content: string, relDir: string): string[] 
 }
 
 export async function scanProject(root: string, limits?: Partial<ScanLimits>): Promise<ScanResult> {
-  const rootStat = await fs.stat(root)
+  const projectIdentity = await resolveProjectIdentity(root)
+  const scanRoot = projectIdentity.realPath
+  const rootStat = await fs.lstat(scanRoot, { bigint: true })
   if (!rootStat.isDirectory()) throw new Error('所选路径不是目录')
-  const snapshotEntries: SnapshotEntry[] = [{ path: '', type: 'dir', size: rootStat.size, mtimeMs: rootStat.mtimeMs, ctimeMs: rootStat.ctimeMs }]
-  let snapshotValid = true
+  const rootIdentity = identityFromBigIntStats(rootStat)
+  const snapshotEntries: SnapshotEntry[] = [{ path: '', type: 'dir', size: Number(rootStat.size), mtimeMs: Number(rootStat.mtimeMs), ctimeMs: Number(rootStat.ctimeMs), identity: rootIdentity }]
+  let snapshotValid = Boolean(rootIdentity)
+  let contentReadable = Boolean(rootIdentity)
 
   // 两套规则集（issue #16）：内置 ALWAYS_IGNORE 优先级最高，任何 .gitignore 的
   // 否定规则都不能把它们重新纳入；.gitignore 规则（根目录 + 遍历时叠加的嵌套
@@ -204,20 +252,23 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   }
 
   // 解析根目录 .gitignore
-  const gitignorePath = path.join(root, '.gitignore')
+  const gitignorePath = path.join(scanRoot, '.gitignore')
+  let rootGitignoreIdentity: FileSystemIdentity | undefined
   try {
-    const ignoreStat = await fs.stat(gitignorePath)
-    if (!ignoreStat.isFile()) snapshotValid = false
-    snapshotEntries.push({ path: '.gitignore', type: 'file', size: ignoreStat.size, mtimeMs: ignoreStat.mtimeMs, ctimeMs: ignoreStat.ctimeMs })
+    const ignoreStat = await fs.lstat(gitignorePath, { bigint: true })
+    rootGitignoreIdentity = identityFromBigIntStats(ignoreStat)
+    if (!ignoreStat.isFile() || !rootGitignoreIdentity) { snapshotValid = false; contentReadable = false }
+    snapshotEntries.push({ path: '.gitignore', type: 'file', size: Number(ignoreStat.size), mtimeMs: Number(ignoreStat.mtimeMs), ctimeMs: Number(ignoreStat.ctimeMs), identity: rootGitignoreIdentity })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') snapshotEntries.push({ path: '.gitignore', type: 'missing' })
-    else snapshotValid = false
+    else { snapshotValid = false; contentReadable = false }
   }
-  if (fsSync.existsSync(gitignorePath)) {
+  if (rootGitignoreIdentity) {
     try {
-      gitIg.add(stripBom(await fs.readFile(gitignorePath, 'utf-8')))
+      gitIg.add(stripBom(await readVerifiedIgnoreFile(gitignorePath, scanRoot, rootIdentity, [], rootGitignoreIdentity)))
     } catch {
       snapshotValid = false
+      contentReadable = false
       /* 解析失败则忽略；快照不可缓存，因为实际忽略策略不确定 */
     }
   }
@@ -235,23 +286,36 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   const security: SecurityProtectionSummary = { excludedFiles: 0, redactedFiles: 0, redactionMatches: 0, categories: {} }
 
   async function walk(absDir: string, relDir: string, depth: number): Promise<FileNode[]> {
-    let dirStat: Awaited<ReturnType<typeof fs.stat>>
+    let dirStat: import('node:fs').BigIntStats
     try {
-      dirStat = await fs.stat(absDir)
-      if (!dirStat.isDirectory()) { snapshotValid = false; return [] }
-    } catch { snapshotValid = false; return [] }
+      dirStat = await fs.lstat(absDir, { bigint: true })
+      if (!dirStat.isDirectory()) { snapshotValid = false; contentReadable = false; return [] }
+    } catch (error) {
+      snapshotValid = false
+      const code = (error as NodeJS.ErrnoException).code
+      if (relDir === '' || (code !== 'EACCES' && code !== 'EPERM')) contentReadable = false
+      return []
+    }
+    const dirIdentity = identityFromBigIntStats(dirStat)
+    if (!dirIdentity) { snapshotValid = false; contentReadable = false }
     let entries: fsSync.Dirent[]
     try {
       entries = await fs.readdir(absDir, { withFileTypes: true })
-    } catch {
+    } catch (error) {
       snapshotValid = false
+      const code = (error as NodeJS.ErrnoException).code
+      if (relDir === '' || (code !== 'EACCES' && code !== 'EPERM')) contentReadable = false
       return [] // 无权限等错误直接跳过
     }
     const names = entries.map((entry) => entry.name).sort()
     if (relDir === '') {
       snapshotEntries[0].names = names
+      if (names.includes('.gitignore') && !rootGitignoreIdentity) {
+        snapshotValid = false
+        contentReadable = false
+      }
     } else {
-      snapshotEntries.push({ path: relDir, type: 'dir', size: dirStat.size, mtimeMs: dirStat.mtimeMs, ctimeMs: dirStat.ctimeMs, names })
+      snapshotEntries.push({ path: relDir, type: 'dir', size: Number(dirStat.size), mtimeMs: Number(dirStat.mtimeMs), ctimeMs: Number(dirStat.ctimeMs), names, identity: dirIdentity })
     }
 
     // Git 语义：进入目录时叠加该目录的 .gitignore（作用于本目录及整个子树，
@@ -260,22 +324,18 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
     const nestedGitignorePath = path.join(absDir, '.gitignore')
     if (relDir !== '' && names.includes('.gitignore')) {
       try {
-        gitIg.add(prefixGitignoreRules(await fs.readFile(nestedGitignorePath, 'utf-8'), relDir))
-        // 嵌套 .gitignore 本身也可能被忽略规则排除（此时 entry 循环不会为它
-        // 记录快照）——但它的内容影响扫描结果，必须记录，否则它后续变更
-        // 不会使扫描缓存失效，会一直返回陈旧扫描。
-        if (isIgnored(`${relDir}/.gitignore`, false)) {
-          try {
-            const nestedStat = await fs.stat(nestedGitignorePath)
-            snapshotEntries.push({ path: `${relDir}/.gitignore`, type: 'file', size: nestedStat.size, mtimeMs: nestedStat.mtimeMs, ctimeMs: nestedStat.ctimeMs })
-          } catch {
-            snapshotValid = false
-          }
-        }
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (code !== 'ENOENT' && code !== 'EISDIR') snapshotValid = false
-        /* 无 .gitignore（ENOENT）/ 是目录（EISDIR）：按无额外规则处理；其他读取失败使快照不可缓存 */
+        const nestedStat = await fs.lstat(nestedGitignorePath, { bigint: true })
+        const nestedIdentity = identityFromBigIntStats(nestedStat)
+        if (!nestedStat.isFile() || !nestedIdentity) throw new Error('invalid ignore file')
+        snapshotEntries.push({ path: `${relDir}/.gitignore`, type: 'file', size: Number(nestedStat.size), mtimeMs: Number(nestedStat.mtimeMs), ctimeMs: Number(nestedStat.ctimeMs), identity: nestedIdentity })
+        const directoryChain = snapshotEntries.filter((entry) => entry.type === 'dir' && (entry.path === '' || relDir.startsWith(`${entry.path}/`) || entry.path === relDir))
+        gitIg.add(prefixGitignoreRules(await readVerifiedIgnoreFile(nestedGitignorePath, scanRoot, rootIdentity, directoryChain, nestedIdentity), relDir))
+        // 它的内容影响扫描结果，即使后续规则忽略了此文件也必须记录身份，
+        // 否则内容变化不会使扫描缓存失效。
+      } catch {
+        snapshotValid = false
+        contentReadable = false
+        /* names 已观察到 .gitignore；任何身份或读取失败都使内容策略不可信。 */
       }
     }
 
@@ -300,15 +360,26 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
         const children = await walk(path.join(absDir, entry.name), rel, depth + 1)
         nodes.push({ name: entry.name, path: rel, type: 'dir', children })
       } else if (entry.isFile()) {
-        let fileStat: Awaited<ReturnType<typeof fs.stat>>
+        let fileStat: import('node:fs').BigIntStats
         try {
-          fileStat = await fs.stat(path.join(absDir, entry.name))
-        } catch {
+          fileStat = await fs.lstat(path.join(absDir, entry.name), { bigint: true })
+        } catch (error) {
           snapshotValid = false
+          const code = (error as NodeJS.ErrnoException).code
+          if (code !== 'EACCES' && code !== 'EPERM') contentReadable = false
           continue
         }
-        const size = fileStat.size
-        snapshotEntries.push({ path: rel, type: 'file', size, mtimeMs: fileStat.mtimeMs, ctimeMs: fileStat.ctimeMs })
+        if (!fileStat.isFile()) { snapshotValid = false; contentReadable = false; continue }
+        const identity = identityFromBigIntStats(fileStat)
+        if (!identity) { snapshotValid = false; contentReadable = false }
+        const size = Number(fileStat.size)
+        let snapshotFile = snapshotEntries.find((entry) => entry.path === rel && entry.type === 'file')
+        if (snapshotFile) {
+          if (!identity || !sameFileSystemIdentity(snapshotFile.identity, identity)) { snapshotValid = false; contentReadable = false }
+        } else {
+          snapshotFile = { path: rel, type: 'file', size, mtimeMs: Number(fileStat.mtimeMs), ctimeMs: Number(fileStat.ctimeMs), identity }
+          snapshotEntries.push(snapshotFile)
+        }
         treeNodes++
         nodes.push({ name: entry.name, path: rel, type: 'file', size })
 
@@ -332,6 +403,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
             ...(sensitive ? { sensitive } : {})
           }
           files.push(sf)
+          snapshotFile.contentApproved = sf.isContentCandidate
           totalBytes += size
           const lang = EXT_LANG[ext]
           if (lang) langCount.set(lang, (langCount.get(lang) ?? 0) + 1)
@@ -343,7 +415,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
     return nodes
   }
 
-  const tree: FileNode = { name: path.basename(root), path: '', type: 'dir', children: await walk(root, '', 0) }
+  const tree: FileNode = { name: path.basename(root), path: '', type: 'dir', children: await walk(scanRoot, '', 0) }
 
   const codeTotal = Array.from(langCount.values()).reduce((a, b) => a + b, 0)
   const languages: LanguageStat[] = Array.from(langCount.entries())
@@ -367,10 +439,10 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
     result.truncation = truncation
   }
   try {
-    const snapshot: ProjectSnapshot = { identity: await resolveProjectIdentity(root), entries: snapshotEntries, valid: snapshotValid }
+    const snapshot: ProjectSnapshot = { identity: projectIdentity, entries: snapshotEntries, valid: snapshotValid, contentReadable, maxContentFileBytes: eff.maxContentFileBytes }
     recordProjectSnapshot(result, snapshot)
   } catch {
-    recordProjectSnapshot(result, { identity: { realPath: root, key: root }, entries: snapshotEntries, valid: false })
+    recordProjectSnapshot(result, { identity: { realPath: root, key: root }, entries: snapshotEntries, valid: false, contentReadable: false })
   }
   return result
 }

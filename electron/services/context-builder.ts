@@ -1,5 +1,4 @@
 // 按颗粒度组装送入大模型的项目上下文（字符预算控制 + 细粒度分批）
-import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { Granularity, ScanTruncation } from '../../shared/types'
 import type { ScannedFile, ScanResult } from './scanner'
@@ -9,6 +8,10 @@ import { MAX_CONTENT_FILE_BYTES } from './scanner.ts'
 import { redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { batchWeight, MIN_GLOBAL_WEIGHT } from './question-budget.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { ProjectContentBoundaryError, readProjectContent } from './project-content-reader.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { isProjectContentReadable } from './project-snapshot.ts'
 
 // 字符预算：token ≈ 字符/3，以下数值对应约 20k–80k 输入 token，主流模型均可承受
 const BUDGET_CHARS: Record<Granularity, number> = {
@@ -127,7 +130,7 @@ function addContentSecurity(target: ContentSecuritySummary, source: ContentSecur
   }
 }
 
-async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars: number): Promise<PickedFiles> {
+async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars: number, sourceScan = scan): Promise<PickedFiles> {
   const candidates = scan.files
     .filter((f) => f.isContentCandidate)
     .filter((f) => {
@@ -149,7 +152,7 @@ async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars
     try {
       // Redact before applying the budget: placeholders must be the only form
       // of matched secrets that can enter ContextFile, batches, or renderBatch.
-      const redaction = redactSensitiveContent(await fs.readFile(f.absPath, 'utf-8'))
+      const redaction = redactSensitiveContent(await readProjectContent(sourceScan, f))
       const content = redaction.content
       const remaining = budgetChars - headerReserve - used
       if (remaining <= 0) break
@@ -172,7 +175,8 @@ async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars
         }
       }
       if (truncated) break
-    } catch {
+    } catch (error) {
+      if (error instanceof ProjectContentBoundaryError) throw error
       /* 读取失败跳过 */
     }
   }
@@ -189,6 +193,7 @@ function moduleMass(files: readonly ScannedFile[]): { fileCount: number; content
 }
 
 export async function buildContext(scan: ScanResult, granularity: Granularity): Promise<BuiltContext> {
+  if (!isProjectContentReadable(scan)) throw new ProjectContentBoundaryError()
   const langText = scan.languages.length
     ? scan.languages.map((l) => `${l.lang} ${l.percent}%`).join('、')
     : '未识别出常见编程语言'
@@ -266,7 +271,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     if (moduleBatches >= MAX_MODULE_BATCHES) break
     // 复用 pickFiles 的打分与预算逻辑：构造仅含该模块的临时 ScanResult 子集
     const subScan: ScanResult = { ...scan, files: groupFiles }
-    const picked = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine)
+    const picked = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine, scan)
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
     if (!files.length) continue

@@ -32,6 +32,7 @@ const SAFE_BUSINESS_ERRORS = new Set([
   '已有生成任务在进行中',
   '已有相同名词解释请求在进行中',
   '生成面试题时模型请求超时，请检查网络或稍后重试。',
+  '项目文件在读取期间发生变化，请重新扫描后重试。',
   '未找到指定的大模型配置，请先到设置页完成配置',
   RESULT_CONTRACT_MESSAGES.generated,
   RESULT_CONTRACT_MESSAGES.history,

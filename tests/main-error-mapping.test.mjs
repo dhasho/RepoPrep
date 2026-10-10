@@ -4,10 +4,13 @@ import path from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { randomUUID } from 'node:crypto'
+import fs from 'node:fs/promises'
+import os from 'node:os'
 import { IPC } from '../shared/ipc.ts'
 import * as sharedTypes from '../shared/types.ts'
 import * as resultContract from '../shared/result-contract.ts'
 import { buildExplainMessages, generateInterview } from '../electron/services/generator.ts'
+import { scanProject } from '../electron/services/scanner.ts'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError } from '../electron/services/llm.ts'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -47,7 +50,7 @@ async function loadTypescriptModule(filename, requireModule) {
   return module.exports
 }
 
-async function createHarness() {
+async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } = {}) {
   const handlers = new Map()
   const appEvents = new Map()
   const windows = []
@@ -77,8 +80,8 @@ async function createHarness() {
     static fromWebContents(contents) { return windows.find((window) => window.webContents === contents) ?? null }
   }
 
-  const scan = {
-    root: PROJECT_PATH, name: 'demo', totalFiles: 0, totalBytes: 0, languages: [],
+  const scan = suppliedScan ?? {
+    root: projectPath, name: 'demo', totalFiles: 0, totalBytes: 0, languages: [],
     tree: { name: 'demo', path: '', type: 'dir', children: [] }, keyFiles: [], files: [],
     security: { excludedFiles: 0, redactedFiles: 0, redactionMatches: 0, categories: {} }
   }
@@ -124,7 +127,7 @@ async function createHarness() {
   modules.set('./services/store', {
     addRecentProject: (value) => recents.push(value),
     deleteResult() {},
-    getRecentProjects: () => [{ path: PROJECT_PATH, name: 'demo', lastUsedAt: 'now' }],
+    getRecentProjects: () => [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }],
     getSettings: () => ({ profiles: [{ id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }] }),
     loadResult: () => null,
     removeRecentProject: async () => {},
@@ -201,37 +204,51 @@ test('trusted renderer reaches the exact generation-timeout business message thr
   assert.equal(calls, 1, 'untrusted sender must be rejected before main handler execution')
 })
 
-test('compensation timeout from the real generator reaches the guard without saving partial success', async () => {
+test('content boundary rejection reaches the renderer with a static rescan hint and saves nothing', async () => {
   const h = await createHarness()
-  h.setGenerate(generateInterview)
+  h.setGenerate(async () => { throw new Error('项目文件在读取期间发生变化，请重新扫描后重试。') })
+  await assert.rejects(h.invoke(IPC.generateRun, options), (error) => error.message === '项目文件在读取期间发生变化，请重新扫描后重试。')
+  assert.equal(h.saves.length, 0)
+  assert.equal(h.recents.length, 0)
+})
+
+test('compensation timeout from the real generator reaches the guard without saving partial success', async () => {
+  const fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-compensation-timeout-'))
   const originalFetch = globalThis.fetch
   const originalSetTimeout = globalThis.setTimeout
   const originalClearTimeout = globalThis.clearTimeout
-  const timers = []
-  let requests = 0
-  globalThis.setTimeout = (callback, delay, ...args) => {
-    const timer = { callback: () => callback(...args), delay }
-    timers.push(timer)
-    return timer
-  }
-  globalThis.clearTimeout = () => {}
-  globalThis.fetch = async (_input, init) => {
-    requests++
-    if (requests === 1) {
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-        projectSummary: 'demo', sections: [{ title: 'Basic', questions: [
-          { question: 'One question', answer: 'One answer', followUps: [] }
-        ] }], glossary: {}
-      }) } }] }))
-    }
-    const timer = timers.at(-1)
-    assert.equal(timer.delay, 600_000)
-    timer.callback()
-    assert.equal(init.signal.aborted, true)
-    throw new Error('mock transport stopped after deadline')
-  }
   try {
-    await assert.rejects(h.invoke(IPC.generateRun, options), (error) => error.message === GENERATION_TIMEOUT)
+    await fs.writeFile(path.join(fixtureRoot, 'README.md'), '# Approved fixture\n\nThis real project is used for the compensation timeout path.\n')
+    await fs.mkdir(path.join(fixtureRoot, 'src'))
+    await fs.writeFile(path.join(fixtureRoot, 'src', 'app.ts'), 'export const approved = true\n')
+    const scan = await scanProject(fixtureRoot)
+    const h = await createHarness({ scan, projectPath: fixtureRoot })
+    h.setGenerate(generateInterview)
+    const requestOptions = { ...options, projectPath: fixtureRoot }
+    const timers = []
+    let requests = 0
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      const timer = { callback: () => callback(...args), delay }
+      timers.push(timer)
+      return timer
+    }
+    globalThis.clearTimeout = () => {}
+    globalThis.fetch = async (_input, init) => {
+      requests++
+      if (requests === 1) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+          projectSummary: 'demo', sections: [{ title: 'Basic', questions: [
+            { question: 'One question', answer: 'One answer', followUps: [] }
+          ] }], glossary: {}
+        }) } }] }))
+      }
+      const timer = timers.at(-1)
+      assert.equal(timer.delay, 600_000)
+      timer.callback()
+      assert.equal(init.signal.aborted, true)
+      throw new Error('mock transport stopped after deadline')
+    }
+    await assert.rejects(h.invoke(IPC.generateRun, requestOptions), (error) => error.message === GENERATION_TIMEOUT)
     assert.equal(requests, 2, 'an initial shortfall must reach the compensation request')
     assert.equal(h.saves.length, 0, 'a compensation deadline must not persist partial success')
     assert.equal(h.recents.length, 0)
@@ -239,6 +256,10 @@ test('compensation timeout from the real generator reaches the guard without sav
     globalThis.fetch = originalFetch
     globalThis.setTimeout = originalSetTimeout
     globalThis.clearTimeout = originalClearTimeout
+    const resolvedFixture = path.resolve(fixtureRoot)
+    const resolvedTemp = path.resolve(os.tmpdir())
+    assert.ok(resolvedFixture.startsWith(`${resolvedTemp}${path.sep}`), 'cleanup target must remain inside the generated temp directory')
+    await fs.rm(resolvedFixture, { recursive: true, force: true })
   }
 })
 
