@@ -17,6 +17,42 @@ test('classifies secret paths without excluding ordinary config.json', () => {
   assert.equal(classifySensitivePath('src/types.ts'), null)
 })
 
+test('classifies protected project roots and descendants with normalized root context', () => {
+  const protectedRoots = [
+    '.docker',
+    '.aws',
+    '.ssh',
+    '.kube',
+    '.gnupg',
+    '.config/gcloud'
+  ]
+
+  for (const rootName of protectedRoots) {
+    const rootPath = `C:\\Users\\fixture\\${rootName.replaceAll('/', '\\')}`
+    assert.ok(classifySensitivePath('config.json', rootPath, 'win32'), `${rootName} root config should be protected`)
+    assert.ok(classifySensitivePath('nested/credentials.db', rootPath, 'win32'), `${rootName} descendants should be protected`)
+    assert.ok(classifySensitivePath('nested\\credentials.db', rootPath, 'win32'), `${rootName} descendants should normalize Windows separators`)
+  }
+
+  assert.ok(classifySensitivePath('config.json', '/tmp/fixture/.AWS', 'linux'), 'root matching should ignore case')
+  assert.ok(classifySensitivePath('src.ts', '/tmp/fixture/.aws/checkout', 'linux'), 'protected ancestor segments should remain in scope for nested selections')
+  assert.ok(classifySensitivePath('credentials', 'C:\\Users\\fixture\\.CONFIG\\GCLOUD', 'win32'), 'Windows root matching should normalize case and separators')
+  assert.equal(classifySensitivePath('config.json', '/tmp/fixture/project', 'linux'), null, 'ordinary project config remains eligible')
+  assert.equal(classifySensitivePath('config.json', '/tmp/fixture/.aws-old', 'linux'), null, 'near-name directories are not protected roots')
+  assert.equal(classifySensitivePath('config.json', '/tmp/fixture/.config/google', 'linux'), null, 'unlisted config subdirectories remain eligible')
+  assert.equal(classifySensitivePath('config.json', '/tmp/ordinary\\.aws\\project', 'linux'), null, 'POSIX backslashes in a root component are literal')
+  assert.equal(classifySensitivePath('dir\\.aws\\file.ts', '/tmp/project', 'linux'), null, 'POSIX scanner paths preserve literal backslashes inside a component')
+  assert.ok(classifySensitivePath('.aws/config', '/tmp/project', 'linux'), 'real POSIX sensitive descendants remain protected')
+  assert.ok(classifySensitivePath('config.json', '/tmp/.aws/project', 'linux'), 'real POSIX sensitive ancestors remain protected')
+  assert.equal(classifySensitivePath('config.json', '/tmp/ordinary\\.aws\\project', 'darwin'), null, 'Darwin also treats root backslashes as literal')
+  assert.ok(classifySensitivePath('config.json', '/tmp/.aws/project', 'darwin'), 'Darwin still protects real sensitive ancestors')
+  assert.ok(classifySensitivePath('C:/Users/fixture/.ssh/config', 'C:\\Users\\fixture\\.ssh', 'win32'), 'Windows mixed separators preserve protected ancestry')
+  assert.ok(classifySensitivePath('config.json', '\\\\server\\share\\.aws', 'win32'), 'UNC protected roots normalize Windows separators')
+  assert.equal(classifySensitivePath('config.json', '\\\\server\\share\\ordinary.aws', 'win32'), null, 'UNC near-name roots remain eligible')
+  assert.equal(classifySensitivePath('config.json', 'C:\\Users\\fixture\\project-old', 'win32'), null, 'Windows near-name roots remain eligible')
+  assert.equal(classifySensitivePath('config\\.aws\\credentials')?.category, 'cloud-credential', 'one-argument legacy separator behavior remains compatible')
+})
+
 test('covers Google AI, AWS secret assignments, JSON/YAML keys and examples', () => {
   const source = [
     'google = AIza123456789012345678901234567890',

@@ -240,6 +240,9 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   const snapshotEntries: SnapshotEntry[] = [{ path: '', type: 'dir', size: Number(rootStat.size), mtimeMs: Number(rootStat.mtimeMs), ctimeMs: Number(rootStat.ctimeMs), identity: rootIdentity }]
   let snapshotValid = Boolean(rootIdentity)
   let contentReadable = Boolean(rootIdentity)
+  const sensitivePolicyRoot = projectIdentity.realPath
+  // Treat the canonical selected root as a directory context, not as a filename.
+  const rootSensitive = classifySensitivePath('__project_root__', sensitivePolicyRoot)
 
   // 两套规则集（issue #16）：内置 ALWAYS_IGNORE 优先级最高，任何 .gitignore 的
   // 否定规则都不能把它们重新纳入；.gitignore 规则（根目录 + 遍历时叠加的嵌套
@@ -360,7 +363,8 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
       if (entry.isDirectory()) {
         treeNodes++
         const children = await walk(path.join(absDir, entry.name), rel, depth + 1)
-        nodes.push({ name: entry.name, path: rel, type: 'dir', children })
+        const excluded = Boolean(classifySensitivePath(rel, sensitivePolicyRoot))
+        nodes.push({ name: entry.name, path: rel, type: 'dir', children, ...(excluded ? { modelExcluded: true } : {}) })
       } else if (entry.isFile()) {
         let fileStat: import('node:fs').BigIntStats
         try {
@@ -383,11 +387,11 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
           snapshotEntries.push(snapshotFile)
         }
         treeNodes++
-        nodes.push({ name: entry.name, path: rel, type: 'file', size })
+        const sensitive = classifySensitivePath(rel, sensitivePolicyRoot)
+        nodes.push({ name: entry.name, path: rel, type: 'file', size, ...(sensitive ? { modelExcluded: true } : {}) })
 
         const ext = path.extname(entry.name).slice(1).toLowerCase()
         const isBinary = BINARY_EXT.has(ext)
-        const sensitive = classifySensitivePath(rel)
         if (sensitive) {
           security.excludedFiles++
           security.categories[sensitive.category] = (security.categories[sensitive.category] ?? 0) + 1
@@ -418,7 +422,10 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   }
 
   const projectName = projectDisplayName(root)
-  const tree: FileNode = { name: projectName, path: '', type: 'dir', children: await walk(scanRoot, '', 0) }
+  const tree: FileNode = {
+    name: projectName, path: '', type: 'dir', children: await walk(scanRoot, '', 0),
+    ...(rootSensitive ? { modelExcluded: true } : {})
+  }
 
   const codeTotal = Array.from(langCount.values()).reduce((a, b) => a + b, 0)
   const languages: LanguageStat[] = Array.from(langCount.entries())
@@ -451,7 +458,10 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
 }
 
 /** 将文件树渲染为缩进文本（供大模型阅读） */
-export function treeToText(node: FileNode, maxLines = 4000): string {
+export function treeToText(node: FileNode, maxLines = 4000, projectRoot?: string): string {
+  if (node.modelExcluded || (projectRoot !== undefined && classifySensitivePath('__project_root__', projectRoot))) {
+    return '（项目根目录已按安全策略排除）'
+  }
   const lines: string[] = [`${node.name}/`]
   function render(nodes: FileNode[], prefix: string): void {
     if (lines.length >= maxLines) return
@@ -460,7 +470,7 @@ export function treeToText(node: FileNode, maxLines = 4000): string {
         lines.push(`${prefix}…（已截断）`)
         return
       }
-      if (classifySensitivePath(n.path)) continue
+      if (n.modelExcluded || classifySensitivePath(n.path, projectRoot ?? '')) continue
       if (n.type === 'dir') {
         lines.push(`${prefix}${n.name}/`)
         render(n.children ?? [], `${prefix}  `)

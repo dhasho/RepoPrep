@@ -50,6 +50,8 @@ export interface FileNode {
   name: string
   path: string // 相对项目根目录
   type: 'file' | 'dir'
+  /** The node is excluded from model-visible tree output by the scanner policy. */
+  modelExcluded?: boolean
   size?: number
   children?: FileNode[]
 }

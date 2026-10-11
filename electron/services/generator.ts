@@ -15,7 +15,7 @@ import { contentReadWarning } from '@shared/content-read'
 import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, type ContextBatch } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, truncateToQuota, type QuestionPlan } from './question-budget'
-import { treeToText, type ScanResult } from './scanner'
+import type { ScanResult } from './scanner'
 
 export interface GenerateParams {
   scan: ScanResult
@@ -237,8 +237,8 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   const built = await buildContext(scan, granularity)
   const readWarning = built.contentReadSummary.failedReads > 0
     ? contentReadWarning(built.contentReadSummary)
-    : ''
-  const treeText = treeToText(scan.tree)
+    : '';
+  const treeText = built.treeText
   onProgress(
     '上下文就绪',
     `${built.batches.length} 个分析批次，共 ${Math.round(built.batches.reduce((a, b) => a + b.totalChars, 0) / 1000)}k 字符；已排除 ${scan.security.excludedFiles} 个敏感文件，脱敏 ${built.contentSecurity.redactedFiles} 个文件（${built.contentSecurity.redactionMatches} 处）`,

@@ -7,6 +7,16 @@ import path from 'node:path'
 import { scanProject, treeToText } from './scanner.ts'
 // @ts-ignore TS5097 -- Node executes this test source directly.
 import { buildContext, renderBatch } from './context-builder.ts'
+// @ts-ignore TS5097 -- Node executes this test source directly.
+import { ProjectScanCache } from './scan-cache.ts'
+
+async function removeFixture(root: string): Promise<void> {
+  const resolvedRoot = path.resolve(root)
+  const resolvedTemp = path.resolve(os.tmpdir())
+  assert.equal(path.dirname(resolvedRoot), resolvedTemp, 'cleanup target must be a direct child of the temporary directory')
+  assert.match(path.basename(resolvedRoot), /^projectlens-security-root-/)
+  await fs.rm(resolvedRoot, { recursive: true, force: true })
+}
 
 test('excludes sensitive paths and redacts ordinary source before rendering', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-security-'))
@@ -184,6 +194,432 @@ test('real scan-to-generation path keeps inline fake credentials out of context,
   }
 })
 
+test('real scan-to-generation path redacts empty-username Redis URI credentials and preserves URI controls', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-redis-uri-security-'))
+  const redisCredential = 'issue88-fake-redis-credential'
+  const redissCredential = 'issue88-fake%2Drediss%40credential'
+  const namedCredential = 'issue88-named-user-control-credential'
+  const redisUri = `redis://:${redisCredential}@redis.example.invalid:6379/4?client=issue88-redis-control`
+  const redissUri = `rediss://:${redissCredential}@secure.example.invalid:6380/5?client=issue88-rediss-control`
+  const namedUri = `redis://cache-reader:${namedCredential}@named.example.invalid:6379/6?client=issue88-named-control`
+  const noUserInfoUri = 'redis://public.example.invalid:6379/7?client=issue88-public-control'
+  const emptyPasswordUri = 'redis://empty-user:@empty.example.invalid:6379/8?client=issue88-empty-password-control'
+  const credentials = [redisCredential, redissCredential, namedCredential]
+  const fakeModelResult = {
+    projectSummary: 'Synthetic Redis configuration summary.',
+    sections: [{
+      title: 'Connection configuration',
+      summary: 'Synthetic configuration coverage.',
+      questions: Array.from({ length: 20 }, (_, index) => ({
+        question: `Synthetic Redis question ${index + 1}?`,
+        answer: `Synthetic Redis answer ${index + 1}.`,
+        followUps: []
+      }))
+    }],
+    glossary: {}
+  }
+  const profile = {
+    id: 'synthetic-redis-profile', name: 'Synthetic only', baseUrl: 'https://example.invalid/v1',
+    apiKey: 'synthetic-profile-key', model: 'mock-model'
+  }
+  const originalFetch = globalThis.fetch
+  const capturedBodies: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  try {
+    await fs.mkdir(path.join(root, 'src'), { recursive: true })
+    await fs.writeFile(path.join(root, 'config.json'), JSON.stringify({ cacheAddress: redisUri, publicAddress: noUserInfoUri }, null, 2))
+    await fs.writeFile(path.join(root, 'src', 'cache.ts'), [
+      `export const secureCacheAddress = '${redissUri}'`,
+      `export const namedCacheAddress = '${namedUri}'`
+    ].join('\n'))
+    await fs.writeFile(path.join(root, 'cache.txt'), `cache_address=${emptyPasswordUri}\npublic_address=${noUserInfoUri}\n`)
+
+    // scanProject records the private policy and approved-file snapshot used by
+    // buildContext/readProjectContent; the generation path must consume that scan.
+    const scan = await scanProject(root)
+    const filePaths = ['config.json', 'src/cache.ts', 'cache.txt']
+    const candidateFiles = scan.files.filter((file) => filePaths.includes(file.relPath) && file.isContentCandidate)
+    assert.equal(candidateFiles.length, filePaths.length)
+
+    const built = await buildContext(scan, 'medium')
+    assert.equal(built.batches.length, 1)
+    assert.equal(built.batches[0].files.length, filePaths.length)
+    assert.equal(built.contentSecurity.redactedFiles, 2)
+    assert.equal(built.contentSecurity.redactionMatches, 3)
+    assert.equal(built.contentSecurity.matchesByCategory['connection-string'], 3)
+
+    const expectedByFile = new Map([
+      ['config.json', { matches: 1, safeUris: [noUserInfoUri] }],
+      ['src/cache.ts', { matches: 2, safeUris: [
+        'rediss://:[REDACTED:connection-string]@secure.example.invalid:6380/5?client=issue88-rediss-control',
+        'redis://cache-reader:[REDACTED:connection-string]@named.example.invalid:6379/6?client=issue88-named-control'
+      ] }],
+      ['cache.txt', { matches: 0, safeUris: [emptyPasswordUri, noUserInfoUri] }]
+    ])
+    for (const [filePath, expected] of expectedByFile) {
+      const file = built.batches[0].files.find((item) => item.relPath === filePath)
+      assert.ok(file, `${filePath} should be present in the real context batch`)
+      assert.equal(file.redactionMatches, expected.matches, `${filePath} should have the exact URI redaction count`)
+      assert.equal((file.content.match(/\[REDACTED:connection-string\]/g) ?? []).length, expected.matches)
+      for (const safeUri of expected.safeUris) assert.ok(file.content.includes(safeUri), `${filePath} should preserve ${safeUri}`)
+    }
+    const contextText = JSON.stringify(built.batches)
+    for (const credential of credentials) assert.doesNotMatch(contextText, new RegExp(credential))
+
+    const rendered = built.batches
+      .map((batch) => renderBatch(built.headerText, treeToText(scan.tree), batch))
+      .join('\n')
+    assert.equal((rendered.match(/\[REDACTED:connection-string\]/g) ?? []).length, 3)
+    for (const credential of credentials) assert.doesNotMatch(rendered, new RegExp(credential))
+    for (const safeUri of [
+      `redis://:[REDACTED:connection-string]@redis.example.invalid:6379/4?client=issue88-redis-control`,
+      `rediss://:[REDACTED:connection-string]@secure.example.invalid:6380/5?client=issue88-rediss-control`,
+      `redis://cache-reader:[REDACTED:connection-string]@named.example.invalid:6379/6?client=issue88-named-control`,
+      noUserInfoUri,
+      emptyPasswordUri
+    ]) assert.ok(rendered.includes(safeUri), `rendered context should preserve ${safeUri}`)
+
+    // Register the repo's normal direct-Node import alias before loading the real generator.
+    // @ts-ignore TS5097 -- intentional dynamic Node test imports.
+    await import('../../tests/register-shared-alias.mjs')
+    // @ts-ignore TS5097 -- generator.ts uses the bundler's @shared alias by design.
+    const { generateInterview } = await import('./generator.ts')
+    globalThis.fetch = async (_input, init) => {
+      capturedBodies.push(JSON.parse(String(init?.body)) as typeof capturedBodies[number])
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fakeModelResult) } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
+    const progress: Array<{ step: string; detail?: string }> = []
+    const generated = await generateInterview({
+      scan,
+      granularity: 'medium',
+      roleFocus: 'general',
+      profile,
+      signal: new AbortController().signal,
+      onProgress: (step, detail) => progress.push({ step, detail })
+    })
+    globalThis.fetch = originalFetch
+
+    assert.equal(capturedBodies.length, 1, '20 mocked questions meet the medium-granularity quota without compensation')
+    const serializedRequest = JSON.stringify(capturedBodies[0])
+    assert.equal((serializedRequest.match(/\[REDACTED:connection-string\]/g) ?? []).length, 3)
+    for (const credential of credentials) assert.doesNotMatch(serializedRequest, new RegExp(credential))
+    for (const safeUri of [noUserInfoUri, emptyPasswordUri, 'cache-reader', 'redis.example.invalid', 'secure.example.invalid', 'issue88-rediss-control']) {
+      assert.ok(serializedRequest.includes(safeUri), `request should preserve ${safeUri}`)
+    }
+    const contextReady = progress.find((item) => item.step === '上下文就绪')
+    assert.ok(contextReady?.detail?.includes('脱敏 2 个文件（3 处）'))
+    for (const credential of credentials) assert.doesNotMatch(JSON.stringify(progress), new RegExp(credential))
+    assert.equal(generated.sections.reduce((sum, section) => sum + section.questions.length, 0), 20)
+    assert.equal(generated.security?.redactedFiles, 2)
+    assert.equal(generated.security?.redactionMatches, 3)
+    assert.equal(generated.security?.categories['connection-string'], 3)
+    for (const credential of credentials) assert.doesNotMatch(JSON.stringify(generated), new RegExp(credential))
+  } finally {
+    globalThis.fetch = originalFetch
+    const resolvedRoot = path.resolve(root)
+    const resolvedTemp = path.resolve(os.tmpdir())
+    assert.ok(resolvedRoot.startsWith(`${resolvedTemp}${path.sep}`), `fixture cleanup must stay in temp directory: ${resolvedRoot}`)
+    assert.ok(path.basename(resolvedRoot).startsWith('projectlens-redis-uri-security-'), `unexpected fixture cleanup path: ${resolvedRoot}`)
+    await fs.rm(resolvedRoot, { recursive: true, force: true })
+  }
+})
+
+test('protected selected roots stay out of all granularity batches and mocked generation requests', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-security-root-'))
+  const protectedNames = ['.docker', '.aws', '.ssh', '.kube', '.gnupg', path.join('.config', 'gcloud')]
+  const sentinels: string[] = []
+  const originalFetch = globalThis.fetch
+  const capturedBodies: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const fakeModelResult = {
+    projectSummary: 'Synthetic protected-root fixture.',
+    sections: [{
+      title: 'Fixture',
+      summary: 'Synthetic test output.',
+      questions: Array.from({ length: 40 }, (_, index) => ({
+        question: `Synthetic question ${index + 1}?`,
+        answer: 'Synthetic answer.',
+        followUps: []
+      }))
+    }],
+    glossary: {}
+  }
+  const profile = {
+    id: 'synthetic-protected-root-profile',
+    name: 'Synthetic only',
+    baseUrl: 'https://example.invalid/v1',
+    apiKey: 'synthetic-profile-key',
+    model: 'mock-model'
+  }
+
+  try {
+    for (const protectedName of protectedNames) {
+      const selectedRoot = path.join(workspace, protectedName)
+      await fs.mkdir(path.join(selectedRoot, 'nested'), { recursive: true })
+      const fixtureId = protectedName.replaceAll(/[\\/.]/g, '-')
+      const rootSecret = `synthetic-root-secret-${fixtureId}`
+      const rootCredentialSecret = `synthetic-root-credential-secret-${fixtureId}`
+      const rootBinarySecret = `synthetic-root-binary-secret-${fixtureId}`
+      const childSecret = `synthetic-child-secret-${fixtureId}`
+      const childBinarySecret = `synthetic-child-binary-secret-${fixtureId}`
+      sentinels.push(rootSecret, rootCredentialSecret, rootBinarySecret, childSecret, childBinarySecret)
+      await fs.writeFile(path.join(selectedRoot, 'config.json'), `{"apiKey":"${rootSecret}"}`)
+      await fs.writeFile(path.join(selectedRoot, 'credentials'), `password=${rootCredentialSecret}\n`)
+      await fs.writeFile(path.join(selectedRoot, 'root-vault.db'), Buffer.from(rootBinarySecret))
+      await fs.writeFile(path.join(selectedRoot, 'nested', 'source.ts'), `export const apiKey = '${childSecret}'\n`)
+      await fs.writeFile(path.join(selectedRoot, 'nested', 'vault.db'), Buffer.from(childBinarySecret))
+
+      const scan = await scanProject(selectedRoot)
+      assert.equal(scan.files.length, 3, `${protectedName} root fixture should have three textual files`)
+      assert.ok(scan.files.every((file) => !file.isContentCandidate), `${protectedName} files must not remain model candidates`)
+      assert.equal(scan.security.excludedFiles, 5, `${protectedName} root should count three root files and two nested files`)
+      assert.equal(Object.values(scan.security.categories).reduce((sum, count) => sum + count, 0), 5, `${protectedName} root category counts should cover every excluded file exactly once`)
+      assert.equal(scan.tree.modelExcluded, true, `${protectedName} tree root should carry the model exclusion marker`)
+      const markedNodes = (node: typeof scan.tree): boolean =>
+        node.modelExcluded === true && (node.children ?? []).every(markedNodes)
+      assert.ok(markedNodes(scan.tree), `${protectedName} tree descendants should carry exclusion markers`)
+
+      const treeText = treeToText(scan.tree)
+      for (const protectedSegment of protectedName.split(/[\\/]/)) {
+        assert.doesNotMatch(treeText, new RegExp(protectedSegment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      }
+      assert.doesNotMatch(treeText, /config\.json|credentials|source\.ts|root-vault\.db|vault\.db/)
+      assert.match(treeText, /保护|排除/)
+
+      for (const granularity of ['coarse', 'medium', 'fine'] as const) {
+        const built = await buildContext(scan, granularity)
+        const treeText = built.treeText
+        for (const protectedSegment of protectedName.split(/[\\/]/)) {
+          assert.doesNotMatch(built.headerText, new RegExp(protectedSegment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        }
+        for (const batch of built.batches) {
+          assert.equal(batch.files.length, 0, `${granularity} must not select content under ${protectedName}`)
+          const rendered = renderBatch(built.headerText, treeText, batch)
+          for (const sentinel of sentinels) assert.doesNotMatch(rendered, new RegExp(sentinel))
+          assert.doesNotMatch(rendered, /config\.json|credentials|source\.ts|root-vault\.db|vault\.db/)
+        }
+      }
+
+      const selectedNested = await scanProject(path.join(selectedRoot, 'nested'))
+      assert.equal(selectedNested.files.length, 1, `${protectedName} nested selection should have one text candidate record`)
+      assert.ok(selectedNested.files.every((file) => !file.isContentCandidate), `${protectedName} nested selection must inherit protected ancestry`)
+      assert.equal(selectedNested.security.excludedFiles, 2, `${protectedName} nested selection should count its text and binary files`)
+      assert.equal(Object.values(selectedNested.security.categories).reduce((sum, count) => sum + count, 0), 2, `${protectedName} nested category counts should cover both files exactly once`)
+      assert.equal(selectedNested.tree.modelExcluded, true, `${protectedName} nested selected root should be marked protected`)
+      for (const granularity of ['coarse', 'medium', 'fine'] as const) {
+        const built = await buildContext(selectedNested, granularity)
+        assert.ok(built.batches.every((batch) => batch.files.length === 0), `${granularity} must suppress content from selected ${protectedName}/nested`)
+        for (const protectedSegment of protectedName.split(/[\\/]/)) {
+          assert.doesNotMatch(built.headerText, new RegExp(protectedSegment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        }
+        const rendered = built.batches.map((batch) => renderBatch(built.headerText, built.treeText, batch)).join('\n')
+        for (const sentinel of sentinels) assert.doesNotMatch(rendered, new RegExp(sentinel))
+        assert.doesNotMatch(`${built.treeText}\n${rendered}`, /source\.ts|vault\.db/)
+      }
+    }
+
+    // Exercise the actual generator request path for one protected root at each granularity.
+    // @ts-ignore TS5097 -- intentional dynamic Node test imports.
+    await import('../../tests/register-shared-alias.mjs')
+    // @ts-ignore TS5097 -- generator.ts uses the bundler's @shared alias by design.
+    const { generateInterview } = await import('./generator.ts')
+    globalThis.fetch = async (_input, init) => {
+      capturedBodies.push(JSON.parse(String(init?.body)) as typeof capturedBodies[number])
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fakeModelResult) } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
+    const selectedRoot = path.join(workspace, '.aws')
+    const scan = await scanProject(selectedRoot)
+    const clearModelMarkers = (node: typeof scan.tree): void => {
+      delete node.modelExcluded
+      for (const child of node.children ?? []) clearModelMarkers(child)
+    }
+    clearModelMarkers(scan.tree)
+    for (const file of scan.files) file.isContentCandidate = true
+    for (const granularity of ['coarse', 'medium', 'fine'] as const) {
+      const staleContext = await buildContext(scan, granularity)
+      assert.ok(staleContext.batches.every((batch) => batch.files.length === 0), `${granularity} must recheck stale candidate flags against the protected scan root`)
+      assert.doesNotMatch(staleContext.headerText, /\.aws/)
+    }
+
+    for (const granularity of ['coarse', 'medium', 'fine'] as const) {
+      await generateInterview({
+        scan,
+        granularity,
+        roleFocus: 'general',
+        profile,
+        signal: new AbortController().signal,
+        onProgress: () => {}
+      })
+    }
+
+    assert.equal(capturedBodies.length, 3, 'each granularity should make one mocked request for its stale tree-only context')
+    for (const body of capturedBodies) {
+      const serialized = JSON.stringify(body)
+      for (const sentinel of sentinels) assert.doesNotMatch(serialized, new RegExp(sentinel))
+      for (const protectedName of protectedNames) {
+        for (const protectedSegment of protectedName.split(/[\\/]/)) {
+          assert.doesNotMatch(serialized, new RegExp(protectedSegment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        }
+      }
+      assert.doesNotMatch(serialized, /config\.json|credentials|source\.ts|root-vault\.db|vault\.db/)
+      assert.match(serialized, /保护|排除/)
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+    await removeFixture(workspace)
+  }
+})
+
+test('stops before a model request when canonical project resolution fails', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-security-root-'))
+  const originalFetch = globalThis.fetch
+  let fetchCalls = 0
+  try {
+    await fs.writeFile(path.join(root, 'config.json'), '{"apiKey":"canonicalization-synthetic-secret"}')
+    const scan = await scanProject(root)
+    // @ts-ignore TS5097 -- intentional dynamic Node test imports.
+    await import('../../tests/register-shared-alias.mjs')
+    // @ts-ignore TS5097 -- generator.ts uses the bundler's @shared alias by design.
+    const { generateInterview } = await import('./generator.ts')
+    t.mock.method(fs, 'realpath', async (..._args: Parameters<typeof fs.realpath>) => {
+      throw Object.assign(new Error('synthetic canonicalization failure'), { code: 'EACCES' })
+    })
+    globalThis.fetch = async () => {
+      fetchCalls++
+      return new Response('unexpected model call', { status: 500 })
+    }
+
+    await assert.rejects(generateInterview({
+      scan,
+      granularity: 'coarse',
+      roleFocus: 'general',
+      profile: {
+        id: 'synthetic-canonicalization-profile',
+        name: 'Synthetic only',
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'synthetic-profile-key',
+        model: 'mock-model'
+      },
+      signal: new AbortController().signal,
+      onProgress: () => {}
+    }), /无法安全解析所选项目路径，已停止分析/)
+    assert.equal(fetchCalls, 0, 'canonicalization failure must stop before the model request')
+  } finally {
+    globalThis.fetch = originalFetch
+    await removeFixture(root)
+  }
+})
+
+test('POSIX literal backslashes remain visible through scan, context, and tree rendering', { skip: process.platform === 'win32' }, async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-security-root-'))
+  const selectedRoot = path.join(root, 'ordinary\\.aws\\project')
+  const safeMarker = 'safe-posix-literal-marker'
+  const refreshedMarker = 'safe-posix-refreshed-marker'
+  const secretMarker = 'secret-real-aws-marker'
+  const nestedSafeMarker = 'safe-posix-backslash-directory-marker'
+  const nestedRelativePath = 'ordinary\\.ssh\\module'
+  const originalFetch = globalThis.fetch
+  const capturedBodies: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const cache = new ProjectScanCache()
+  try {
+    await fs.mkdir(path.join(selectedRoot, '.aws'), { recursive: true })
+    await fs.writeFile(path.join(selectedRoot, 'README.md'), `# ${safeMarker}\n`)
+    await fs.writeFile(path.join(selectedRoot, 'index.ts'), `export const marker = '${safeMarker}'\n`)
+    await fs.writeFile(path.join(selectedRoot, '.aws', 'credentials'), `password=${secretMarker}\n`)
+    const nestedDirectory = path.join(selectedRoot, nestedRelativePath)
+    await fs.mkdir(nestedDirectory, { recursive: true })
+    await fs.writeFile(path.join(nestedDirectory, 'README.md'), `# ${nestedSafeMarker}\n`)
+    await fs.writeFile(path.join(nestedDirectory, 'index.ts'), `export const marker = '${nestedSafeMarker}'\n`)
+
+    const first = await cache.getFresh(selectedRoot)
+    assert.equal(first.status, 'scanned')
+    const scan = first.scan
+    assert.equal(scan.root, await fs.realpath(selectedRoot), 'the literal backslash path itself must be the selected scan root')
+    const readme = scan.files.find((file) => file.relPath === 'README.md')
+    const source = scan.files.find((file) => file.relPath === 'index.ts')
+    assert.ok(readme?.isContentCandidate, 'README.md at the POSIX selected root must be a content candidate')
+    assert.ok(source?.isContentCandidate, 'source at the POSIX selected root must be a content candidate')
+    const nestedReadmePath = `${nestedRelativePath}/README.md`
+    const nestedSourcePath = `${nestedRelativePath}/index.ts`
+    const nestedReadme = scan.files.find((file) => file.relPath === nestedReadmePath)
+    const nestedSource = scan.files.find((file) => file.relPath === nestedSourcePath)
+    assert.ok(nestedReadme?.isContentCandidate, 'nested README must keep its literal-backslash relative path as a content candidate')
+    assert.ok(nestedSource?.isContentCandidate, 'nested source must keep its literal-backslash relative path as a content candidate')
+    const renderedTree = treeToText(scan.tree)
+    assert.ok(renderedTree.includes('README.md'), 'default tree rendering must retain the selected root files')
+    assert.ok(renderedTree.includes(nestedRelativePath), 'default tree rendering must retain the nested directory name including literal backslashes')
+    assert.doesNotMatch(renderedTree, /credentials/)
+
+    for (const granularity of ['coarse', 'medium', 'fine'] as const) {
+      const built = await buildContext(scan, granularity)
+      assert.ok(built.treeText.includes('README.md'), `${granularity} tree must retain the selected root files`)
+      assert.ok(built.treeText.includes(nestedRelativePath), `${granularity} tree must retain the nested directory name including literal backslashes`)
+      assert.ok(built.batches.some((batch) => batch.files.some((file) => file.content.includes(safeMarker))), `${granularity} context must include the safe marker`)
+      assert.ok(built.batches.some((batch) => batch.files.some((file) => file.content.includes(nestedSafeMarker))), `${granularity} context must include the nested safe marker`)
+      assert.doesNotMatch(JSON.stringify(built), new RegExp(secretMarker))
+      assert.doesNotMatch(built.treeText, /credentials/)
+    }
+
+    const reused = await cache.getFresh(selectedRoot)
+    assert.equal(reused.status, 'reused', 'same unchanged literal-root scan should be reused')
+    assert.equal(reused.scan, scan)
+    const reusedContext = await buildContext(reused.scan, 'medium')
+    assert.ok(reusedContext.batches.some((batch) => batch.files.some((file) => file.content.includes(safeMarker))))
+
+    await fs.writeFile(path.join(selectedRoot, 'README.md'), `# ${refreshedMarker}\n`)
+    const changed = await cache.getFresh(selectedRoot)
+    assert.equal(changed.status, 'scanned', 'changed snapshot must trigger a fresh scan')
+    assert.notEqual(changed.scan, scan)
+    assert.ok((await buildContext(changed.scan, 'coarse')).batches.some((batch) => batch.files.some((file) => file.content.includes(refreshedMarker))))
+    const refreshed = await cache.refresh(selectedRoot)
+    assert.equal(refreshed.status, 'scanned')
+    assert.equal(refreshed.reason, 'forced')
+    assert.ok((await buildContext(refreshed.scan, 'coarse')).batches.some((batch) => batch.files.some((file) => file.content.includes(refreshedMarker))))
+
+    const generationAlias = path.join(root, 'ordinary-alias')
+    await fs.symlink(selectedRoot, generationAlias, 'dir')
+    // Keep the generated project name within the existing result-contract while scanning the same canonical literal-path root.
+    const generationScan = await scanProject(generationAlias)
+    assert.equal(await fs.realpath(generationAlias), scan.root, 'generation alias must resolve to the literal selected root')
+    assert.equal(generationScan.name, path.basename(generationAlias), 'generation scan must retain its safe alias display name')
+    assert.ok(generationScan.files.find((file) => file.relPath === nestedReadmePath)?.isContentCandidate, 'generation scan must retain the nested literal-backslash candidate')
+    // @ts-ignore TS5097 -- intentional dynamic Node test imports.
+    await import('../../tests/register-shared-alias.mjs')
+    // @ts-ignore TS5097 -- generator.ts uses the bundler's @shared alias by design.
+    const { generateInterview } = await import('./generator.ts')
+    globalThis.fetch = async (_input, init) => {
+      capturedBodies.push(JSON.parse(String(init?.body)) as typeof capturedBodies[number])
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        projectSummary: 'Synthetic POSIX path fixture.',
+        sections: [{ title: 'Fixture', summary: 'Synthetic output.', questions: Array.from({ length: 20 }, (_, index) => ({ question: `Question ${index + 1}?`, answer: 'Synthetic answer.', followUps: [] })) }],
+        glossary: {}
+      }) } }] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    await generateInterview({
+      scan: generationScan,
+      granularity: 'medium',
+      roleFocus: 'general',
+      profile: { id: 'synthetic-posix-profile', name: 'Synthetic only', baseUrl: 'https://example.invalid/v1', apiKey: 'synthetic-profile-key', model: 'mock-model' },
+      signal: new AbortController().signal,
+      onProgress: () => {}
+    })
+    const requestBody = JSON.stringify(capturedBodies)
+    assert.equal(capturedBodies.length, 1)
+    assert.ok(requestBody.includes(safeMarker), 'mocked model request must include the safe literal-path content')
+    assert.ok(requestBody.includes(nestedSafeMarker), 'mocked model request must include content from the literal-backslash directory')
+    assert.ok(requestBody.includes(refreshedMarker), 'mocked model request must use the refreshed selected-root scan')
+    assert.doesNotMatch(requestBody, new RegExp(secretMarker), 'mocked model request must exclude real sensitive-directory content')
+    assert.doesNotMatch(requestBody, /credentials/)
+  } finally {
+    globalThis.fetch = originalFetch
+    await removeFixture(root)
+  }
+})
+
 test('real scan-to-generation path redacts refresh-token forms from ordinary project settings and source', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-refresh-token-'))
   const settingsSource = JSON.stringify({
@@ -314,138 +750,6 @@ test('real scan-to-generation path redacts refresh-token forms from ordinary pro
     const relativeFixtureRoot = path.relative(tempRoot, fixtureRoot)
     assert.ok(relativeFixtureRoot !== '' && relativeFixtureRoot !== '..' && !relativeFixtureRoot.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeFixtureRoot), 'fixture cleanup must stay below the temp directory')
     await fs.rm(fixtureRoot, { recursive: true, force: true })
-  }
-})
-
-test('real scan-to-generation path redacts empty-username Redis URI credentials and preserves URI controls', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-redis-uri-security-'))
-  const redisCredential = 'issue88-fake-redis-credential'
-  const redissCredential = 'issue88-fake%2Drediss%40credential'
-  const namedCredential = 'issue88-named-user-control-credential'
-  const redisUri = `redis://:${redisCredential}@redis.example.invalid:6379/4?client=issue88-redis-control`
-  const redissUri = `rediss://:${redissCredential}@secure.example.invalid:6380/5?client=issue88-rediss-control`
-  const namedUri = `redis://cache-reader:${namedCredential}@named.example.invalid:6379/6?client=issue88-named-control`
-  const noUserInfoUri = 'redis://public.example.invalid:6379/7?client=issue88-public-control'
-  const emptyPasswordUri = 'redis://empty-user:@empty.example.invalid:6379/8?client=issue88-empty-password-control'
-  const credentials = [redisCredential, redissCredential, namedCredential]
-  const fakeModelResult = {
-    projectSummary: 'Synthetic Redis configuration summary.',
-    sections: [{
-      title: 'Connection configuration',
-      summary: 'Synthetic configuration coverage.',
-      questions: Array.from({ length: 20 }, (_, index) => ({
-        question: `Synthetic Redis question ${index + 1}?`,
-        answer: `Synthetic Redis answer ${index + 1}.`,
-        followUps: []
-      }))
-    }],
-    glossary: {}
-  }
-  const profile = {
-    id: 'synthetic-redis-profile', name: 'Synthetic only', baseUrl: 'https://example.invalid/v1',
-    apiKey: 'synthetic-profile-key', model: 'mock-model'
-  }
-  const originalFetch = globalThis.fetch
-  const capturedBodies: Array<{ messages: Array<{ role: string; content: string }> }> = []
-  try {
-    await fs.mkdir(path.join(root, 'src'), { recursive: true })
-    await fs.writeFile(path.join(root, 'config.json'), JSON.stringify({ cacheAddress: redisUri, publicAddress: noUserInfoUri }, null, 2))
-    await fs.writeFile(path.join(root, 'src', 'cache.ts'), [
-      `export const secureCacheAddress = '${redissUri}'`,
-      `export const namedCacheAddress = '${namedUri}'`
-    ].join('\n'))
-    await fs.writeFile(path.join(root, 'cache.txt'), `cache_address=${emptyPasswordUri}\npublic_address=${noUserInfoUri}\n`)
-
-    // scanProject records the private policy and approved-file snapshot used by
-    // buildContext/readProjectContent; the generation path must consume that scan.
-    const scan = await scanProject(root)
-    const filePaths = ['config.json', 'src/cache.ts', 'cache.txt']
-    const candidateFiles = scan.files.filter((file) => filePaths.includes(file.relPath) && file.isContentCandidate)
-    assert.equal(candidateFiles.length, filePaths.length)
-
-    const built = await buildContext(scan, 'medium')
-    assert.equal(built.batches.length, 1)
-    assert.equal(built.batches[0].files.length, filePaths.length)
-    assert.equal(built.contentSecurity.redactedFiles, 2)
-    assert.equal(built.contentSecurity.redactionMatches, 3)
-    assert.equal(built.contentSecurity.matchesByCategory['connection-string'], 3)
-
-    const expectedByFile = new Map([
-      ['config.json', { matches: 1, safeUris: [noUserInfoUri] }],
-      ['src/cache.ts', { matches: 2, safeUris: [
-        'rediss://:[REDACTED:connection-string]@secure.example.invalid:6380/5?client=issue88-rediss-control',
-        'redis://cache-reader:[REDACTED:connection-string]@named.example.invalid:6379/6?client=issue88-named-control'
-      ] }],
-      ['cache.txt', { matches: 0, safeUris: [emptyPasswordUri, noUserInfoUri] }]
-    ])
-    for (const [filePath, expected] of expectedByFile) {
-      const file = built.batches[0].files.find((item) => item.relPath === filePath)
-      assert.ok(file, `${filePath} should be present in the real context batch`)
-      assert.equal(file.redactionMatches, expected.matches, `${filePath} should have the exact URI redaction count`)
-      assert.equal((file.content.match(/\[REDACTED:connection-string\]/g) ?? []).length, expected.matches)
-      for (const safeUri of expected.safeUris) assert.ok(file.content.includes(safeUri), `${filePath} should preserve ${safeUri}`)
-    }
-    const contextText = JSON.stringify(built.batches)
-    for (const credential of credentials) assert.doesNotMatch(contextText, new RegExp(credential))
-
-    const rendered = built.batches
-      .map((batch) => renderBatch(built.headerText, treeToText(scan.tree), batch))
-      .join('\n')
-    assert.equal((rendered.match(/\[REDACTED:connection-string\]/g) ?? []).length, 3)
-    for (const credential of credentials) assert.doesNotMatch(rendered, new RegExp(credential))
-    for (const safeUri of [
-      `redis://:[REDACTED:connection-string]@redis.example.invalid:6379/4?client=issue88-redis-control`,
-      `rediss://:[REDACTED:connection-string]@secure.example.invalid:6380/5?client=issue88-rediss-control`,
-      `redis://cache-reader:[REDACTED:connection-string]@named.example.invalid:6379/6?client=issue88-named-control`,
-      noUserInfoUri,
-      emptyPasswordUri
-    ]) assert.ok(rendered.includes(safeUri), `rendered context should preserve ${safeUri}`)
-
-    // Register the repo's normal direct-Node import alias before loading the real generator.
-    // @ts-ignore TS5097 -- intentional dynamic Node test imports.
-    await import('../../tests/register-shared-alias.mjs')
-    // @ts-ignore TS5097 -- generator.ts uses the bundler's @shared alias by design.
-    const { generateInterview } = await import('./generator.ts')
-    globalThis.fetch = async (_input, init) => {
-      capturedBodies.push(JSON.parse(String(init?.body)) as typeof capturedBodies[number])
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(fakeModelResult) } }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' }
-      })
-    }
-    const progress: Array<{ step: string; detail?: string }> = []
-    const generated = await generateInterview({
-      scan,
-      granularity: 'medium',
-      roleFocus: 'general',
-      profile,
-      signal: new AbortController().signal,
-      onProgress: (step, detail) => progress.push({ step, detail })
-    })
-    globalThis.fetch = originalFetch
-
-    assert.equal(capturedBodies.length, 1, '20 mocked questions meet the medium-granularity quota without compensation')
-    const serializedRequest = JSON.stringify(capturedBodies[0])
-    assert.equal((serializedRequest.match(/\[REDACTED:connection-string\]/g) ?? []).length, 3)
-    for (const credential of credentials) assert.doesNotMatch(serializedRequest, new RegExp(credential))
-    for (const safeUri of [noUserInfoUri, emptyPasswordUri, 'cache-reader', 'redis.example.invalid', 'secure.example.invalid', 'issue88-rediss-control']) {
-      assert.ok(serializedRequest.includes(safeUri), `request should preserve ${safeUri}`)
-    }
-    const contextReady = progress.find((item) => item.step === '上下文就绪')
-    assert.ok(contextReady?.detail?.includes('脱敏 2 个文件（3 处）'))
-    for (const credential of credentials) assert.doesNotMatch(JSON.stringify(progress), new RegExp(credential))
-    assert.equal(generated.sections.reduce((sum, section) => sum + section.questions.length, 0), 20)
-    assert.equal(generated.security?.redactedFiles, 2)
-    assert.equal(generated.security?.redactionMatches, 3)
-    assert.equal(generated.security?.categories['connection-string'], 3)
-    for (const credential of credentials) assert.doesNotMatch(JSON.stringify(generated), new RegExp(credential))
-  } finally {
-    globalThis.fetch = originalFetch
-    const resolvedRoot = path.resolve(root)
-    const resolvedTemp = path.resolve(os.tmpdir())
-    assert.ok(resolvedRoot.startsWith(`${resolvedTemp}${path.sep}`), `fixture cleanup must stay in temp directory: ${resolvedRoot}`)
-    assert.ok(path.basename(resolvedRoot).startsWith('projectlens-redis-uri-security-'), `unexpected fixture cleanup path: ${resolvedRoot}`)
-    await fs.rm(resolvedRoot, { recursive: true, force: true })
   }
 })
 

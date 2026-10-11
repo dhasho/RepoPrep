@@ -12,15 +12,15 @@ import {
 import type { Granularity, ScanTruncation } from '../../shared/types'
 import type { ScannedFile, ScanResult } from './scanner'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { MAX_CONTENT_FILE_BYTES } from './scanner.ts'
+import { MAX_CONTENT_FILE_BYTES, treeToText } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
+import { classifySensitivePath, redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { batchWeight, MIN_GLOBAL_WEIGHT } from './question-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { ProjectContentBoundaryError, ProjectContentReadError, readProjectContent } from './project-content-reader.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { isProjectContentReadable } from './project-snapshot.ts'
+import { isProjectContentReadable, resolveProjectIdentity } from './project-snapshot.ts'
 
 // 字符预算：token ≈ 字符/3，以下数值对应约 20k–80k 输入 token，主流模型均可承受
 const BUDGET_CHARS: Record<Granularity, number> = {
@@ -63,6 +63,7 @@ export interface ContextBatch {
 
 export interface BuiltContext {
   headerText: string // 项目名 + 语言分布 + 文件树（每批都带）
+  treeText: string // Canonical-root-filtered model-visible tree
   batches: ContextBatch[]
   contentSecurity: ContentSecuritySummary
   contentReadSummary: ContentReadSummary
@@ -216,11 +217,23 @@ function moduleMass(files: readonly ScannedFile[]): { fileCount: number; content
 
 export async function buildContext(scan: ScanResult, granularity: Granularity): Promise<BuiltContext> {
   if (!isProjectContentReadable(scan)) throw new ProjectContentBoundaryError()
+  let policyRoot: string | undefined
+  try {
+    policyRoot = (await resolveProjectIdentity(scan.root)).realPath
+  } catch {
+    throw new Error('无法安全解析所选项目路径，已停止分析')
+  }
+  const protectedRoot = Boolean(scan.tree.modelExcluded || classifySensitivePath('__project_root__', policyRoot))
+  const treeText = treeToText(scan.tree, 4000, policyRoot)
+  const safeFiles = protectedRoot
+    ? []
+    : scan.files.filter((file) => !classifySensitivePath(file.relPath, policyRoot ?? ''))
+  const safeScan = safeFiles.length === scan.files.length ? scan : { ...scan, files: safeFiles }
   const langText = scan.languages.length
     ? scan.languages.map((l) => `${l.lang} ${l.percent}%`).join('、')
     : '未识别出常见编程语言'
   const headerLines = [
-    `项目根目录：${scan.name}`,
+    `项目根目录：${protectedRoot ? '（受保护项目）' : scan.name}`,
     `主要语言：${langText}`,
     `文件总数（不含忽略项）：${scan.totalFiles}`
   ]
@@ -242,7 +255,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const contentReadSummary = emptyContentReadSummary()
 
   if (granularity !== 'fine') {
-    const picked = await pickFiles(scan, granularity, BUDGET_CHARS[granularity], contentReadSummary)
+    const picked = await pickFiles(safeScan, granularity, BUDGET_CHARS[granularity], contentReadSummary, scan)
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
     batches.push({
@@ -258,12 +271,12 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     }
     const readWarning = contentReadWarning(contentReadSummary)
     if (readWarning) headerText = `${headerText}\n\n${readWarning}`
-    return { headerText, batches, contentSecurity, contentReadSummary, moduleCount: 0 }
+    return { headerText, treeText, batches, contentSecurity, contentReadSummary, moduleCount: 0 }
   }
 
   // 细粒度：全局批（文档+配置）+ 各模块批（按顶层目录分组）
   // 全局批与模块批分别代表实际请求；同一文件若出现在多个批次，按请求次数分别计数。
-  const globalPicked = await pickFiles(scan, 'coarse', BUDGET_CHARS.fine, contentReadSummary)
+  const globalPicked = await pickFiles(safeScan, 'coarse', BUDGET_CHARS.fine, contentReadSummary, scan)
   addContentSecurity(contentSecurity, globalPicked.contentSecurity)
   const globalFiles = globalPicked.files
   const globalBatch: ContextBatch = {
@@ -276,7 +289,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   batches.push(globalBatch)
 
   const groups = new Map<string, ScannedFile[]>()
-  for (const f of scan.files) {
+  for (const f of safeScan.files) {
     if (!f.isContentCandidate) continue
     if (!CODE_EXTS.has(f.ext)) continue
     const segs = f.relPath.split('/')
@@ -326,7 +339,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   }
   const readWarning = contentReadWarning(contentReadSummary)
   if (readWarning) headerText = `${headerText}\n\n${readWarning}`
-  return { headerText, batches, contentSecurity, contentReadSummary, moduleCount: moduleBatches }
+  return { headerText, treeText, batches, contentSecurity, contentReadSummary, moduleCount: moduleBatches }
 }
 
 /** 把批次渲染为完整的用户消息文本 */

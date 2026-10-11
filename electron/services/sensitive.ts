@@ -29,8 +29,25 @@ const PATH_RULES: Array<{ category: SensitiveCategory; reason: string; test: (pa
   { category: 'secret-directory', reason: 'secret-bearing directory', test: (p, _b, parts) => parts.some((part) => /^(?:\.ssh|\.aws|\.gnupg|\.kube|\.docker|\.config\/gcloud)$/i.test(part)) || /(?:^|\/)(?:\.config\/gcloud)(?:\/|$)/i.test(p) }
 ]
 
-export function classifySensitivePath(relPath: string): SensitivePathMatch | null {
-  const normalized = relPath.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+/g, '/').replace(/\/$/, '')
+type PathPlatform = NodeJS.Platform
+
+function normalizePath(value: string, platform: PathPlatform, legacySeparators = false): string {
+  const withSeparators = platform === 'win32' || legacySeparators ? value.replaceAll('\\', '/') : value
+  return withSeparators.replace(/^\.\//, '').replace(/\/+/g, '/').replace(/\/$/, '')
+}
+
+/**
+ * Classify a relative path, optionally including the canonical selected root.
+ * Including root segments protects a secret-bearing project selected directly
+ * or reached through an ordinary alias, while the one-argument behavior stays
+ * compatible with callers that only have a relative path.
+ */
+export function classifySensitivePath(relPath: string, projectRoot?: string, platform: PathPlatform = process.platform): SensitivePathMatch | null {
+  // Legacy one-argument calls historically accepted Windows-style separators
+  // on every host. Scanner paths include their root and follow host path rules.
+  const normalizedRelPath = normalizePath(relPath, platform, projectRoot === undefined)
+  const normalizedRoot = projectRoot === undefined ? '' : normalizePath(projectRoot, platform)
+  const normalized = [normalizedRoot, normalizedRelPath].filter(Boolean).join('/')
   const parts = normalized.split('/').filter(Boolean)
   const base = parts.at(-1) ?? ''
   const rule = PATH_RULES.find((candidate) => candidate.test(normalized, base, parts))

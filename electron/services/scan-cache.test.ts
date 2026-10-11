@@ -98,6 +98,68 @@ describe('ProjectScanCache', () => {
     assert.equal(first.status, 'scanned')
   })
 
+  it('preserves protected-root filtering through cache reuse, refresh, and an ordinary directory alias', async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'projectlens-cache-protected-'))
+    const protectedRoot = path.join(root, '.aws')
+    const alias = path.join(root, 'ordinary-project')
+    const cache = new ProjectScanCache()
+    try {
+      await fs.mkdir(path.join(protectedRoot, 'nested'), { recursive: true })
+      await fs.writeFile(path.join(protectedRoot, 'config.json'), '{"apiKey":"cache-root-synthetic-secret"}')
+      await fs.writeFile(path.join(protectedRoot, 'nested', 'source.ts'), 'export const token = "cache-child-synthetic-secret"\n')
+      await fs.writeFile(path.join(protectedRoot, 'nested', 'vault.db'), Buffer.from([0, 1, 2]))
+      try {
+        await fs.symlink(protectedRoot, alias, process.platform === 'win32' ? 'junction' : 'dir')
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'EPERM' || code === 'EACCES' || code === 'ENOTSUP') {
+          return t.skip('directory link creation is unavailable on this platform')
+        }
+        throw error
+      }
+
+      const first = await cache.getFresh(alias)
+      assert.equal(first.status, 'scanned')
+      assert.ok(first.scan.files.length >= 2)
+      assert.ok(first.scan.files.every((file) => !file.isContentCandidate))
+      assert.equal(first.scan.tree.modelExcluded, true)
+      assert.ok(first.scan.security.excludedFiles >= 3, 'binary credentials must also contribute to excluded counts')
+      let context = await buildContext(first.scan, 'medium')
+      assert.ok(context.batches.every((batch) => batch.files.length === 0))
+      assert.doesNotMatch(`${context.headerText}\n${treeToText(first.scan.tree)}`, /\.aws|config\.json|source\.ts|vault\.db/)
+      assert.doesNotMatch(JSON.stringify(context), /cache-root-synthetic-secret|cache-child-synthetic-secret/)
+
+      const reused = await cache.getFresh(alias)
+      assert.equal(reused.status, 'reused')
+      assert.equal(reused.scan, first.scan)
+      context = await buildContext(reused.scan, 'fine')
+      assert.ok(context.batches.every((batch) => batch.files.length === 0), 'a cache hit must retain root exclusions')
+
+      await fs.writeFile(path.join(protectedRoot, 'added.ts'), 'export const password = "cache-refresh-synthetic-secret"\n')
+      const refreshed = await cache.refresh(alias)
+      assert.equal(refreshed.status, 'scanned')
+      assert.equal(refreshed.reason, 'forced')
+      assert.ok(refreshed.scan.files.every((file) => !file.isContentCandidate), 'refresh must reapply protected-root policy')
+      assert.ok(refreshed.scan.files.some((file) => file.relPath === 'added.ts'))
+      context = await buildContext(refreshed.scan, 'fine')
+      assert.ok(context.batches.every((batch) => batch.files.length === 0))
+      assert.doesNotMatch(`${context.headerText}\n${treeToText(refreshed.scan.tree)}`, /\.aws|config\.json|source\.ts|vault\.db|added\.ts/)
+      assert.doesNotMatch(JSON.stringify(context), /cache-root-synthetic-secret|cache-child-synthetic-secret|cache-refresh-synthetic-secret/)
+    } finally {
+      const resolvedRoot = path.resolve(root)
+      assert.equal(path.dirname(resolvedRoot), path.resolve(os.tmpdir()), 'cleanup target must be a direct child of the temporary directory')
+      assert.match(path.basename(resolvedRoot), /^projectlens-cache-protected-/)
+      try {
+        const resolvedAlias = path.resolve(alias)
+        assert.equal(path.dirname(resolvedAlias), resolvedRoot, 'alias cleanup must stay inside the fixture workspace')
+        await fs.unlink(alias)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+      await fs.rm(resolvedRoot, { recursive: true, force: true })
+    }
+  })
+
   it('keeps the least recently used entries within capacity', async () => {
     const cache = new ProjectScanCache(2)
     const a = await project({ 'a.ts': 'a' })
