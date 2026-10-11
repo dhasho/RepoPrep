@@ -110,7 +110,7 @@ GitHub Advisory Database，并按 semver 精确判定已安装版本是否落在
 > **静默返回 `false` 且不抛异常**，从而系统性漏报。必须先规范化为空格 AND 形式：
 > `range.split(',').map(s => s.trim()).join(' ')`。本文件早期版本的错误数字正是由此产生。
 
-审计脚本已随仓库提供，可随时复现（需要 `gh` CLI 已登录）：
+审计脚本已随仓库提供，可随时复现（需要 `gh` CLI 已登录）。CLI 状态与退出码为：完整且无适用 HIGH / CRITICAL 公告时 `status=clean`、退出码 0；查询完整但有适用 HIGH / CRITICAL 公告时 `status=findings`、退出码 1；输入、查询、分页或解析不完整时 `status=incomplete`、退出码 2。部分查询的零命中不代表无风险；不完整报告保留已确认命中，不能作为干净结果。撤回公告单独记录，不计入当前有效命中，也不构成风险豁免。
 
 ```bash
 npm run audit:deps                                      # 审计当前 lockfile
@@ -141,21 +141,20 @@ node scripts/audit-deps.cjs <lockfile> --label BEFORE   # 审计任意基线 loc
 | extract-zip 2.0.1 | `GHSA-7pqw-9j4j-h8q3`、`GHSA-jmr9-qjv8-65gv` | HIGH ×2 |
 | source-map-js 1.2.1 | `GHSA-68fv-2mgg-jv7q`（本次通过显式升级到 1.2.2 消除） | HIGH |
 
-### 仍存在的 2 条（均在构建链，不进入安装包，上游无修复版本）
+### 仍存在的 2 条 HIGH 公告（均在构建链，不进入安装包）
 
-均已确认**只经由 devDependencies 引入**，不会进入 `dist`：
+本节的依赖闭包审计只查询 HIGH / CRITICAL。基于当前工作区已安装依赖树（2026-10-11）核对，二者分别由 `tailwindcss` 与 `electron-builder` 构建链引入，均未进入生产安装包闭包。GitHub Advisory Database 页面截至 2026-10-11 显示两条公告都没有列出修复版本；应在后续审计中重新核对，不把当前状态视为永久结论。
 
 | 包 | 公告 | 暴露面评估 |
 | --- | --- | --- |
-| `braces@3.0.3` | `GHSA-vfj7-8cjw-p6xm`（深层嵌套模式导致栈耗尽 DoS） | 依赖链 `tailwindcss → chokidar / micromatch / fast-glob`，**仅在 Tailwind 构建期扫描 glob 时可达**，输入是开发者自己写的 glob 而非外部数据。上游 `last_affected` 即等于当前最新发布版，无修复版本 |
-| `http-cache-semantics@4.2.0` | `GHSA-ch52-4w7c-c8xp`（`max-stale` 可跨用户泄漏缓存响应） | 依赖链 `electron-builder → app-builder-lib → @electron/get → got → cacheable-request`。**仅在打包时下载 Electron 二进制的 HTTP 缓存路径上可达**。构建机不共享缓存、下载源为固定 HTTPS 源，实际风险低；上游同样无修复版本 |
+| `braces@3.0.3` | [`GHSA-vfj7-8cjw-p6xm`](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)（深层嵌套模式可导致栈耗尽 DoS） | 当前链为 `tailwindcss → chokidar → braces`，以及 `tailwindcss → micromatch → braces`。公告描述的是处理深层嵌套 brace pattern 时可能触发递归栈耗尽；本次只确认依赖存在，未证明实际可控输入或利用路径。 |
+| `http-cache-semantics@4.2.0` | [`GHSA-ch52-4w7c-c8xp`](https://github.com/advisories/GHSA-ch52-4w7c-c8xp)（`max-stale` 可跨用户泄漏共享缓存响应） | 当前链为 `electron-builder → app-builder-lib → @electron/get@3.1.0 → got@11.8.6 → cacheable-request → http-cache-semantics`。`GotDownloader` 将下载选项传给 `got.stream`，默认没有配置 `got` 的 HTTP 缓存，因此不能据此声称 Electron 二进制下载会自动走该 HTTP 共享缓存。`@electron/get` 的 Electron ZIP 文件系统缓存是独立机制，不等于 `got` 的 HTTP 缓存。本次没有证明该公告的跨用户缓存条件在本项目中成立或已被利用。 |
 
-另有 2 条**已撤回（Withdrawn）**公告，不计入上述统计，仅作记录：
+另有 2 条**已撤回（Withdrawn）**公告，不计入有效命中统计，仅作记录：
 `cacheable-request@7.0.4` 的 `GHSA-8x6c-cv3v-vp6g`（2023-02-14 撤回）与
 `esbuild` 的 `GHSA-gv7w-rqvm-qjhr`（2026-06-17 撤回）。
 
-结论：**安装包内不含任何适用公告（任何严重度）**；剩余 2 条全部位于构建期工具链，
-且上游均无修复版本可用。
+结论：按本节所述审计范围，安装包内未发现适用的 HIGH / CRITICAL 公告。该结果不能推出安装包不存在其他严重度或未收录的风险；完整依赖树仍有上述两条适用 HIGH 公告，且当前 Advisory 页面没有列出修复版本。依赖位置和可达条件不等于证明漏洞已被利用，也不消除后续复核的必要。
 
 ### 安装包口径的验证
 
@@ -167,7 +166,7 @@ node scripts/audit-deps.cjs <lockfile> --label BEFORE   # 审计任意基线 loc
 2. 推导：从 lockfile 按 root `dependencies` 做可达闭包。
 
 两者得到的集合**完全相同（113 个包）**，因此「生产依赖闭包」确实是本项目入包内容的
-正确口径。在这 113 个包上适用公告数为 **0**。
+正确口径。在该次审计查询的 HIGH / CRITICAL 范围内，这 113 个包上适用公告数为 **0**；这不是对其他严重度的结论。
 （注意 `@types/react` / `@types/prop-types` / `csstype` 在 lockfile 中缺少 `dev:true`
 标记，但实测并不在 asar 内，electron-builder 的裁剪是正确的。）
 

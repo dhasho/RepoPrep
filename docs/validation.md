@@ -23,7 +23,7 @@
 | `npm run test:smoke` | 先执行 `npm run build`，再运行 Electron 本地构建产物冒烟。 |
 | `npm run build` | 构建 Electron 主进程、preload 与 renderer。 |
 | `npm run dist` | 重新构建并用 electron-builder 生成 Windows 安装包。 |
-| `npm run audit:deps` | 通过 GitHub CLI/GraphQL 查询 lockfile 依赖适用的 HIGH/CRITICAL 公告；需要 `gh` 可用且已认证并可联网。 |
+| `npm run audit:deps` | 通过 GitHub CLI/GraphQL 查询 lockfile 依赖适用的 HIGH/CRITICAL 公告；需要 `gh` 可用且已认证并可联网。完整无命中为 `status=clean` / 退出码 0；完整且有命中为 `status=findings` / 退出码 1；查询或报告不完整为 `status=incomplete` / 退出码 2。 |
 
 目前没有自动检查这些命令的统一入口，也没有自动 SemVer 比较门禁。云端 review 在 Codex/GitHub 连接配置中启用，仓库文档与模板提供规则；是否启用及权限范围以平台状态为准。下表是按影响范围执行的提交前最低验证要求，不是可选建议。未覆盖的变更类型应先确定并执行相应测试或人工验收；已有脚本不能机械代替对实际需求和用户流程的验收。若测试失败，先定向诊断失败阶段并保留原失败结果。修复后应重跑受影响阶段。已有成功阶段没有新改动或疑点时不必重复运行。
 
@@ -46,7 +46,7 @@
 - `test:smoke` 检查本地 Electron 构建产物的窗口加载、React 渲染和一次 IPC 往返。它不是安装态验证，也不是完整用户流程；不证明真实项目扫描、模型生成、导出或取消流程可用。
 - 将 smoke 记为通过时，必须确认日志同时含 `VERDICT SMOKE-OK` 且进程退出码为 `0`。只有退出码为 `0`、没有 verdict 或出现 `SMOKE-FAIL` 都不能记作通过。
 - `dist` 当前只生成 Windows 安装包。生成成功不等于已安装验收；要声称安装验收完成，还需另行安装并实际检查启动、保存/导出和卸载。此流程不代表 macOS 或 Linux 发布验证。
-- `audit:deps` 检查 GitHub Advisory 数据中脚本查询到的适用 HIGH/CRITICAL 公告，不证明整个生态不存在漏洞。执行前运行 `gh auth status`，确认 GitHub CLI 身份为预期账号 `dhasho`，并记录网络状态；查询失败或部分 chunk 失败应记为不完整，不能记成零漏洞或通过。它不是默认离线检查。
+- `audit:deps` 只检查 GitHub Advisory 数据中查询到的适用 HIGH / CRITICAL 公告，不证明其他严重度、未收录公告或整个生态不存在风险。执行前运行 `gh auth status`，确认 GitHub CLI 身份为预期账号 `dhasho`，并记录网络状态。完整且没有有效命中时报告 `status=clean`、退出码 0；完整且有有效命中时为 `status=findings`、退出码 1；输入、查询、分页、解析或报告不完整时为 `status=incomplete`、退出码 2。部分查询的零命中不能解释为干净；不完整报告仍应保留已确认命中。已撤回公告单独记录，不算当前有效命中，也不能用来豁免仍有效的公告。该检查不是默认离线检查。
 - 当前没有完全离线的验证承诺：Electron 二进制可能需要下载，依赖和工具链也须预先可用。网络或依赖条件不满足时写明跳过/失败原因。
 - 若要验收真实 API、模型兼容性或额度，需用户授权或此前已有明确授权，并使用明确记录的真实服务配置。不要用默认 fixture、mock 或本地 smoke 结果代替。
 

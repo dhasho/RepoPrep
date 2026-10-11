@@ -1,126 +1,194 @@
-// 审计依赖的 HIGH/CRITICAL 公告。
-// 关键修正：GitHub Advisory 返回的区间是 ">= 1.0.0, < 1.2.2" 这种**逗号**形式，
-// npm 的 semver 无法解析（validRange 返回 null），satisfies 会**静默返回 false**，
-// 从而系统性漏报。必须先规范化为空格 AND 形式。
-// 用法: node audit-fixed.cjs <lockfilePath> [--label NAME]
+'use strict'
+
+// 审计 lockfile 中已安装依赖适用的 HIGH/CRITICAL GitHub 公告。
+// Usage: node scripts/audit-deps.cjs <lockfilePath> [--label NAME]
+
 const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const {
+  collectPages,
+  createReport,
+  inspectChunk,
+  parseLockfile
+} = require('./audit-deps-core.cjs')
 
-const lockPath = process.argv[2]
-const labelIdx = process.argv.indexOf('--label')
-const label = labelIdx > 0 ? process.argv[labelIdx + 1] : lockPath
+const CHUNK_SIZE = 20
+const PAGE_SIZE = 50
+const MAX_ADVISORY_PAGES = 100
 
-const semver = require('semver')
-
-/** 规范化 GitHub 的逗号区间为 npm 语义的空格 AND 形式。 */
-function normalizeRange(range) {
-  return String(range)
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(' ')
-}
-
-function applies(version, range) {
-  const normalized = normalizeRange(range)
-  if (semver.validRange(normalized) === null) return { ok: false, unparsed: true }
-  try {
-    return { ok: semver.satisfies(version, normalized, { includePrerelease: true }) }
-  } catch {
-    return { ok: false, unparsed: true }
+function parseArguments(args) {
+  if (!args[0] || args[0].startsWith('--')) return null
+  let label = args[0]
+  for (let index = 1; index < args.length; index += 1) {
+    if (args[index] !== '--label' || !args[index + 1]) return null
+    label = args[index + 1]
+    index += 1
   }
+  return { lockPath: args[0], label }
 }
 
-// 从 lockfile 取出「已安装」的 name@version 集合（顶层与嵌套都算）
-const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'))
-const installed = new Map()
-for (const [key, info] of Object.entries(lock.packages || {})) {
-  if (!key.startsWith('node_modules/')) continue
-  if (!info || !info.version) continue
-  const name = key.replace(/^.*node_modules\//, '')
-  const prev = installed.get(name)
-  // 同名多版本时保留全部（用列表）
-  if (!prev) installed.set(name, new Set([info.version]))
-  else prev.add(info.version)
+function safeLabel(label) {
+  return String(label || 'dependency-audit').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || 'dependency-audit'
 }
 
-const names = [...installed.keys()]
-console.error(`[${label}] packages: ${names.length}`)
+function reportPathFor(label) {
+  const configured = process.env.PROJECTLENS_AUDIT_REPORT
+  if (configured) return configured
+  return path.join(process.env.TEMP || os.tmpdir(), `audit-${safeLabel(label)}.json`)
+}
 
 function gql(query) {
-  const out = execFileSync('gh', ['api', 'graphql', '-f', `query=${query}`], {
+  const output = execFileSync('gh', ['api', 'graphql', '-f', `query=${query}`], {
     encoding: 'utf8',
+    windowsHide: true,
     maxBuffer: 64 * 1024 * 1024
   })
-  return JSON.parse(out)
+  return JSON.parse(output)
 }
 
-const CHUNK = 20
-const hits = []
-for (let i = 0; i < names.length; i += CHUNK) {
-  const chunk = names.slice(i, i + CHUNK)
-  const parts = chunk.map(
-    (name, idx) =>
-      `p${idx}: securityVulnerabilities(ecosystem: NPM, first: 50, package: ${JSON.stringify(name)}) {
-         nodes { advisory { ghsaId summary severity withdrawnAt } vulnerableVersionRange }
-       }`
-  )
-  let res
-  try {
-    res = gql(`query { ${parts.join('\n')} }`)
-  } catch (e) {
-    console.error(`  chunk ${i} failed: ${String(e.message).split('\n')[0]}`)
-    continue
+function vulnerabilityFields(alias, packageName, cursor) {
+  const after = cursor === undefined ? '' : `, after: ${JSON.stringify(cursor)}`
+  return `${alias}: securityVulnerabilities(ecosystem: NPM, first: ${PAGE_SIZE}, package: ${JSON.stringify(packageName)}${after}) {
+    pageInfo { hasNextPage endCursor }
+    nodes { advisory { ghsaId summary severity withdrawnAt } vulnerableVersionRange }
+  }`
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function addPageFailures(failures, packageName, pageFailures) {
+  for (const failure of pageFailures) failures.push({ package: packageName, reason: failure.reason })
+}
+
+async function run() {
+  const parsedArgs = parseArguments(process.argv.slice(2))
+  const label = parsedArgs?.label || 'dependency-audit'
+  const reportPath = reportPathFor(label)
+  const state = {
+    packageCount: 0,
+    queriedPackageCount: 0,
+    chunkCount: 0,
+    active: [],
+    withdrawn: [],
+    unparsed: [],
+    failures: []
   }
-  chunk.forEach((name, idx) => {
-    const nodes = (res.data && res.data[`p${idx}`] && res.data[`p${idx}`].nodes) || []
-    for (const node of nodes) {
-      const sev = node.advisory.severity
-      if (sev !== 'HIGH' && sev !== 'CRITICAL') continue
-      for (const version of installed.get(name)) {
-        const { ok, unparsed } = applies(version, node.vulnerableVersionRange)
-        if (!ok) continue
-        hits.push({
-          name,
-          version,
-          severity: sev,
-          ghsa: node.advisory.ghsaId,
-          withdrawn: !!node.advisory.withdrawnAt,
-          withdrawnAt: node.advisory.withdrawnAt || null,
-          range: node.vulnerableVersionRange,
-          summary: node.advisory.summary,
-          unparsed: !!unparsed
-        })
+
+  if (!parsedArgs) {
+    state.failures.push({ reason: 'invalid-arguments' })
+  } else {
+    let lock
+    try {
+      lock = JSON.parse(fs.readFileSync(parsedArgs.lockPath, 'utf8'))
+    } catch {
+      state.failures.push({ reason: 'lockfile-input-unreadable-or-invalid-json' })
+    }
+
+    if (lock !== undefined) {
+      const parsedLock = parseLockfile(lock)
+      state.failures.push(...parsedLock.failures)
+      const installed = parsedLock.installed
+      const names = [...installed.keys()].sort()
+      state.packageCount = names.length
+
+      for (let offset = 0; offset < names.length; offset += CHUNK_SIZE) {
+        const chunk = names.slice(offset, offset + CHUNK_SIZE)
+        const query = `query { ${chunk.map((name, index) => vulnerabilityFields(`p${index}`, name)).join('\n')} }`
+        state.chunkCount += 1
+        state.queriedPackageCount += chunk.length
+
+        let response
+        try {
+          response = gql(query)
+        } catch {
+          for (const packageName of chunk) {
+            state.failures.push({ package: packageName, reason: 'graphql-request-failed' })
+          }
+          continue
+        }
+
+        const hasErrorsField = isObject(response) && Object.hasOwn(response, 'errors')
+        const responseErrors = hasErrorsField ? response.errors : undefined
+        const hasResponseErrors = hasErrorsField &&
+          (!Array.isArray(responseErrors) || responseErrors.length > 0)
+        if (hasResponseErrors) {
+          for (const packageName of chunk) {
+            state.failures.push({ package: packageName, reason: 'graphql-response-errors' })
+          }
+        }
+
+        if (!isObject(response) || !isObject(response.data)) {
+          if (!hasResponseErrors) {
+            for (const packageName of chunk) {
+              state.failures.push({ package: packageName, reason: 'graphql-response-incomplete' })
+            }
+          }
+          continue
+        }
+
+        const completeData = {}
+        for (let index = 0; index < chunk.length; index += 1) {
+          const packageName = chunk[index]
+          const firstPage = response.data[`p${index}`]
+          if (!isObject(firstPage)) {
+            state.failures.push({ package: packageName, reason: 'missing-query-data' })
+            continue
+          }
+          const collected = await collectPages(firstPage, async (cursor) => {
+            const pageQuery = `query { ${vulnerabilityFields('p0', packageName, cursor)} }`
+            const pageResponse = gql(pageQuery)
+            const hasPageErrorsField = isObject(pageResponse) && Object.hasOwn(pageResponse, 'errors')
+            const pageErrors = hasPageErrorsField ? pageResponse.errors : undefined
+            if (!isObject(pageResponse) ||
+                (hasPageErrorsField && (!Array.isArray(pageErrors) || pageErrors.length > 0)) ||
+                !isObject(pageResponse.data) || !Object.hasOwn(pageResponse.data, 'p0')) {
+              throw new Error('invalid advisory page response')
+            }
+            return pageResponse.data.p0
+          }, MAX_ADVISORY_PAGES)
+          completeData[`p${index}`] = collected.connection
+          addPageFailures(state.failures, packageName, collected.failures)
+        }
+
+        const inspected = inspectChunk(chunk, { data: completeData }, installed)
+        for (const finding of inspected.findings) {
+          if (finding.withdrawn) state.withdrawn.push(finding)
+          else state.active.push(finding)
+        }
+        state.unparsed.push(...inspected.unparsed)
+        state.failures.push(...inspected.failures)
       }
     }
-  })
-}
-
-const active = hits.filter((h) => !h.withdrawn)
-const withdrawn = hits.filter((h) => h.withdrawn)
-
-console.log(`\n===== ${label} =====`)
-console.log(`适用 HIGH/CRITICAL（不含已撤回）: ${active.length}`)
-console.log(`适用 HIGH/CRITICAL（含已撤回）  : ${hits.length}`)
-console.log(`  CRITICAL: ${active.filter((h) => h.severity === 'CRITICAL').length}`)
-
-const group = (list) => {
-  const m = new Map()
-  for (const h of list) {
-    const k = `${h.name}@${h.version}`
-    if (!m.has(k)) m.set(k, [])
-    m.get(k).push(h.ghsa)
   }
-  return [...m.entries()].sort()
+
+  const report = createReport(label, state)
+  try {
+    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), { encoding: 'utf8' })
+  } catch {
+    process.stderr.write('Dependency audit could not write its report\n')
+    process.exitCode = 2
+    return
+  }
+
+  process.stdout.write(`Dependency audit status: ${report.status}; packages: ${report.packageCount}; active findings: ${report.activeCount}; incomplete conditions: ${report.failures.length + report.unparsed.length}\n`)
+  process.exitCode = report.status === 'clean' ? 0 : report.status === 'findings' ? 1 : 2
 }
 
-console.log('\n--- 不含已撤回 ---')
-for (const [k, ids] of group(active)) console.log(`  ${k}  ${ids.join(', ')}`)
-console.log('--- 已撤回（不计入）---')
-for (const [k, ids] of group(withdrawn)) console.log(`  ${k}  ${ids.join(', ')}`)
-
-fs.writeFileSync(
-  `${process.env.TEMP}/audit-${label}.json`,
-  JSON.stringify({ label, activeCount: active.length, active, withdrawn }, null, 2)
-)
-console.log(`\n详细结果: ${process.env.TEMP}/audit-${label}.json`)
+run().catch(() => {
+  const report = createReport('dependency-audit', {
+    failures: [{ reason: 'audit-unexpected-failure' }]
+  })
+  try {
+    const fallbackPath = process.env.PROJECTLENS_AUDIT_REPORT ||
+      path.join(process.env.TEMP || os.tmpdir(), `audit-${safeLabel('dependency-audit')}.json`)
+    fs.writeFileSync(fallbackPath, JSON.stringify(report, null, 2), { encoding: 'utf8' })
+  } catch {
+    // The static stderr message below is the only safe signal when no report can be written.
+  }
+  process.stderr.write('Dependency audit failed unexpectedly\n')
+  process.exitCode = 2
+})

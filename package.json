@@ -1,6 +1,6 @@
 {
   "name": "projectlens",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
   "author": "ProjectLens",
@@ -19,6 +19,7 @@
     "test:lib": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test src/lib/log-time.test.ts src/lib/model-detection.test.ts src/lib/settings-save.test.ts src/lib/scan-limit-input.test.ts src/lib/connection-test.test.ts",
     "test:smoke": "npm run build && electron tests/smoke.cjs",
     "audit:deps": "node scripts/audit-deps.cjs package-lock.json",
+    "test:audit-deps": "node --test tests/audit-deps.test.mjs",
     "dist": "electron-vite build && electron-builder --win",
     "test:renderer": "node scripts/build-render-test.mjs && node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test src/lib/question-numbering.test.ts src/lib/explain-stream.test.ts src/components/TermPopover.test.ts src/pages/SettingsPage.test.ts src/App.test.mjs",
     "test:question-budget": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test electron/services/question-budget.test.ts electron/services/question-budget-integration.test.ts electron/services/generator-merge.test.ts"
