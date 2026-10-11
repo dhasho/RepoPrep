@@ -2,6 +2,8 @@
 import type { ListModelsResult, LlmProfile, TestConnectionResult } from '@shared/types'
 // @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
 import { SseDecoder } from './sse-parser.ts'
+// @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
+import { LLM_PROFILE_LIMITS } from '../../shared/result-contract.ts'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -51,7 +53,13 @@ interface CallOptions {
   maxOutputTokens?: number
 }
 
-const MAX_LLM_STREAM_CHARS = 1_000_000
+export const LLM_RESPONSE_LIMITS = Object.freeze({
+  chatBodyBytes: 4 * 1024 * 1024,
+  modelsBodyBytes: 1 * 1024 * 1024,
+  modelCount: 2000,
+  modelIdChars: LLM_PROFILE_LIMITS.model,
+  chatContentChars: 1_000_000
+})
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -129,7 +137,10 @@ async function request(
     }
 
     if (!stream) {
-      const text = await readBodyText(response.body, controller.signal)
+      const text = await readBodyText(response.body, controller.signal, {
+        maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
+        fatalUtf8: true
+      })
       throwIfAborted()
       let json: { choices?: { message?: { content?: string } }[] }
       try {
@@ -138,7 +149,9 @@ async function request(
         throw new LlmRequestError('response')
       }
       const content = json.choices?.[0]?.message?.content
-      if (typeof content !== 'string') throw new LlmRequestError('response')
+      if (typeof content !== 'string' || content.length > LLM_RESPONSE_LIMITS.chatContentChars || hasUnpairedSurrogate(content)) {
+        throw new LlmRequestError('response')
+      }
       throwIfAborted()
       return content
     }
@@ -197,7 +210,7 @@ async function request(
         if (content !== undefined && content !== null) {
           if (typeof content !== 'string' || hasUnpairedSurrogate(content)) throw new LlmRequestError('response')
           if (content.length > 0) {
-            if (full.length + content.length > MAX_LLM_STREAM_CHARS) throw new LlmRequestError('response')
+            if (full.length + content.length > LLM_RESPONSE_LIMITS.chatContentChars) throw new LlmRequestError('response')
             full += content
             try {
               onDelta?.(content)
@@ -217,7 +230,7 @@ async function request(
         return
       }
       throw new LlmRequestError('response')
-    }, { maxBufferChars: MAX_LLM_STREAM_CHARS })
+    }, { maxBufferChars: LLM_RESPONSE_LIMITS.chatContentChars })
 
     const feed = (decoded: string): boolean => {
       try {
@@ -263,11 +276,12 @@ async function request(
 /** Read and release the response reader ourselves so aborts during body reads are observable. */
 async function readBodyText(
   body: ReadableStream<Uint8Array> | null,
-  signal: AbortSignal
+  signal: AbortSignal,
+  options: { maxBytes?: number; fatalUtf8?: boolean } = {}
 ): Promise<string> {
   if (!body) return ''
   let text = ''
-  await readBodyChunks(body, signal, (chunk) => { text += chunk })
+  await readBodyChunks(body, signal, (chunk) => { text += chunk }, options)
   return text
 }
 
@@ -275,12 +289,13 @@ async function readBodyChunks(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
   onChunk: (text: string) => boolean | void,
-  options: { flushDecoder?: boolean; fatalUtf8?: boolean } = {}
+  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number } = {}
 ): Promise<void> {
   const reader = body.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: options.fatalUtf8 ?? false })
   let finished = false
   let cancelRequested = false
+  let bytesRead = 0
   const cancelReader = (): void => {
     if (cancelRequested) return
     cancelRequested = true
@@ -300,6 +315,10 @@ async function readBodyChunks(
           if (tail) onChunk(tail)
         }
         return
+      }
+      if (options.maxBytes !== undefined) {
+        if (value.byteLength > options.maxBytes - bytesRead) throw new LlmRequestError('response')
+        bytesRead += value.byteLength
       }
       let decoded: string
       try { decoded = decoder.decode(value, { stream: true }) } catch { throw new LlmRequestError('response') }
@@ -387,7 +406,10 @@ export async function listModels(profile: LlmProfile): Promise<ListModelsResult>
         message: `接口返回 HTTP ${response.status}。该服务可能不支持模型列表接口，可手动填写模型名。`
       }
     }
-    const bodyText = await readBodyText(response.body, controller.signal)
+    const bodyText = await readBodyText(response.body, controller.signal, {
+      maxBytes: LLM_RESPONSE_LIMITS.modelsBodyBytes,
+      fatalUtf8: true
+    })
     if (timedOut) {
       return { ok: false, models: [], message: '获取模型列表超时，请检查服务是否可用后重试。' }
     }
@@ -404,17 +426,29 @@ export async function listModels(profile: LlmProfile): Promise<ListModelsResult>
     if (!Array.isArray(arr) || arr.length === 0) {
       return { ok: false, models: [], message: '接口返回了空的模型列表，请手动填写模型名。' }
     }
+    if (arr.length > LLM_RESPONSE_LIMITS.modelCount) {
+      return { ok: false, models: [], message: '接口返回的模型列表格式或大小超出限制，请手动填写模型名。' }
+    }
+    const candidates = arr.map((m) => (typeof m === 'string' ? m : (m as { id?: unknown })?.id))
+    if (candidates.some((id) => typeof id === 'string' && id.length > LLM_RESPONSE_LIMITS.modelIdChars)) {
+      return { ok: false, models: [], message: '接口返回的模型列表格式或大小超出限制，请手动填写模型名。' }
+    }
     const ids = Array.from(
       new Set(
-        arr
-          .map((m) => (typeof m === 'string' ? m : (m as { id?: unknown })?.id))
-          .filter((s): s is string => typeof s === 'string' && s.length > 0)
+        candidates
+          .filter((s): s is string => typeof s === 'string' && s.trim().length > 0 && !s.includes('\0') && !hasUnpairedSurrogate(s))
       )
     ).sort((a, b) => a.localeCompare(b))
+    if (ids.length === 0) {
+      return { ok: false, models: [], message: '接口没有返回可用的模型名称，请手动填写模型名。' }
+    }
     return { ok: true, models: ids, message: `检测到 ${ids.length} 个可用模型，点击即可选择` }
-  } catch {
+  } catch (error) {
     if (timedOut) {
       return { ok: false, models: [], message: '获取模型列表超时，请检查服务是否可用后重试。' }
+    }
+    if (error instanceof LlmRequestError && error.kind === 'response') {
+      return { ok: false, models: [], message: '接口返回的模型列表格式或大小超出限制，请手动填写模型名。' }
     }
     return { ok: false, models: [], message: '获取模型列表失败，请检查网络、服务地址和配置后重试。' }
   } finally {
