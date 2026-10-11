@@ -146,7 +146,16 @@ export interface InterviewResult {
   sections: Section[]
   glossary: Record<string, string>
   security?: SecurityProtectionSummary
+  /** Present only when part of the scanned model context was omitted. */
+  contextTruncation?: ContextTruncationMetadata
+  /** Present only when one or more candidate files could not be read. */
   contentReadSummary?: import('./content-read').ContentReadSummary
+}
+
+export interface ContextTruncationMetadata {
+  treeTruncated: boolean
+  contentTruncated: boolean
+  requestTruncated: boolean
 }
 
 export interface RecentProject {

@@ -2,6 +2,8 @@
 // @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
 import type { FollowUp, InterviewResult } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
+import { formatContextTruncationWarning } from '../../shared/context-budget.ts'
+// @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
 import { contentReadWarning } from '../../shared/content-read.ts'
@@ -57,9 +59,15 @@ export function resultToMarkdown(result: InterviewResult): string {
     `> 颗粒度：${GRANULARITY_META[result.granularity].label}（${GRANULARITY_META[result.granularity].sub}）｜方向：${ROLE_META[result.roleFocus].label}｜模型：${result.modelUsed}｜生成时间：${new Date(result.createdAt).toLocaleString('zh-CN')}`
   )
   lines.push('')
+  const contextWarning = formatContextTruncationWarning(result.contextTruncation)
+  if (contextWarning) {
+    lines.push(`> ${contextWarning}`)
+  }
   const contentReadWarning = renderContentReadWarning(result)
   if (contentReadWarning.length) {
     lines.push(...contentReadWarning)
+  }
+  if (contextWarning || contentReadWarning.length) {
     lines.push('')
   }
   if (result.projectSummary) {

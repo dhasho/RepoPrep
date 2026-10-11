@@ -5,6 +5,8 @@ import path from 'node:path'
 import ignore from 'ignore'
 import type { FileNode, KeyFileInfo, LanguageStat, ProjectOverview, SecurityProtectionSummary } from '../../shared/types'
 import type { ScanLimits, ScanTruncation } from '../../shared/types'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { safeClipText } from '../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
@@ -457,29 +459,48 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   return result
 }
 
-/** 将文件树渲染为缩进文本（供大模型阅读） */
-export function treeToText(node: FileNode, maxLines = 4000, projectRoot?: string): string {
-  if (node.modelExcluded || (projectRoot !== undefined && classifySensitivePath('__project_root__', projectRoot))) {
-    return '（项目根目录已按安全策略排除）'
+/** 将文件树渲染为缩进文本，同时限制输出字符数并应用 canonical root 敏感路径策略。 */
+export function renderBoundedTree(node: FileNode, maxLines = 4000, maxChars = 12_000, policyRoot?: string): { text: string; truncated: boolean } {
+  if (node.modelExcluded || (policyRoot !== undefined && classifySensitivePath('__project_root__', policyRoot))) {
+    const notice = '（项目根目录已按安全策略排除）'
+    return { text: safeClipText(notice, maxChars, ''), truncated: notice.length > maxChars }
   }
-  const lines: string[] = [`${node.name}/`]
-  function render(nodes: FileNode[], prefix: string): void {
-    if (lines.length >= maxLines) return
-    for (const n of nodes) {
-      if (lines.length >= maxLines) {
-        lines.push(`${prefix}…（已截断）`)
-        return
+  const lines: string[] = []
+  let chars = 0
+  let truncated = false
+  const marker = '…（文件树已截断）'
+  const push = (line: string): boolean => {
+    const lineChars = line.length + (lines.length ? 1 : 0)
+    if (lines.length >= maxLines || chars + lineChars > maxChars) {
+      truncated = true
+      const available = Math.max(0, maxChars - chars - (lines.length ? 1 : 0))
+      if (available) {
+        const clipped = safeClipText(marker, available, '')
+        if (clipped) lines.push(clipped)
       }
-      if (n.modelExcluded || classifySensitivePath(n.path, projectRoot ?? '')) continue
-      if (n.type === 'dir') {
-        lines.push(`${prefix}${n.name}/`)
-        render(n.children ?? [], `${prefix}  `)
-      } else {
-        const kb = n.size ? ` (${Math.max(1, Math.round(n.size / 1024))}KB)` : ''
-        lines.push(`${prefix}${n.name}${kb}`)
-      }
+      return false
     }
+    lines.push(line)
+    chars += lineChars
+    return true
   }
-  render(node.children ?? [], '  ')
-  return lines.join('\n')
+  if (!push(`${node.name}/`)) return { text: lines.join('\n'), truncated }
+  function render(nodes: FileNode[], prefix: string): boolean {
+    for (const child of nodes) {
+      if (child.modelExcluded || classifySensitivePath(child.path, policyRoot ?? '')) continue
+      const line = child.type === 'dir'
+        ? `${prefix}${child.name}/`
+        : `${prefix}${child.name}${child.size ? ` (${Math.max(1, Math.round(child.size / 1024))}KB)` : ''}`
+      if (!push(line)) return false
+      if (child.type === 'dir' && !render(child.children ?? [], `${prefix}  `)) return false
+    }
+    return true
+  }
+  if (!render(node.children ?? [], '  ')) truncated = true
+  return { text: lines.join('\n'), truncated }
+}
+
+/** 第三个参数保留为 main 的 canonical projectRoot 契约。 */
+export function treeToText(node: FileNode, maxLines = 4000, projectRoot?: string): string {
+  return renderBoundedTree(node, maxLines, 12_000, projectRoot).text
 }

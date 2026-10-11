@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FollowUp, InterviewResult, QuestionItem, Section, Settings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
 import { contentReadWarning } from '@shared/content-read'
+import { formatContextTruncationWarning } from '@shared/context-budget'
 import { api } from '../lib/ipc'
 import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf } from '../lib/question-numbering'
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
@@ -107,6 +108,7 @@ export default function ResultPage({ result, settings, onRegenerate, regeneratin
 
   const totalQuestions = result.sections.reduce((a, s) => a + s.questions.length, 0)
   const shownQuestions = filtered.reduce((a, s) => a + s.questions.length, 0)
+  const contextWarning = formatContextTruncationWarning(result.contextTruncation)
 
   // 题号一律取原始结果的稳定序号（在过滤之前算好），
   // 因此无论怎么搜索，同一个问题显示的题号都相同，也不会出现 Q0。
@@ -240,6 +242,12 @@ export default function ResultPage({ result, settings, onRegenerate, regeneratin
         {/* 正文滚动区 */}
         <div className="min-h-0 flex-1 overflow-y-auto" onClick={() => setPopover(null)}>
           <div className="mx-auto max-w-3xl px-6 py-6">
+            {contextWarning && (
+              <div role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {contextWarning}
+              </div>
+            )}
+
             {result.projectSummary && (
               <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
                 <h2 className="mb-2 text-sm font-semibold text-indigo-900">📋 项目概览</h2>

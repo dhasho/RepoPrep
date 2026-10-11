@@ -11,9 +11,10 @@ import type {
 } from '@shared/types'
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
 import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
 import { contentReadWarning } from '@shared/content-read'
 import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
-import { buildContext, renderBatch, type ContextBatch } from './context-builder'
+import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, truncateToQuota, type QuestionPlan } from './question-budget'
 import type { ScanResult } from './scanner'
 
@@ -199,33 +200,70 @@ function normalizeParsed(raw: unknown): { projectSummary: string; sections: Sect
 /** 调用大模型并解析出结构化结果，失败自动带错误重试一次 */
 async function callForJson(
   profile: LlmProfile,
-  messages: ChatMessage[],
-  signal: AbortSignal
+  buildMessages: (contextLimit: number, repair?: { reply: string; error: string }) => ChatMessage[],
+  contextChars: number,
+  minimumContextChars: number,
+  budget: number,
+  signal: AbortSignal,
+  onRequestTruncation: () => void
 ): Promise<{ projectSummary: string; sections: Section[]; glossary: Record<string, string> }> {
   let lastError = ''
+  let previousReply = ''
   for (let attempt = 0; attempt < 2; attempt++) {
-    const reply = await chatCompletion(profile, messages, { signal, timeoutMs: 600_000 })
+    if (attempt && previousReply.length > 20_000) onRequestTruncation()
+    const repair = attempt ? { reply: safeClipText(previousReply, 20_000), error: lastError } : undefined
+    const fitted = fitMessages(buildMessages, contextChars, minimumContextChars, budget, repair)
+    if (fitted.contextLimit < contextChars) onRequestTruncation()
+    if (!validateMessageCharBudget(fitted.messages, budget)) throw new Error('模型请求内容超出支持范围。')
+    const reply = await chatCompletion(profile, fitted.messages, { signal, timeoutMs: 600_000 })
     try {
       return normalizeParsed(JSON.parse(extractJson(reply)))
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
-      messages = [
-        ...messages,
-        { role: 'assistant', content: reply.slice(0, 20_000) },
-        {
-          role: 'user',
-          content: `你刚才的输出不是合法 JSON 或缺少必需字段（错误：${lastError}）。请重新输出，务必只输出一个合法的 JSON 对象，不要包含任何其他文字。`
-        }
-      ]
+      previousReply = reply
     }
   }
   throw new Error(`模型两次均未返回合法 JSON：${lastError}`)
+}
+
+const REQUEST_TRUNCATION_MARKER = `\n\n⚠️ ${CONTEXT_TRUNCATION_WARNING} 请只依据实际提供的上下文作答，不要假设已看到省略内容。`
+
+function fitMessages(
+  buildMessages: (contextLimit: number, repair?: { reply: string; error: string }) => ChatMessage[],
+  contextChars: number,
+  minimumContextChars: number,
+  budget: number,
+  repair?: { reply: string; error: string }
+): { messages: ChatMessage[]; contextLimit: number } {
+  const fits = (limit: number): boolean => {
+    try {
+      return validateMessageCharBudget(buildMessages(limit, repair), budget)
+    } catch {
+      return false
+    }
+  }
+  if (fits(contextChars)) return { messages: buildMessages(contextChars, repair), contextLimit: contextChars }
+  let low = minimumContextChars
+  let high = contextChars
+  if (low > high || !fits(low)) throw new Error('模型请求固定指令超出支持范围。')
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (fits(mid)) low = mid
+    else high = mid - 1
+  }
+  if (!fits(low)) throw new Error('模型请求固定指令超出支持范围。')
+  return { messages: buildMessages(low, repair), contextLimit: low }
 }
 
 // ---------- 主流程 ----------
 
 export async function generateInterview(params: GenerateParams): Promise<InterviewResult> {
   const { scan, granularity, roleFocus, profile, signal, onProgress } = params
+  let latestPercent = 0
+  const reportProgress = (step: string, detail: string | undefined, percent: number): void => {
+    latestPercent = Math.max(latestPercent, Math.min(100, Math.max(0, percent)))
+    onProgress(step, detail, latestPercent)
+  }
 
   try {
     assertProjectIdentityContract(scan.name, scan.root)
@@ -233,18 +271,22 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     throw new Error(RESULT_CONTRACT_MESSAGES.generated)
   }
 
-  onProgress('构建项目上下文', `颗粒度：${GRANULARITY_META[granularity].label}`, 8)
+  reportProgress('构建项目上下文', `颗粒度：${GRANULARITY_META[granularity].label}`, 8)
   const built = await buildContext(scan, granularity)
+  const markRequestTruncation = (): void => {
+    if (built.contextTruncation.requestTruncated) return
+    built.contextTruncation.requestTruncated = true
+    reportProgress('分析提示', formatContextTruncationWarning(built.contextTruncation), latestPercent)
+  }
   const readWarning = built.contentReadSummary.failedReads > 0
     ? contentReadWarning(built.contentReadSummary)
-    : '';
-  const treeText = built.treeText
-  onProgress(
+    : ''
+  reportProgress(
     '上下文就绪',
-    `${built.batches.length} 个分析批次，共 ${Math.round(built.batches.reduce((a, b) => a + b.totalChars, 0) / 1000)}k 字符；已排除 ${scan.security.excludedFiles} 个敏感文件，脱敏 ${built.contentSecurity.redactedFiles} 个文件（${built.contentSecurity.redactionMatches} 处）`,
+    `${built.batches.length} 个分析批次，共 ${Math.round(built.batches.reduce((a, b) => a + b.totalChars, 0) / 1000)}k 字符；已排除 ${scan.security.excludedFiles} 个敏感文件，脱敏 ${built.contentSecurity.redactedFiles} 个文件（${built.contentSecurity.redactionMatches} 处）${hasContextTruncation(built.contextTruncation) ? `；${formatContextTruncationWarning(built.contextTruncation)}` : ''}`,
     15
   )
-  if (readWarning) onProgress('内容读取警告', readWarning, 15)
+  if (readWarning) reportProgress('内容读取警告', readWarning, 15)
 
   // 题量预算：在发起任何模型调用之前就把总量分配到各批次，
   // 这是 issue #9 的核心修复——此前全局批 10-15 题 + 每模块 6-10 题最多可得 70-115 题。
@@ -262,36 +304,62 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     total: plan.total,
     // 每批的进度：合并阶段占 15%→95%
     onBatch: (index, detail, fraction) =>
-      onProgress(
+      reportProgress(
         `调用大模型分析（${index + 1}/${built.batches.length}）：${built.batches[index].label}`,
         detail,
         Math.round(15 + fraction * 80)
       ),
     // 补偿轮使用同一进度条末端，文案由调用方给
-    onCompensate: (detail) => onProgress('补充请求（题量不足）', detail, 94),
-    requestBatch: (index, quota, extraInstruction) =>
-      callForJson(
-        profile,
-        [
+    onCompensate: (detail) => reportProgress('补充请求（题量不足）', detail, 94),
+    requestBatch: (index, quota, extraInstruction) => {
+      const contextText = renderBatch(built.headerText, built.treeText, built.batches[index])
+      const minimumContextChars = renderBatch(
+        built.headerText,
+        built.treeText,
+        { ...built.batches[index], files: [] }
+      ).length + REQUEST_TRUNCATION_MARKER.length
+      const makePrompt = (contextLimit: number, repair?: { reply: string; error: string }): ChatMessage[] => {
+        const bounded = renderBatchWithinBudget(
+          built.headerText,
+          built.treeText,
+          built.batches[index],
+          contextLimit,
+          REQUEST_TRUNCATION_MARKER
+        )
+        const userPrompt = buildUserPrompt({
+          contextText: bounded.text,
+          granularity,
+          roleFocus,
+          isModuleBatch: built.batches[index].kind === 'module',
+          moduleLabel:
+            built.batches[index].kind === 'module'
+              ? built.batches[index].label.replace(/^模块「|」$/g, '')
+              : undefined,
+          quota,
+          extraInstruction
+        })
+        const messages: ChatMessage[] = [
           { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: buildUserPrompt({
-              contextText: renderBatch(built.headerText, treeText, built.batches[index]),
-              granularity,
-              roleFocus,
-              isModuleBatch: built.batches[index].kind === 'module',
-              moduleLabel:
-                built.batches[index].kind === 'module'
-                  ? built.batches[index].label.replace(/^模块「|」$/g, '')
-                  : undefined,
-              quota,
-              extraInstruction
-            })
-          }
-        ],
-        signal
+          { role: 'user', content: userPrompt }
+        ]
+        if (repair) {
+          messages.push(
+            { role: 'assistant', content: repair.reply },
+            { role: 'user', content: `你刚才的输出不是合法 JSON 或缺少必需字段（错误：${repair.error}）。请重新输出，务必只输出一个合法的 JSON 对象，不要包含任何其他文字。` }
+          )
+        }
+        return messages
+      }
+      return callForJson(
+        profile,
+        makePrompt,
+        contextText.length,
+        minimumContextChars,
+        CONTEXT_CHAR_BUDGETS[granularity],
+        signal,
+        markRequestTruncation
       )
+    }
   })
 
   const merged = mergeResult
@@ -303,7 +371,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   const shortfall = Math.max(0, budget.min - totalQuestions)
   const droppedTotal = merged.droppedByQuota + capped.dropped
   const orphanTerms = Object.keys(merged.glossary).length - Object.keys(glossary).length
-  onProgress(
+  reportProgress(
     '整理结果',
     `${capped.sections.length} 个主题，共 ${totalQuestions} 题（预算 ${budget.min}–${budget.max}）` +
       `${merged.compensated > 0 ? `；补偿请求补回 ${merged.compensated} 题` : ''}` +
@@ -325,6 +393,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     projectSummary: merged.projectSummary,
     sections: capped.sections,
     glossary,
+    ...(hasContextTruncation(built.contextTruncation) ? { contextTruncation: built.contextTruncation } : {}),
     security: {
       excludedFiles: scan.security.excludedFiles,
       redactedFiles: built.contentSecurity.redactedFiles,
@@ -346,7 +415,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   } catch {
     throw new Error(RESULT_CONTRACT_MESSAGES.generated)
   }
-  onProgress('完成', undefined, 100)
+  reportProgress('完成', undefined, 100)
   return result
 }
 

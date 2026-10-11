@@ -251,7 +251,7 @@ export function assertInterviewResultContract(
 ): asserts value is InterviewResult {
   boundedTree(value)
   if (!record(value)) invalid()
-  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contentReadSummary'])
+  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contextTruncation', 'contentReadSummary'])
   if (value.version !== 1 || !text(value.createdAt, RESULT_LIMITS.createdAt) || !Number.isFinite(Date.parse(value.createdAt)) || !text(value.projectName, RESULT_LIMITS.projectName)) invalid()
   assertProjectIdentityContract(value.projectName, value.projectPath, isAbsolutePath)
   enumValue(value.granularity, GRANULARITIES)
@@ -259,6 +259,14 @@ export function assertInterviewResultContract(
   string(value.profileId, RESULT_LIMITS.profileId)
   string(value.modelUsed, RESULT_LIMITS.modelUsed)
   string(value.projectSummary, RESULT_LIMITS.projectSummary, 0)
+  if (value.contextTruncation !== undefined) {
+    if (!record(value.contextTruncation)) invalid()
+    exactKeys(value.contextTruncation, ['treeTruncated', 'contentTruncated', 'requestTruncated'])
+    for (const key of ['treeTruncated', 'contentTruncated', 'requestTruncated'] as const) {
+      if (typeof value.contextTruncation[key] !== 'boolean') invalid()
+    }
+    if (!value.contextTruncation.treeTruncated && !value.contextTruncation.contentTruncated && !value.contextTruncation.requestTruncated) invalid()
+  }
   if (!Array.isArray(value.sections) || value.sections.length > RESULT_LIMITS.sections || !record(value.glossary)) invalid()
   const glossary = plainDictionary(value.glossary, RESULT_LIMITS.glossaryEntries)
   if (value.security !== undefined) {

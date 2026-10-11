@@ -94,6 +94,27 @@ test('无术语表 / 空摘要时不输出对应区块', () => {
   assert.ok(!md.includes('## 项目概览'))
 })
 
+test('上下文有省略时导出与结果页相同的静态提示，旧结果不增加提示', () => {
+  const warning = '⚠️ 部分项目信息未参与分析，结果可能遗漏相关内容。'
+  const ordinary = resultToMarkdown(makeResult())
+  assert.ok(!ordinary.includes(warning))
+
+  for (const field of ['treeTruncated', 'contentTruncated', 'requestTruncated'] as const) {
+    const markdown = resultToMarkdown(makeResult({ contextTruncation: {
+      treeTruncated: false,
+      contentTruncated: false,
+      requestTruncated: false,
+      [field]: true
+    } }))
+    assert.equal(markdown.split(warning).length - 1, 1, `${field} 应输出一次通用提示`)
+    assert.ok(markdown.indexOf(warning) < markdown.indexOf('## 项目概览'), '提示应出现在正文之前')
+  }
+
+  const legacy = makeResult()
+  delete (legacy as Partial<InterviewResult>).contextTruncation
+  assert.ok(!resultToMarkdown(legacy).includes(warning), '未记录元数据的旧结果不应显示提示')
+})
+
 test('读取不完整的持久化结果在 Markdown 中显示受控原因、转义路径及省略次数', () => {
   const md = resultToMarkdown(makeResult({
     contentReadSummary: {
@@ -146,4 +167,22 @@ test('读取警告限制长路径样本文本，但结果元数据仍保留全�
   assert.ok(markdown.length < 6000, 'long persisted paths cannot consume the prompt/header display budget')
   assert.ok(markdown.includes('另有 45 次读取失败未列出'))
   assert.ok(!markdown.includes('49-'), 'only the bounded set of leading examples is displayed')
+})
+
+test('内容读取失败和上下文截断可以同时显示在导出开头', () => {
+  const markdown = resultToMarkdown(makeResult({
+    contextTruncation: { treeTruncated: false, contentTruncated: true, requestTruncated: false },
+    contentReadSummary: {
+      attemptedReads: 2,
+      successfulReads: 1,
+      failedReads: 1,
+      failuresByReason: { permission: 1, missing: 0, io: 0 },
+      failures: [{ path: 'src/private.ts', reason: 'permission' }]
+    }
+  }))
+
+  assert.ok(markdown.includes('部分项目信息未参与分析'))
+  assert.ok(markdown.includes('内容读取不完整'))
+  assert.ok(markdown.indexOf('部分项目信息未参与分析') < markdown.indexOf('## 项目概览'))
+  assert.ok(markdown.indexOf('内容读取不完整') < markdown.indexOf('## 项目概览'))
 })

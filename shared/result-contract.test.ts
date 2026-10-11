@@ -261,3 +261,28 @@ test('optional summary undefined stays compatible and explain context ceilings a
   assert.equal(EXPLAIN_CONTEXT_LIMITS.projectSummary, 20_000)
   assert.equal(EXPLAIN_CONTEXT_LIMITS.glossaryHint, 4000)
 })
+
+test('context truncation metadata is optional, bounded to booleans, and only records an actual omission', () => {
+  // Historical results have no metadata and remain valid.
+  assertValid(makeResult())
+
+  for (const contextTruncation of [
+    { treeTruncated: true, contentTruncated: false, requestTruncated: false },
+    { treeTruncated: false, contentTruncated: true, requestTruncated: false },
+    { treeTruncated: false, contentTruncated: false, requestTruncated: true },
+    { treeTruncated: true, contentTruncated: true, requestTruncated: true }
+  ]) {
+    assertValid(makeResult({ contextTruncation }))
+  }
+
+  for (const contextTruncation of [
+    {},
+    { treeTruncated: false, contentTruncated: false, requestTruncated: false },
+    { treeTruncated: true, contentTruncated: false },
+    { treeTruncated: false, contentTruncated: false, requestTruncated: 'yes' },
+    { treeTruncated: true, contentTruncated: false, requestTruncated: false, path: 'C:\\private\\source.ts' },
+    { treeTruncated: true, contentTruncated: false, requestTruncated: false, apiKey: 'must-not-be-retained' }
+  ]) {
+    assertKind(makeResult({ contextTruncation }), 'invalid')
+  }
+})

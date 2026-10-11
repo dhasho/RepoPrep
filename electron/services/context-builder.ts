@@ -9,10 +9,10 @@ import {
   type ContentReadSummary
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 } from '../../shared/content-read.ts'
-import type { Granularity, ScanTruncation } from '../../shared/types'
+import type { ContextTruncationMetadata, Granularity, ScanTruncation } from '../../shared/types'
 import type { ScannedFile, ScanResult } from './scanner'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { MAX_CONTENT_FILE_BYTES, treeToText } from './scanner.ts'
+import { MAX_CONTENT_FILE_BYTES } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { classifySensitivePath, redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
@@ -21,18 +21,19 @@ import { batchWeight, MIN_GLOBAL_WEIGHT } from './question-budget.ts'
 import { ProjectContentBoundaryError, ProjectContentReadError, readProjectContent } from './project-content-reader.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { isProjectContentReadable, resolveProjectIdentity } from './project-snapshot.ts'
-
-// 字符预算：token ≈ 字符/3，以下数值对应约 20k–80k 输入 token，主流模型均可承受
-const BUDGET_CHARS: Record<Granularity, number> = {
-  coarse: 60_000,
-  medium: 220_000,
-  fine: 160_000 // 每批预算
-}
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, safeClipText, treeCharBudget } from '../../shared/context-budget.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
+import { renderBoundedTree } from './scanner.ts'
 
 const CODE_EXTS = new Set([
   'ts','tsx','js','jsx','mjs','cjs','py','java','go','rs','c','h','cpp','cc','cxx','hpp',
   'cs','rb','php','swift','kt','kts','scala','dart','lua','vue','svelte','astro','sql','proto','graphql','prisma'
 ])
+
+// Five capped samples are escaped for display; reserve enough room for their
+// worst-case JSON expansion and the bounded reason/count summary.
+const CONTENT_READ_WARNING_RESERVE = 2200
 
 export interface ContextFile {
   relPath: string
@@ -63,7 +64,9 @@ export interface ContextBatch {
 
 export interface BuiltContext {
   headerText: string // 项目名 + 语言分布 + 文件树（每批都带）
-  treeText: string // Canonical-root-filtered model-visible tree
+  /** The one bounded tree rendering used by every batch and model request. */
+  treeText: string
+  contextTruncation: ContextTruncationMetadata
   batches: ContextBatch[]
   contentSecurity: ContentSecuritySummary
   contentReadSummary: ContentReadSummary
@@ -117,6 +120,7 @@ export function isCoarseCandidate(relPath: string): boolean {
 interface PickedFiles {
   files: ContextFile[]
   contentSecurity: ContentSecuritySummary
+  contentTruncated: boolean
 }
 
 export function renderScanWarnings(t: ScanTruncation): string {
@@ -146,6 +150,9 @@ async function pickFiles(
   granularity: Granularity,
   budgetChars: number,
   contentReadSummary: ContentReadSummary,
+  headerText: string,
+  treeText: string,
+  warningReserve: number,
   sourceScan = scan
 ): Promise<PickedFiles> {
   const candidates = scan.files
@@ -162,12 +169,25 @@ async function pickFiles(
 
   const out: ContextFile[] = []
   const contentSecurity = emptyContentSecurity()
-  let used = 0
-  const headerReserve = 6000 // 预留文件树等头部文本
-  for (const { f } of candidates) {
-    if (used >= budgetChars - headerReserve) break
-    let rawContent: string
+  const emptyBatch: ContextBatch = { label: '', files: [], totalChars: 0, kind: 'global', weight: 1 }
+  let renderedChars = renderBatch(headerText, treeText, emptyBatch).length
+  let contentTruncated = false
+  for (let index = 0; index < candidates.length; index++) {
+    const { f } = candidates[index]
+    const separatorChars = 1
+    const plainTitle = `### 文件：${f.relPath}`
+    const plainOverhead = plainTitle.length + 9 + separatorChars
+    const remaining = budgetChars - warningReserve - renderedChars - plainOverhead
+    if (remaining < 0) {
+      contentTruncated = true
+      continue
+    }
+    const truncatedTitle = `### 文件：${f.relPath}（内容过长已截断）`
+    const truncatedOverhead = truncatedTitle.length + 9 + separatorChars
+    const availableWithNotice = budgetChars - warningReserve - renderedChars - truncatedOverhead
+    const contentMarker = '…（内容已截断）'
     contentReadSummary.attemptedReads++
+    let rawContent: string
     try {
       rawContent = await readProjectContent(sourceScan, f)
     } catch (error) {
@@ -178,13 +198,18 @@ async function pickFiles(
     }
     contentReadSummary.successfulReads++
 
-    // Do not catch redaction failures: only ordinary content-read failures are recoverable.
+    // Redact before applying the budget: placeholders must be the only form
+    // of matched secrets that can enter ContextFile, batches, or renderBatch.
     const redaction = redactSensitiveContent(rawContent)
     const content = redaction.content
-    const remaining = budgetChars - headerReserve - used
-    if (remaining <= 0) break
     const truncated = content.length > remaining
-    const selectedContent = truncated ? content.slice(0, remaining) : content
+    if (truncated && availableWithNotice < contentMarker.length) {
+      contentTruncated = true
+      continue
+    }
+    const selectedContent = truncated
+      ? safeClipText(content, availableWithNotice, contentMarker)
+      : content
     out.push({
       relPath: f.relPath,
       content: selectedContent,
@@ -192,7 +217,8 @@ async function pickFiles(
       redacted: redaction.totalMatches > 0,
       redactionMatches: redaction.totalMatches
     })
-    used += selectedContent.length
+    renderedChars += (truncated ? truncatedOverhead : plainOverhead) + selectedContent.length
+    contentTruncated ||= truncated
     if (redaction.totalMatches > 0) {
       contentSecurity.redactedFiles++
       contentSecurity.redactionMatches += redaction.totalMatches
@@ -201,9 +227,12 @@ async function pickFiles(
           (contentSecurity.matchesByCategory[match.category] ?? 0) + match.count
       }
     }
-    if (truncated) break
+    if (truncated) {
+      if (index < candidates.length - 1) contentTruncated = true
+      break
+    }
   }
-  return { files: out, contentSecurity }
+  return { files: out, contentSecurity, contentTruncated }
 }
 
 /** 模块体量估计：文件数与内容量（按单文件上限截断，避免个别大文件垄断权重） */
@@ -217,18 +246,21 @@ function moduleMass(files: readonly ScannedFile[]): { fileCount: number; content
 
 export async function buildContext(scan: ScanResult, granularity: Granularity): Promise<BuiltContext> {
   if (!isProjectContentReadable(scan)) throw new ProjectContentBoundaryError()
-  let policyRoot: string | undefined
+  let policyRoot: string
   try {
     policyRoot = (await resolveProjectIdentity(scan.root)).realPath
   } catch {
     throw new Error('无法安全解析所选项目路径，已停止分析')
   }
   const protectedRoot = Boolean(scan.tree.modelExcluded || classifySensitivePath('__project_root__', policyRoot))
-  const treeText = treeToText(scan.tree, 4000, policyRoot)
-  const safeFiles = protectedRoot
-    ? []
-    : scan.files.filter((file) => !classifySensitivePath(file.relPath, policyRoot ?? ''))
+  const tree = renderBoundedTree(scan.tree, 4000, treeCharBudget(granularity), policyRoot)
+  const safeFiles = protectedRoot ? [] : scan.files.filter((file) => !classifySensitivePath(file.relPath, policyRoot))
   const safeScan = safeFiles.length === scan.files.length ? scan : { ...scan, files: safeFiles }
+  const contextTruncation: ContextTruncationMetadata = {
+    treeTruncated: tree.truncated,
+    contentTruncated: false,
+    requestTruncated: false
+  }
   const langText = scan.languages.length
     ? scan.languages.map((l) => `${l.lang} ${l.percent}%`).join('、')
     : '未识别出常见编程语言'
@@ -249,44 +281,89 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     '```'
   )
   let headerText = headerLines.join('\n')
-
+  const contextWarning = `⚠️ ${CONTEXT_TRUNCATION_WARNING}请基于实际提供的内容作答，不要假设已看到省略内容。`
+  if (contextTruncation.treeTruncated) {
+    headerText = headerText.replace('\n\n## 项目文件树', `\n\n${contextWarning}\n\n## 项目文件树`)
+  }
+  const warningReserve = CONTENT_READ_WARNING_RESERVE + (contextTruncation.treeTruncated ? 0 : contextWarning.length + 4)
+  const render = (batch: ContextBatch): string => renderBatch(headerText, tree.text, batch)
+  const setTotalChars = (batch: ContextBatch): void => { batch.totalChars = render(batch).length }
+  const addContextWarning = (): void => {
+    if (!contextTruncation.treeTruncated && !contextTruncation.contentTruncated) return
+    if (headerText.includes(contextWarning)) return
+    headerText = headerText.replace(
+      '\n\n## 项目文件树',
+      `\n\n${contextWarning}\n\n## 项目文件树`
+    )
+  }
   const batches: ContextBatch[] = []
   const contentSecurity = emptyContentSecurity()
   const contentReadSummary = emptyContentReadSummary()
 
   if (granularity !== 'fine') {
-    const picked = await pickFiles(safeScan, granularity, BUDGET_CHARS[granularity], contentReadSummary, scan)
+    const picked = await pickFiles(
+      safeScan,
+      granularity,
+      CONTEXT_CHAR_BUDGETS[granularity],
+      contentReadSummary,
+      headerText,
+      tree.text,
+      warningReserve,
+      scan
+    )
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
-    batches.push({
+    contextTruncation.contentTruncated = picked.contentTruncated
+    addContextWarning()
+    const batch: ContextBatch = {
       label: granularity === 'coarse' ? '项目整体分析' : '项目整体与核心模块分析',
       files,
-      totalChars: files.reduce((a, f) => a + f.content.length, 0),
+      totalChars: 0,
       kind: 'global',
       // 单批即全部：权重恒为 1，配额必然等于该颗粒度的总题量目标
       weight: 1
-    })
+    }
+    batches.push(batch)
     if (contentReadSummary.attemptedReads > 0 && contentReadSummary.successfulReads === 0 && contentReadSummary.failedReads > 0) {
       throw new Error(CONTENT_READ_MESSAGES.allFailed)
     }
     const readWarning = contentReadWarning(contentReadSummary)
     if (readWarning) headerText = `${headerText}\n\n${readWarning}`
-    return { headerText, treeText, batches, contentSecurity, contentReadSummary, moduleCount: 0 }
+    setTotalChars(batch)
+    return {
+      headerText,
+      treeText: tree.text,
+      contextTruncation,
+      batches,
+      contentSecurity,
+      contentReadSummary,
+      moduleCount: 0
+    }
   }
 
   // 细粒度：全局批（文档+配置）+ 各模块批（按顶层目录分组）
   // 全局批与模块批分别代表实际请求；同一文件若出现在多个批次，按请求次数分别计数。
-  const globalPicked = await pickFiles(safeScan, 'coarse', BUDGET_CHARS.fine, contentReadSummary, scan)
+  const globalPicked = await pickFiles(
+    safeScan,
+    'coarse',
+    CONTEXT_CHAR_BUDGETS.fine,
+    contentReadSummary,
+    headerText,
+    tree.text,
+    warningReserve,
+    scan
+  )
   addContentSecurity(contentSecurity, globalPicked.contentSecurity)
   const globalFiles = globalPicked.files
   const globalBatch: ContextBatch = {
     label: '全局概览（架构与选型）',
     files: globalFiles,
-    totalChars: globalFiles.reduce((a, f) => a + f.content.length, 0),
+    totalChars: 0,
     kind: 'global',
     weight: 1 // 占位，下面按模块体量定稿
   }
   batches.push(globalBatch)
+  contextTruncation.contentTruncated = globalPicked.contentTruncated
 
   const groups = new Map<string, ScannedFile[]>()
   for (const f of safeScan.files) {
@@ -309,10 +386,23 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const MAX_MODULE_BATCHES = 10
   let moduleBatches = 0
   for (const { group, groupFiles, mass } of sortedGroups) {
-    if (moduleBatches >= MAX_MODULE_BATCHES) break
+    if (moduleBatches >= MAX_MODULE_BATCHES) {
+      // The batch cap omits remaining modules just like per-file clipping omits content.
+      contextTruncation.contentTruncated = true
+      break
+    }
     // 复用 pickFiles 的打分与预算逻辑：构造仅含该模块的临时 ScanResult 子集
-    const subScan: ScanResult = { ...scan, files: groupFiles }
-    const picked = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine, contentReadSummary, scan)
+    const subScan: ScanResult = { ...safeScan, files: groupFiles }
+    const picked = await pickFiles(
+      subScan,
+      'fine',
+      CONTEXT_CHAR_BUDGETS.fine,
+      contentReadSummary,
+      headerText,
+      tree.text,
+      warningReserve,
+      scan
+    )
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
     if (!files.length) continue
@@ -320,10 +410,11 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     batches.push({
       label: `模块「${group}」`,
       files,
-      totalChars: files.reduce((a, f) => a + f.content.length, 0),
+      totalChars: 0,
       kind: 'module',
       weight: batchWeight(mass.fileCount, mass.contentBytes)
     })
+    contextTruncation.contentTruncated ||= picked.contentTruncated
   }
 
   // 全局批权重 = 模块批数量，这样全局批的按比例份额与"所有模块加起来"相当，
@@ -334,12 +425,23 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   // 所以 MIN_GLOBAL_WEIGHT 只在 0 个模块的退化分支里作为语义常量使用。
   globalBatch.weight = moduleBatches === 0 ? MIN_GLOBAL_WEIGHT : moduleBatches
 
+  addContextWarning()
   if (contentReadSummary.attemptedReads > 0 && contentReadSummary.successfulReads === 0 && contentReadSummary.failedReads > 0) {
     throw new Error(CONTENT_READ_MESSAGES.allFailed)
   }
   const readWarning = contentReadWarning(contentReadSummary)
   if (readWarning) headerText = `${headerText}\n\n${readWarning}`
-  return { headerText, treeText, batches, contentSecurity, contentReadSummary, moduleCount: moduleBatches }
+  for (const batch of batches) setTotalChars(batch)
+
+  return {
+    headerText,
+    treeText: tree.text,
+    contextTruncation,
+    batches,
+    contentSecurity,
+    contentReadSummary,
+    moduleCount: moduleBatches
+  }
 }
 
 /** 把批次渲染为完整的用户消息文本 */
@@ -349,4 +451,48 @@ export function renderBatch(headerText: string, treeText: string, batch: Context
     [`### 文件：${f.relPath}${f.truncated ? '（内容过长已截断）' : ''}`, '```', f.content, '```'].join('\n')
   )
   return [header, '', '## 文件内容', ...parts].join('\n')
+}
+
+/** Fit prompt overhead by clipping/removing whole file entries while keeping Markdown fences balanced. */
+export function renderBatchWithinBudget(
+  headerText: string,
+  treeText: string,
+  batch: ContextBatch,
+  maxChars: number,
+  requestTruncationMarker = ''
+): { text: string; truncated: boolean } {
+  const text = renderBatch(headerText, treeText, batch)
+  if (text.length <= maxChars) return { text, truncated: false }
+  const outputBudget = maxChars - requestTruncationMarker.length
+  const base = renderBatch(headerText, treeText, { ...batch, files: [] })
+  if (outputBudget < 0 || base.length > outputBudget) throw new Error('模型请求固定上下文超出支持范围。')
+
+  const files: ContextFile[] = []
+  let renderedChars = base.length
+  let truncated = false
+  for (let index = 0; index < batch.files.length; index++) {
+    const file = batch.files[index]
+    const separator = 1
+    const plainTitle = `### 文件：${file.relPath}${file.truncated ? '（内容过长已截断）' : ''}`
+    const plainCost = separator + plainTitle.length + 9 + file.content.length
+    if (renderedChars + plainCost <= outputBudget) {
+      files.push(file)
+      renderedChars += plainCost
+      continue
+    }
+
+    const clippedTitle = `### 文件：${file.relPath}（内容过长已截断）`
+    const clipMarker = '…（内容已截断）'
+    const contentAllowance = outputBudget - renderedChars - separator - clippedTitle.length - 9
+    if (contentAllowance >= clipMarker.length) {
+      const content = safeClipText(file.content, contentAllowance, clipMarker)
+      files.push({ ...file, content, truncated: true })
+      renderedChars += separator + clippedTitle.length + 9 + content.length
+    }
+    truncated = true
+    break
+  }
+  if (files.length < batch.files.length) truncated = true
+  const rendered = renderBatch(headerText, treeText, { ...batch, files })
+  return { text: `${rendered}${requestTruncationMarker}`, truncated: truncated || files.length < batch.files.length }
 }

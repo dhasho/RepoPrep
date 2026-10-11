@@ -1,3 +1,4 @@
+// Render the actual ResultPage bundle so both warning paths are covered on the result/history UI path.
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import test from 'node:test'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
@@ -12,6 +13,7 @@ import type { InterviewResult, Settings } from '../../shared/types.ts'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const bundlePath = path.resolve(here, '..', '..', '.render-test', 'result-page.cjs')
+const contextWarning = '部分项目信息未参与分析，结果可能遗漏相关内容。'
 
 type ResultPageProps = {
   result: InterviewResult
@@ -66,7 +68,21 @@ async function render(result: InterviewResult): Promise<string> {
   }
 }
 
-test('真实 ResultPage 持续显示读取失败原因、相对路径和样本省略次数', async () => {
+test('真实 ResultPage 显示截断提示，普通结果和缺省元数据的旧结果不显示', async () => {
+  const truncated = await render(makeResult({
+    contextTruncation: { treeTruncated: true, contentTruncated: false, requestTruncated: false }
+  }))
+  assert.ok(truncated.includes(contextWarning), 'truncated results show the shared static warning')
+
+  const ordinary = await render(makeResult())
+  assert.ok(!ordinary.includes(contextWarning), 'ordinary results do not show a truncation warning')
+
+  const legacyResult = makeResult()
+  delete legacyResult.contextTruncation
+  assert.ok(!(await render(legacyResult)).includes(contextWarning), 'legacy results without metadata do not show a warning')
+})
+
+test('真实 ResultPage 显示读取失败原因、相对路径和样本省略次数', async () => {
   const html = await render(makeResult({
     contentReadSummary: {
       attemptedReads: 4,
@@ -88,7 +104,20 @@ test('真实 ResultPage 持续显示读取失败原因、相对路径和样本�
   assert.ok(!html.includes('C:\\synthetic'), 'project absolute path is not exposed in the warning')
 })
 
-test('真实 ResultPage 对正常结果和缺省元数据的旧结果不显示读取警告', async () => {
+test('真实 ResultPage 可同时显示两类警告，正常结果与旧结果不会误报', async () => {
+  const both = await render(makeResult({
+    contextTruncation: { treeTruncated: false, contentTruncated: true, requestTruncated: false },
+    contentReadSummary: {
+      attemptedReads: 2,
+      successfulReads: 1,
+      failedReads: 1,
+      failuresByReason: { permission: 1, missing: 0, io: 0 },
+      failures: [{ path: 'src/denied.ts', reason: 'permission' }]
+    }
+  }))
+  assert.ok(both.includes(contextWarning))
+  assert.ok(both.includes('内容读取不完整'))
+
   const normal = await render(makeResult({
     contentReadSummary: {
       attemptedReads: 1,
@@ -98,7 +127,10 @@ test('真实 ResultPage 对正常结果和缺省元数据的旧结果不显示�
       failures: []
     }
   }))
-  const old = await render(makeResult())
   assert.ok(!normal.includes('内容读取不完整'))
+  assert.ok(!normal.includes(contextWarning))
+
+  const old = await render(makeResult())
   assert.ok(!old.includes('内容读取不完整'))
+  assert.ok(!old.includes(contextWarning))
 })
