@@ -52,6 +52,57 @@ test('redacts PEM, provider tokens, JWT, bearer and connection credentials', () 
   assert.equal(repeated.totalMatches, 0, 'existing connection placeholders must not count as new replacements')
 })
 
+test('redacts non-empty URI passwords with empty usernames and preserves URI boundaries', () => {
+  const source = [
+    'redis://:FAKE_EMPTY_USER_REDIS_PASSWORD@cache.invalid:6379/0?keep=redis-query-value',
+    'rediss://:FAKE_EMPTY_USER_TLS_PASSWORD@cache.invalid:6380/1#keep-fragment',
+    'postgres://named-user:FAKE_NAMED_USER_GENERIC_PASSWORD@db.invalid/app?keep=generic-query',
+    'redis://encoded%3Auser:FAKE%40%3A%2F_ENCODED_PASSWORD@cache.invalid/path%40name?keep=query',
+    'redis://:@cache.invalid/path',
+    'redis://user:@cache.invalid/path',
+    'redis://user@cache.invalid/path',
+    'redis://cache.invalid:6379/0',
+    'redis://[2001:db8::1]:6379/0'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+
+  assert.equal(result.totalMatches, 4)
+  assert.deepEqual(result.matches, [{ category: 'connection-string', count: 4 }])
+  for (const secret of [
+    'FAKE_EMPTY_USER_REDIS_PASSWORD',
+    'FAKE_EMPTY_USER_TLS_PASSWORD',
+    'FAKE_NAMED_USER_GENERIC_PASSWORD',
+    'FAKE%40%3A%2F_ENCODED_PASSWORD'
+  ]) {
+    assert.doesNotMatch(result.content, new RegExp(secret))
+  }
+  assert.match(result.content, /redis:\/\/:\[REDACTED:connection-string\]@cache\.invalid:6379\/0\?keep=redis-query-value/)
+  assert.match(result.content, /rediss:\/\/:\[REDACTED:connection-string\]@cache\.invalid:6380\/1#keep-fragment/)
+  assert.match(result.content, /postgres:\/\/named-user:\[REDACTED:connection-string\]@db\.invalid\/app\?keep=generic-query/)
+  assert.match(result.content, /redis:\/\/encoded%3Auser:\[REDACTED:connection-string\]@cache\.invalid\/path%40name\?keep=query/)
+  assert.match(result.content, /redis:\/\/:@cache\.invalid\/path/)
+  assert.match(result.content, /redis:\/\/user:@cache\.invalid\/path/)
+  assert.match(result.content, /redis:\/\/user@cache\.invalid\/path/)
+  assert.match(result.content, /redis:\/\/cache\.invalid:6379\/0/)
+  assert.match(result.content, /redis:\/\/\[2001:db8::1\]:6379\/0/)
+
+  const repeated = redactSensitiveContent(result.content)
+  assert.equal(repeated.content, result.content)
+  assert.equal(repeated.totalMatches, 0)
+})
+
+test('URI credential scanning stays usable on large values and finds multiple credentials', () => {
+  const filler = 'ordinary-value-'.repeat(20_000)
+  const source = `${filler}\nredis://:FAKE_LARGE_EMPTY_USER_PASSWORD@cache.invalid/0\nrediss://user:FAKE_LARGE_NAMED_USER_PASSWORD@cache.invalid/1`
+  const result = redactSensitiveContent(source)
+
+  assert.equal(result.totalMatches, 2)
+  assert.deepEqual(result.matches, [{ category: 'connection-string', count: 2 }])
+  assert.ok(result.content.startsWith(filler))
+  assert.doesNotMatch(result.content, /FAKE_LARGE_EMPTY_USER_PASSWORD|FAKE_LARGE_NAMED_USER_PASSWORD/)
+  assert.equal(redactSensitiveContent(result.content).totalMatches, 0)
+})
+
 test('redacts assignment values while retaining key names and CRLF', () => {
   const result = redactSensitiveContent('API_KEY="abc123secret"\r\npassword: p@ssw0rd\r\nconst token: string = "safe type declaration"\r\n')
   assert.equal(result.totalMatches, 2)

@@ -719,9 +719,8 @@ function redactConnectionCredentials(source: string): { content: string; count: 
     }
     if (character === ':' && schemeStart >= 0 && schemeHasValidStart && source[index + 1] === '/' && source[index + 2] === '/') {
       let cursor = index + 3
-      const usernameStart = cursor
       while (cursor < source.length && !/[\s/@:]/.test(source[cursor])) cursor++
-      if (cursor > usernameStart && source[cursor] === ':') {
+      if (source[cursor] === ':') {
         const passwordStart = ++cursor
         while (cursor < source.length && !/[\s/@]/.test(source[cursor])) cursor++
         if (cursor > passwordStart && source[cursor] === '@' && source.slice(passwordStart, cursor) !== '[REDACTED:connection-string]') {
