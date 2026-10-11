@@ -9,6 +9,8 @@ import path from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { fileURLToPath } from 'node:url'
+// @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
+import * as sharedTypes from '../../shared/types.ts'
 
 const fixtureRoots: string[] = []
 after(async () => {
@@ -28,10 +30,10 @@ async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) =
   await fs.mkdir(userData)
   const here = path.dirname(fileURLToPath(import.meta.url))
   const contractPath = path.resolve(here, '..', '..', 'shared', 'result-contract.ts')
+  const contentReadPath = path.resolve(here, '..', '..', 'shared', 'content-read.ts')
   const storePath = path.resolve(here, 'store.ts')
   const options = { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }
-  const contractCode = ts.transpileModule(await fs.readFile(contractPath, 'utf8'), options).outputText
-  const contractModule = { exports: {} as Record<string, unknown> }
+  const contentReadCode = ts.transpileModule(await fs.readFile(contentReadPath, 'utf8'), options).outputText
   const nativeRequire = (await import('node:module')).createRequire(import.meta.url)
   const evalModule = (code: string, filename: string, suppliedRequire: (id: string) => unknown): Record<string, any> => {
     const module = { exports: {} as Record<string, any> }
@@ -39,15 +41,23 @@ async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) =
     wrapper(module.exports, suppliedRequire, module, filename, path.dirname(filename))
     return module.exports
   }
-  const contentReadPath = path.resolve(here, '..', '..', 'shared', 'content-read.ts')
-  const contentReadCode = ts.transpileModule(await fs.readFile(contentReadPath, 'utf8'), options).outputText
-  const contentReadModule = evalModule(contentReadCode, contentReadPath, (id) => nativeRequire(id))
+  const contentReadModule = evalModule(contentReadCode, contentReadPath, (id) => {
+    return nativeRequire(id)
+  })
+  const contractCode = ts.transpileModule(await fs.readFile(contractPath, 'utf8'), options).outputText
+  const contractModule = { exports: {} as Record<string, unknown> }
   Object.assign(contractModule.exports, evalModule(contractCode, contractPath, (id) => {
     if (id === './content-read.ts') return contentReadModule
     throw new Error(`unexpected contract dependency: ${id}`)
   }))
 
   const storeCode = ts.transpileModule(await fs.readFile(storePath, 'utf8'), options).outputText
+  const atomicPath = path.resolve(here, 'atomic-json.ts')
+  const atomicCode = ts.transpileModule(await fs.readFile(atomicPath, 'utf8'), options).outputText
+  const atomicModule = evalModule(atomicCode, atomicPath, nativeRequire)
+  const storageContractPath = path.resolve(here, '..', '..', 'shared', 'storage-contract.ts')
+  const storageContractCode = ts.transpileModule(await fs.readFile(storageContractPath, 'utf8'), options).outputText
+  const storageContractModule = evalModule(storageContractCode, storageContractPath, nativeRequire)
   const displayNamePath = path.resolve(here, 'project-display-name.ts')
   const displayNameCode = ts.transpileModule(await fs.readFile(displayNamePath, 'utf8'), options).outputText
   const displayNameModule = evalModule(displayNameCode, displayNamePath, (id) => nativeRequire(id))
@@ -56,7 +66,10 @@ async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) =
       assert.equal(name, 'userData')
       return userData
     } } }
+    if (id === '@shared/types') return sharedTypes
     if (id === '@shared/result-contract') return contractModule.exports
+    if (id === '@shared/storage-contract') return storageContractModule
+    if (id === './atomic-json') return atomicModule
     if (id === './project-display-name') return displayNameModule
     return nativeRequire(id)
   })
@@ -111,13 +124,18 @@ test('invalid save cannot overwrite prior result; invalid history is controlled 
 
   const invalidRaw = JSON.stringify({ ...valid, invalidExtra: 'legacy payload' }, null, 2)
   await fs.writeFile(file, invalidRaw, 'utf8')
-  assert.throws(() => store.loadResult(projectPath), /历史结果格式无效或超出支持范围，请重新生成。/)
+  assert.throws(() => store.loadResult(projectPath), /历史结果文件已损坏/)
+  assert.ok(store.getStorageDiagnostics().some((diagnostic: any) =>
+    diagnostic.kind === 'result' && diagnostic.projectPath === projectPath && diagnostic.problem === 'corrupt' && !diagnostic.canRecover
+  ))
   assert.equal(await fs.readFile(file, 'utf8'), invalidRaw, 'invalid history remains unmodified for controlled recovery')
 })
 
 test('legacy empty names adapt only at lexical filesystem roots without rewriting the stored bytes', async () => {
   const { store, userData } = await makeHarness()
   const projectPath = path.parse(path.resolve('.')).root
+  const [recent] = store.addRecentProject({ path: projectPath, name: '' })
+  assert.equal(recent.name, /^[A-Za-z]:[\\/]/.test(projectPath) ? `磁盘 ${projectPath[0].toUpperCase()}` : '文件系统根目录')
   const file = storedResultFile(userData, projectPath)
   await fs.mkdir(path.dirname(file), { recursive: true })
   const raw = JSON.stringify({ ...legacyAffectedResult(projectPath), projectName: '' }, null, 2)
@@ -131,7 +149,10 @@ test('legacy empty names adapt only at lexical filesystem roots without rewritin
 
   const invalidRootRaw = JSON.stringify({ ...legacyAffectedResult(projectPath), projectName: '', invalidExtra: true })
   await fs.writeFile(file, invalidRootRaw, 'utf8')
-  assert.throws(() => store.loadResult(projectPath), /历史结果格式无效/)
+  assert.throws(() => store.loadResult(projectPath), /历史结果文件已损坏/)
+  assert.ok(store.getStorageDiagnostics().some((diagnostic: any) =>
+    diagnostic.kind === 'result' && diagnostic.projectPath === projectPath && diagnostic.problem === 'corrupt' && !diagnostic.canRecover
+  ))
   assert.equal(await fs.readFile(file, 'utf8'), invalidRootRaw, 'legacy root adaptation must still reject other invalid fields')
 
   const invalidPaths = [path.join(projectPath, 'ordinary'), `${projectPath}folder${path.sep}..${path.sep}`]
@@ -140,7 +161,29 @@ test('legacy empty names adapt only at lexical filesystem roots without rewritin
     const invalidFile = storedResultFile(userData, invalidPath)
     const invalidRaw = JSON.stringify({ ...legacyAffectedResult(invalidPath), projectName: '' }, null, 2)
     await fs.writeFile(invalidFile, invalidRaw, 'utf8')
-    assert.throws(() => store.loadResult(invalidPath), /历史结果格式无效/)
+    assert.throws(() => store.loadResult(invalidPath), /历史结果文件已损坏/)
+    assert.ok(store.getStorageDiagnostics().some((diagnostic: any) =>
+      diagnostic.kind === 'result' && diagnostic.projectPath === invalidPath && diagnostic.problem === 'corrupt' && !diagnostic.canRecover
+    ))
     assert.equal(await fs.readFile(invalidFile, 'utf8'), invalidRaw)
   }
+})
+
+test('legacy empty root name in a backup stays loadable and recoverable without rewriting backup bytes', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.parse(path.resolve('.')).root
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const backupRaw = JSON.stringify({ ...legacyAffectedResult(projectPath), projectName: '' }, null, 2)
+  await fs.writeFile(`${file}.bak`, backupRaw, 'utf8')
+  await fs.writeFile(file, '{ broken', 'utf8')
+
+  const loaded = store.loadResult(projectPath)
+  assert.notEqual(loaded.projectName, '')
+  assert.equal(await fs.readFile(`${file}.bak`, 'utf8'), backupRaw)
+  const [diagnostic] = store.getStorageDiagnostics()
+  assert.equal(diagnostic.usingBackup, true)
+  store.recoverStorage(diagnostic.id)
+  assert.equal(await fs.readFile(file, 'utf8'), backupRaw, 'recovery copies the validated historical bytes unchanged')
+  assert.notEqual(store.loadResult(projectPath).projectName, '')
 })

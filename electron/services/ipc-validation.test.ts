@@ -28,6 +28,7 @@ test('每个 invoke 通道全部登记且各自接受合法参数形状', () => 
     [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
     [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
     [IPC.explainCancel, [requestId]], [IPC.settingsGet, []], [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]],
+    [IPC.storageDiagnostics, []], [IPC.storageRecover, [`result:${'a'.repeat(40)}`]],
     [IPC.llmTest, [profile]], [IPC.llmListModels, [profile]], [IPC.exportMarkdown, [result]]
   ])
   for (const channel of INVOKE_CHANNELS) {
@@ -155,6 +156,20 @@ test('导出时间必须有效，项目名不能成为路径或携带控制字�
   rejects(IPC.exportMarkdown, [{ ...result, createdAt: 'not-a-date' }])
   rejects(IPC.exportMarkdown, [{ ...result, projectName: '..\\outside' }])
   rejects(IPC.exportMarkdown, [{ ...result, projectName: 'demo\nname' }])
+})
+
+test('存储诊断与恢复 IPC 只接受固定诊断 ID，不接受路径或额外参数', () => {
+  assert.doesNotThrow(() => validateIpcArgs(IPC.storageDiagnostics, []))
+  for (const id of ['settings', 'recent', `result:${'0'.repeat(40)}`]) {
+    assert.doesNotThrow(() => validateIpcArgs(IPC.storageRecover, [id]))
+  }
+  for (const id of [
+    '', 'C:\\Users\\me\\settings.json', 'result:ABC', `result:${'a'.repeat(39)}`,
+    `result:${'g'.repeat(40)}`, 'result:../settings', 'settings.json', null, { id: 'settings' }
+  ]) rejects(IPC.storageRecover, id)
+  rejects(IPC.storageDiagnostics, 'extra')
+  rejects(IPC.storageRecover)
+  rejects(IPC.storageRecover, 'settings', 'extra')
 })
 
 test('InterviewResult 所有对象闭合，兼容旧结果与新增 security 摘要', () => {

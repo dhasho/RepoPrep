@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { GenerateOptions, InterviewResult, ProjectOverview, Settings } from '@shared/types'
 import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { api } from './lib/ipc'
 import { GenerationSession, type GenerationTask } from './lib/generation-session'
 import SelectPage from './pages/SelectPage'
@@ -30,6 +31,28 @@ function isInvalidHistoryLoadError(error: unknown): boolean {
   return new RegExp(`(?:^|: )(?:Error: )?${escaped}$`).test(message)
 }
 
+function isCorruptHistoryLoadError(error: unknown): boolean {
+  const escaped = STORAGE_MESSAGES.corruptResult.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|: )(?:Error: )?${escaped}$`).test(errorMessage(error))
+}
+
+function projectName(path: string | undefined): string {
+  if (!path) return '历史项目'
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] ?? '历史项目'
+}
+
+function storageProblemMessage(diagnostic: StorageDiagnostic): string {
+  if (diagnostic.kind === 'result') {
+    if (diagnostic.problem === 'corrupt') return STORAGE_MESSAGES.corruptResult
+    if (diagnostic.problem === 'missing') return '历史结果文件缺失。'
+    return STORAGE_MESSAGES.unreadableResult
+  }
+  const subject = diagnostic.kind === 'settings' ? '设置' : '最近项目列表'
+  if (diagnostic.problem === 'corrupt') return `${subject}文件已损坏。`
+  if (diagnostic.problem === 'missing') return `${subject}文件缺失。`
+  return `${subject}文件暂时无法读取，请检查权限后重试。`
+}
 export default function App() {
   const [view, setView] = useState<View>('select')
   const viewRef = useRef(view)
@@ -50,6 +73,13 @@ export default function App() {
   const [configureRevision, setConfigureRevision] = useState(0)
   const [historyRecovery, setHistoryRecovery] = useState<HistoryRecoveryState | null>(null)
   const historyRecoveryAttempt = useRef<number | null>(null)
+  const [storageDiagnostics, setStorageDiagnostics] = useState<StorageDiagnostic[]>([])
+  const [storageRecovery, setStorageRecovery] = useState<{ id: string; error: string } | null>(null)
+  const [recoveringStorageId, setRecoveringStorageId] = useState<string | null>(null)
+  const recoveryLock = useRef(false)
+  const [selectPageRevision, setSelectPageRevision] = useState(0)
+  const diagnosticsRequest = useRef(0)
+  const mounted = useRef(false)
 
   const session = useMemo(() => new GenerationSession(api), [])
   const sessionSnapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
@@ -61,19 +91,32 @@ export default function App() {
     : null
   const backgroundTasks = sessionSnapshot.tasks.filter((task) => task.mode === 'background')
 
-  const refreshSettings = useCallback(() => {
-    api.getSettings().then(setSettings).catch(() => undefined)
+  const refreshStorageDiagnostics = useCallback(() => {
+    const request = ++diagnosticsRequest.current
+    void api.getStorageDiagnostics().then((items) => {
+      if (mounted.current && request === diagnosticsRequest.current) setStorageDiagnostics(items)
+    }).catch(() => undefined)
   }, [])
 
+  const refreshSettings = useCallback(() => {
+    api.getSettings().then((next) => {
+      if (mounted.current) setSettings(next)
+    }).catch(() => undefined).finally(refreshStorageDiagnostics)
+  }, [refreshStorageDiagnostics])
+
   useEffect(() => {
+    mounted.current = true
     session.activate()
     refreshSettings()
+    refreshStorageDiagnostics()
     const off = api.onGenerateProgress((progress) => session.receiveProgress(progress))
     return () => {
+      mounted.current = false
+      diagnosticsRequest.current++
       off()
       session.dispose()
     }
-  }, [refreshSettings, session])
+  }, [refreshSettings, refreshStorageDiagnostics, session])
 
   // Only the current foreground task may navigate on settlement. Detached tasks keep
   // their result in the session history and never replace the visible project/result.
@@ -187,11 +230,13 @@ export default function App() {
     let notice: string | null = null
     try {
       nextResult = await api.loadResult(nextOverview.storagePath ?? path)
+      refreshStorageDiagnostics()
     } catch (error) {
+      refreshStorageDiagnostics()
       if (ticket !== navigationEpoch.current) return
-      if (!isInvalidHistoryLoadError(error)) throw error
+      if (!isInvalidHistoryLoadError(error) && !isCorruptHistoryLoadError(error)) throw error
       nextResult = null
-      notice = RESULT_CONTRACT_MESSAGES.history
+      notice = isCorruptHistoryLoadError(error) ? STORAGE_MESSAGES.corruptResult : RESULT_CONTRACT_MESSAGES.history
     }
     if (ticket !== navigationEpoch.current) return
     setOverview(nextOverview)
@@ -202,7 +247,43 @@ export default function App() {
     setConfigureRevision((revision) => revision + 1)
     setHistoryRecovery(null)
     setView('configure')
-  }, [])
+  }, [refreshStorageDiagnostics])
+
+  const recoverStorage = async (diagnostic: StorageDiagnostic) => {
+    if (!diagnostic.canRecover || recoveryLock.current) return
+    recoveryLock.current = true
+    const ticket = navigationEpoch.current
+    setRecoveringStorageId(diagnostic.id)
+    setStorageRecovery(null)
+    try {
+      await api.recoverStorage(diagnostic.id)
+      refreshStorageDiagnostics()
+      if (diagnostic.kind === 'settings') refreshSettings()
+      if (mounted.current && ticket === navigationEpoch.current && viewRef.current === 'select' && (diagnostic.kind === 'recent' || diagnostic.kind === 'result')) {
+        setSelectPageRevision((revision) => revision + 1)
+      }
+      if (
+        diagnostic.kind === 'result' && diagnostic.projectPath && mounted.current &&
+        ticket === navigationEpoch.current && viewRef.current === 'result' && resultStoragePath === diagnostic.projectPath
+      ) {
+        try {
+          const recoveredResult = await api.loadResult(diagnostic.projectPath)
+          if (mounted.current && ticket === navigationEpoch.current && viewRef.current === 'result' && resultStoragePath === diagnostic.projectPath && recoveredResult) {
+            setResult(recoveredResult)
+            setResultStoragePath(diagnostic.projectPath)
+          }
+        } catch {
+          refreshStorageDiagnostics()
+        }
+      }
+    } catch {
+      if (mounted.current) setStorageRecovery({ id: diagnostic.id, error: STORAGE_MESSAGES.restoreFailed })
+      refreshStorageDiagnostics()
+    } finally {
+      recoveryLock.current = false
+      if (mounted.current) setRecoveringStorageId(null)
+    }
+  }
 
   const startGenerate = useCallback((options: GenerateOptions) => {
     if (!overview) return
@@ -365,6 +446,7 @@ export default function App() {
   const busyForConfigure = activeTask && (activeTask.status === 'running' || activeTask.status === 'cancelling')
     ? { projectName: activeTask.overview.name, runId: activeTask.runId, cancelling: activeTask.status === 'cancelling' }
     : null
+  const visibleStorageDiagnostics = storageDiagnostics.filter((item) => item.problem !== 'missing' || item.usingBackup || item.canRecover)
 
   return (
     <div className="flex h-full flex-col">
@@ -391,70 +473,96 @@ export default function App() {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1">
-        {view === 'select' && (
-          <SelectPage settings={settings} openProject={openProject} viewExisting={viewExisting} openSettings={() => requestNavigation({ kind: 'settings' })} />
+      <main className="flex min-h-0 flex-1 flex-col">
+        {visibleStorageDiagnostics.length > 0 && (
+          <section className="mx-auto max-h-32 w-full max-w-5xl shrink-0 space-y-2 overflow-y-auto px-4 pt-3" aria-label="存储状态">
+            {visibleStorageDiagnostics.map((diagnostic) => (
+              <div key={diagnostic.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+                <p className="min-w-0 flex-1">
+                  <span className="font-medium">{diagnostic.kind === 'result' ? projectName(diagnostic.projectPath) : diagnostic.kind === 'settings' ? '设置' : '最近项目列表'}：</span>
+                  {storageProblemMessage(diagnostic)}{diagnostic.usingBackup ? ' 当前正在使用最近的完整备份。' : ''}
+                </p>
+                {diagnostic.canRecover && (
+                  <button
+                    className="shrink-0 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 disabled:opacity-50"
+                    disabled={recoveringStorageId !== null}
+                    onClick={() => void recoverStorage(diagnostic)}
+                  >
+                    {recoveringStorageId === diagnostic.id ? '正在恢复…' : storageRecovery?.id === diagnostic.id ? '重试恢复备份' : '恢复最近完整备份'}
+                  </button>
+                )}
+                {storageRecovery?.id === diagnostic.id && (
+                  <span className="w-full text-xs text-rose-700" role="alert">{storageRecovery.error}</span>
+                )}
+              </div>
+            ))}
+          </section>
         )}
-        {view === 'configure' && overview && (
-          <ConfigurePage
-            key={`${overview.root}:${configureRevision}`}
-            overview={overview}
-            projectStoragePath={projectStoragePath ?? overview.root}
-            existingResult={existingResult}
-            settings={settings}
-            initialOptions={configureInitialOptions}
-            notice={configureNotice}
-            onStart={startGenerate}
-            onViewExisting={viewExisting}
-            busyTask={busyForConfigure}
-            onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
-          />
-        )}
-        {view === 'generating' && foregroundTask && (
-          <GeneratingPage
-            overview={foregroundTask.overview as ProjectOverview}
-            options={foregroundTask.options as GenerateOptions}
-            progress={foregroundTask.progress}
-            logs={foregroundTask.logs}
-            error={foregroundTask.error}
-            cancelling={foregroundTask.status === 'cancelling'}
-            onCancel={cancelGenerate}
-            onBack={() => {
-              setOverview(foregroundTask.overview as ProjectOverview)
-              setProjectStoragePath(foregroundTask.options.projectPath)
-              setExistingResult(foregroundTask.existingResult as InterviewResult | null)
-              setForegroundRunId(null)
-              setConfigureInitialOptions({
-                projectPath: foregroundTask.options.projectPath,
-                granularity: foregroundTask.options.granularity,
-                roleFocus: foregroundTask.options.roleFocus,
-                profileId: foregroundTask.options.profileId
-              })
-              setConfigureNotice(null)
-              setConfigureRevision((revision) => revision + 1)
-              navigationEpoch.current++
-              setView('configure')
-            }}
-          />
-        )}
-        {view === 'result' && result && (
-          <ResultPage
-            result={result}
-            settings={settings}
-            onRegenerate={() => beginHistoryRecovery(result, resultStoragePath ?? result.projectPath)}
-            regenerating={Boolean(historyRecovery)}
-          />
-        )}
-        {view === 'settings' && (
-          <SettingsPage
-            settings={settings}
-            onSaved={(next) => { setSettings(next); refreshSettings() }}
-            onBack={() => {
-              navigationEpoch.current++
-              setView(prevView === 'settings' ? 'select' : prevView)
-            }}
-          />
-        )}
+        <div className="min-h-0 flex-1 overflow-auto">
+          {view === 'select' && (
+            <SelectPage key={selectPageRevision} settings={settings} openProject={openProject} viewExisting={viewExisting} openSettings={() => requestNavigation({ kind: 'settings' })} onStorageRead={refreshStorageDiagnostics} storageDiagnostics={storageDiagnostics} />
+          )}
+          {view === 'configure' && overview && (
+            <ConfigurePage
+              key={`${overview.root}:${configureRevision}`}
+              overview={overview}
+              projectStoragePath={projectStoragePath ?? overview.root}
+              existingResult={existingResult}
+              settings={settings}
+              initialOptions={configureInitialOptions}
+              notice={configureNotice}
+              onStart={startGenerate}
+              onViewExisting={viewExisting}
+              busyTask={busyForConfigure}
+              onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
+            />
+          )}
+          {view === 'generating' && foregroundTask && (
+            <GeneratingPage
+              overview={foregroundTask.overview as ProjectOverview}
+              options={foregroundTask.options as GenerateOptions}
+              progress={foregroundTask.progress}
+              logs={foregroundTask.logs}
+              error={foregroundTask.error}
+              cancelling={foregroundTask.status === 'cancelling'}
+              onCancel={cancelGenerate}
+              onBack={() => {
+                setOverview(foregroundTask.overview as ProjectOverview)
+                setProjectStoragePath(foregroundTask.options.projectPath)
+                setExistingResult(foregroundTask.existingResult as InterviewResult | null)
+                setForegroundRunId(null)
+                setConfigureInitialOptions({
+                  projectPath: foregroundTask.options.projectPath,
+                  granularity: foregroundTask.options.granularity,
+                  roleFocus: foregroundTask.options.roleFocus,
+                  profileId: foregroundTask.options.profileId
+                })
+                setConfigureNotice(null)
+                setConfigureRevision((revision) => revision + 1)
+                navigationEpoch.current++
+                setView('configure')
+              }}
+            />
+          )}
+          {view === 'result' && result && (
+            <ResultPage
+              result={result}
+              settings={settings}
+              onRegenerate={() => beginHistoryRecovery(result, resultStoragePath ?? result.projectPath)}
+              regenerating={Boolean(historyRecovery)}
+            />
+          )}
+          {view === 'settings' && (
+            <SettingsPage
+              settings={settings}
+              onSaved={(next) => { setSettings(next); refreshSettings(); refreshStorageDiagnostics() }}
+              onBack={() => {
+                navigationEpoch.current++
+                setView(prevView === 'settings' ? 'select' : prevView)
+              }}
+            />
+          )}
+        </div>
       </main>
 
       {leaveTarget && foregroundTask && (

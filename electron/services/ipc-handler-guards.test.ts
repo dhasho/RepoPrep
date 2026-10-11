@@ -26,6 +26,7 @@ const inputs = new Map<string, unknown[]>([
   [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
   [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
   [IPC.explainCancel, [requestId]], [IPC.settingsGet, []],
+  [IPC.storageDiagnostics, []], [IPC.storageRecover, [`result:${'a'.repeat(40)}`]],
   [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]], [IPC.llmTest, [profile]],
   [IPC.llmListModels, [profile]], [IPC.exportMarkdown, [result]]
 ])
@@ -36,7 +37,16 @@ function context() {
   const event = { sender: contents, senderFrame: mainFrame }
   const projects = new AuthorizedProjectRegistry()
   projects.registerSelected('C:\\demo')
-  return { deps: { getExpectedWebContents: () => contents, getTrustedRendererUrl: () => 'http://localhost:5173/', projects }, event, projects }
+  return {
+    deps: {
+      getExpectedWebContents: () => contents,
+      getTrustedRendererUrl: () => 'http://localhost:5173/',
+      getStorageRecoveryProject: (id: string) => id === `result:${'a'.repeat(40)}` ? 'C:\\demo' : null,
+      projects
+    },
+    event,
+    projects
+  }
 }
 
 test('登记通道和白名单与实际 IPC invoke 常量完全一致', () => {
@@ -92,6 +102,24 @@ test('removeRecent authorizes the supplied alias but preserves the exact persist
   projects.registerSelected('c:/demo')
   const handler = createGuardedIpcHandler(IPC.removeRecent, deps, (_event, path) => path)
   assert.equal(await handler(event, 'C:\\Demo'), 'C:\\Demo')
+})
+
+test('result recovery requires a currently authorized project resolved from its diagnostic ID', async () => {
+  const allowed = context()
+  let received = ''
+  const handler = createGuardedIpcHandler(IPC.storageRecover, allowed.deps, (_event, id) => { received = id as string })
+  const id = `result:${'a'.repeat(40)}`
+  await handler(allowed.event, id)
+  assert.equal(received, id)
+
+  const denied = context()
+  let calls = 0
+  const deniedDeps = { ...denied.deps, getStorageRecoveryProject: () => null }
+  await assert.rejects(
+    createGuardedIpcHandler(IPC.storageRecover, deniedDeps, () => { calls++ })(denied.event, id),
+    /请求无效或未获授权/
+  )
+  assert.equal(calls, 0, 'revoked or unresolved result diagnostics must fail before the store is called')
 })
 
 test('所有通道拒绝非可信 sender，且拒绝发生在服务调用前', async () => {

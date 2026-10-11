@@ -6,6 +6,8 @@ import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
+import { isStorageDiagnosticId } from '../../shared/storage-contract.ts'
+// @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { assertInterviewResultContract, EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS, ResultContractError } from '../../shared/result-contract.ts'
 
 const messages = {
@@ -121,6 +123,8 @@ const validators: Record<string, Validator> = {
   [IPC.recentProjects]: (a) => exactArgs(a, 0),
   [IPC.generateCancel]: (a) => { exactArgs(a, 1); requestId(a[0]) },
   [IPC.settingsGet]: (a) => exactArgs(a, 0),
+  [IPC.storageDiagnostics]: (a) => exactArgs(a, 0),
+  [IPC.storageRecover]: (a) => { exactArgs(a, 1); if (!isStorageDiagnosticId(a[0])) fail() },
   [IPC.scanProject]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.removeRecent]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.loadResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },

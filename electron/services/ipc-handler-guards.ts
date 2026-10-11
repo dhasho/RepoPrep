@@ -10,6 +10,8 @@ import { IPC } from '../../shared/ipc.ts'
 import { RESULT_CONTRACT_MESSAGES } from '../../shared/result-contract.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { CONTENT_READ_MESSAGES } from '../../shared/content-read.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { STORAGE_MESSAGES } from '../../shared/storage-contract.ts'
 
 export type IpcHandler<E extends IpcEventLike = IpcEventLike> = (event: E, ...args: any[]) => unknown
 export interface IpcGuardDependencies {
@@ -20,6 +22,7 @@ export interface IpcGuardDependencies {
    */
   getTrustedRendererUrl: () => string | null
   projects: AuthorizedProjectRegistry
+  getStorageRecoveryProject?: (id: string) => string | null
 }
 
 const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.removeRecent])
@@ -39,6 +42,7 @@ const SAFE_BUSINESS_ERRORS = new Set([
   '未找到指定的大模型配置，请先到设置页完成配置',
   RESULT_CONTRACT_MESSAGES.generated,
   RESULT_CONTRACT_MESSAGES.history,
+  ...Object.values(STORAGE_MESSAGES),
   // 设置持久化失败（issue #15）：主进程按 errno 静态映射，不含路径等敏感细节
   '磁盘空间不足，无法保存设置。请清理磁盘空间后重试。',
   '没有写入权限，无法保存设置。请检查应用数据目录权限后重试。',
@@ -101,6 +105,10 @@ export function createGuardedIpcHandler<E extends IpcEventLike>(
       } else if (channel === IPC.exportMarkdown) {
         const result = rawArgs[0] as Record<string, unknown>
         args = [{ ...result, projectPath: deps.projects.requireAuthorized(result.projectPath as string) }]
+      } else if (channel === IPC.storageRecover && (rawArgs[0] as string).startsWith('result:')) {
+        const projectPath = deps.getStorageRecoveryProject?.(rawArgs[0] as string)
+        if (!projectPath) throw new Error('storage-recovery-project')
+        deps.projects.requireAuthorized(projectPath)
       }
 
       try {

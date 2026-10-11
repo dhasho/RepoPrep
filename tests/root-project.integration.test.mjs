@@ -93,22 +93,115 @@ function createVirtualFileSystem(platformPath, rootPath) {
   }
 }
 
-function createVirtualStoreFs() {
+function createVirtualStoreFs(platformPath = path) {
   const files = new Map()
+  const directories = new Set()
+  const descriptors = new Map()
+  let nextDescriptor = 1
+  const normalize = (filePath) => platformPath.normalize(filePath)
+  const missing = () => {
+    const error = new Error('virtual store file missing')
+    error.code = 'ENOENT'
+    return error
+  }
+  const stat = (entry) => ({
+    size: entry.bytes.length,
+    mtimeMs: entry.mtimeMs ?? 1,
+    isFile: () => true,
+    isDirectory: () => false
+  })
   return {
     files,
     fsSync: {
       readFileSync(filePath) {
-        if (!files.has(filePath)) {
-          const error = new Error('virtual store file missing')
-          error.code = 'ENOENT'
-          throw error
-        }
-        return files.get(filePath)
+        const entry = files.get(normalize(filePath))
+        if (!entry) throw missing()
+        return Buffer.from(entry.bytes)
       },
-      mkdirSync() {},
-      writeFileSync(filePath, value) { files.set(filePath, String(value)) },
-      rmSync(filePath) { files.delete(filePath) }
+      mkdirSync(filePath, options) {
+        const directory = normalize(filePath)
+        if (!options?.recursive && !directories.has(path.dirname(directory))) throw missing()
+        directories.add(directory)
+      },
+      openSync(filePath, flags) {
+        const target = normalize(filePath)
+        if (flags === 'r') {
+          const entry = files.get(target)
+          if (!entry) throw missing()
+          const descriptor = nextDescriptor++
+          descriptors.set(descriptor, { target, bytes: Buffer.from(entry.bytes), readable: true, writable: false })
+          return descriptor
+        }
+        if (flags === 'wx') {
+          if (files.has(target)) {
+            const error = new Error('virtual store file already exists')
+            error.code = 'EEXIST'
+            throw error
+          }
+          const descriptor = nextDescriptor++
+          descriptors.set(descriptor, { target, bytes: Buffer.alloc(0), readable: false, writable: true })
+          return descriptor
+        }
+        throw new Error(`unsupported virtual store open flags: ${flags}`)
+      },
+      fstatSync(descriptor) {
+        const opened = descriptors.get(descriptor)
+        if (!opened) throw new Error('invalid virtual descriptor')
+        return stat({ bytes: opened.bytes })
+      },
+      readSync(descriptor, buffer, offset, length, position) {
+        const opened = descriptors.get(descriptor)
+        if (!opened?.readable) throw new Error('virtual descriptor is not readable')
+        const bytesRead = opened.bytes.copy(buffer, offset, position, position + length)
+        return bytesRead
+      },
+      writeSync(descriptor, buffer, offset, length) {
+        const opened = descriptors.get(descriptor)
+        if (!opened?.writable) throw new Error('virtual descriptor is not writable')
+        const chunk = Buffer.isBuffer(buffer) ? buffer.subarray(offset, offset + length) : Buffer.from(buffer).subarray(offset, offset + length)
+        opened.bytes = Buffer.concat([opened.bytes, chunk])
+        return chunk.length
+      },
+      fsyncSync(descriptor) {
+        const opened = descriptors.get(descriptor)
+        if (!opened?.writable) throw new Error('virtual descriptor is not writable')
+        files.set(opened.target, { bytes: Buffer.from(opened.bytes), mtimeMs: Date.now() })
+      },
+      closeSync(descriptor) {
+        const opened = descriptors.get(descriptor)
+        if (!opened) throw new Error('invalid virtual descriptor')
+        if (opened.writable) files.set(opened.target, { bytes: Buffer.from(opened.bytes), mtimeMs: Date.now() })
+        descriptors.delete(descriptor)
+      },
+      renameSync(from, to) {
+        const source = normalize(from)
+        const destination = normalize(to)
+        const entry = files.get(source)
+        if (!entry) throw missing()
+        files.set(destination, { bytes: Buffer.from(entry.bytes), mtimeMs: Date.now() })
+        files.delete(source)
+      },
+      rmSync(filePath) { files.delete(normalize(filePath)) },
+      opendirSync(directory) {
+        const normalizedDirectory = normalize(directory)
+        if (!directories.has(normalizedDirectory)) throw missing()
+        const names = [...files.keys()]
+          .filter((filePath) => path.dirname(filePath) === normalizedDirectory)
+          .map((filePath) => path.basename(filePath))
+        let index = 0
+        return {
+          readSync() {
+            const name = names[index++]
+            return name ? { name, isFile: () => true } : null
+          },
+          closeSync() {}
+        }
+      },
+      lstatSync(filePath) {
+        const entry = files.get(normalize(filePath))
+        if (!entry) throw missing()
+        return stat(entry)
+      }
     }
   }
 }
@@ -196,7 +289,7 @@ function mockQuestionResponse() {
 
 async function exerciseRoot({ platform, platformPath, rootPath, expectedName }) {
   const virtualFs = createVirtualFileSystem(platformPath, platformPath.normalize(rootPath))
-  const virtualStore = createVirtualStoreFs()
+  const virtualStore = createVirtualStoreFs(platformPath)
   const loader = createSourceLoader({ platformPath, platform, virtualFs, virtualStore })
   const scanner = loader.loadModule(path.join(repoRoot, 'electron', 'services', 'scanner.ts'))
   const generator = loader.loadModule(path.join(repoRoot, 'electron', 'services', 'generator.ts'))
@@ -305,7 +398,7 @@ test('ordinary Windows project directory keeps its basename', async () => {
   const platformPath = path.win32
   const rootPath = 'C:\\demo'
   const virtualFs = createVirtualFileSystem(platformPath, rootPath)
-  const loader = createSourceLoader({ platformPath, platform: 'win32', virtualFs, virtualStore: createVirtualStoreFs() })
+  const loader = createSourceLoader({ platformPath, platform: 'win32', virtualFs, virtualStore: createVirtualStoreFs(platformPath) })
   const scanner = loader.loadModule(path.join(repoRoot, 'electron', 'services', 'scanner.ts'))
   const scan = await scanner.scanProject(rootPath)
   assert.equal(scan.name, 'demo')

@@ -16,7 +16,9 @@ import {
   deleteResult,
   getRecentProjects,
   getSettings,
+  getStorageDiagnostics,
   loadResult,
+  recoverStorage,
   removeRecentProject,
   saveResult,
   saveSettings
@@ -46,7 +48,11 @@ function handle(
     {
       getExpectedWebContents: () => mainWindow?.webContents ?? null,
       getTrustedRendererUrl: () => trustedAppEntryUrl,
-      projects: authorizedProjects
+      projects: authorizedProjects,
+      getStorageRecoveryProject: (id) => {
+        const diagnostic = getStorageDiagnostics().find((entry) => entry.id === id)
+        return diagnostic?.kind === 'result' ? diagnostic.projectPath ?? null : null
+      }
     },
     listener
   )
@@ -292,6 +298,23 @@ handle(IPC.explainCancel, (_e, requestId: string) => {
 // ---------- 设置与工具 ----------
 
 handle(IPC.settingsGet, () => getSettings())
+
+handle(IPC.storageDiagnostics, () => getStorageDiagnostics().filter((diagnostic) => {
+  if (diagnostic.kind !== 'result') return true
+  if (!diagnostic.projectPath) return false
+  try {
+    authorizedProjects.requireAuthorized(diagnostic.projectPath)
+    return true
+  } catch {
+    return false
+  }
+}))
+
+handle(IPC.storageRecover, (_e, id: string) => {
+  recoverStorage(id)
+  // Restored recent records affect the set of allowed history projects.
+  if (id === 'recent') authorizedProjects.registerRecent(getRecentProjects().map((project) => project.path))
+})
 
 /**
  * 把设置写盘失败的 errno 翻译成可操作、不含敏感信息（不含路径/密钥）的提示

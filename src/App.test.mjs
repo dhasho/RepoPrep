@@ -55,6 +55,8 @@ function makeApi({
   recent: initialRecent = [],
   savedResults: initialSavedResults = new Map(),
   loadFailures: initialLoadFailures = new Map(),
+  storageDiagnostics: initialStorageDiagnostics = [],
+  storageRecoveryFailures: initialStorageRecoveryFailures = new Map(),
   scanOverview,
   profiles = [{ id: 'profile-1', name: 'Mock', baseUrl: 'https://example.test/v1', apiKey: '', model: 'mock-model' }],
   defaultProfileId = profiles[0]?.id ?? null
@@ -67,6 +69,12 @@ function makeApi({
   const loads = []
   const removals = []
   const deletions = []
+  const storageRecoveries = []
+  let storageDiagnostics = [...initialStorageDiagnostics]
+  const storageRecoveryFailures = initialStorageRecoveryFailures instanceof Map
+    ? new Map(initialStorageRecoveryFailures)
+    : new Map(Object.entries(initialStorageRecoveryFailures))
+  const delayedStorageRecoveries = new Map()
   const listeners = new Set()
   const delayedScans = new Map()
   const delayedLoads = new Map()
@@ -137,6 +145,21 @@ function makeApi({
       profiles,
       defaultProfileId
     }),
+    getStorageDiagnostics: async () => [...storageDiagnostics],
+    recoverStorage: async (id) => {
+      storageRecoveries.push(id)
+      const failure = storageRecoveryFailures.get(id)
+      if (failure) {
+        storageRecoveryFailures.delete(id)
+        throw failure
+      }
+      const control = delayedStorageRecoveries.get(id)
+      if (control) {
+        delayedStorageRecoveries.delete(id)
+        await control.promise
+      }
+      storageDiagnostics = storageDiagnostics.filter((diagnostic) => diagnostic.id !== id)
+    },
     saveSettings: async () => {},
     testLlm: async () => ({ ok: true, message: 'ok' }),
     listModels: async () => ({ ok: true, models: [], message: 'ok' }),
@@ -185,6 +208,14 @@ function makeApi({
     },
     get selectCalls() { return selectCalls },
     get recentPaths() { return recent.map((project) => project.path) },
+    get storageDiagnostics() { return [...storageDiagnostics] },
+    get storageRecoveries() { return [...storageRecoveries] },
+    setStorageDiagnostics: (entries) => { storageDiagnostics = [...entries] },
+    delayStorageRecovery: (id, control = deferred()) => {
+      delayedStorageRecoveries.set(id, control)
+      cleanupControls.add(control)
+      return control
+    },
     emitProgress: (progress) => { for (const listener of listeners) listener(progress) },
     get listenerCount() { return listeners.size },
     get subscribeCount() { return subscribeCount },
@@ -1080,11 +1111,15 @@ test('an invalid recent result does not prevent a valid neighboring history resu
       lastUsedAt: '2026-10-10T00:00:00.000Z'
     })),
     savedResults: new Map([[validPath, makeResult(validPath)]]),
-    loadFailures: new Map([[invalidPath, new Error('历史结果格式无效或超出支持范围，请重新生成。')]])
+    loadFailures: new Map([[invalidPath, new Error('历史结果文件已损坏，原文件已保留。可恢复备份或重新生成。')]]),
+    storageDiagnostics: [{
+      id: `result:${'c'.repeat(40)}`, kind: 'result', problem: 'corrupt',
+      usingBackup: false, canRecover: false, projectPath: invalidPath
+    }]
   })
   try {
     await act(h, () => {})
-    assert.ok(h.host.textContent.includes('历史结果格式无效或超出支持范围，请重新生成。'))
+    assert.ok(h.host.textContent.includes('历史结果文件已损坏，原文件已保留。可恢复备份或重新生成。'))
     assert.ok(recentButton(h.host, validPath, '查看结果'), 'valid neighbor keeps its history action available')
     await viewRecentResult(h, validPath)
     assert.ok(h.host.textContent.includes('ValidHistory · 面试题'), 'valid neighbor remains usable')
@@ -1172,4 +1207,88 @@ test('returning from A history recovery to task B restores B options after cance
       await act(h, () => retryB.resolve({ runId: retryB.request.runId, result: makeResult(pathB) }))
     } finally { await cleanupAndUnmount(h) }
   }
+})
+
+test('storage diagnostics show backup use and recovery failure can be retried without exposing filesystem errors', async () => {
+  const projectPath = 'C:\\Private\\Demo'
+  const diagnostic = {
+    id: `result:${'a'.repeat(40)}`,
+    kind: 'result',
+    problem: 'corrupt',
+    usingBackup: true,
+    canRecover: true,
+    projectPath
+  }
+  const secret = 'credential-marker-do-not-render'
+  const h = await mountApp({
+    recent: [{ path: projectPath, name: 'Demo', lastUsedAt: '2026-10-10T00:00:00.000Z' }],
+    storageDiagnostics: [diagnostic],
+    storageRecoveryFailures: new Map([[diagnostic.id, new Error(`EACCES C:\\private\\userData\\result.json apiKey=${secret}`)]])
+  })
+  try {
+    assert.ok(h.host.textContent.includes('Demo'), 'result diagnostic should identify the authorized project by name')
+    assert.ok(h.host.textContent.includes('历史结果文件已损坏'))
+    assert.ok(h.host.textContent.includes('当前正在使用最近的完整备份'))
+    await act(h, () => button(h.host, '恢复最近完整备份').click())
+    assert.ok(h.host.textContent.includes('恢复失败，请重试；原文件和备份已保留。'))
+    assert.ok(button(h.host, '重试恢复备份'), 'failed recovery should retain a retry action')
+    assert.equal(h.host.textContent.includes(secret), false, 'filesystem errors and credentials must stay hidden')
+    assert.equal(h.host.textContent.includes('userData'), false, 'storage paths must stay hidden')
+    await act(h, () => button(h.host, '重试恢复备份').click())
+    assert.deepEqual(h.mock.storageRecoveries, [diagnostic.id, diagnostic.id])
+    assert.equal(h.host.textContent.includes('当前正在使用最近的完整备份'), false, 'successful recovery refreshes the diagnostic')
+  } finally { await cleanupAndUnmount(h) }
+})
+
+test('a missing settings file with a usable backup shows its status and recovery action', async () => {
+  const diagnostic = { id: 'settings', kind: 'settings', problem: 'missing', usingBackup: true, canRecover: true }
+  const h = await mountApp({ storageDiagnostics: [diagnostic] })
+  try {
+    assert.ok(h.host.textContent.includes('缺失'), 'a missing primary with backup should be distinguishable from corruption')
+    assert.ok(h.host.textContent.includes('当前正在使用最近的完整备份'))
+    assert.ok(button(h.host, '恢复最近完整备份'))
+    await act(h, () => button(h.host, '恢复最近完整备份').click())
+    assert.deepEqual(h.mock.storageRecoveries, ['settings'])
+  } finally { await cleanupAndUnmount(h) }
+})
+
+test('rapid repeated recovery clicks send only one restore request', async () => {
+  const id = `result:${'c'.repeat(40)}`
+  const projectPath = 'C:\\ProjectC'
+  const h = await mountApp({
+    storageDiagnostics: [{ id, kind: 'result', problem: 'corrupt', usingBackup: true, canRecover: true, projectPath }]
+  })
+  const pending = h.mock.delayStorageRecovery(id)
+  try {
+    await act(h, () => {
+      const restore = button(h.host, '恢复最近完整备份')
+      restore.click()
+      restore.click()
+    })
+    assert.deepEqual(h.mock.storageRecoveries, [id], 'the same outstanding ID should be deduplicated before IPC')
+    await act(h, () => pending.resolve())
+    assert.deepEqual(h.mock.storageRecoveries, [id])
+  } finally { await cleanupAndUnmount(h) }
+})
+
+test('late storage recovery cannot replace a project opened while restore is pending', async () => {
+  const damagedPath = 'C:\\ProjectA'
+  const nextPath = 'C:\\ProjectB'
+  const id = `result:${'b'.repeat(40)}`
+  const h = await mountApp({
+    recent: [damagedPath, nextPath].map((projectPath) => ({
+      path: projectPath, name: projectPath.split('\\').at(-1), lastUsedAt: '2026-10-10T00:00:00.000Z'
+    })),
+    storageDiagnostics: [{
+      id, kind: 'result', problem: 'corrupt', usingBackup: true, canRecover: true, projectPath: damagedPath
+    }]
+  })
+  const pending = h.mock.delayStorageRecovery(id)
+  try {
+    await act(h, () => button(h.host, '恢复最近完整备份').click())
+    await openRecentProject(h, nextPath)
+    await act(h, () => pending.resolve())
+    assert.ok(h.host.textContent.includes(nextPath), 'recovery completion must leave the later project selection visible')
+    assert.equal(h.host.textContent.includes('ProjectA · 面试题'), false, 'stale recovery must not navigate to the damaged result')
+  } finally { await cleanupAndUnmount(h) }
 })

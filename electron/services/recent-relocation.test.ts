@@ -18,6 +18,8 @@ import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 import * as resultContract from '../../shared/result-contract.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import * as contentRead from '../../shared/content-read.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import * as storageContract from '../../shared/storage-contract.ts'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -156,6 +158,8 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
     if (id === 'node:crypto') return { randomUUID }
     if (id === '../../shared/types.ts') return { SCAN_LIMIT_BOUNDS }
     if (id === '../../shared/result-contract.ts') return resultContract
+    if (id === '../../shared/content-read.ts') return contentRead
+    if (id === '../../shared/storage-contract.ts') return storageContract
     if (id === './ipc-validation.ts') {
       const loaded = loadTypescriptModule('electron/services/ipc-validation.ts', requireModule)
       moduleCache.set(id, loaded)

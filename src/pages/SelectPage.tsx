@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import type { InterviewResult, RecentProject, Settings } from '@shared/types'
 import { GRANULARITY_META } from '@shared/types'
+import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 
@@ -10,9 +11,11 @@ interface Props {
   openProject: (path: string) => Promise<void>
   viewExisting: (result: InterviewResult, sourceRecentPath: string) => void
   openSettings: () => void
+  onStorageRead?: () => void
+  storageDiagnostics?: StorageDiagnostic[]
 }
 
-export default function SelectPage({ settings, openProject, viewExisting, openSettings }: Props) {
+export default function SelectPage({ settings, openProject, viewExisting, openSettings, onStorageRead, storageDiagnostics = [] }: Props) {
   const [recent, setRecent] = useState<RecentProject[]>([])
   const [results, setResults] = useState<Record<string, InterviewResult | null>>({})
   const [resultIssues, setResultIssues] = useState<Record<string, boolean>>({})
@@ -38,11 +41,13 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
       setResultIssues(Object.fromEntries(entries.filter((entry) => entry.failed).map(({ path }) => [path, true])))
     }).catch(() => {
       // Recent-project failures are handled by the page's existing empty state.
+    }).finally(() => {
+      if (mounted) onStorageRead?.()
     })
     return () => {
       mounted = false
     }
-  }, [])
+  }, [onStorageRead])
 
   const open = async (path: string) => {
     setError('')
@@ -113,6 +118,7 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             {recent.map((p, i) => {
               const r = results[p.path]
+              const storageIssue = storageDiagnostics.find((item) => item.kind === 'result' && item.projectPath === p.path && (item.problem !== 'missing' || item.usingBackup || item.canRecover))
               return (
                 <div
                   key={p.path}
@@ -131,8 +137,18 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
                     <div className="truncate text-xs text-slate-400" title={p.path}>
                       {p.path}
                     </div>
-                    {resultIssues[p.path] && (
-                      <div className="mt-1 text-xs text-amber-700">{RESULT_CONTRACT_MESSAGES.history}</div>
+                    {(storageIssue || resultIssues[p.path]) && (
+                      <div className="mt-1 text-xs text-amber-700">
+                        {storageIssue?.problem === 'missing'
+                          ? `历史结果文件缺失。${storageIssue.usingBackup ? ' 当前正在使用最近的完整备份。' : ''}`
+                          : storageIssue?.problem === 'unreadable'
+                            ? STORAGE_MESSAGES.unreadableResult
+                            : storageIssue?.problem === 'corrupt'
+                              ? STORAGE_MESSAGES.corruptResult
+                              : storageIssue
+                                ? STORAGE_MESSAGES.unreadableResult
+                                : RESULT_CONTRACT_MESSAGES.history}
+                      </div>
                     )}
                   </div>
                   {r && (

@@ -10,6 +10,7 @@ import { IPC } from '../shared/ipc.ts'
 import * as sharedTypes from '../shared/types.ts'
 import * as resultContract from '../shared/result-contract.ts'
 import * as contentRead from '../shared/content-read.ts'
+import * as storageContract from '../shared/storage-contract.ts'
 import { buildExplainMessages, generateInterview } from '../electron/services/generator.ts'
 import { scanProject } from '../electron/services/scanner.ts'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError } from '../electron/services/llm.ts'
@@ -103,6 +104,7 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   modules.set('../../shared/types.ts', sharedTypes)
   modules.set('../../shared/result-contract.ts', resultContract)
   modules.set('../../shared/content-read.ts', contentRead)
+  modules.set('../../shared/storage-contract.ts', storageContract)
   modules.set('./services/scan-cache', {
     ProjectScanCache: class {
       async getFresh() { return { status: 'reused', scan } }
@@ -131,8 +133,10 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
     deleteResult() {},
     getRecentProjects: () => [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }],
     getSettings: () => ({ profiles: [{ id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }] }),
+    getStorageDiagnostics: () => [],
     loadResult: () => null,
     removeRecentProject: async () => {},
+    recoverStorage() {},
     saveResult: (...args) => saves.push(args),
     saveSettings() {}
   })

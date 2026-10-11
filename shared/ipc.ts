@@ -13,6 +13,7 @@ import type {
   Settings,
   TestConnectionResult
 } from './types'
+import type { StorageDiagnostic } from './storage-contract'
 
 export const IPC = {
   selectFolder: 'dialog:selectFolder',
@@ -31,7 +32,9 @@ export const IPC = {
   settingsSave: 'settings:save',
   llmTest: 'llm:test',
   llmListModels: 'llm:listModels',
-  exportMarkdown: 'export:markdown'
+  exportMarkdown: 'export:markdown',
+  storageDiagnostics: 'storage:diagnostics',
+  storageRecover: 'storage:recover'
 } as const
 
 /** preload 暴露到 window.api 的接口 */
@@ -53,4 +56,6 @@ export interface ProjectLensApi {
   testLlm(profile: LlmProfile): Promise<TestConnectionResult>
   listModels(profile: LlmProfile): Promise<ListModelsResult>
   exportMarkdown(result: InterviewResult): Promise<{ ok: boolean; path?: string; message: string }>
+  getStorageDiagnostics(): Promise<StorageDiagnostic[]>
+  recoverStorage(id: string): Promise<void>
 }
