@@ -509,3 +509,215 @@ test('typed legacy source keys reach their initializer while declarations and co
   assert.match(result.content, /declare const OPENAI_API_KEY: string;/)
   assert.match(result.content, /notApiKey: "safe", OPENAI_API_KEY: "documented-field"/)
 })
+
+test('redacts refresh-token spellings in compact and multiline JSON and source objects', () => {
+  const source = [
+    '{"refresh_token":"FAKE_JSON_SNAKE","refreshToken":"FAKE_JSON_CAMEL","refresh-token":"FAKE_JSON_KEBAB"}',
+    '{',
+    '  "refresh_token": "FAKE_MULTILINE_JSON_SNAKE",',
+    '  "refreshToken": "FAKE_MULTILINE_JSON_CAMEL",',
+    '  "refresh-token": "FAKE_MULTILINE_JSON_KEBAB"',
+    '}',
+    'const credentials = { refresh_token: \'FAKE_OBJECT_SNAKE\', refreshToken: "FAKE_OBJECT_CAMEL", \'refresh-token\': `FAKE_OBJECT_KEBAB` };',
+    'refresh-token: FAKE_YAML_KEBAB'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 10)
+  assert.doesNotMatch(result.content, /FAKE_(?:JSON|MULTILINE_JSON|OBJECT|YAML)_/)
+  assert.match(result.content, /"refresh_token":"\[REDACTED:secret-assignment\]","refreshToken":"\[REDACTED:secret-assignment\]","refresh-token":"\[REDACTED:secret-assignment\]"/)
+  assert.match(result.content, /refresh_token: '\[REDACTED:secret-assignment\]', refreshToken: "\[REDACTED:secret-assignment\]", 'refresh-token': `\[REDACTED:secret-assignment\]`/)
+})
+
+test('redacts prefixed refresh source suffixes and supported typed or expression assignments', () => {
+  const source = [
+    'const OAUTH_REFRESH_TOKEN = "FAKE_PREFIX_SNAKE";',
+    'let oauthRefreshToken = buildToken(\'FAKE_PREFIX_CAMEL\');',
+    'config.githubRefreshToken /* comment */ = `FAKE_PROPERTY_CAMEL`;',
+    'const REFRESH_TOKEN: Credential = buildToken("FAKE_TYPED_EXPRESSION");',
+    'const refreshToken = "prefix" + "FAKE_CONCAT_TAIL";'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 5)
+  assert.doesNotMatch(result.content, /FAKE_PREFIX_SNAKE|FAKE_PREFIX_CAMEL|FAKE_PROPERTY_CAMEL|FAKE_TYPED_EXPRESSION|FAKE_CONCAT_TAIL/)
+  assert.match(result.content, /const OAUTH_REFRESH_TOKEN = "\[REDACTED:secret-assignment\]";/)
+  assert.match(result.content, /const refreshToken = \[REDACTED:secret-assignment\];/)
+})
+
+test('refresh-token near names, declarations, examples and existing redactions keep their boundaries', () => {
+  const source = [
+    'const refreshTokenCache = "ordinary-suffix-value";',
+    'const cached_refresh_token_value = "ordinary-delimited-value";',
+    'const refreshingToken = "ordinary-containing-value";',
+    '{"notRefreshToken":"ordinary-property-value","refresh_token_cache":"ordinary-longer-key"}',
+    'type Credentials = { refresh_token: string; refreshToken?: Token };',
+    'interface Config { refreshToken: Credential }',
+    '{"refresh_token":"your_refresh_token","refreshToken":"<refresh_token>"}',
+    '{ refresh_token: "[REDACTED:secret-assignment]", refreshToken: "[REDACTED:secret-assignment]" }'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 0)
+  assert.equal(result.content, source)
+  const repeated = redactSensitiveContent(redactSensitiveContent('{"refresh_token":"FAKE_IDEMPOTENT"}').content)
+  assert.equal(repeated.totalMatches, 0)
+  assert.doesNotMatch(repeated.content, /FAKE_IDEMPOTENT/)
+})
+
+test('redacts YAML block scalars as whole values and preserves adjacent fields', () => {
+  const source = [
+    'refresh_token: |',
+    '  YAML_LITERAL_BODY_LINE_ONE_A91F',
+    '  YAML_LITERAL_BODY_LINE_TWO_B82E',
+    'safe_after_literal: KEEP_AFTER_LITERAL',
+    'refreshToken: >- # folded header comment',
+    '  YAML_FOLDED_BODY_LINE_C73D',
+    '',
+    '  YAML_FOLDED_BODY_LINE_D64C',
+    'safe_after_folded: KEEP_AFTER_FOLDED',
+    'refresh-token: |2-',
+    '  YAML_EXPLICIT_INDENT_BODY_E55B',
+    'safe_after_explicit: KEEP_AFTER_EXPLICIT',
+    'api_key: >-2',
+    '  YAML_REVERSED_INDICATOR_BODY_F46A',
+    'safe_after_reversed: KEEP_AFTER_REVERSED',
+    'nested:',
+    '  - refresh_token: >+',
+    '      YAML_SEQUENCE_BODY_G37A',
+    '    safe: KEEP_SEQUENCE_SIBLING',
+    '  access_token: |2',
+    '    YAML_NESTED_BODY_H28B',
+    '  safe: KEEP_NESTED_SIBLING'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 6)
+  for (const secret of ['YAML_LITERAL_BODY_LINE_ONE_A91F', 'YAML_LITERAL_BODY_LINE_TWO_B82E', 'YAML_FOLDED_BODY_LINE_C73D', 'YAML_FOLDED_BODY_LINE_D64C', 'YAML_EXPLICIT_INDENT_BODY_E55B', 'YAML_REVERSED_INDICATOR_BODY_F46A', 'YAML_SEQUENCE_BODY_G37A', 'YAML_NESTED_BODY_H28B']) {
+    assert.doesNotMatch(result.content, new RegExp(secret))
+  }
+  for (const safe of ['KEEP_AFTER_LITERAL', 'KEEP_AFTER_FOLDED', 'KEEP_AFTER_EXPLICIT', 'KEEP_AFTER_REVERSED', 'KEEP_SEQUENCE_SIBLING', 'KEEP_NESTED_SIBLING']) {
+    assert.ok(result.content.includes(safe), `${safe} should remain available`)
+  }
+  const repeated = redactSensitiveContent(result.content)
+  assert.equal(repeated.content, result.content)
+  assert.equal(repeated.totalMatches, 0)
+})
+
+test('redacts TOML multiline basic and literal strings through their actual closing quotes', () => {
+  const source = [
+    'refresh_token = """TOML_BASIC_SAME_LINE_A11A"""',
+    'refreshToken = """',
+    'TOML_BASIC_FIRST_LINE_B22B',
+    'TOML_BASIC_SECOND_LINE_C33C',
+    '"""',
+    'safe_after_basic = "KEEP_TOML_BASIC_SIBLING"',
+    "refresh-token = '''TOML_LITERAL_SAME_LINE_D44D'''",
+    "api_key = '''",
+    "TOML_LITERAL_FIRST_LINE_E55E",
+    "TOML_LITERAL_HAS '' internal quotes F66F",
+    "'''",
+    'safe_after_literal = "KEEP_TOML_LITERAL_SIBLING"',
+    String.raw`access_token = """escaped quote \""" text TOML_ESCAPED_QUOTE_G77G"""`,
+    'safe_after_escaped = "KEEP_TOML_ESCAPED_SIBLING"'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 5)
+  for (const secret of ['TOML_BASIC_SAME_LINE_A11A', 'TOML_BASIC_FIRST_LINE_B22B', 'TOML_BASIC_SECOND_LINE_C33C', 'TOML_LITERAL_SAME_LINE_D44D', 'TOML_LITERAL_FIRST_LINE_E55E', 'TOML_LITERAL_HAS', 'TOML_ESCAPED_QUOTE_G77G']) {
+    assert.doesNotMatch(result.content, new RegExp(secret))
+  }
+  for (const safe of ['KEEP_TOML_BASIC_SIBLING', 'KEEP_TOML_LITERAL_SIBLING', 'KEEP_TOML_ESCAPED_SIBLING']) {
+    assert.ok(result.content.includes(safe), `${safe} should remain available`)
+  }
+  assert.equal(redactSensitiveContent(result.content).totalMatches, 0)
+})
+
+test('conservatively redacts unclosed TOML multiline credentials through EOF', () => {
+  const basicSource = [
+    'refresh_token = """',
+    'TOML_UNCLOSED_BASIC_SECRET_H88H',
+    'more TOML_UNCLOSED_BASIC_TAIL_I99I'
+  ].join('\n')
+  const literalSource = [
+    "refreshToken = '''",
+    'TOML_UNCLOSED_LITERAL_SECRET_J10J'
+  ].join('\n')
+  const basicResult = redactSensitiveContent(basicSource)
+  const literalResult = redactSensitiveContent(literalSource)
+  assert.equal(basicResult.totalMatches, 1)
+  assert.equal(literalResult.totalMatches, 1)
+  assert.doesNotMatch(basicResult.content, /TOML_UNCLOSED_(?:BASIC_SECRET|BASIC_TAIL)_/)
+  assert.doesNotMatch(literalResult.content, /TOML_UNCLOSED_LITERAL_SECRET_/)
+  assert.equal(redactSensitiveContent(basicResult.content).totalMatches, 0)
+  assert.equal(redactSensitiveContent(literalResult.content).totalMatches, 0)
+})
+
+test('redacts CRLF YAML block scalars at EOF and preserves dedented siblings', () => {
+  const source = [
+    'refreshToken: >-2',
+    '  YAML_CRLF_FIRST_LINE_K21K',
+    '  YAML_CRLF_SECOND_LINE_L32L',
+    'safe_crlf_sibling: KEEP_CRLF_SIBLING',
+    'api_key: |'
+  ].join('\r\n') + '\r\n  YAML_CRLF_EOF_SECRET_M43M'
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 2)
+  assert.doesNotMatch(result.content, /YAML_CRLF_(?:FIRST_LINE|SECOND_LINE|EOF_SECRET)_/)
+  assert.ok(result.content.includes('safe_crlf_sibling: KEEP_CRLF_SIBLING'))
+  assert.equal(redactSensitiveContent(result.content).totalMatches, 0)
+})
+
+test('redacts explicit-indentation YAML scalars in sequence mappings without consuming siblings', () => {
+  const source = [
+    '- refresh_token: |2',
+    '    YAML_SEQUENCE_EXPLICIT_SECRET_N54N',
+    '  safe: KEEP_SEQUENCE_EXPLICIT_SIBLING'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 1)
+  assert.doesNotMatch(result.content, /YAML_SEQUENCE_EXPLICIT_SECRET_N54N/)
+  assert.ok(result.content.includes('safe: KEEP_SEQUENCE_EXPLICIT_SIBLING'))
+})
+
+test('handles malformed and empty YAML block headers without exposing scalar text', () => {
+  const malformed = [
+    'refresh_token: |0',
+    '  YAML_INVALID_ZERO_INDENT_SECRET_P65P',
+    'api_key: |4',
+    '  YAML_INSUFFICIENT_INDENT_SECRET_Q76Q',
+    'safe_after_malformed: KEEP_MALFORMED_SIBLING'
+  ].join('\n')
+  const malformedResult = redactSensitiveContent(malformed)
+  assert.doesNotMatch(malformedResult.content, /YAML_INVALID_ZERO_INDENT_SECRET_P65P|YAML_INSUFFICIENT_INDENT_SECRET_Q76Q/)
+
+  const empty = 'refresh_token: |\nsafe_after_empty: KEEP_EMPTY_BLOCK_SIBLING'
+  const emptyResult = redactSensitiveContent(empty)
+  assert.equal(emptyResult.totalMatches, 0)
+  assert.equal(emptyResult.content, empty)
+})
+
+test('redacts TOML literal multiline strings closed by four or five quote runs', () => {
+  const source = [
+    "refresh_token = '''TOML_FOUR_QUOTE_SECRET_R87R''''",
+    'safe_after_four = "KEEP_AFTER_FOUR_QUOTES"',
+    "api_key = '''TOML_FIVE_QUOTE_SECRET_S98S'''''",
+    'safe_after_five = "KEEP_AFTER_FIVE_QUOTES"'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 2)
+  assert.doesNotMatch(result.content, /TOML_(?:FOUR|FIVE)_QUOTE_SECRET_/)
+  assert.ok(result.content.includes('KEEP_AFTER_FOUR_QUOTES'))
+  assert.ok(result.content.includes('KEEP_AFTER_FIVE_QUOTES'))
+})
+
+test('a literal TOML backslash does not escape the closing triple-single quote', () => {
+  const source = String.raw`refresh_token = '''TOML_LITERAL_BACKSLASH_SECRET_U21U \'''` + '\nsafe_after_literal_backslash = "KEEP_AFTER_LITERAL_BACKSLASH"'
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 1)
+  assert.doesNotMatch(result.content, /TOML_LITERAL_BACKSLASH_SECRET_U21U/)
+  assert.ok(result.content.includes('KEEP_AFTER_LITERAL_BACKSLASH'))
+})
+
+test('escaped backticks inside sensitive template values do not expose later text', () => {
+  const source = 'const refreshToken = `prefix \\` FAKE_ESCAPED_TEMPLATE_TAIL_T10T`; const safe = "KEEP_AFTER_TEMPLATE"'
+  const result = redactSensitiveContent(source)
+  assert.equal(result.totalMatches, 1)
+  assert.doesNotMatch(result.content, /FAKE_ESCAPED_TEMPLATE_TAIL_T10T/)
+  assert.ok(result.content.includes('KEEP_AFTER_TEMPLATE'))
+})

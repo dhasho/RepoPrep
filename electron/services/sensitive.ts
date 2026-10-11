@@ -39,9 +39,9 @@ export function classifySensitivePath(relPath: string): SensitivePathMatch | nul
 
 type ContentRule = { category: SensitiveCategory; pattern: RegExp; replacement: string | ((...args: string[]) => string) }
 
-const SECRET_KEY = /^(?:api[_-]?key|secret(?:[_-]?key)?|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?session[_-]?token)$/i
-const SECRET_SOURCE_SUFFIX = /(?:^|[_-])(?:api[_-]?key|secret(?:[_-]?key)?|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?session[_-]?token)$|(?:accessToken|authToken|clientSecret|password|passwd|secretKey|apiKey)$/i
-const EXAMPLE_VALUE = /^(?:placeholder|example|changeme|change-me|your(?:[_-](?:api[_-]?key|secret|token|password))?|<[^>]+>|xxx+)$/i
+const SECRET_KEY = /^(?:api[_-]?key|secret(?:[_-]?key)?|access[_-]?token|auth[_-]?token|refresh[_-]?token|password|passwd|client[_-]?secret|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?session[_-]?token)$/i
+const SECRET_SOURCE_SUFFIX = /(?:^|[_-])(?:api[_-]?key|secret(?:[_-]?key)?|access[_-]?token|auth[_-]?token|refresh[_-]?token|password|passwd|client[_-]?secret|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?session[_-]?token)$|(?:accessToken|authToken|refreshToken|clientSecret|password|passwd|secretKey|apiKey)$/i
+const EXAMPLE_VALUE = /^(?:placeholder|example|changeme|change-me|your(?:[_-](?:api[_-]?key|secret|token|refresh[_-]?token|password))?|<[^>]+>|xxx+)$/i
 const TYPE_VALUE = /^(?:string|number|boolean|bigint|symbol|object|unknown|any|never|null|undefined|void|true|false|Record(?:<.*>)?|Readonly(?:<.*>)?)$/i
 const EXISTING_REDACTION = /^\[REDACTED:[a-z-]+\]$/i
 const ASSIGNMENT_REDACTION = '[REDACTED:secret-assignment]'
@@ -58,18 +58,29 @@ interface QuotedToken {
 interface RedactionSpan {
   start: number
   end: number
+  replacement?: string
 }
 
 function readQuotedToken(source: string, start: number, limit = source.length): QuotedToken {
   const quote = source[start]
-  let index = start + 1
+  const triple = (quote === '"' || quote === "'") && source.slice(start, start + 3) === quote.repeat(3)
+  const delimiter = triple ? quote.repeat(3) : quote
+  let index = start + delimiter.length
   while (index < limit) {
     const character = source[index]
-    if (character === '\\') {
+    if (character === '\\' && (quote !== "'" || !triple)) {
       index += index + 1 < limit ? 2 : 1
       continue
     }
-    if (character === quote) {
+    if (triple && character === quote) {
+      let runEnd = index + 1
+      while (runEnd < limit && source[runEnd] === quote) runEnd++
+      if (runEnd - index >= 3) {
+        const closeStart = runEnd - 3
+        return { end: runEnd, contentStart: start + 3, contentEnd: closeStart, value: source.slice(start + 3, closeStart), closed: true }
+      }
+    }
+    if (!triple && character === quote) {
       return {
         end: index + 1,
         contentStart: start + 1,
@@ -78,7 +89,7 @@ function readQuotedToken(source: string, start: number, limit = source.length): 
         closed: true
       }
     }
-    if ((quote === '"' || quote === "'") && (character === '\n' || character === '\r')) {
+    if (!triple && (quote === '"' || quote === "'") && (character === '\n' || character === '\r')) {
       return {
         end: index,
         contentStart: start + 1,
@@ -91,9 +102,9 @@ function readQuotedToken(source: string, start: number, limit = source.length): 
   }
   return {
     end: limit,
-    contentStart: start + 1,
+    contentStart: start + delimiter.length,
     contentEnd: limit,
-    value: source.slice(start + 1, limit),
+    value: source.slice(start + delimiter.length, limit),
     closed: false
   }
 }
@@ -485,6 +496,7 @@ interface ParsedValue {
   end: number
   next: number
   value: string
+  replacement?: string
 }
 
 function hasExpressionContinuation(source: string, index: number, limit: number): boolean {
@@ -550,6 +562,11 @@ function parseAssignmentValue(source: string, valueStart: number, colonValue: bo
   const start = skipTrivia(source, valueStart, limit)
   if (start >= limit || /[,;\]}#\r\n)]/.test(source[start])) return null
 
+  if (colonValue && (source[start] === '|' || source[start] === '>')) {
+    const block = parseYamlBlockScalar(source, start, limit)
+    if (block) return block
+  }
+
   const quote = source[start]
   if (quote === '"' || quote === "'" || quote === '`') {
     const token = readQuotedToken(source, start, limit)
@@ -578,6 +595,77 @@ function parseAssignmentValue(source: string, valueStart: number, colonValue: bo
   }
 
   return parseExpressionValue(source, start, limit)
+}
+
+/** Reads a YAML block scalar only when its header is on a mapping line. */
+function parseYamlBlockScalar(source: string, start: number, limit: number): ParsedValue | null {
+  const lineStart = source.lastIndexOf('\n', start - 1) + 1
+  const prefix = source.slice(lineStart, start)
+  const mapping = /^[ \t]*(?:-[ \t]+)?(?:["'`][^\r\n]*?["'`]|[A-Za-z_$][\w$-]*)[ \t]*:[ \t]*$/.exec(prefix)
+  if (!mapping) return null
+  const lineEndLF = source.indexOf('\n', start)
+  const lineEnd = lineEndLF < 0 || lineEndLF >= limit ? limit : lineEndLF
+  const header = source.slice(start, lineEnd).replace(/\r$/, '')
+  const match = /^([|>])([+-]?[1-9]?|[1-9]?[+-]?)(?:[ \t]+#.*)?[ \t]*$/.exec(header)
+  const parentIndent = (/^[ \t]*/.exec(prefix)?.[0].length ?? 0) + (prefix.trimStart().startsWith('-') ? 2 : 0)
+  const bodyStart = lineEndLF < 0 || lineEndLF >= limit ? limit : lineEndLF + 1
+  if (bodyStart >= limit) return null
+  let cursor = bodyStart
+  const explicit = match ? /[1-9]/.exec(match[2]) : null
+  const requiredIndent = explicit ? parentIndent + Number(explicit[0]) : null
+  let inferredIndent: number | null = requiredIndent
+  let hasContent = false
+  while (cursor < limit) {
+    let end = source.indexOf('\n', cursor)
+    if (end < 0 || end >= limit) end = limit
+    const contentEnd = end > cursor && source[end - 1] === '\r' ? end - 1 : end
+    const line = source.slice(cursor, contentEnd)
+    const indent = /^[ \t]*/.exec(line)?.[0].length ?? 0
+    const blank = /^[ \t]*$/.test(line)
+    if (!blank) {
+      if (indent <= parentIndent) {
+        const sibling = /^(?:[A-Za-z_$][\w$-]*|["'][^\r\n]+?["'])[ \t]*:/.test(line.slice(indent))
+        if (sibling && match) {
+          if (!hasContent) {
+            return { start: bodyStart, end: bodyStart, next: bodyStart, value: ASSIGNMENT_REDACTION }
+          }
+          break
+        }
+        cursor = limit
+        hasContent = true
+        inferredIndent ??= parentIndent + 1
+        break
+      }
+      if (requiredIndent !== null && indent < requiredIndent) {
+        // Explicit indentation indicators define the minimum body indent.
+        // A clearly aligned mapping is a sibling; ambiguous under-indented
+        // content is malformed and must be consumed to the safe limit.
+        const sibling = /^(?:[A-Za-z_$][\w$-]*|["'][^\r\n]+?["'])[ \t]*:/.test(line.slice(indent))
+        if (sibling && match) {
+          if (!hasContent) return { start: bodyStart, end: bodyStart, next: bodyStart, value: ASSIGNMENT_REDACTION }
+          break
+        }
+        cursor = limit
+        hasContent = true
+        inferredIndent = indent
+        break
+      }
+      if (inferredIndent === null) inferredIndent = indent
+      hasContent = true
+    }
+    cursor = end < limit ? end + 1 : limit
+  }
+  if (!hasContent) return { start: bodyStart, end: bodyStart, next: bodyStart, value: ASSIGNMENT_REDACTION }
+  const bodyEnd = cursor
+  const replacementIndent = ' '.repeat((inferredIndent ?? parentIndent + 1))
+  const trailingNewline = bodyEnd > bodyStart && source[bodyEnd - 1] === '\n' ? '\n' : ''
+  return {
+    start: bodyStart,
+    end: bodyEnd,
+    next: bodyEnd,
+    value: source.slice(bodyStart, bodyEnd).trim(),
+    replacement: `${replacementIndent}[REDACTED:secret-assignment]${trailingNewline}`
+  }
 }
 
 function assignmentValueAt(source: string, keyStart: number, keyEnd: number, typeRanges: readonly { start: number; end: number }[], limit = source.length): ParsedValue | null {
@@ -651,7 +739,7 @@ function redactSecretAssignments(source: string, scanComments = true): { content
       if (value) {
         const normalizedValue = value.value.trim()
         if (!EXAMPLE_VALUE.test(normalizedValue) && !TYPE_VALUE.test(normalizedValue) && !EXISTING_REDACTION.test(normalizedValue)) {
-          spans.push({ start: value.start, end: value.end })
+          spans.push({ start: value.start, end: value.end, replacement: value.replacement })
         }
         index = value.next
         continue
@@ -674,7 +762,7 @@ function redactSecretAssignments(source: string, scanComments = true): { content
   for (const range of scanComments ? findCommentRanges(source) : []) {
     const fragment = source.slice(range.start, range.end)
     const commented = redactSecretAssignments(fragment, false)
-    spans.push(...commented.spans.map((span) => ({ start: span.start + range.start, end: span.end + range.start })))
+    spans.push(...commented.spans.map((span) => ({ ...span, start: span.start + range.start, end: span.end + range.start })))
   }
 
   spans.sort((left, right) => left.start - right.start)
@@ -683,7 +771,7 @@ function redactSecretAssignments(source: string, scanComments = true): { content
   const chunks: string[] = []
   let cursor = 0
   for (const span of uniqueSpans) {
-    chunks.push(source.slice(cursor, span.start), ASSIGNMENT_REDACTION)
+    chunks.push(source.slice(cursor, span.start), span.replacement ?? ASSIGNMENT_REDACTION)
     cursor = span.end
   }
   chunks.push(source.slice(cursor))
