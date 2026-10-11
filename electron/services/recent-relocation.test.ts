@@ -16,6 +16,8 @@ import { IPC } from '../../shared/ipc.ts'
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import * as resultContract from '../../shared/result-contract.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import * as contentRead from '../../shared/content-read.ts'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -160,6 +162,7 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
       return loaded
     }
     if (id === '../../shared/ipc.ts') return { IPC }
+    if (id === '../../shared/content-read.ts') return contentRead
     if (id === './ipc-authority.ts') {
       const loaded = loadTypescriptModule('electron/services/ipc-authority.ts', requireModule)
       moduleCache.set('./services/ipc-authority', loaded)

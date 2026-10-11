@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { InterviewResult, RecentProject, Settings } from '@shared/types'
 import { assertInterviewResultContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { isFilesystemRoot, projectDisplayName } from './project-display-name'
 
 function userDataFile(name: string): string {
   return path.join(app.getPath('userData'), name)
@@ -61,11 +62,25 @@ export function loadResult(projectPath: string): InterviewResult | null {
   }
   if (parsed === null) return null
   try {
-    assertInterviewResultContract(parsed, path.isAbsolute)
+    let candidate = parsed
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      'projectName' in parsed &&
+      parsed.projectName === '' &&
+      'projectPath' in parsed &&
+      typeof parsed.projectPath === 'string' &&
+      path.isAbsolute(parsed.projectPath) &&
+      isFilesystemRoot(parsed.projectPath)
+    ) {
+      candidate = { ...parsed, projectName: projectDisplayName(parsed.projectPath) }
+    }
+    assertInterviewResultContract(candidate, path.isAbsolute)
+    return candidate
   } catch {
     throw new Error(RESULT_CONTRACT_MESSAGES.history)
   }
-  return parsed
 }
 
 export function deleteResult(projectPath: string): void {

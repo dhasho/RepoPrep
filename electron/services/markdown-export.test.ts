@@ -93,3 +93,57 @@ test('无术语表 / 空摘要时不输出对应区块', () => {
   assert.ok(!md.includes('## 附录：专业名词表'))
   assert.ok(!md.includes('## 项目概览'))
 })
+
+test('读取不完整的持久化结果在 Markdown 中显示受控原因、转义路径及省略次数', () => {
+  const md = resultToMarkdown(makeResult({
+    contentReadSummary: {
+      attemptedReads: 9,
+      successfulReads: 5,
+      failedReads: 4,
+      failuresByReason: { permission: 1, missing: 1, io: 2 },
+      failures: [
+        { path: 'src/a`b.ts', reason: 'permission' },
+        { path: 'docs/guide.md', reason: 'missing' },
+        { path: 'docs/<tag>.md', reason: 'io' }
+      ]
+    }
+  }))
+
+  assert.ok(md.includes('尝试读取 9 次，成功 5 次，失败 4 次'))
+  assert.ok(md.includes('权限不足 1 次、文件不存在 1 次、读取异常 2 次'))
+  assert.ok(md.includes('"src/a\\`b\\.ts"'), 'backticks and punctuation in quoted paths are escaped for Markdown')
+  assert.ok(md.includes('"docs/\\<tag\\>\\.md"'), 'angle brackets in paths cannot become raw HTML')
+  assert.ok(md.includes('另有 1 次读取失败未列出'))
+})
+
+test('正常结果和旧结果不显示内容读取警告', () => {
+  assert.ok(!resultToMarkdown(makeResult()).includes('内容读取不完整'))
+  assert.ok(!resultToMarkdown(makeResult({
+    contentReadSummary: {
+      attemptedReads: 2,
+      successfulReads: 2,
+      failedReads: 0,
+      failuresByReason: { permission: 0, missing: 0, io: 0 },
+      failures: []
+    }
+  })).includes('内容读取不完整'))
+})
+
+test('读取警告限制长路径样本文本，但结果元数据仍保留全部 50 个样本', () => {
+  const summary = {
+    attemptedReads: 100,
+    successfulReads: 50,
+    failedReads: 50,
+    failuresByReason: { permission: 50, missing: 0, io: 0 },
+    failures: Array.from({ length: 50 }, (_, index) => ({
+      path: `src/${index}-${'x'.repeat(1000)}.ts`,
+      reason: 'permission' as const
+    }))
+  }
+  const markdown = resultToMarkdown(makeResult({ contentReadSummary: summary }))
+
+  assert.equal(summary.failures.length, 50, 'warning rendering does not mutate or discard persisted samples')
+  assert.ok(markdown.length < 6000, 'long persisted paths cannot consume the prompt/header display budget')
+  assert.ok(markdown.includes('另有 45 次读取失败未列出'))
+  assert.ok(!markdown.includes('49-'), 'only the bounded set of leading examples is displayed')
+})

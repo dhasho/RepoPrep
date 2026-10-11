@@ -3,6 +3,8 @@
 import type { FollowUp, InterviewResult } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '../../shared/types.ts'
+// @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
+import { contentReadWarning } from '../../shared/content-read.ts'
 
 /**
  * 转义 Markdown 表格单元格内容（issue #19）：
@@ -15,6 +17,20 @@ export function escapeTableCell(text: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/\|/g, '\\|')
     .replace(/\r\n|\r|\n/g, ' ')
+}
+
+function escapeMarkdownText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/([\\`*_{}\[\]()#+.!|><~-])/g, '\\$1')
+}
+
+function renderContentReadWarning(result: InterviewResult): string[] {
+  const summary = result.contentReadSummary
+  if (!summary || summary.failedReads === 0) return []
+
+  // Failure samples are project-controlled paths, so quote every Markdown-sensitive character.
+  return [`> ${escapeMarkdownText(contentReadWarning(summary))}`]
 }
 
 function renderFollowUps(followUps: FollowUp[], depth: number): string {
@@ -41,6 +57,11 @@ export function resultToMarkdown(result: InterviewResult): string {
     `> 颗粒度：${GRANULARITY_META[result.granularity].label}（${GRANULARITY_META[result.granularity].sub}）｜方向：${ROLE_META[result.roleFocus].label}｜模型：${result.modelUsed}｜生成时间：${new Date(result.createdAt).toLocaleString('zh-CN')}`
   )
   lines.push('')
+  const contentReadWarning = renderContentReadWarning(result)
+  if (contentReadWarning.length) {
+    lines.push(...contentReadWarning)
+    lines.push('')
+  }
   if (result.projectSummary) {
     lines.push('## 项目概览')
     lines.push('')

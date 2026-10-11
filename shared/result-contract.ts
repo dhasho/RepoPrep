@@ -1,4 +1,6 @@
 import type { InterviewResult } from './types'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { CONTENT_READ_LIMITS, isSafeContentReadPath } from './content-read.ts'
 
 export const LLM_PROFILE_LIMITS = {
   id: 128,
@@ -113,6 +115,17 @@ function absolutePath(value: unknown, isAbsolutePath?: (value: string) => boolea
   if (!(/^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+|\/)/.test(value))) invalid()
 }
 
+/** Validate project identity fields before building a context or calling a model. */
+export function assertProjectIdentityContract(
+  projectName: unknown,
+  projectPath: unknown,
+  isAbsolutePath?: (value: string) => boolean
+): asserts projectName is string {
+  string(projectName, RESULT_LIMITS.projectName)
+  if (/[\\/\x00-\x1f\x7f]/.test(projectName)) invalid()
+  absolutePath(projectPath, isAbsolutePath)
+}
+
 function boundedTree(root: unknown): void {
   const stack: Array<{ value: unknown; depth: number; rootGlossary: boolean; undefinedAllowed: boolean }> = [
     { value: root, depth: 0, rootGlossary: false, undefinedAllowed: false }
@@ -163,6 +176,45 @@ function enumValue<T extends string>(value: unknown, choices: readonly T[]): ass
   if (typeof value !== 'string' || !choices.includes(value as T)) invalid()
 }
 
+const CONTENT_READ_REASONS = ['permission', 'missing', 'io'] as const
+
+function isContentReadCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= CONTENT_READ_LIMITS.attempts
+}
+
+function assertContentReadSummary(value: unknown): void {
+  if (!record(value)) invalid()
+  exactKeys(value, ['attemptedReads', 'successfulReads', 'failedReads', 'failuresByReason', 'failures'])
+  const { attemptedReads, successfulReads, failedReads } = value
+  if (!isContentReadCount(attemptedReads) || !isContentReadCount(successfulReads) || !isContentReadCount(failedReads)) invalid()
+  if (attemptedReads !== successfulReads + failedReads) invalid()
+  if (!record(value.failuresByReason)) invalid()
+  exactKeys(value.failuresByReason, CONTENT_READ_REASONS)
+  if (ownDataEntries(value.failuresByReason).length !== CONTENT_READ_REASONS.length) invalid()
+  let reasonTotal = 0
+  for (const reason of CONTENT_READ_REASONS) {
+    const count = value.failuresByReason[reason]
+    if (!isContentReadCount(count)) invalid()
+    reasonTotal += count
+  }
+  if (reasonTotal !== failedReads) invalid()
+  if (!Array.isArray(value.failures) || value.failures.length > CONTENT_READ_LIMITS.samples || value.failures.length > failedReads) invalid()
+  const sampledByReason: Record<(typeof CONTENT_READ_REASONS)[number], number> = { permission: 0, missing: 0, io: 0 }
+  for (const failure of value.failures) {
+    if (!record(failure)) invalid()
+    exactKeys(failure, ['path', 'reason'])
+    if (typeof failure.path !== 'string' || failure.path.length === 0) invalid()
+    if (failure.path.length > CONTENT_READ_LIMITS.path) oversized()
+    if (!isSafeContentReadPath(failure.path)) invalid()
+    enumValue(failure.reason, CONTENT_READ_REASONS)
+    sampledByReason[failure.reason]++
+  }
+  for (const reason of CONTENT_READ_REASONS) {
+    const count = value.failuresByReason[reason]
+    if (!isContentReadCount(count) || sampledByReason[reason] > count) invalid()
+  }
+}
+
 function compactJsonByteLength(value: unknown): number {
   if (value === null) return 4
   if (typeof value === 'string') return new TextEncoder().encode(JSON.stringify(value)).length
@@ -199,10 +251,9 @@ export function assertInterviewResultContract(
 ): asserts value is InterviewResult {
   boundedTree(value)
   if (!record(value)) invalid()
-  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security'])
+  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contentReadSummary'])
   if (value.version !== 1 || !text(value.createdAt, RESULT_LIMITS.createdAt) || !Number.isFinite(Date.parse(value.createdAt)) || !text(value.projectName, RESULT_LIMITS.projectName)) invalid()
-  if (/[\\/\x00-\x1f\x7f]/.test(value.projectName)) invalid()
-  absolutePath(value.projectPath, isAbsolutePath)
+  assertProjectIdentityContract(value.projectName, value.projectPath, isAbsolutePath)
   enumValue(value.granularity, GRANULARITIES)
   enumValue(value.roleFocus, ROLES)
   string(value.profileId, RESULT_LIMITS.profileId)
@@ -224,6 +275,7 @@ export function assertInterviewResultContract(
       if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) invalid()
     }
   }
+  if (value.contentReadSummary !== undefined) assertContentReadSummary(value.contentReadSummary)
   let questions = 0
   let follows = 0
   const checkFollow = (follow: unknown, depth: number): void => {

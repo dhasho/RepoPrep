@@ -11,6 +11,8 @@ import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 import { identityFromBigIntStats, recordProjectSnapshot, resolveProjectIdentity, sameFileSystemIdentity, type FileSystemIdentity, type ProjectSnapshot, type SnapshotEntry } from './project-snapshot.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { classifySensitivePath } from './sensitive.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { projectDisplayName } from './project-display-name.ts'
 
 /** 始终忽略的目录/文件（无论有没有 .gitignore） */
 const ALWAYS_IGNORE = [
@@ -415,7 +417,8 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
     return nodes
   }
 
-  const tree: FileNode = { name: path.basename(root), path: '', type: 'dir', children: await walk(scanRoot, '', 0) }
+  const projectName = projectDisplayName(root)
+  const tree: FileNode = { name: projectName, path: '', type: 'dir', children: await walk(scanRoot, '', 0) }
 
   const codeTotal = Array.from(langCount.values()).reduce((a, b) => a + b, 0)
   const languages: LanguageStat[] = Array.from(langCount.entries())
@@ -425,7 +428,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
 
   const result: ScanResult = {
     root,
-    name: path.basename(root),
+    name: projectName,
     totalFiles: files.length,
     totalBytes,
     languages,

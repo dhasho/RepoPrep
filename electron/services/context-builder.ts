@@ -1,5 +1,14 @@
 // 按颗粒度组装送入大模型的项目上下文（字符预算控制 + 细粒度分批）
 import path from 'node:path'
+import {
+  contentReadFailureReason,
+  contentReadWarning,
+  CONTENT_READ_MESSAGES,
+  emptyContentReadSummary,
+  recordContentReadFailure,
+  type ContentReadSummary
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+} from '../../shared/content-read.ts'
 import type { Granularity, ScanTruncation } from '../../shared/types'
 import type { ScannedFile, ScanResult } from './scanner'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
@@ -9,7 +18,7 @@ import { redactSensitiveContent, type SensitiveCategory } from './sensitive.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { batchWeight, MIN_GLOBAL_WEIGHT } from './question-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { ProjectContentBoundaryError, readProjectContent } from './project-content-reader.ts'
+import { ProjectContentBoundaryError, ProjectContentReadError, readProjectContent } from './project-content-reader.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { isProjectContentReadable } from './project-snapshot.ts'
 
@@ -56,6 +65,7 @@ export interface BuiltContext {
   headerText: string // 项目名 + 语言分布 + 文件树（每批都带）
   batches: ContextBatch[]
   contentSecurity: ContentSecuritySummary
+  contentReadSummary: ContentReadSummary
   /** 模块批的数量（0 表示没有按模块分批）。进度提示用它区分"全局+模块"与"仅全局"。 */
   moduleCount: number
 }
@@ -130,7 +140,13 @@ function addContentSecurity(target: ContentSecuritySummary, source: ContentSecur
   }
 }
 
-async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars: number, sourceScan = scan): Promise<PickedFiles> {
+async function pickFiles(
+  scan: ScanResult,
+  granularity: Granularity,
+  budgetChars: number,
+  contentReadSummary: ContentReadSummary,
+  sourceScan = scan
+): Promise<PickedFiles> {
   const candidates = scan.files
     .filter((f) => f.isContentCandidate)
     .filter((f) => {
@@ -149,36 +165,42 @@ async function pickFiles(scan: ScanResult, granularity: Granularity, budgetChars
   const headerReserve = 6000 // 预留文件树等头部文本
   for (const { f } of candidates) {
     if (used >= budgetChars - headerReserve) break
+    let rawContent: string
+    contentReadSummary.attemptedReads++
     try {
-      // Redact before applying the budget: placeholders must be the only form
-      // of matched secrets that can enter ContextFile, batches, or renderBatch.
-      const redaction = redactSensitiveContent(await readProjectContent(sourceScan, f))
-      const content = redaction.content
-      const remaining = budgetChars - headerReserve - used
-      if (remaining <= 0) break
-      const truncated = content.length > remaining
-      const selectedContent = truncated ? content.slice(0, remaining) : content
-      out.push({
-        relPath: f.relPath,
-        content: selectedContent,
-        truncated,
-        redacted: redaction.totalMatches > 0,
-        redactionMatches: redaction.totalMatches
-      })
-      used += selectedContent.length
-      if (redaction.totalMatches > 0) {
-        contentSecurity.redactedFiles++
-        contentSecurity.redactionMatches += redaction.totalMatches
-        for (const match of redaction.matches) {
-          contentSecurity.matchesByCategory[match.category] =
-            (contentSecurity.matchesByCategory[match.category] ?? 0) + match.count
-        }
-      }
-      if (truncated) break
+      rawContent = await readProjectContent(sourceScan, f)
     } catch (error) {
       if (error instanceof ProjectContentBoundaryError) throw error
-      /* 读取失败跳过 */
+      if (!(error instanceof ProjectContentReadError)) throw error
+      recordContentReadFailure(contentReadSummary, f.relPath, contentReadFailureReason(error))
+      continue
     }
+    contentReadSummary.successfulReads++
+
+    // Do not catch redaction failures: only ordinary content-read failures are recoverable.
+    const redaction = redactSensitiveContent(rawContent)
+    const content = redaction.content
+    const remaining = budgetChars - headerReserve - used
+    if (remaining <= 0) break
+    const truncated = content.length > remaining
+    const selectedContent = truncated ? content.slice(0, remaining) : content
+    out.push({
+      relPath: f.relPath,
+      content: selectedContent,
+      truncated,
+      redacted: redaction.totalMatches > 0,
+      redactionMatches: redaction.totalMatches
+    })
+    used += selectedContent.length
+    if (redaction.totalMatches > 0) {
+      contentSecurity.redactedFiles++
+      contentSecurity.redactionMatches += redaction.totalMatches
+      for (const match of redaction.matches) {
+        contentSecurity.matchesByCategory[match.category] =
+          (contentSecurity.matchesByCategory[match.category] ?? 0) + match.count
+      }
+    }
+    if (truncated) break
   }
   return { files: out, contentSecurity }
 }
@@ -213,13 +235,14 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     '（见下方文件树）',
     '```'
   )
-  const headerText = headerLines.join('\n')
+  let headerText = headerLines.join('\n')
 
   const batches: ContextBatch[] = []
   const contentSecurity = emptyContentSecurity()
+  const contentReadSummary = emptyContentReadSummary()
 
   if (granularity !== 'fine') {
-    const picked = await pickFiles(scan, granularity, BUDGET_CHARS[granularity])
+    const picked = await pickFiles(scan, granularity, BUDGET_CHARS[granularity], contentReadSummary)
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
     batches.push({
@@ -230,12 +253,17 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
       // 单批即全部：权重恒为 1，配额必然等于该颗粒度的总题量目标
       weight: 1
     })
-    return { headerText, batches, contentSecurity, moduleCount: 0 }
+    if (contentReadSummary.attemptedReads > 0 && contentReadSummary.successfulReads === 0 && contentReadSummary.failedReads > 0) {
+      throw new Error(CONTENT_READ_MESSAGES.allFailed)
+    }
+    const readWarning = contentReadWarning(contentReadSummary)
+    if (readWarning) headerText = `${headerText}\n\n${readWarning}`
+    return { headerText, batches, contentSecurity, contentReadSummary, moduleCount: 0 }
   }
 
   // 细粒度：全局批（文档+配置）+ 各模块批（按顶层目录分组）
   // 全局批与模块批分别代表实际请求；同一文件若出现在多个批次，按请求次数分别计数。
-  const globalPicked = await pickFiles(scan, 'coarse', BUDGET_CHARS.fine)
+  const globalPicked = await pickFiles(scan, 'coarse', BUDGET_CHARS.fine, contentReadSummary)
   addContentSecurity(contentSecurity, globalPicked.contentSecurity)
   const globalFiles = globalPicked.files
   const globalBatch: ContextBatch = {
@@ -271,7 +299,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     if (moduleBatches >= MAX_MODULE_BATCHES) break
     // 复用 pickFiles 的打分与预算逻辑：构造仅含该模块的临时 ScanResult 子集
     const subScan: ScanResult = { ...scan, files: groupFiles }
-    const picked = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine, scan)
+    const picked = await pickFiles(subScan, 'fine', BUDGET_CHARS.fine, contentReadSummary, scan)
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
     if (!files.length) continue
@@ -293,7 +321,12 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   // 所以 MIN_GLOBAL_WEIGHT 只在 0 个模块的退化分支里作为语义常量使用。
   globalBatch.weight = moduleBatches === 0 ? MIN_GLOBAL_WEIGHT : moduleBatches
 
-  return { headerText, batches, contentSecurity, moduleCount: moduleBatches }
+  if (contentReadSummary.attemptedReads > 0 && contentReadSummary.successfulReads === 0 && contentReadSummary.failedReads > 0) {
+    throw new Error(CONTENT_READ_MESSAGES.allFailed)
+  }
+  const readWarning = contentReadWarning(contentReadSummary)
+  if (readWarning) headerText = `${headerText}\n\n${readWarning}`
+  return { headerText, batches, contentSecurity, contentReadSummary, moduleCount: moduleBatches }
 }
 
 /** 把批次渲染为完整的用户消息文本 */

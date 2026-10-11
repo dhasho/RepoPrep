@@ -144,6 +144,7 @@ export interface InterviewResult {
   sections: Section[]
   glossary: Record<string, string>
   security?: SecurityProtectionSummary
+  contentReadSummary?: import('./content-read').ContentReadSummary
 }
 
 export interface RecentProject {

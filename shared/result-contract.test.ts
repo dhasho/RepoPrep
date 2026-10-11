@@ -26,6 +26,16 @@ function makeResult(overrides: Record<string, unknown> = {}): Record<string, any
   }
 }
 
+function makeContentReadSummary(overrides: Record<string, unknown> = {}): Record<string, any> {
+  return {
+    attemptedReads: 2,
+    successfulReads: 1,
+    failedReads: 1,
+    failuresByReason: { permission: 1, missing: 0, io: 0 },
+    failures: [{ path: 'src/locked.ts', reason: 'permission' }],
+    ...overrides
+  }
+}
 function assertValid(value: unknown): void {
   assert.doesNotThrow(() => assertInterviewResultContract(value, (candidate) => candidate.startsWith('C:\\')))
 }
@@ -155,6 +165,29 @@ test('exact one-million-character tree is accepted and one more character is rej
   assertKind(exact, 'oversized')
 })
 
+test('content-read summary accepts valid optional metadata and rejects mismatched or extended shapes', () => {
+  assertValid(makeResult({ contentReadSummary: makeContentReadSummary() }))
+  assertValid(makeResult())
+  assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ attemptedReads: 3 }) }), 'invalid')
+  assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ failuresByReason: { permission: 0, missing: 0, io: 1 } }) }), 'invalid')
+  assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ extra: true }) }), 'invalid')
+  assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ failuresByReason: { permission: 1, missing: 0, io: 0, unknown: 0 } }) }), 'invalid')
+})
+
+test('content-read summary rejects unsafe paths, excessive samples, cycles and oversized values', () => {
+  for (const unsafePath of ['/etc/passwd', 'C:/private/file.ts', 'src\\private.ts', 'src/../private.ts', 'src/./file.ts', 'src/line\\nbreak.ts']) {
+    assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ failures: [{ path: unsafePath, reason: 'permission' }] }) }), 'invalid')
+  }
+  const tooManySamples = makeContentReadSummary({ attemptedReads: 51, successfulReads: 0, failedReads: 51,
+    failuresByReason: { permission: 51, missing: 0, io: 0 },
+    failures: Array.from({ length: 51 }, (_, index) => ({ path: `src/file-${index}.ts`, reason: 'permission' })) })
+  assertKind(makeResult({ contentReadSummary: tooManySamples }), 'invalid')
+  const cycle = makeContentReadSummary()
+  cycle.failures[0] = cycle
+  assertKind(makeResult({ contentReadSummary: cycle }), 'invalid')
+  assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ failures: [{ path: `src/${'x'.repeat(2048)}.ts`, reason: 'permission' }] }) }), 'oversized')
+  assertKind(makeResult({ contentReadSummary: makeContentReadSummary({ attemptedReads: 100_001, successfulReads: 100_000 }) }), 'invalid')
+})
 test('compact JSON UTF-8 budget includes repeated tiny keys and escaping overhead', () => {
   const escaped = makeResult()
   // A control character consumes one tree character but six bytes in compact JSON.

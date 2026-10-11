@@ -8,6 +8,8 @@ import type { IpcEventLike, IpcWebContentsLike } from './ipc-authority.ts'
 import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { RESULT_CONTRACT_MESSAGES } from '../../shared/result-contract.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { CONTENT_READ_MESSAGES } from '../../shared/content-read.ts'
 
 export type IpcHandler<E extends IpcEventLike = IpcEventLike> = (event: E, ...args: any[]) => unknown
 export interface IpcGuardDependencies {
@@ -33,6 +35,7 @@ const SAFE_BUSINESS_ERRORS = new Set([
   '已有相同名词解释请求在进行中',
   '生成面试题时模型请求超时，请检查网络或稍后重试。',
   '项目文件在读取期间发生变化，请重新扫描后重试。',
+  CONTENT_READ_MESSAGES.allFailed,
   '未找到指定的大模型配置，请先到设置页完成配置',
   RESULT_CONTRACT_MESSAGES.generated,
   RESULT_CONTRACT_MESSAGES.history,

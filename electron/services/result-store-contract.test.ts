@@ -32,22 +32,32 @@ async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) =
   const options = { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }
   const contractCode = ts.transpileModule(await fs.readFile(contractPath, 'utf8'), options).outputText
   const contractModule = { exports: {} as Record<string, unknown> }
+  const nativeRequire = (await import('node:module')).createRequire(import.meta.url)
   const evalModule = (code: string, filename: string, suppliedRequire: (id: string) => unknown): Record<string, any> => {
     const module = { exports: {} as Record<string, any> }
     const wrapper = vm.runInThisContext(`(function (exports, require, module, __filename, __dirname) { ${code}\n})`, { filename }) as Function
     wrapper(module.exports, suppliedRequire, module, filename, path.dirname(filename))
     return module.exports
   }
-  Object.assign(contractModule.exports, evalModule(contractCode, contractPath, () => { throw new Error('contract must not load runtime dependencies') }))
+  const contentReadPath = path.resolve(here, '..', '..', 'shared', 'content-read.ts')
+  const contentReadCode = ts.transpileModule(await fs.readFile(contentReadPath, 'utf8'), options).outputText
+  const contentReadModule = evalModule(contentReadCode, contentReadPath, (id) => nativeRequire(id))
+  Object.assign(contractModule.exports, evalModule(contractCode, contractPath, (id) => {
+    if (id === './content-read.ts') return contentReadModule
+    throw new Error(`unexpected contract dependency: ${id}`)
+  }))
 
   const storeCode = ts.transpileModule(await fs.readFile(storePath, 'utf8'), options).outputText
-  const nativeRequire = (await import('node:module')).createRequire(import.meta.url)
+  const displayNamePath = path.resolve(here, 'project-display-name.ts')
+  const displayNameCode = ts.transpileModule(await fs.readFile(displayNamePath, 'utf8'), options).outputText
+  const displayNameModule = evalModule(displayNameCode, displayNamePath, (id) => nativeRequire(id))
   const store = evalModule(storeCode, storePath, (id) => {
     if (id === 'electron') return { app: { getPath: (name: string) => {
       assert.equal(name, 'userData')
       return userData
     } } }
     if (id === '@shared/result-contract') return contractModule.exports
+    if (id === './project-display-name') return displayNameModule
     return nativeRequire(id)
   })
   return { store, root, userData }
@@ -103,4 +113,34 @@ test('invalid save cannot overwrite prior result; invalid history is controlled 
   await fs.writeFile(file, invalidRaw, 'utf8')
   assert.throws(() => store.loadResult(projectPath), /历史结果格式无效或超出支持范围，请重新生成。/)
   assert.equal(await fs.readFile(file, 'utf8'), invalidRaw, 'invalid history remains unmodified for controlled recovery')
+})
+
+test('legacy empty names adapt only at lexical filesystem roots without rewriting the stored bytes', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.parse(path.resolve('.')).root
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const raw = JSON.stringify({ ...legacyAffectedResult(projectPath), projectName: '' }, null, 2)
+  await fs.writeFile(file, raw, 'utf8')
+
+  const previousMtime = (await fs.stat(file)).mtimeMs
+  const loaded = store.loadResult(projectPath)
+  assert.equal(loaded.projectName, /^[A-Za-z]:[\\/]/.test(projectPath) ? `磁盘 ${projectPath[0].toUpperCase()}` : '文件系统根目录')
+  assert.equal(await fs.readFile(file, 'utf8'), raw)
+  assert.equal((await fs.stat(file)).mtimeMs, previousMtime, 'legacy name adaptation is read-only')
+
+  const invalidRootRaw = JSON.stringify({ ...legacyAffectedResult(projectPath), projectName: '', invalidExtra: true })
+  await fs.writeFile(file, invalidRootRaw, 'utf8')
+  assert.throws(() => store.loadResult(projectPath), /历史结果格式无效/)
+  assert.equal(await fs.readFile(file, 'utf8'), invalidRootRaw, 'legacy root adaptation must still reject other invalid fields')
+
+  const invalidPaths = [path.join(projectPath, 'ordinary'), `${projectPath}folder${path.sep}..${path.sep}`]
+  if (process.platform === 'win32') invalidPaths.push('\\\\?\\C:\\')
+  for (const invalidPath of invalidPaths) {
+    const invalidFile = storedResultFile(userData, invalidPath)
+    const invalidRaw = JSON.stringify({ ...legacyAffectedResult(invalidPath), projectName: '' }, null, 2)
+    await fs.writeFile(invalidFile, invalidRaw, 'utf8')
+    assert.throws(() => store.loadResult(invalidPath), /历史结果格式无效/)
+    assert.equal(await fs.readFile(invalidFile, 'utf8'), invalidRaw)
+  }
 })

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FollowUp, InterviewResult, QuestionItem, Section, Settings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
+import { contentReadWarning } from '@shared/content-read'
 import { api } from '../lib/ipc'
 import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf } from '../lib/question-numbering'
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
@@ -209,6 +210,9 @@ export default function ResultPage({ result, settings, onRegenerate, regeneratin
                 <span>{result.modelUsed}</span>
                 <span>{new Date(result.createdAt).toLocaleString('zh-CN')}</span>
               </p>
+              {result.contentReadSummary && result.contentReadSummary.failedReads > 0 && (
+                <ContentReadWarning summary={result.contentReadSummary} />
+              )}
               {result.security && (result.security.excludedFiles > 0 || result.security.redactedFiles > 0) && (
                 <div className="mt-2 inline-flex rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
                   安全保护：排除 {result.security.excludedFiles} / 脱敏 {result.security.redactedFiles} 文件（{result.security.redactionMatches} 处）
@@ -314,6 +318,14 @@ export default function ResultPage({ result, settings, onRegenerate, regeneratin
         />
       )}
     </div>
+  )
+}
+
+function ContentReadWarning({ summary }: { summary: NonNullable<InterviewResult['contentReadSummary']> }) {
+  return (
+    <section role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+      <p className="font-semibold">{contentReadWarning(summary)}</p>
+    </section>
   )
 }
 

@@ -10,7 +10,8 @@ import type {
   Section
 } from '@shared/types'
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
-import { assertInterviewResultContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { contentReadWarning } from '@shared/content-read'
 import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, type ContextBatch } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, truncateToQuota, type QuestionPlan } from './question-budget'
@@ -226,14 +227,24 @@ async function callForJson(
 export async function generateInterview(params: GenerateParams): Promise<InterviewResult> {
   const { scan, granularity, roleFocus, profile, signal, onProgress } = params
 
+  try {
+    assertProjectIdentityContract(scan.name, scan.root)
+  } catch {
+    throw new Error(RESULT_CONTRACT_MESSAGES.generated)
+  }
+
   onProgress('构建项目上下文', `颗粒度：${GRANULARITY_META[granularity].label}`, 8)
   const built = await buildContext(scan, granularity)
+  const readWarning = built.contentReadSummary.failedReads > 0
+    ? contentReadWarning(built.contentReadSummary)
+    : ''
   const treeText = treeToText(scan.tree)
   onProgress(
     '上下文就绪',
     `${built.batches.length} 个分析批次，共 ${Math.round(built.batches.reduce((a, b) => a + b.totalChars, 0) / 1000)}k 字符；已排除 ${scan.security.excludedFiles} 个敏感文件，脱敏 ${built.contentSecurity.redactedFiles} 个文件（${built.contentSecurity.redactionMatches} 处）`,
     15
   )
+  if (readWarning) onProgress('内容读取警告', readWarning, 15)
 
   // 题量预算：在发起任何模型调用之前就把总量分配到各批次，
   // 这是 issue #9 的核心修复——此前全局批 10-15 题 + 每模块 6-10 题最多可得 70-115 题。
@@ -327,7 +338,8 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         else entries.push([category, Number(count)])
         return entries
       }, [] as Array<[string, number]>))
-    }
+    },
+    ...(built.contentReadSummary.failedReads > 0 ? { contentReadSummary: built.contentReadSummary } : {})
   }
   try {
     assertInterviewResultContract(result)

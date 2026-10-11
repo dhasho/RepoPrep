@@ -16,6 +16,17 @@ export class ProjectContentBoundaryError extends Error {
   }
 }
 
+/** Safe-to-summarize content I/O failure after the approved path and handle were revalidated. */
+export class ProjectContentReadError extends Error {
+  readonly code: 'EACCES' | 'EPERM' | 'ENOENT' | 'EIO'
+
+  constructor(code: 'EACCES' | 'EPERM' | 'ENOENT' | 'EIO') {
+    super('项目文件读取失败。')
+    this.name = 'ProjectContentReadError'
+    this.code = code
+  }
+}
+
 export interface ProjectContentIO {
   lstat(path: string): Promise<import('node:fs').BigIntStats>
   realpath(path: string): Promise<string>
@@ -56,6 +67,14 @@ function assertIdentity(expected: FileSystemIdentity | undefined, stats: import(
   if (!current || !sameFileSystemIdentity(expected, current)) rejectBoundary()
 }
 
+function contentReadError(error: unknown): ProjectContentReadError {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+  if (code === 'EACCES' || code === 'EPERM' || code === 'ENOENT' || code === 'EIO') {
+    return new ProjectContentReadError(code)
+  }
+  return rejectBoundary()
+}
+
 export function createProjectContentReader(io: Partial<ProjectContentIO> = {}): (scan: ScanResult, file: ScannedFile) => Promise<string> {
   const filesystem = { ...defaultIO, ...io }
   return async (scan, file) => {
@@ -94,7 +113,13 @@ export function createProjectContentReader(io: Partial<ProjectContentIO> = {}): 
       const flags = process.platform === 'win32'
         ? fsSync.constants.O_RDONLY
         : fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW ?? 0)
-      handle = await filesystem.open(candidate, flags)
+      try {
+        handle = await filesystem.open(candidate, flags)
+      } catch (error) {
+        // An open denial is recoverable only while every approved path identity still matches.
+        await checkPathChain()
+        throw contentReadError(error)
+      }
       const opened = await handle.stat({ bigint: true })
       if (!opened.isFile()) rejectBoundary()
       assertIdentity(approvedFile.identity, opened)
@@ -103,7 +128,21 @@ export function createProjectContentReader(io: Partial<ProjectContentIO> = {}): 
       const buffer = Buffer.alloc(byteLength)
       let offset = 0
       while (offset < byteLength) {
-        const result = await handle.read(buffer, offset, byteLength - offset, offset)
+        let result: { bytesRead: number; buffer: Buffer }
+        try {
+          result = await handle.read(buffer, offset, byteLength - offset, offset)
+        } catch (error) {
+          // Once opened, verify both the handle and path chain before treating an I/O error as ordinary.
+          try {
+            const current = await handle.stat({ bigint: true })
+            if (!current.isFile()) rejectBoundary()
+            assertIdentity(approvedFile.identity, current)
+            await checkPathChain()
+          } catch {
+            return rejectBoundary()
+          }
+          throw contentReadError(error)
+        }
         if (result.bytesRead <= 0 || result.bytesRead > byteLength - offset) rejectBoundary()
         offset += result.bytesRead
       }
@@ -116,6 +155,7 @@ export function createProjectContentReader(io: Partial<ProjectContentIO> = {}): 
       return buffer.toString('utf-8')
     } catch (error) {
       if (error instanceof ProjectContentBoundaryError) throw error
+      if (error instanceof ProjectContentReadError) throw error
       return rejectBoundary()
     } finally {
       if (handle) await handle.close().catch(() => undefined)
