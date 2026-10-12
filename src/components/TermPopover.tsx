@@ -109,7 +109,11 @@ export default function TermPopover(props: TermPopoverProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
-    const onScroll = () => onClose()
+    const onScroll = (e: Event) => {
+      const box = boxRef.current
+      if (box && e.target && 'nodeType' in e.target && box.contains(e.target as Node)) return
+      onClose()
+    }
     window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey)
     window.addEventListener('scroll', onScroll, true)
@@ -148,7 +152,7 @@ export default function TermPopover(props: TermPopoverProps) {
         </button>
       </div>
 
-      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
         {glossaryHint && (
           <div className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[13px] leading-6 text-slate-600">
             <span className="mr-1 font-medium text-slate-500">术语表：</span>
