@@ -22,7 +22,7 @@ function section(count: number, title = '主题'): Section {
     title,
     questions: Array.from({ length: count }, (_, i) => ({
       id: `q-${title}-${i}-${Math.random().toString(36).slice(2, 8)}`,
-      question: `问题 ${i + 1}`,
+      question: `${title} 问题 ${i + 1}`,
       answer: `答案 ${i + 1}`,
       followUps: []
     }))
@@ -48,7 +48,7 @@ function makeInput(
       const n = deliver({ index, quota, isCompensation }, calls.length)
       return {
         projectSummary: '',
-        sections: n > 0 ? [section(n, `批次${index}`)] : [],
+        sections: n > 0 ? [section(n, `批次${index} 请求${calls.length}`)] : [],
         glossary: {}
       }
     },

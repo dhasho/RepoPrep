@@ -58,17 +58,17 @@ afterEach(async () => {
  * 被后续题引用的词条"这类问题才会暴露——若所有批次共用同一份 glossary，
  * 该缺陷会被掩盖。
  */
-function mockReplyForPrompt(prompt: string): string {
+function mockReplyForPrompt(prompt: string, callNo: number): string {
   const strict = prompt.match(/严格\s*(\d+)\s*题/)
   const approx = prompt.match(/约\s*(\d+)\s*题/)
   const requested = Number(strict?.[1] ?? approx?.[1] ?? 5)
   const count = requested + 6
   // 用提示词里的批次名派生一个稳定前缀，保证各批术语互不相同
   const batchMatch = prompt.match(/模块「([^」]+)」/)
-  const prefix = batchMatch ? `模块${batchMatch[1]}` : '全局'
+  const prefix = `${batchMatch ? `模块${batchMatch[1]}` : '全局'}请求${callNo}`
 
   const questions = Array.from({ length: count }, (_, i) => ({
-    question: `第 ${i + 1} 题：这里的实现为什么这样写？`,
+    question: `第 ${i + 1} 题（${prefix}）：这里的实现为什么这样写？`,
     answer: `参考答案 ${i + 1}，涉及 [[${prefix}术语${i + 1}]] 与 [[共用术语]]。`,
     followUps: [{ question: `追问 ${i + 1}`, answer: '追问答案', followUps: [] }]
   }))
@@ -91,7 +91,7 @@ async function withMockLlm<T>(run: (prompts: string[]) => Promise<T>): Promise<T
       ? body.messages.map((m: { content?: string }) => m.content ?? '').join('\n')
       : ''
     prompts.push(prompt)
-    return new Response(JSON.stringify({ choices: [{ message: { content: mockReplyForPrompt(prompt) } }] }), {
+    return new Response(JSON.stringify({ choices: [{ message: { content: mockReplyForPrompt(prompt, prompts.length) } }] }), {
       status: 200,
       headers: { 'content-type': 'application/json' }
     })

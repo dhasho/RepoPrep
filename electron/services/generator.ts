@@ -15,7 +15,8 @@ import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncati
 import { contentReadWarning } from '@shared/content-read'
 import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder'
-import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, truncateToQuota, type QuestionPlan } from './question-budget'
+import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
+import { buildCompensationInstruction, selectUniqueQuestions } from './question-dedupe'
 import type { ScanResult } from './scanner'
 
 export interface GenerateParams {
@@ -210,7 +211,6 @@ async function callForJson(
   let lastError = ''
   let previousReply = ''
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt && previousReply.length > 20_000) onRequestTruncation()
     const repair = attempt ? { reply: safeClipText(previousReply, 20_000), error: lastError } : undefined
     const fitted = fitMessages(buildMessages, contextChars, minimumContextChars, budget, repair)
     if (fitted.contextLimit < contextChars) onRequestTruncation()
@@ -375,6 +375,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     '整理结果',
     `${capped.sections.length} 个主题，共 ${totalQuestions} 题（预算 ${budget.min}–${budget.max}）` +
       `${merged.compensated > 0 ? `；补偿请求补回 ${merged.compensated} 题` : ''}` +
+      `${merged.duplicates > 0 ? `；已跳过 ${merged.duplicates} 道重复题` : ''}` +
       `${droppedTotal > 0 ? `；超出配额已丢弃 ${droppedTotal} 题` : ''}` +
       `${orphanTerms > 0 ? `；已清理 ${orphanTerms} 个未再引用的名词` : ''}` +
       `${shortfall > 0 ? `；模型输出不足，比下限少 ${shortfall} 题，可换用能力更强的模型或提高颗粒度` : ''}`,
@@ -451,6 +452,8 @@ export interface MergeResult {
   compensationRounds: number
   /** 最终合并的题量 */
   collected: number
+  /** 合并时跳过的重复题数量 */
+  duplicates: number
 }
 
 /**
@@ -476,21 +479,30 @@ export async function mergeWithCompensation(
     droppedByQuota: 0,
     compensated: 0,
     compensationRounds: 0,
-    collected: 0
+    collected: 0,
+    duplicates: 0
   }
   /** 每批实际贡献的题量，用于挑出"给得最少"的批次做补偿 */
   const delivered = quotas.map(() => 0)
+  const seen = new Set<string>()
+  const retainedByBatch: Section[][] = quotas.map(() => [])
 
   const absorb = (parsed: ParsedBatch, quota: number, index: number): number => {
-    const trimmed = truncateToQuota(parsed.sections, quota)
-    const keptSections = trimmed.sections.filter((s) => s.questions.length > 0)
-    merged.droppedByQuota += trimmed.dropped
-    if (!merged.projectSummary && parsed.projectSummary) merged.projectSummary = parsed.projectSummary
-    merged.sections.push(...keptSections)
-    Object.assign(merged.glossary, parsed.glossary)
-    delivered[index] += trimmed.kept
-    merged.collected += trimmed.kept
-    return trimmed.kept
+    const unique = selectUniqueQuestions(parsed.sections, quota, seen)
+    merged.droppedByQuota += unique.dropped
+    merged.duplicates += unique.duplicates
+    if (unique.kept > 0) {
+      if (!merged.projectSummary && parsed.projectSummary) merged.projectSummary = parsed.projectSummary
+      merged.sections.push(...unique.sections)
+      retainedByBatch[index].push(...unique.sections)
+      const retainedGlossary = pruneGlossary(parsed.glossary, unique.sections)
+      for (const [term, definition] of Object.entries(retainedGlossary)) {
+        if (!Object.hasOwn(merged.glossary, term)) merged.glossary[term] = definition
+      }
+    }
+    delivered[index] += unique.kept
+    merged.collected += unique.kept
+    return unique.kept
   }
 
   for (let i = 0; i < batches.length; i++) {
@@ -528,8 +540,14 @@ export async function mergeWithCompensation(
       const parsed = await requestBatch(
         target,
         ask,
-        `这是补充请求：上一次该部分只产出了 ${delivered[target]} 题，总量还差 ${gap} 题。` +
-          `请**再补充 ${ask} 个此前没有覆盖到的考察点**，不要重复已有问题。`
+        buildCompensationInstruction({
+          delivered: delivered[target],
+          gap,
+          ask,
+          sections: [...retainedByBatch[target], ...retainedByBatch.flatMap((sections, index) =>
+            index === target ? [] : sections
+          )]
+        })
       )
       merged.compensated += absorb(parsed, ask, target)
     } catch (error) {
