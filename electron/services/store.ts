@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { SCAN_LIMIT_BOUNDS, type InterviewResult, type RecentProject, type Settings } from '@shared/types'
-import { assertInterviewResultContract, LLM_PROFILE_LIMITS, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { assertInterviewResultContract, LLM_PROFILE_LIMITS, MAX_LLM_PROFILES, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import {
   archiveCorrupt,
   atomicReplaceBytes,
@@ -81,7 +81,7 @@ function isSettings(value: unknown): value is Settings {
   const keys = Object.keys(value)
   if (keys.some((key) => !['profiles', 'defaultProfileId', 'scanLimits'].includes(key))) return false
   const profiles = value.profiles === undefined ? [] : value.profiles
-  if (!Array.isArray(profiles) || profiles.length > 32) return false
+  if (!Array.isArray(profiles) || profiles.length > MAX_LLM_PROFILES) return false
   for (const profile of profiles) {
     if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature'].includes(key))) return false
     if (!validText(profile.id, LLM_PROFILE_LIMITS.id)) return false

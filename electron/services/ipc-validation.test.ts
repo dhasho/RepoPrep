@@ -7,7 +7,7 @@ import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
 import { INVOKE_CHANNELS, IpcValidationError, validateIpcArgs } from './ipc-validation.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; tests run directly in Node.
-import { EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS } from '../../shared/result-contract.ts'
+import { EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS, MAX_LLM_PROFILES } from '../../shared/result-contract.ts'
 
 const profile = { id: 'p1', name: '本地', baseUrl: 'https://api.example.com/v1', apiKey: '', model: 'model-x' }
 const requestId = '4f22d0a1-3e0f-4f4e-8c1d-1c9f9036bc17'
@@ -63,8 +63,18 @@ test('路径、枚举和字符串边界严格校验', () => {
 test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', () => {
   for (const baseUrl of ['file:///tmp/x', 'ftp://example.com', 'https://user:pass@example.com', 'https://[broken']) {
     rejects(IPC.llmTest, { ...profile, baseUrl })
+    rejects(IPC.settingsSave, { profiles: [{ ...profile, baseUrl }], defaultProfileId: profile.id })
   }
-  rejects(IPC.settingsSave, { profiles: Array.from({ length: 33 }, (_, i) => ({ ...profile, id: String(i) })), defaultProfileId: null })
+  for (const field of ['name', 'model', 'apiKey'] as const) {
+    rejects(IPC.settingsSave, { profiles: [{ ...profile, [field]: `${profile[field]}\0` }], defaultProfileId: profile.id })
+  }
+  rejects(IPC.settingsSave, { profiles: Array.from({ length: MAX_LLM_PROFILES + 1 }, (_, i) => ({ ...profile, id: `p${i}` })), defaultProfileId: null })
+})
+
+test('settingsSave 接受共享数量上限且继续拒绝超过上限的直接调用', () => {
+  const profiles = Array.from({ length: MAX_LLM_PROFILES }, (_, index) => ({ ...profile, id: `limit-${index}` }))
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles, defaultProfileId: profiles[0].id }]))
+  rejects(IPC.settingsSave, { profiles: [...profiles, { ...profile, id: 'limit-overflow' }], defaultProfileId: profiles[0].id })
 })
 
 test('profile 与 explain IPC 使用共享上限，并接受每个字段的合法边界', () => {
@@ -82,6 +92,19 @@ test('profile 与 explain IPC 使用共享上限，并接受每个字段的合�
   rejects(IPC.llmTest, { ...maximumProfile, model: `${maximumProfile.model}x` })
   rejects(IPC.llmTest, { ...maximumProfile, apiKey: `${maximumProfile.apiKey}x` })
   rejects(IPC.llmTest, { ...maximumProfile, baseUrl: `${maximumProfile.baseUrl}x` })
+
+  const maximumSettingsProfile = { ...maximumProfile, baseUrl: `https://example.com/${'x'.repeat(LLM_PROFILE_LIMITS.baseUrl - 'https://example.com/'.length)}` }
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [maximumSettingsProfile], defaultProfileId: maximumSettingsProfile.id }]))
+  const maximumHttpProfile = {
+    ...maximumSettingsProfile,
+    baseUrl: `http://example.com/${'x'.repeat(LLM_PROFILE_LIMITS.baseUrl - 'http://example.com/'.length)}`
+  }
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [maximumHttpProfile], defaultProfileId: maximumHttpProfile.id }]))
+  for (const field of ['name', 'model', 'apiKey'] as const) {
+    rejects(IPC.settingsSave, { profiles: [{ ...maximumSettingsProfile, [field]: `${maximumSettingsProfile[field]}x` }], defaultProfileId: maximumSettingsProfile.id })
+  }
+  const tooLongSettingsUrl = `https://example.com/${'x'.repeat(LLM_PROFILE_LIMITS.baseUrl - 'https://example.com/'.length + 1)}`
+  rejects(IPC.settingsSave, { profiles: [{ ...maximumSettingsProfile, baseUrl: tooLongSettingsUrl }], defaultProfileId: maximumSettingsProfile.id })
 
   const request = {
     requestId,

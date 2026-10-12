@@ -10,6 +10,8 @@ export const LLM_PROFILE_LIMITS = {
   baseUrl: 2048
 } as const
 
+export const MAX_LLM_PROFILES = 32
+
 export const RESULT_LIMITS = {
   modelUsed: LLM_PROFILE_LIMITS.name + 3 + LLM_PROFILE_LIMITS.model,
   projectName: 256,

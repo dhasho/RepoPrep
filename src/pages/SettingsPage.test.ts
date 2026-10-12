@@ -13,6 +13,12 @@ import { fileURLToPath } from 'node:url'
 import { JSDOM } from 'jsdom'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import type { LlmProfile, Settings, TestConnectionResult } from '../../shared/types.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { IPC } from '../../shared/ipc.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { LLM_PROFILE_LIMITS, MAX_LLM_PROFILES } from '../../shared/result-contract.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { validateIpcArgs } from '../../electron/services/ipc-validation.ts'
 
 interface Deferred {
   resolve: () => void
@@ -669,6 +675,165 @@ test('SettingsPage discard after profile deletion does not write or change persi
     assert.equal(page.backCalls, 1)
     assert.equal(writes, 0, 'discarding a deletion must not call settings persistence')
     assert.deepEqual(backend, initial)
+  } finally {
+    await page.unmount()
+  }
+})
+
+function schemaCheckedSave(calls: Settings[]) {
+  return async (next: Settings) => {
+    calls.push(structuredClone(next))
+    validateIpcArgs(IPC.settingsSave, [next])
+  }
+}
+
+function profileFixture(index: number): LlmProfile {
+  return {
+    id: `limit-profile-${index}`,
+    name: `Profile ${index}`,
+    baseUrl: 'https://example.com/v1',
+    apiKey: '',
+    model: `model-${index}`,
+    temperature: 0.4
+  }
+}
+
+test('SettingsPage adds the real 32nd profile, disables add at the shared limit, and saves through IPC schema', async () => {
+  const initial: Settings = {
+    profiles: Array.from({ length: MAX_LLM_PROFILES - 1 }, (_, index) => profileFixture(index + 1)),
+    defaultProfileId: 'limit-profile-1'
+  }
+  const writes: Settings[] = []
+  const page = await mountSettingsPage(initial, schemaCheckedSave(writes))
+  try {
+    const addButton = () => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('新增配置'))!
+    assert.equal(addButton().disabled, false)
+    await page.React.act(async () => addButton().click())
+    assert.equal(page.rootElement.querySelectorAll('input[placeholder="如：DeepSeek 日常用"]').length, 1)
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 1)
+    assert.equal(writes[0].profiles.length, MAX_LLM_PROFILES)
+    assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [writes[0]]))
+    assert.equal(addButton().disabled, true)
+    assert.match(page.rootElement.textContent ?? '', new RegExp(String(MAX_LLM_PROFILES)))
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage preflights imported over-limit settings and permits a corrective save', async () => {
+  const initial: Settings = {
+    profiles: Array.from({ length: MAX_LLM_PROFILES + 1 }, (_, index) => profileFixture(index + 1)),
+    defaultProfileId: 'limit-profile-1'
+  }
+  const writes: Settings[] = []
+  const page = await mountSettingsPage(initial, schemaCheckedSave(writes))
+  try {
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 0, 'legacy invalid settings must be blocked before save IPC')
+    assert.match(page.rootElement.textContent ?? '', new RegExp(String(MAX_LLM_PROFILES)))
+
+    const targetName = `Profile ${MAX_LLM_PROFILES + 1}`
+    const targetTab = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes(targetName))!
+    await page.React.act(async () => targetTab.click())
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 1)
+    assert.equal(writes[0].profiles.length, MAX_LLM_PROFILES)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage field limit edges pass through the real schema and overlong raw DOM drafts are field-targeted', async () => {
+  const cases: Array<{ field: 'name' | 'model' | 'baseUrl' | 'apiKey'; max: number; selector: string; atLimit: string; overLimit: string; label: RegExp }> = [
+    { field: 'name', max: LLM_PROFILE_LIMITS.name, selector: 'input[placeholder="如：DeepSeek 日常用"]', atLimit: 'n'.repeat(LLM_PROFILE_LIMITS.name), overLimit: 'n'.repeat(LLM_PROFILE_LIMITS.name + 1), label: /配置名称/ },
+    { field: 'model', max: LLM_PROFILE_LIMITS.model, selector: 'input[placeholder="deepseek-chat，或点右侧按钮检测"]', atLimit: 'm'.repeat(LLM_PROFILE_LIMITS.model), overLimit: 'm'.repeat(LLM_PROFILE_LIMITS.model + 1), label: /模型名/ },
+    { field: 'baseUrl', max: LLM_PROFILE_LIMITS.baseUrl, selector: 'input[placeholder="https://api.deepseek.com/v1"]', atLimit: `http://e.test/${'x'.repeat(LLM_PROFILE_LIMITS.baseUrl - 'http://e.test/'.length)}`, overLimit: `http://e.test/${'x'.repeat(LLM_PROFILE_LIMITS.baseUrl - 'http://e.test/'.length + 1)}`, label: /接口地址/ },
+    { field: 'apiKey', max: LLM_PROFILE_LIMITS.apiKey, selector: 'input[type="password"]', atLimit: 'k'.repeat(LLM_PROFILE_LIMITS.apiKey), overLimit: `synthetic-secret-${'k'.repeat(LLM_PROFILE_LIMITS.apiKey - 'synthetic-secret-'.length + 1)}`, label: /API Key/ }
+  ]
+
+  for (const item of cases) {
+    const writes: Settings[] = []
+    const page = await mountSettingsPage(initialSettings, schemaCheckedSave(writes))
+    try {
+      const input = () => page.rootElement.querySelector<HTMLInputElement>(item.selector)!
+      await page.React.act(async () => setInput(input(), item.atLimit))
+      assert.equal(input().value, item.atLimit, `${item.field} boundary must remain intact in the actual DOM`)
+      await page.React.act(async () => page.saveButton().click())
+      assert.equal(writes.length, 1, `${item.field} at its shared maximum should reach the actual IPC schema`)
+      assert.equal(writes[0].profiles[0][item.field], item.atLimit)
+      assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [writes[0]]))
+      if (item.field === 'apiKey') {
+        await page.React.act(async () => setInput(input(), ''))
+        assert.equal(input().value, '', 'an empty API Key remains a valid draft')
+        await page.React.act(async () => page.saveButton().click())
+        assert.equal(writes.length, 2)
+        assert.equal(writes[1].profiles[0].apiKey, '')
+      }
+      const writesBeforeInvalidDraft = writes.length
+
+      await page.React.act(async () => setInput(input(), item.overLimit))
+      assert.equal(input().value, item.overLimit, `${item.field} over-limit paste must not be truncated in the DOM`)
+      await page.React.act(async () => page.saveButton().click())
+      assert.equal(writes.length, writesBeforeInvalidDraft, `${item.field} over-limit draft must not call save`)
+      assert.equal(input().getAttribute('aria-invalid'), 'true')
+      const describedBy = input().getAttribute('aria-describedby')
+      assert.ok(describedBy, `${item.field} must point assistive technology to its field error`)
+      assert.equal(describedBy, `profile-0-${item.field}-error`)
+      const errorNode = page.dom.window.document.getElementById(describedBy!)
+      assert.ok(errorNode, `${item.field} aria-describedby must resolve to an error node`)
+      assert.match(errorNode.textContent ?? '', item.label)
+      assert.match(errorNode.textContent ?? '', new RegExp(String(item.max)), `${item.field} error must state its shared limit`)
+      if (item.field === 'apiKey') {
+        assert.equal(page.rootElement.textContent?.includes(item.overLimit), false, 'API Key content must never appear in validation errors')
+      }
+
+      await page.React.act(async () => setInput(input(), item.atLimit))
+      assert.equal(input().value, item.atLimit)
+      await page.React.act(async () => page.saveButton().click())
+      assert.equal(writes.length, writesBeforeInvalidDraft + 1, `${item.field} correction must be saveable`)
+      assert.equal(writes[writes.length - 1].profiles[0][item.field], item.atLimit)
+    } finally {
+      await page.unmount()
+    }
+  }
+})
+
+test('SettingsPage validates a bad profile beyond the selected row and retains other raw draft values', async () => {
+  const profiles = [profileFixture(1), profileFixture(2)]
+  const initial: Settings = { profiles, defaultProfileId: profiles[0].id }
+  const writes: Settings[] = []
+  const page = await mountSettingsPage(initial, schemaCheckedSave(writes))
+  try {
+    const firstName = page.rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
+    await page.React.act(async () => setInput(firstName, 'unsaved first-row text'))
+    const secondTab = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('Profile 2'))!
+    await page.React.act(async () => secondTab.click())
+    const badModel = page.rootElement.querySelector<HTMLInputElement>('input[placeholder="deepseek-chat，或点右侧按钮检测"]')!
+    const tooLong = 'x'.repeat(LLM_PROFILE_LIMITS.model + 1)
+    await page.React.act(async () => setInput(badModel, tooLong))
+    assert.equal(badModel.value, tooLong)
+    const firstTabBeforeSave = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('unsaved first-row text'))!
+    await page.React.act(async () => firstTabBeforeSave.click())
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 0)
+    const focusedBadModel = page.rootElement.querySelector<HTMLInputElement>('input[placeholder="deepseek-chat，或点右侧按钮检测"]')!
+    assert.equal(focusedBadModel.value, tooLong)
+    assert.equal(focusedBadModel.getAttribute('aria-invalid'), 'true')
+    const badModelErrorId = focusedBadModel.getAttribute('aria-describedby')
+    assert.ok(badModelErrorId)
+    assert.equal(badModelErrorId, 'profile-1-model-error')
+    const badModelError = page.dom.window.document.getElementById(badModelErrorId!)
+    assert.ok(badModelError)
+    assert.equal(badModelError.textContent?.includes('模型名'), true)
+    assert.equal(badModelError.textContent?.includes(String(LLM_PROFILE_LIMITS.model)), true)
+    const firstTab = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('unsaved first-row text'))!
+    assert.ok(firstTab, 'preflight should reveal/select the invalid profile without discarding another row draft')
+    await page.React.act(async () => firstTab.click())
+    const visibleFirstName = page.rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
+    assert.equal(visibleFirstName.value, 'unsaved first-row text')
   } finally {
     await page.unmount()
   }

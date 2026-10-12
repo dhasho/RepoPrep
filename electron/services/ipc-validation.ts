@@ -8,7 +8,7 @@ import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { isStorageDiagnosticId } from '../../shared/storage-contract.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
-import { assertInterviewResultContract, EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS, ResultContractError } from '../../shared/result-contract.ts'
+import { assertInterviewResultContract, EXPLAIN_CONTEXT_LIMITS, LLM_PROFILE_LIMITS, MAX_LLM_PROFILES, ResultContractError } from '../../shared/result-contract.ts'
 
 const messages = {
   unknown: '不允许的 IPC 请求。',
@@ -74,7 +74,7 @@ function scanLimits(value: unknown): void {
   if (value.maxContentFileBytes !== undefined) int(value.maxContentFileBytes, SCAN_LIMIT_BOUNDS.maxContentFileBytes)
 }
 function settings(value: unknown): asserts value is Settings {
-  if (!record(value) || !Array.isArray(value.profiles) || value.profiles.length > 32) fail()
+  if (!record(value) || !Array.isArray(value.profiles) || value.profiles.length > MAX_LLM_PROFILES) fail()
   exactKeys(value, ['profiles', 'defaultProfileId', 'scanLimits'])
   if (value.defaultProfileId !== null) string(value.defaultProfileId, 128)
   for (const item of value.profiles) profile(item)

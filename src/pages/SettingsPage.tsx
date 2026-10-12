@@ -8,6 +8,7 @@ import { SettingsSaveFlow } from '../lib/settings-save'
 import { ModelDetectionController, modelStateOf } from '../lib/model-detection'
 import { ConnectionTestController } from '../lib/connection-test'
 import { parseScanLimitDraft, scanLimitDraftOf, type ScanLimitDraft, type ScanLimitErrors } from '../lib/scan-limit-input'
+import { MAX_LLM_PROFILES, profileFieldErrorId, validateProfiles, type ProfileField, type ProfileValidationError } from '../lib/profile-validation'
 
 interface Props {
   settings: Settings
@@ -44,6 +45,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const [saved, setSaved] = useState(false)
   const [scanLimitDraft, setScanLimitDraft] = useState<ScanLimitDraft>(() => scanLimitDraftOf(settings.scanLimits))
   const [scanLimitErrors, setScanLimitErrors] = useState<ScanLimitErrors>({})
+  const [profileErrors, setProfileErrors] = useState<ProfileValidationError[]>([])
   // 保存必须等待主进程写盘结果（issue #15）：保存中防重复提交；
   // 失败时不清除 dirty、显示可操作错误；带未保存修改返回时先提示
   const saveFlow = useMemo(() => new SettingsSaveFlow(api), [])
@@ -72,10 +74,15 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   }, [connectionTest])
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null
+  const selectedIndex = profiles.findIndex((p) => p.id === selectedId)
+  const profileError = (field: ProfileField) => profileErrors.find((error) => error.profileIndex === selectedIndex && error.field === field)
 
   const patchSelected = (patch: Partial<LlmProfile>) => {
     connectionTest.invalidate()
-    setProfiles((l) => l.map((p) => (p.id === selectedId ? { ...p, ...patch } : p)))
+    const nextProfiles = profiles.map((p) => (p.id === selectedId ? { ...p, ...patch } : p))
+    setProfiles(nextProfiles)
+    setProfileErrors(validateProfiles(nextProfiles))
+    setSaveError((error) => error?.startsWith('配置 ') ? null : error)
     setDirty(true)
     setSaved(false)
     saveFlow.markLocalEdit()
@@ -104,9 +111,18 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
    */
   const save = async () => {
     if (saving) return // 防重复提交（按钮同时禁用，流程控制器也会拒绝并发保存）
-    if (profiles.some((profile) => !profile.name.trim() || !profile.baseUrl.trim() || !profile.model.trim())) {
+    if (profiles.length > MAX_LLM_PROFILES) {
       setSaved(false)
-      setSaveError('名称、接口地址、模型名不能为空')
+      setSaveError(`配置数量不得超过 ${MAX_LLM_PROFILES} 项`)
+      return
+    }
+    const invalidProfiles = validateProfiles(profiles)
+    setProfileErrors(invalidProfiles)
+    if (invalidProfiles.length) {
+      setSaved(false)
+      const firstError = invalidProfiles[0]
+      setSelectedId(profiles[firstError.profileIndex].id)
+      setSaveError(`配置 ${firstError.profileIndex + 1}：${firstError.message}`)
       return
     }
     const parsedLimits = parseScanLimitDraft(scanLimitDraft)
@@ -148,8 +164,12 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   }
 
   const addProfile = () => {
+    if (profiles.length >= MAX_LLM_PROFILES) return
     const p = emptyProfile()
-    setProfiles((l) => [...l, p])
+    const nextProfiles = [...profiles, p]
+    setProfiles(nextProfiles)
+    setProfileErrors(validateProfiles(nextProfiles))
+    setSaveError((error) => error?.startsWith('配置 ') ? null : error)
     setSelectedId(p.id)
     setDirty(true)
     setSaved(false)
@@ -165,6 +185,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     connectionTest.invalidate()
     detection.invalidate(selected.id) // 该配置已删除，进行中的检测作废
     setProfiles(rest)
+    setProfileErrors(validateProfiles(rest))
+    setSaveError((error) => error?.startsWith('配置 ') ? null : error)
     if (defaultId === selected.id) setDefaultId(rest[0]?.id ?? null)
     setSelectedId(rest[0]?.id ?? '')
     setDirty(true)
@@ -219,6 +241,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             {profiles.map((p, i) => (
               <button
                 key={p.id}
+                aria-invalid={Boolean(profileErrors.some((error) => error.profileIndex === i && error.field === 'id'))}
+                aria-describedby={profileErrors.some((error) => error.profileIndex === i && error.field === 'id') ? profileFieldErrorId(i, 'id') : undefined}
                 className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm ${
                   i > 0 ? 'border-t border-slate-100' : ''
                 } ${p.id === selectedId ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}
@@ -238,16 +262,19 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             ))}
           </div>
           <button
-            className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600"
+            className="mt-2 w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={addProfile}
+            disabled={profiles.length >= MAX_LLM_PROFILES}
           >
             ＋ 新增配置
           </button>
+          <p className="mt-1 text-center text-xs text-slate-400">配置数量：{profiles.length}/{MAX_LLM_PROFILES}</p>
         </div>
 
         {/* 编辑区 */}
         {selected ? (
           <div className="rounded-xl border border-slate-200 bg-white p-5">
+            {profileError('id') && <p id={profileFieldErrorId(selectedIndex, 'id')} className="mb-3 text-xs text-rose-600">{profileError('id')?.message}</p>}
             <div className="mb-4 flex flex-wrap gap-1.5">
               {PRESETS.map((preset) => (
                 <button
@@ -266,23 +293,31 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                 <input
                   className={inputCls}
                   value={selected.name}
+                  aria-invalid={Boolean(profileError('name'))}
+                  aria-describedby={profileError('name') ? profileFieldErrorId(selectedIndex, 'name') : undefined}
                   onChange={(e) => patchSelected({ name: e.target.value })}
                   placeholder="如：DeepSeek 日常用"
                 />
+                {profileError('name') && <p id={profileFieldErrorId(selectedIndex, 'name')} className="mt-1 text-xs text-rose-600">{profileError('name')?.message}</p>}
               </Field>
               <Field label="接口地址 Base URL">
                 <input
                   className={inputCls}
                   value={selected.baseUrl}
+                  aria-invalid={Boolean(profileError('baseUrl'))}
+                  aria-describedby={profileError('baseUrl') ? profileFieldErrorId(selectedIndex, 'baseUrl') : undefined}
                   onChange={(e) => patchSelected({ baseUrl: e.target.value })}
                   placeholder="https://api.deepseek.com/v1"
                 />
+                {profileError('baseUrl') && <p id={profileFieldErrorId(selectedIndex, 'baseUrl')} className="mt-1 text-xs text-rose-600">{profileError('baseUrl')?.message}</p>}
               </Field>
               <Field label="API Key">
                 <input
                   className={inputCls}
                   type="password"
                   value={selected.apiKey}
+                  aria-invalid={Boolean(profileError('apiKey'))}
+                  aria-describedby={profileError('apiKey') ? profileFieldErrorId(selectedIndex, 'apiKey') : undefined}
                   onChange={(e) => patchSelected({ apiKey: e.target.value })}
                   onBlur={() => {
                     // 粘贴完 Key 失焦时自动检测一次可用模型
@@ -297,6 +332,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                   }}
                   placeholder="sk-…（本地保存于本机，仅用于调用接口；Ollama 等本地服务可留空）"
                 />
+                {profileError('apiKey') && <p id={profileFieldErrorId(selectedIndex, 'apiKey')} className="mt-1 text-xs text-rose-600">{profileError('apiKey')?.message}</p>}
               </Field>
               <Field label="模型名">
                 <div className="relative">
@@ -304,6 +340,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                     <input
                       className={inputCls}
                       value={selected.model}
+                      aria-invalid={Boolean(profileError('model'))}
+                      aria-describedby={profileError('model') ? profileFieldErrorId(selectedIndex, 'model') : undefined}
                       onChange={(e) => patchSelected({ model: e.target.value })}
                       placeholder="deepseek-chat，或点右侧按钮检测"
                     />
@@ -315,6 +353,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                       {modelState.loading ? '检测中…' : '🔍 检测可用模型'}
                     </button>
                   </div>
+                  {profileError('model') && <p id={profileFieldErrorId(selectedIndex, 'model')} className="mt-1 text-xs text-rose-600">{profileError('model')?.message}</p>}
                   {modelState.message && (
                     <p className={`mt-1.5 text-xs ${modelState.messageOk ? 'text-emerald-600' : 'text-slate-500'}`}>
                       {modelState.messageOk ? '✓ ' : ''}
