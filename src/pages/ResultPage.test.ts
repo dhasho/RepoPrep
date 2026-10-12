@@ -134,3 +134,156 @@ test('真实 ResultPage 可同时显示两类警告，正常结果与旧结果�
   assert.ok(!old.includes('内容读取不完整'))
   assert.ok(!old.includes(contextWarning))
 })
+
+test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和页面局部状态', async () => {
+  await fs.access(bundlePath)
+  const { JSDOM } = await import('jsdom')
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const requests: Array<Record<string, unknown>> = []
+  const cancelled: string[] = []
+  const eventHandlers: Array<(event: { requestId: string; type: 'delta' | 'done' | 'error'; data: string }) => void> = []
+  const globalDescriptors = new Map<string, PropertyDescriptor | undefined>()
+  const bindGlobal = (name: string, value: unknown) => {
+    globalDescriptors.set(name, Object.getOwnPropertyDescriptor(globalThis, name))
+    Object.defineProperty(globalThis, name, { configurable: true, writable: true, value })
+  }
+  const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(dom.window.HTMLElement.prototype, 'scrollIntoView')
+  dom.window.HTMLElement.prototype.scrollIntoView = () => undefined
+  ;(dom.window as unknown as Record<string, unknown>).api = {
+    exportMarkdown: async () => ({ ok: true, message: 'ok' }),
+    explain: (request: Record<string, unknown>) => {
+      requests.push(request)
+      return new Promise<void>(() => {})
+    },
+    cancelExplain: (requestId: string) => { cancelled.push(requestId) },
+    onExplainEvent: (handler: (event: { requestId: string; type: 'delta' | 'done' | 'error'; data: string }) => void) => {
+      eventHandlers.push(handler)
+      return () => undefined
+    }
+  }
+  bindGlobal('window', dom.window)
+  bindGlobal('document', dom.window.document)
+  bindGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  bindGlobal('requestAnimationFrame', dom.window.requestAnimationFrame.bind(dom.window))
+  bindGlobal('cancelAnimationFrame', dom.window.cancelAnimationFrame.bind(dom.window))
+
+  try {
+    const requireBundle = createRequire(import.meta.url)
+    const resolved = requireBundle.resolve(bundlePath)
+    if (requireBundle.cache?.[resolved]) delete requireBundle.cache[resolved]
+    const { default: ResultPage } = requireBundle(bundlePath) as { default: React.ComponentType<ResultPageProps & { initialSearch?: string }> }
+    const React = await import('react')
+    const { createRoot } = await import('react-dom/client')
+    const { Simulate } = await import('react-dom/test-utils')
+    const act = (React as unknown as { act: (fn: () => void | Promise<void>) => Promise<void> }).act
+    const container = dom.window.document.createElement('div')
+    dom.window.document.body.appendChild(container)
+    const root = createRoot(container)
+    const settingsA: Settings = { profiles: [], defaultProfileId: 'profile-A' }
+    const settingsB: Settings = { profiles: [], defaultProfileId: 'profile-B' }
+    const resultA = makeResult({
+      projectPath: 'C:\\same-project',
+      profileId: 'profile-A',
+      projectSummary: 'SUMMARY_A',
+      sections: [{ id: 's1', title: 'Section A', questions: [{ id: 'qa', question: 'QUESTION_A [[TermA]]', answer: 'ANSWER_A [[TermA]] context', followUps: [] }] }],
+      glossary: { TermA: 'GLOSSARY_A' }
+    })
+
+    await act(async () => { root.render(React.createElement(ResultPage, { result: resultA, settings: settingsA, onRegenerate: () => undefined })) })
+    const termA = [...container.querySelectorAll('.term-link')].find((item) => item.textContent === 'TermA')
+    assert.ok(termA)
+    const enterA = new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    await act(async () => { termA.dispatchEvent(enterA) })
+    assert.equal(enterA.defaultPrevented, true, 'Enter is consumed so the enclosing question button cannot activate')
+    assert.ok(!container.textContent?.includes('ANSWER_A TermA context'), 'the enclosing question did not expand')
+    assert.ok(container.textContent?.includes('GLOSSARY_A'), 'the title term popover remains open')
+    const closeA = container.querySelector<HTMLButtonElement>('button[title="关闭"]')
+    assert.ok(closeA)
+    await act(async () => { closeA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    const questionA = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('QUESTION_A'))
+    assert.ok(questionA)
+    await act(async () => { questionA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.ok(container.textContent?.includes('ANSWER_A TermA context'), 'A question is expanded before the identity change')
+    assert.ok(questionA.className.includes('bg-indigo-50'), 'A question is active before the identity change')
+    const titleTermA = [...container.querySelectorAll('.term-link')].find((item) => item.textContent === 'TermA')
+    assert.ok(titleTermA)
+    const secondEnterA = new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    await act(async () => { titleTermA.dispatchEvent(secondEnterA) })
+    assert.equal(secondEnterA.defaultPrevented, true)
+    assert.ok(container.textContent?.includes('GLOSSARY_A'))
+    const explainA = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('让 AI 结合本项目详细解释'))
+    assert.ok(explainA)
+    await act(async () => { explainA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].question, 'QUESTION_A TermA')
+    assert.equal(requests[0].snippet, 'ANSWER_A TermA context')
+    assert.equal(requests[0].glossaryHint, 'GLOSSARY_A')
+    assert.equal(requests[0].projectSummary, 'SUMMARY_A')
+    assert.equal(requests[0].profileId, 'profile-A')
+    const requestA = String(requests[0].requestId)
+    const emitLateA = eventHandlers[0]
+
+    const search = container.querySelector('input')
+    assert.ok(search)
+    const setInputValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')?.set
+    setInputValue?.call(search, 'no matching question')
+    await act(async () => {
+      Simulate.change(search, { target: search })
+    })
+    assert.equal((search as HTMLInputElement).value, 'no matching question', 'A search state changed before replacement')
+    assert.ok(container.textContent?.includes('没有匹配的问题'), 'A filter is active before replacement')
+
+    // Same project path and timestamp, but this is a replaced generation snapshot.
+    const resultB = makeResult({
+      projectPath: resultA.projectPath,
+      createdAt: resultA.createdAt,
+      profileId: 'profile-B',
+      projectSummary: 'SUMMARY_B',
+      sections: [{ id: 's1', title: 'Section B', questions: [{ id: 'qa', question: 'QUESTION_B [[TermB]]', answer: 'ANSWER_B [[TermB]] context', followUps: [] }] }],
+      glossary: { TermB: 'GLOSSARY_B' }
+    })
+    await act(async () => { root.render(React.createElement(ResultPage, { result: resultB, settings: settingsB, onRegenerate: () => undefined })) })
+    assert.deepEqual(cancelled, [requestA], 'replacing the owning result unmounts and cancels its pending request once')
+    assert.ok(!container.textContent?.includes('GLOSSARY_A'), 'A popover is gone before B can be interacted with')
+    assert.equal((container.querySelector('input') as HTMLInputElement).value, '', 'search resets for the new result')
+    assert.ok(!container.textContent?.includes('ANSWER_B TermB context'), 'expanded state resets')
+    const navB = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('QUESTION_B'))
+    assert.ok(navB && !navB.className.includes('bg-indigo-50'), 'active question resets even with the same question id')
+
+    await act(async () => { navB!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    const termB = [...container.querySelectorAll('.term-link')].find((item) => item.textContent === 'TermB')
+    assert.ok(termB)
+    const spaceB = new dom.window.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    await act(async () => { termB.dispatchEvent(spaceB) })
+    assert.equal(spaceB.defaultPrevented, true, 'Space is consumed so it cannot activate the enclosing question button')
+    assert.ok(container.textContent?.includes('GLOSSARY_B'), 'Space opens the title term popover')
+    const explainB = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('让 AI 结合本项目详细解释'))
+    assert.ok(explainB)
+    await act(async () => { explainB.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.equal(requests.length, 2)
+    assert.deepEqual(
+      Object.fromEntries(['term', 'question', 'snippet', 'glossaryHint', 'projectSummary', 'profileId'].map((key) => [key, requests[1][key]])),
+      { term: 'TermB', question: 'QUESTION_B TermB', snippet: 'ANSWER_B TermB context', glossaryHint: 'GLOSSARY_B', projectSummary: 'SUMMARY_B', profileId: 'profile-B' }
+    )
+
+    for (const event of [
+      { requestId: requestA, type: 'delta' as const, data: 'LATE_A_DELTA' },
+      { requestId: requestA, type: 'done' as const, data: '' },
+      { requestId: requestA, type: 'error' as const, data: 'LATE_A_ERROR' }
+    ]) {
+      await act(async () => { emitLateA(event) })
+    }
+    assert.ok(!container.textContent?.includes('LATE_A_DELTA'))
+    assert.ok(!container.textContent?.includes('LATE_A_ERROR'))
+    assert.ok(container.textContent?.includes('生成中'), 'late A events do not change B request state')
+    await act(async () => { root.unmount() })
+  } finally {
+    for (const [name, descriptor] of globalDescriptors) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
+      else Reflect.deleteProperty(globalThis, name)
+    }
+    if (scrollIntoViewDescriptor) Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollIntoView', scrollIntoViewDescriptor)
+    else Reflect.deleteProperty(dom.window.HTMLElement.prototype, 'scrollIntoView')
+    dom.window.close()
+  }
+})

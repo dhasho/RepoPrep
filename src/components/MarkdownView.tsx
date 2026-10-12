@@ -27,6 +27,7 @@ export function TermText({ text, onTerm }: { text: string; onTerm: OnTerm }) {
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
                   e.stopPropagation()
                   onTerm(m[1], e.currentTarget.getBoundingClientRect())
                 }

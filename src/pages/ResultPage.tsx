@@ -18,6 +18,20 @@ interface Props {
   initialSearch?: string
 }
 
+// A saved result is an immutable snapshot. Reference identity also distinguishes
+// regenerated results for the same project when their metadata is unchanged.
+const resultIdentities = new WeakMap<InterviewResult, number>()
+let nextResultIdentity = 1
+
+function resultIdentity(result: InterviewResult): number {
+  let identity = resultIdentities.get(result)
+  if (identity === undefined) {
+    identity = nextResultIdentity++
+    resultIdentities.set(result, identity)
+  }
+  return identity
+}
+
 interface TermTarget {
   term: string
   anchor: DOMRect
@@ -39,7 +53,18 @@ function snippetAround(answer: string, term: string): string {
   return (start > 0 ? '…' : '') + text.slice(start, idx + term.length + 110)
 }
 
-export default function ResultPage({ result, settings, onRegenerate, regenerating = false, initialSearch = '' }: Props) {
+export default function ResultPage(props: Props) {
+  const initialResult = useRef(props.result)
+  return (
+    <OwnedResultPage
+      key={resultIdentity(props.result)}
+      {...props}
+      initialSearch={props.result === initialResult.current ? props.initialSearch : ''}
+    />
+  )
+}
+
+function OwnedResultPage({ result, settings, onRegenerate, regenerating = false, initialSearch = '' }: Props) {
   const [search, setSearch] = useState(initialSearch)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeId, setActiveId] = useState('')

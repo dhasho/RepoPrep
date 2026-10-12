@@ -33,7 +33,7 @@ function makeOverview(projectPath) {
   }
 }
 
-function makeResult(projectPath) {
+function makeResult(projectPath, overrides = {}) {
   const projectName = projectPath.split(/[\\/]/).filter(Boolean).at(-1) || 'Project'
   return {
     version: 1,
@@ -46,7 +46,8 @@ function makeResult(projectPath) {
     modelUsed: 'mock-model',
     projectSummary: 'summary',
     sections: [{ id: 's1', title: 'Basics', questions: [{ id: 'q1', question: 'Question?', answer: 'Answer.', followUps: [] }] }],
-    glossary: {}
+    glossary: {},
+    ...overrides
   }
 }
 
@@ -64,6 +65,9 @@ function makeApi({
   let selectedPath = initialSelectedPath
   let recent = [...initialRecent]
   const requests = []
+  const explainRequests = []
+  const explainCancellations = []
+  const explainListeners = new Set()
   const cancellations = []
   const scans = []
   const loads = []
@@ -170,6 +174,16 @@ function makeApi({
       return control.promise
     },
     cancelGenerate: async (runId) => { cancellations.push(runId) },
+    explain: (request) => {
+      const control = deferred()
+      explainRequests.push({ request, ...control })
+      return control.promise
+    },
+    cancelExplain: async (requestId) => { explainCancellations.push(requestId) },
+    onExplainEvent: (callback) => {
+      explainListeners.add(callback)
+      return () => explainListeners.delete(callback)
+    },
     onGenerateProgress: (callback) => {
       subscribeCount++
       listeners.add(callback)
@@ -179,6 +193,8 @@ function makeApi({
   return {
     api,
     requests,
+    explainRequests,
+    explainCancellations,
     cancellations,
     scans,
     loads,
@@ -217,6 +233,10 @@ function makeApi({
       return control
     },
     emitProgress: (progress) => { for (const listener of listeners) listener(progress) },
+    emitExplainEvent: (event) => { for (const listener of explainListeners) listener(event) },
+    emitExplainDelta: (request, data) => { for (const listener of explainListeners) listener({ type: 'delta', requestId: request.request.requestId, data }) },
+    emitExplainDone: (request) => { for (const listener of explainListeners) listener({ type: 'done', requestId: request.request.requestId, data: '' }) },
+    emitExplainError: (request, message) => { for (const listener of explainListeners) listener({ type: 'error', requestId: request.request.requestId, data: message }) },
     get listenerCount() { return listeners.size },
     get subscribeCount() { return subscribeCount },
     get unsubscribeCount() { return unsubscribeCount }
@@ -412,6 +432,131 @@ async function leaveGenerationToSelect(harness) {
   await act(harness, () => button(harness.host, '后台继续').click())
   assert.ok(harness.host.textContent.includes('选择项目文件夹'), '后台继续后应进入项目选择页')
 }
+
+function termButton(host, term) {
+  return [...host.querySelectorAll('.term-link')].find((item) => item.textContent.trim() === term)
+}
+
+async function pressEnter(harness, element) {
+  assert.ok(element, 'keyboard target should exist')
+  element.focus()
+  await act(harness, () => element.dispatchEvent(new harness.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+}
+
+async function simulatedKeyboardButton(harness, element) {
+  assert.ok(element, 'button target should exist')
+  element.focus()
+  // JSDOM does not implement Chromium's default keyboard activation. click() models that
+  // activation for this renderer-only regression; native default activation is covered below.
+  await act(harness, () => element.click())
+}
+
+async function mouseActivate(harness, element) {
+  assert.ok(element, 'mouse target should exist')
+  await act(harness, () => {
+    element.dispatchEvent(new harness.dom.window.MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    element.click()
+  })
+}
+
+test('mouse navigation from history A to completed background B also cancels A explain', async () => {
+  const pathA = 'C:\\MouseA'
+  const pathB = 'C:\\MouseB'
+  const resultA = makeResult(pathA, {
+    profileId: 'profile-A', sections: [{ id: 'a', title: 'A', questions: [{ id: 'qa', question: 'QUESTION_A [[TERM_A]]', answer: 'ANSWER_A TERM_A context', followUps: [] }] }],
+    glossary: { TERM_A: 'GLOSSARY_A' }
+  })
+  const resultB = makeResult(pathB)
+  const h = await mountApp({
+    recent: [{ path: pathA, name: 'MouseA', lastUsedAt: '2026-10-10T00:00:00.000Z' }],
+    savedResults: new Map([[pathA, resultA]]),
+    profiles: [
+      { id: 'profile-A', name: 'Profile A', baseUrl: 'https://a.example.test/v1', apiKey: '', model: 'model-a' },
+      { id: 'profile-B', name: 'Profile B', baseUrl: 'https://b.example.test/v1', apiKey: '', model: 'model-b' }
+    ], defaultProfileId: 'profile-B'
+  })
+  try {
+    await openProject(h, pathB)
+    const requestB = await startGeneration(h)
+    await leaveGenerationToSelect(h)
+    await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: resultB }))
+    await viewRecentResult(h, pathA)
+    await act(h, () => termButton(h.host, 'TERM_A').click())
+    const explainButton = [...h.dom.window.document.querySelectorAll('button')].find((item) => item.textContent.includes('让 AI 结合本项目详细解释'))
+    await act(h, () => explainButton.click())
+    const pendingA = h.mock.explainRequests.at(-1)
+    await mouseActivate(h, button(h.host, '后台生成'))
+    assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId])
+    await mouseActivate(h, button(h.host, '查看结果'))
+    assert.ok(h.host.textContent.includes('MouseB · 面试题'))
+    assert.equal(h.dom.window.document.body.querySelector('.z-50'), null)
+  } finally { await cleanupAndUnmount(h) }
+})
+
+test('viewing B from the background task panel disposes A term context and ignores late A events', async () => {
+  const pathA = 'C:\\ProjectA'
+  const pathB = 'C:\\ProjectB'
+  const resultA = makeResult(pathA, {
+    profileId: 'profile-A', projectSummary: 'SUMMARY_A',
+    sections: [{ id: 's1', title: 'A section', questions: [{ id: 'qa', question: 'QUESTION_A [[TERM_A]]', answer: 'ANSWER_A TERM_A context', followUps: [] }] }],
+    glossary: { TERM_A: 'GLOSSARY_A' }
+  })
+  const resultB = makeResult(pathB, {
+    profileId: 'profile-B', projectSummary: 'SUMMARY_B',
+    sections: [{ id: 's1', title: 'B section', questions: [{ id: 'qb', question: 'QUESTION_B [[TERM_B]]', answer: 'ANSWER_B TERM_B context', followUps: [] }] }],
+    glossary: { TERM_B: 'GLOSSARY_B' }
+  })
+  const h = await mountApp({
+    recent: [{ path: pathA, name: 'ProjectA', lastUsedAt: '2026-10-10T00:00:00.000Z' }],
+    savedResults: new Map([[pathA, resultA]]),
+    profiles: [
+      { id: 'profile-A', name: 'Profile A', baseUrl: 'https://a.example.test/v1', apiKey: '', model: 'model-a' },
+      { id: 'profile-B', name: 'Profile B', baseUrl: 'https://b.example.test/v1', apiKey: '', model: 'model-b' }
+    ], defaultProfileId: 'profile-B'
+  })
+  try {
+    await openProject(h, pathB)
+    const requestB = await startGeneration(h)
+    await leaveGenerationToSelect(h)
+    await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: resultB }))
+    await viewRecentResult(h, pathA)
+    assert.ok(h.host.textContent.includes('ProjectA · 面试题'))
+
+    await pressEnter(h, termButton(h.host, 'TERM_A'))
+    assert.ok(h.dom.window.document.body.textContent.includes('让 AI 结合本项目详细解释'))
+    await act(h, () => [...h.dom.window.document.querySelectorAll('button')].find((item) => item.textContent.includes('让 AI 结合本项目详细解释')).click())
+    const pendingA = h.mock.explainRequests.at(-1)
+    assert.ok(pendingA, 'A term should immediately start its AI explanation')
+    assert.deepEqual({ ...pendingA.request, requestId: '<uuid>' }, {
+      term: 'TERM_A', profileId: 'profile-A', projectSummary: 'SUMMARY_A',
+      question: 'QUESTION_A TERM_A', snippet: 'ANSWER_A TERM_A context', glossaryHint: 'GLOSSARY_A', requestId: '<uuid>'
+    })
+
+    await simulatedKeyboardButton(h, button(h.host, '后台生成'))
+    await simulatedKeyboardButton(h, button(h.host, '查看结果'))
+    assert.ok(h.host.textContent.includes('ProjectB · 面试题'))
+    assert.equal(h.dom.window.document.body.querySelector('.z-50'), null)
+    assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId], 'old A stream must be cancelled exactly once by its own UUID')
+
+    await pressEnter(h, termButton(h.host, 'TERM_B'))
+    await act(h, () => [...h.dom.window.document.querySelectorAll('button')].find((item) => item.textContent.includes('让 AI 结合本项目详细解释')).click())
+    const pendingB = h.mock.explainRequests.at(-1)
+    assert.ok(pendingB)
+    h.mock.emitExplainDelta(pendingB, 'B explanation prefix')
+    await act(h, () => {})
+    h.mock.emitExplainDelta(pendingA, 'LATE_A_DELTA')
+    h.mock.emitExplainDone(pendingA)
+    h.mock.emitExplainError(pendingA, 'LATE_A_ERROR')
+    await act(h, () => {})
+    assert.ok(h.dom.window.document.body.textContent.includes('B explanation prefix'))
+    assert.ok(h.dom.window.document.body.textContent.includes('AI 解释（生成中…）'), 'late A delta/done/error must leave B streaming')
+    assert.ok(!h.dom.window.document.body.textContent.includes('LATE_A_'))
+    assert.deepEqual({ ...pendingB.request, requestId: '<uuid>' }, {
+      term: 'TERM_B', profileId: 'profile-B', projectSummary: 'SUMMARY_B',
+      question: 'QUESTION_B TERM_B', snippet: 'ANSWER_B TERM_B context', glossaryHint: 'GLOSSARY_B', requestId: '<uuid>'
+    })
+  } finally { await cleanupAndUnmount(h) }
+})
 
 test('App foreground generation resolves to its result', async () => {
   const h = await mountApp()
