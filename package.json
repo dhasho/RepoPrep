@@ -1,9 +1,9 @@
 {
-  "name": "projectlens",
-  "version": "0.1.26",
+  "name": "repoprep",
+  "version": "0.1.27",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
-  "author": "ProjectLens",
+  "author": "RepoPrep",
   "license": "MIT",
   "engines": {
     "node": "^22.15.0 || >=24.0.0"

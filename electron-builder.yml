@@ -1,5 +1,6 @@
 appId: com.projectlens.app
-productName: ProjectLens
+# Keep the legacy identifier so existing installations upgrade in place.
+productName: RepoPrep
 directories:
   buildResources: build
 files:
@@ -16,4 +17,4 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
-  shortcutName: ProjectLens
+  shortcutName: RepoPrep

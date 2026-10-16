@@ -1,6 +1,6 @@
 # 项目规范
 
-本文定义 ProjectLens 当前架构下的共享实现约束。它是模块边界和技术规范的权威来源；协作流程由根目录 `AGENTS.md` 管理，审查、验证和版本规则分别见 `docs/review.md`、`docs/validation.md`、`docs/VERSIONING.md`。
+本文定义 RepoPrep 当前架构下的共享实现约束。它是模块边界和技术规范的权威来源；协作流程由根目录 `AGENTS.md` 管理，审查、验证和版本规则分别见 `docs/review.md`、`docs/validation.md`、`docs/VERSIONING.md`。
 
 ## 变更与职责
 
@@ -56,4 +56,8 @@
 
 项目已有 `typecheck`、构建、IPC、安全、扫描缓存、冒烟、题量预算与依赖审计等 npm 脚本，具体选择见 `docs/validation.md`。目前没有全局 lint、提交 hook 或自动版本一致性检查；相关风格和版本约束由人工审查落实。不要将目标规则描述成已有自动门禁。
 
-本规范借鉴 Koine 的分层责任、接口契约和可追溯证据思路，依据其根目录 `AGENTS.md` 与 `CLAUDE.md`；ProjectLens 的规则以本项目已有 Electron、IPC、React 和 JSON 存储结构为准。
+本规范借鉴 Koine 的分层责任、接口契约和可追溯证据思路，依据其根目录 `AGENTS.md` 与 `CLAUDE.md`；RepoPrep 的规则以本项目已有 Electron、IPC、React 和 JSON 存储结构为准。
+
+## 安装与本地数据兼容
+
+`com.projectlens.app` 是沿用的 Electron 安装标识，用于让 RepoPrep 安装包升级现有 ProjectLens 安装。主进程也在 Electron 就绪前显式保留旧 `userData` 目录名称（开发环境 `projectlens`，打包环境 `ProjectLens`），因此旧设置、近期项目与结果仍可读取。

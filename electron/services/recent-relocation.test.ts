@@ -123,7 +123,14 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
     static fromWebContents(contents: unknown) { return windows.find((window) => window.webContents === contents) ?? null }
   }
   const electron = {
-    app: { isPackaged: true, whenReady: () => ready, on: (name: string, listener: (...args: any[]) => void) => appEvents.set(name, listener), quit() {} },
+    app: {
+      isPackaged: true,
+      getPath: (name: string) => name === 'appData' ? path.join(path.parse(projectRoot).root, 'AppData', 'Roaming') : null,
+      setPath() {},
+      whenReady: () => ready,
+      on: (name: string, listener: (...args: any[]) => void) => appEvents.set(name, listener),
+      quit() {}
+    },
     BrowserWindow: FakeWindow,
     dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [selectedPath] }), showErrorBox() {} },
     ipcMain: { handle: (channel: string, listener: (...args: any[]) => Promise<any>) => handlers.set(channel, listener) },
@@ -154,6 +161,7 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
     if (modules.has(id)) return modules.get(id)
     if (moduleCache.has(id)) return moduleCache.get(id)
     if (id === 'node:path') return path
+    if (id === 'node:fs') return { mkdirSync() {} }
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
     if (id === 'node:crypto') return { randomUUID }
     if (id === '../../shared/types.ts') return { SCAN_LIMIT_BOUNDS }

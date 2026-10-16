@@ -17,7 +17,7 @@
 - 变更后的 `package.json` 版本：`<version>`
 - 目标 base 分支及版本：`<branch> @ <version>`
 
-说明新版本为何高于目标分支；规则见 [docs/VERSIONING.md](https://github.com/dhasho/ProjectLens/blob/main/docs/VERSIONING.md)。
+说明新版本为何高于目标分支；规则见 [docs/VERSIONING.md](https://github.com/dhasho/RepoPrep/blob/main/docs/VERSIONING.md)。
 
 ## 验证结果
 
@@ -31,7 +31,7 @@
 | 扫描缓存 | `npm run test:scan-cache` | 未运行 / 通过 / 失败；说明 |
 | 题量预算 | `npm run test:question-budget` | 未运行 / 通过 / 失败；说明 |
 | 构建 / smoke | 按验证指南选择 `npm run build` 或 `npm run test:smoke` | 说明结果；smoke 只代表其覆盖范围。安全与 smoke 命令内部会构建，避免重复运行构建 |
-| 其他 / 手工步骤 | 按 [docs/validation.md](https://github.com/dhasho/ProjectLens/blob/main/docs/validation.md) 选择 | 未运行 / 通过 / 失败；说明 |
+| 其他 / 手工步骤 | 按 [docs/validation.md](https://github.com/dhasho/RepoPrep/blob/main/docs/validation.md) 选择 | 未运行 / 通过 / 失败；说明 |
 
 **失败或跳过：** 写明原因及受影响结论；没有则写“无”。
 

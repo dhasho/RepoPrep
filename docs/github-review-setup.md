@@ -2,7 +2,7 @@
 
 云端 review 在 Codex/GitHub 连接设置中启用，仓库规则由 [`AGENTS.md`](../AGENTS.md)、[`docs/review.md`](review.md) 与 `.github` 模板提供。平台是否已启用以及授权范围应以 Codex 设置和 GitHub 当前状态为准。
 
-1. 在 Codex 的 GitHub 连接中授权 `dhasho/ProjectLens`。
+1. 在 Codex 的 GitHub 连接中授权 `dhasho/RepoPrep`。
 2. 在 Codex Settings 选择该仓库，启用 **Review code / Code review**。需要自动审查所有 PR 时，在 **Automatic review** 中选择 **All PRs**；采用 **Follow personal preferences** 时，同时核对个人的 **Automatic review** 与触发设置。
 3. 打开该仓库的 PR 评论，发送 `@codex review`。
 4. 检查 review 的 reaction/状态及其 `Reviewed commit`，确认它对应当前 PR head；新提交后重新触发 review。

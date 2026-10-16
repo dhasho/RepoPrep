@@ -25,12 +25,13 @@ async function loadTypescriptModule(filename, requireModule, context = {}) {
   return module.exports
 }
 
-async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate } = {}) {
+async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true } = {}) {
   const handlers = new Map()
   const appEvents = new Map()
   const windows = []
   const saves = []
   const recents = []
+  const userDataPaths = []
   let ready
   const readyPromise = new Promise((resolve) => { ready = resolve })
   class FakeWindow {
@@ -52,7 +53,14 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
     static getAllWindows() { return windows.filter((window) => !window.destroyed) }
     static fromWebContents(contents) { return windows.find((window) => window.webContents === contents) ?? null }
   }
-  const app = { isPackaged: true, whenReady: () => readyPromise, on: (name, listener) => appEvents.set(name, listener), quit() {} }
+  const app = {
+    isPackaged,
+    getPath: (name) => name === 'appData' ? path.join(path.parse(root).root, 'AppData', 'Roaming') : null,
+    setPath: (name, value) => userDataPaths.push([name, value]),
+    whenReady: () => readyPromise,
+    on: (name, listener) => appEvents.set(name, listener),
+    quit() {}
+  }
   const modules = {
     electron: { app, BrowserWindow: FakeWindow, dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showErrorBox() {} }, ipcMain: { handle: (channel, listener) => handlers.set(channel, listener) }, session: { defaultSession: {} } },
     '@shared/ipc': { IPC },
@@ -69,6 +77,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   }
   const requireModule = (id) => {
     if (id === 'node:path') return path
+    if (id === 'node:fs') return { mkdirSync() {} }
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
     if (id === 'node:crypto') return { randomUUID }
     if (!modules[id]) throw new Error(`unexpected require: ${id}`)
@@ -79,12 +88,22 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   await loadTypescriptModule('electron/main.ts', requireModule, { BrowserWindow: FakeWindow })
   ready()
   await new Promise((resolve) => setImmediate(resolve))
-  return { handlers, appEvents, windows, saves, recents, IPC }
+  return { handlers, appEvents, windows, saves, recents, userDataPaths, IPC }
 }
 
 const options = { projectPath: '/authorized/demo', granularity: 'coarse', roleFocus: 'general', profileId: 'p' }
 const result = { projectName: 'demo' }
 const request = (runId) => ({ ...options, runId })
+
+test('启动时继续使用重命名前的 userData 目录名称', async () => {
+  for (const [isPackaged, legacyName] of [[true, 'ProjectLens'], [false, 'projectlens']]) {
+    const harness = await createHarness({ isPackaged })
+    assert.deepEqual(harness.userDataPaths, [[
+      'userData',
+      path.join(path.parse(root).root, 'AppData', 'Roaming', legacyName)
+    ]])
+  }
+})
 
 test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污染重开的窗口', async () => {
   const generation = deferred()

@@ -1,6 +1,6 @@
 # 版本管理
 
-ProjectLens 是单个 npm 包，使用 SemVer `MAJOR.MINOR.PATCH`。根目录 `package.json` 的 `version` 是产品版本的权威来源；`package-lock.json` 顶层 `version` 与 `packages[""].version` 必须同步。
+RepoPrep 是单个 npm 包，使用 SemVer `MAJOR.MINOR.PATCH`。根目录 `package.json` 的 `version` 是产品版本的权威来源；`package-lock.json` 顶层 `version` 与 `packages[""].version` 必须同步。
 
 ## 合并前的版本政策
 

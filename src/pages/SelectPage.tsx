@@ -84,7 +84,7 @@ export default function SelectPage({ settings, openProject, viewExisting, openSe
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col items-center justify-center px-6 py-10">
       <div className="mb-2 text-5xl">🔭</div>
-      <h1 className="text-2xl font-bold text-slate-900">ProjectLens</h1>
+      <h1 className="text-2xl font-bold text-slate-900">RepoPrep</h1>
       <p className="mt-2 max-w-md text-center text-sm leading-6 text-slate-500">
         选择你的项目，AI 面试官将通读代码与文档，生成「问题 + 参考答案 + 追问」
         的面试准备材料。答案中的专业名词带下划线，点击即可查看解释，还能让 AI 继续深挖。

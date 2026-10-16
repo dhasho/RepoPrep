@@ -58,6 +58,7 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   const windows = []
   const saves = []
   const recents = []
+  const appDataPath = path.join(path.parse(root).root, 'AppData', 'Roaming')
   let ready
   const readyPromise = new Promise((resolve) => { ready = resolve })
 
@@ -92,6 +93,7 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   const modules = new Map()
   const requireModule = (id) => {
     if (id === 'node:path') return path
+    if (id === 'node:fs') return { mkdirSync() {} }
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
     if (id === 'node:crypto') return { randomUUID }
     if (modules.has(id)) return modules.get(id)
@@ -153,6 +155,8 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   modules.set('electron', {
     app: {
       isPackaged: true,
+      getPath: (name) => name === 'appData' ? appDataPath : null,
+      setPath() {},
       whenReady: () => readyPromise,
       on: (name, handler) => appEvents.set(name, handler),
       quit() {}

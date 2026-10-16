@@ -453,7 +453,7 @@ export default function App() {
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-2">
           <span className="text-lg">🔭</span>
-          <span className="select-none text-[15px] font-semibold tracking-wide text-slate-800">ProjectLens</span>
+          <span className="select-none text-[15px] font-semibold tracking-wide text-slate-800">RepoPrep</span>
           <span className="ml-1 hidden select-none text-xs text-slate-400 sm:inline">项目面试题生成器</span>
         </div>
         <div className="flex items-center gap-1">

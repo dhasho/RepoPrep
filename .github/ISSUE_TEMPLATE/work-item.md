@@ -24,7 +24,7 @@ assignees: ""
 
 ## Test plan
 
-列出需要执行的 npm 命令、人工场景或证据来源；说明 mock、smoke 和真实 API/安装态的边界。最终命令以 `package.json` 和 [docs/validation.md](https://github.com/dhasho/ProjectLens/blob/main/docs/validation.md) 为准。
+列出需要执行的 npm 命令、人工场景或证据来源；说明 mock、smoke 和真实 API/安装态的边界。最终命令以 `package.json` 和 [docs/validation.md](https://github.com/dhasho/RepoPrep/blob/main/docs/validation.md) 为准。
 
 ## Dependencies
 

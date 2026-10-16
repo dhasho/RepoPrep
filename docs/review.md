@@ -1,6 +1,6 @@
 # 代码审查与外部反馈
 
-本文规定 ProjectLens 的作者自检、独立审查和外部 review 闭环。云端功能在 Codex/GitHub 连接配置中启用，仓库文档与模板提供规则；是否启用及权限范围以平台状态为准。GitHub 配置步骤见 [GitHub Review 配置](github-review-setup.md)。
+本文规定 RepoPrep 的作者自检、独立审查和外部 review 闭环。云端功能在 Codex/GitHub 连接配置中启用，仓库文档与模板提供规则；是否启用及权限范围以平台状态为准。GitHub 配置步骤见 [GitHub Review 配置](github-review-setup.md)。
 
 ## 审查目标与证据
 
@@ -58,7 +58,7 @@ GitHub 显示 `COMMENTED`、没有 review、机器人没有发现问题或单项
 
 Finding 标题使用 `[P0]` 至 `[P3]` 前缀和可执行描述。位置应尽量指向 diff 中能解释问题的行；代码行会变化时，commit 标识用于固定上下文。避免只说“可能有问题”或直接贴一套未经核实的重写方案。
 
-## ProjectLens 的重点路径
+## RepoPrep 的重点路径
 
 结合改动范围检查以下边界；不要求每个 PR 机械地逐项打勾：
 
@@ -112,4 +112,4 @@ PR 应链接相关 issue、依赖 PR 和版本依据。若一个变更依赖另�
 
 ## 参考来源
 
-Koine 的 [Work Item issue 模板](https://github.com/KinomotoMio/koine/blob/main/.github/ISSUE_TEMPLATE/work-item.md) 提供 Why、Scope、Constraints、Acceptance criteria 和 Test plan 的组织方式；[PR #452](https://github.com/KinomotoMio/koine/pull/452) 使用 Summary、Validation、Evidence boundary 说明变更与证据，[相关 review comment](https://github.com/KinomotoMio/koine/pull/452#discussion_r4172490725) 展示了沿真实入口追查测试是否覆盖真实调用路径的做法。本文的 P0–P3 严重度完整定义及处理流程，是 ProjectLens 新增的明确约定，不代表 Koine 已有同一标准。
+Koine 的 [Work Item issue 模板](https://github.com/KinomotoMio/koine/blob/main/.github/ISSUE_TEMPLATE/work-item.md) 提供 Why、Scope、Constraints、Acceptance criteria 和 Test plan 的组织方式；[PR #452](https://github.com/KinomotoMio/koine/pull/452) 使用 Summary、Validation、Evidence boundary 说明变更与证据，[相关 review comment](https://github.com/KinomotoMio/koine/pull/452#discussion_r4172490725) 展示了沿真实入口追查测试是否覆盖真实调用路径的做法。本文的 P0–P3 严重度完整定义及处理流程，是 RepoPrep 新增的明确约定，不代表 Koine 已有同一标准。

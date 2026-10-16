@@ -1,5 +1,6 @@
 // Electron 主进程：窗口管理 + IPC 注册
 import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
+import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
@@ -25,6 +26,12 @@ import {
 } from './services/store'
 import { AuthorizedProjectRegistry } from './services/ipc-authority'
 import { ExplainAbortRegistry, registerGuardedIpcHandler } from './services/ipc-handler-guards'
+
+// Preserve the existing Electron userData directory across the product rename.
+// Development used the npm package name; packaged builds used productName.
+const legacyUserDataPath = path.join(app.getPath('appData'), app.isPackaged ? 'ProjectLens' : 'projectlens')
+mkdirSync(legacyUserDataPath, { recursive: true })
+app.setPath('userData', legacyUserDataPath)
 
 process.on('uncaughtException', (err) => console.error('[main] uncaughtException:', err))
 
@@ -66,7 +73,7 @@ function createWindow(): void {
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
-    title: 'ProjectLens',
+    title: 'RepoPrep',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -98,13 +105,13 @@ function createWindow(): void {
     // 白屏或加载到过期的构建产物。这里在未打包时把配置错误直接弹出来，避免开发
     // 者把“配置写错”误判成“dev 环境坏了”。
     const message = error instanceof Error ? error.message : String(error)
-    console.error(`[ProjectLens] ${message}; 已回退至本地页面`)
+    console.error(`[RepoPrep] ${message}; 已回退至本地页面`)
     if (!app.isPackaged) {
       // 诊断提示本身不能成为新的失败点：弹窗失败也必须继续创建窗口。
       try {
         dialog.showErrorBox('ELECTRON_RENDERER_URL 不被信任', `已回退至本地页面。\n\n${message}`)
       } catch (dialogError) {
-        console.error('[ProjectLens] 无法显示配置错误提示:', dialogError)
+        console.error('[RepoPrep] 无法显示配置错误提示:', dialogError)
       }
     }
   }
@@ -348,4 +355,4 @@ handle(IPC.exportMarkdown, (e, result: InterviewResult) =>
 // 那里是通道定义的唯一下游，不再需要在这里维护通道数量。
 
 // 便于排查：开发模式下输出一条就绪日志
-console.log(`[ProjectLens] main ready, devUrl=${process.env['ELECTRON_RENDERER_URL'] ?? '(none)'}, randomId=${randomUUID().slice(0, 8)}`)
+console.log(`[RepoPrep] main ready, devUrl=${process.env['ELECTRON_RENDERER_URL'] ?? '(none)'}, randomId=${randomUUID().slice(0, 8)}`)
