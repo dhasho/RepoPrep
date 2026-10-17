@@ -10,4 +10,6 @@ Windows 上 Electron `safeStorage` 使用当前 Windows 用户的 DPAPI。拿到
 
 旧版生成结果仍由 1.0.0 读取。新版生成结果可能带有界定的来源证据字段；旧版程序不支持这些字段，因此不要用旧版二进制打开新版结果。来源证据能证明被引用的脱敏片段曾提供给模型，不证明答案事实正确，详见 [source-evidence.md](source-evidence.md)。
 
+旧版历史结果若包含顶层 `github` 仓库摘要，新版只会在有界读取时移除该已知字段后校验和展示；原文件与备份字节保持不变，显式恢复也保留原始字节。新生成结果和 IPC 仍拒绝此字段；加载后的旧摘要不会出现在当前结果或导出中。
+
 离线生成评测报告与人工复核的范围和限制见 [generation-evaluation.md](generation-evaluation.md)。

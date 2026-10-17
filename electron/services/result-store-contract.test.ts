@@ -97,6 +97,25 @@ function legacyAffectedResult(projectPath: string): Record<string, any> {
   }
 }
 
+function legacyGithubMetadata(): Record<string, unknown> {
+  return {
+    login: 'legacy-user',
+    name: 'Legacy Repository',
+    repoOwner: 'legacy-owner',
+    repo: 'legacy-repo',
+    repoHtmlUrl: 'https://example.invalid/legacy-owner/legacy-repo',
+    defaultBranch: 'main',
+    fetchedAt: '2026-01-01T00:00:00.000Z',
+    stats: { commits: 1 },
+    commits: [],
+    pullRequests: [],
+    issues: [],
+    reviewedPullRequests: [],
+    contextText: 'synthetic historical repository context',
+    truncated: true
+  }
+}
+
 function storedResultFile(userData: string, projectPath: string): string {
   const hash = createHash('sha1').update(projectPath).digest('hex')
   return path.join(userData, 'projects', `${hash}.json`)
@@ -114,6 +133,61 @@ test('real store module loads old wide-glossary/profile result without migrating
   assert.equal(loaded.modelUsed.length, 515)
   assert.equal(Object.keys(loaded.glossary).length, 257)
   assert.equal(await fs.readFile(file, 'utf8'), raw, 'loading old result must not migrate or rewrite the historical file')
+})
+
+test('legacy GitHub result metadata is normalized only during bounded history reads', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'legacy-github-project')
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const result = { ...legacyAffectedResult(projectPath), github: legacyGithubMetadata() }
+  const raw = JSON.stringify(result, null, 2)
+  await fs.writeFile(file, raw, 'utf8')
+
+  const loaded = store.loadResult(projectPath)
+  assert.equal('github' in loaded, false, 'obsolete repository data is omitted from the current result')
+  assert.equal(loaded.projectName, 'legacy-project')
+  assert.equal(await fs.readFile(file, 'utf8'), raw, 'history normalization must not rewrite the source file')
+
+  assert.throws(() => store.saveResult(projectPath, result), /生成结果格式无效或超出支持范围，请重新生成。/)
+  assert.equal(await fs.readFile(file, 'utf8'), raw, 'strict generated-result validation must reject legacy fields')
+})
+
+test('legacy GitHub backup remains readable and explicit recovery preserves its original bytes', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'legacy-github-backup')
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const backupRaw = JSON.stringify({ ...legacyAffectedResult(projectPath), github: legacyGithubMetadata() }, null, 2)
+  await fs.writeFile(`${file}.bak`, backupRaw, 'utf8')
+  await fs.writeFile(file, '{ broken', 'utf8')
+
+  const loaded = store.loadResult(projectPath)
+  assert.equal('github' in loaded, false)
+  assert.equal(await fs.readFile(`${file}.bak`, 'utf8'), backupRaw, 'backup reads must not rewrite historical bytes')
+  const [diagnostic] = store.getStorageDiagnostics()
+  assert.equal(diagnostic.usingBackup, true)
+  await store.recoverStorage(diagnostic.id)
+  assert.equal(await fs.readFile(file, 'utf8'), backupRaw, 'recovery copies the original validated backup bytes')
+  assert.equal('github' in store.loadResult(projectPath), false)
+})
+
+test('history with unrelated invalid fields or an unrecognized GitHub shape remains corrupt', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'invalid-legacy-github')
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+
+  for (const [label, extra] of [
+    ['unrelated field', { github: legacyGithubMetadata(), unrelated: true }],
+    ['unknown github field', { github: { ...legacyGithubMetadata(), accessToken: 'synthetic-secret' } }],
+    ['malformed github field', { github: { ...legacyGithubMetadata(), commits: 'not-a-list' } }]
+  ] as const) {
+    const raw = JSON.stringify({ ...legacyAffectedResult(projectPath), ...extra }, null, 2)
+    await fs.writeFile(file, raw, 'utf8')
+    assert.throws(() => store.loadResult(projectPath), /历史结果文件已损坏/, label)
+    assert.equal(await fs.readFile(file, 'utf8'), raw, `${label} must remain byte-identical`)
+  }
 })
 
 test('invalid save cannot overwrite prior result; invalid history is controlled and remains byte-identical', async () => {

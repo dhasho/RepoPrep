@@ -85,8 +85,8 @@ function createWindow(): void {
   })
   mainWindow.on('ready-to-show', () => mainWindow?.show())
   // 把渲染进程的报错转发到主进程日志，便于排查白屏等问题
-  mainWindow.webContents.on('console-message', (_e, level, message) => {
-    if (level >= 2) console.error(`[renderer] ${message}`)
+  mainWindow.webContents.on('console-message', (details) => {
+    if (details.level === 'warning' || details.level === 'error') console.error(`[renderer] ${details.message}`)
   })
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
     console.error(`[renderer] 加载失败 ${code} ${desc} ${url}`)

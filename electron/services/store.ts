@@ -80,8 +80,36 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+const LEGACY_GITHUB_FIELDS = new Set([
+  'login', 'name', 'repoOwner', 'repo', 'repoHtmlUrl', 'defaultBranch', 'fetchedAt', 'stats',
+  'commits', 'pullRequests', 'issues', 'reviewedPullRequests', 'contextText', 'truncated'
+])
+const LEGACY_GITHUB_TEXT_FIELDS = new Set([
+  'login', 'name', 'repoOwner', 'repo', 'repoHtmlUrl', 'defaultBranch', 'fetchedAt', 'contextText'
+])
+const LEGACY_GITHUB_LIST_FIELDS = new Set(['commits', 'pullRequests', 'issues', 'reviewedPullRequests'])
+
+function isLegacyGithubMetadata(value: unknown): value is Record<string, unknown> {
+  if (!isObject(value)) return false
+  return Object.entries(value).every(([key, item]) => {
+    if (!LEGACY_GITHUB_FIELDS.has(key)) return false
+    if (LEGACY_GITHUB_TEXT_FIELDS.has(key)) return typeof item === 'string' || (key === 'name' && item === null)
+    if (key === 'stats') return isObject(item)
+    if (LEGACY_GITHUB_LIST_FIELDS.has(key)) return Array.isArray(item)
+    if (key === 'truncated') return typeof item === 'boolean'
+    return false
+  })
+}
+
 function isInterviewResult(value: unknown): value is InterviewResult {
   try {
+    // GitHub enrichment was stored on historical results but is no longer part of
+    // the result contract. Drop only its recognized top-level shape while reading;
+    // the parsed object is in memory and the original bounded file bytes stay intact.
+    if (isObject(value) && Object.hasOwn(value, 'github')) {
+      if (!isLegacyGithubMetadata(value.github)) return false
+      delete value.github
+    }
     if (
       isObject(value) && value.projectName === '' && typeof value.projectPath === 'string' &&
       path.isAbsolute(value.projectPath) && isFilesystemRoot(value.projectPath)
