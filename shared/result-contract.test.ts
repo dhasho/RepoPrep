@@ -286,3 +286,29 @@ test('context truncation metadata is optional, bounded to booleans, and only rec
     assertKind(makeResult({ contextTruncation }), 'invalid')
   }
 })
+
+test('bounded source evidence is optional for history and enforces required summary and narrow ranges', () => {
+  const legacy = makeResult()
+  assertValid(legacy)
+  const evidence = {
+    sourceId: 'opaque-source-id', snapshotHash: 'a'.repeat(64), path: 'src/core.ts',
+    startLine: 3, endLine: 4, excerpt: 'const a = 1\nconst b = 2'
+  }
+  const modern = makeResult({
+    sections: [{ id: 's1', title: 'Section', questions: [
+      { id: 'q1', question: 'Question', answer: '', followUps: [], sourceEvidence: [{ ...evidence }] },
+      { id: 'q2', question: 'Question 2', answer: '', followUps: [], sourceEvidence: [{ ...evidence }] }
+    ] }],
+    sourceEvidenceSummary: { asked: 2, accepted: 2, rejected: 0, retained: 2 }
+  })
+  assertValid(modern)
+  assertKind(makeResult({ sourceEvidenceSummary: {} }), 'invalid')
+  assertKind(makeResult({ sourceEvidenceSummary: { asked: 2, accepted: 1, rejected: 0 } }), 'invalid')
+  assertKind(makeResult({
+    sections: [{ id: 's1', title: 'Section', questions: [{
+      id: 'q1', question: 'Question', answer: '', followUps: [],
+      sourceEvidence: [{ ...evidence, path: '../outside.ts' }]
+    }] }],
+    sourceEvidenceSummary: { asked: 1, accepted: 1, rejected: 0, retained: 1 }
+  }), 'invalid')
+})

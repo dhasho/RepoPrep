@@ -1,6 +1,6 @@
 import type { InterviewResult } from './types'
-// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { CONTENT_READ_LIMITS, isSafeContentReadPath } from './content-read.ts'
+// @ts-ignore TS5097 -- extension is required by CJS-based Node test harnesses.
+import { CONTENT_READ_LIMITS, isSafeContentReadPath, SOURCE_EVIDENCE_LIMITS } from './content-read.ts'
 
 export const LLM_PROFILE_LIMITS = {
   id: 128,
@@ -39,7 +39,8 @@ export const RESULT_LIMITS = {
   treeArray: 5000,
   objectKeys: 256,
   totalChars: 1_000_000,
-  totalBytes: 4 * 1024 * 1024
+  totalBytes: 4 * 1024 * 1024,
+  sourceEvidenceTotalChars: SOURCE_EVIDENCE_LIMITS.totalExcerptChars
 } as const
 
 export const EXPLAIN_CONTEXT_LIMITS = {
@@ -253,7 +254,7 @@ export function assertInterviewResultContract(
 ): asserts value is InterviewResult {
   boundedTree(value)
   if (!record(value)) invalid()
-  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contextTruncation', 'contentReadSummary'])
+  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contextTruncation', 'contentReadSummary', 'sourceEvidenceSummary'])
   if (value.version !== 1 || !text(value.createdAt, RESULT_LIMITS.createdAt) || !Number.isFinite(Date.parse(value.createdAt)) || !text(value.projectName, RESULT_LIMITS.projectName)) invalid()
   assertProjectIdentityContract(value.projectName, value.projectPath, isAbsolutePath)
   enumValue(value.granularity, GRANULARITIES)
@@ -286,8 +287,22 @@ export function assertInterviewResultContract(
     }
   }
   if (value.contentReadSummary !== undefined) assertContentReadSummary(value.contentReadSummary)
+  if (value.sourceEvidenceSummary !== undefined) {
+    if (!record(value.sourceEvidenceSummary)) invalid()
+    exactKeys(value.sourceEvidenceSummary, ['asked', 'accepted', 'rejected', 'retained'])
+    const summary = value.sourceEvidenceSummary as Record<string, unknown>
+    for (const count of [summary.asked, summary.accepted, summary.rejected]) {
+      if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0 || count > RESULT_LIMITS.questions * 10) invalid()
+    }
+    const asked = summary.asked as number
+    const accepted = summary.accepted as number
+    const rejected = summary.rejected as number
+    if (accepted + rejected !== asked) invalid()
+    if (summary.retained !== undefined && (typeof summary.retained !== 'number' || !Number.isSafeInteger(summary.retained) || summary.retained < 0 || summary.retained > accepted)) invalid()
+  }
   let questions = 0
   let follows = 0
+  let sourceEvidenceChars = 0
   const checkFollow = (follow: unknown, depth: number): void => {
     if (++follows > RESULT_LIMITS.followUps || depth > RESULT_LIMITS.followUpDepth) oversized()
     if (!record(follow)) invalid()
@@ -308,10 +323,31 @@ export function assertInterviewResultContract(
     if (!Array.isArray(section.questions) || section.questions.length > RESULT_LIMITS.questionsPerSection) invalid()
     for (const question of section.questions) {
       if (++questions > RESULT_LIMITS.questions || !record(question) || !Array.isArray(question.followUps) || question.followUps.length > RESULT_LIMITS.followUpsPerItem) oversized()
-      exactKeys(question, ['id', 'question', 'answer', 'followUps'])
+      exactKeys(question, ['id', 'question', 'answer', 'followUps', 'sourceEvidence'])
       string(question.id, RESULT_LIMITS.profileId)
       string(question.question, RESULT_LIMITS.question)
       string(question.answer, RESULT_LIMITS.answer, 0)
+      if (question.sourceEvidence !== undefined) {
+        if (!Array.isArray(question.sourceEvidence) || question.sourceEvidence.length > SOURCE_EVIDENCE_LIMITS.perQuestion) invalid()
+        for (const evidence of question.sourceEvidence) {
+          if (!record(evidence)) invalid()
+          exactKeys(evidence, ['sourceId', 'snapshotHash', 'path', 'startLine', 'endLine', 'excerpt'])
+          const sourceId = evidence.sourceId
+          const startLine = evidence.startLine
+          const endLine = evidence.endLine
+          const excerpt = evidence.excerpt
+          string(sourceId, 128)
+          if (!/^[a-f0-9]{64}$/.test(String(evidence.snapshotHash))) invalid()
+          string(evidence.snapshotHash, SOURCE_EVIDENCE_LIMITS.snapshotHashChars)
+          string(evidence.path, SOURCE_EVIDENCE_LIMITS.pathChars)
+          if (!isSafeContentReadPath(evidence.path)) invalid()
+          if (typeof startLine !== 'number' || typeof endLine !== 'number' || !Number.isSafeInteger(startLine) || !Number.isSafeInteger(endLine) || startLine < 1 || endLine < startLine || endLine - startLine + 1 > SOURCE_EVIDENCE_LIMITS.linesPerReference) invalid()
+          string(excerpt, SOURCE_EVIDENCE_LIMITS.excerptCharsPerReference)
+          if (excerpt.split(/\r\n|\r|\n/).length !== endLine - startLine + 1) invalid()
+          sourceEvidenceChars += excerpt.length
+          if (sourceEvidenceChars > RESULT_LIMITS.sourceEvidenceTotalChars) oversized()
+        }
+      }
       for (const child of question.followUps) checkFollow(child, 1)
     }
   }
@@ -319,6 +355,13 @@ export function assertInterviewResultContract(
     string(key, RESULT_LIMITS.glossaryKey)
     string(item, RESULT_LIMITS.glossaryValue, 0)
   }
+
+  const evidenceAccepted = value.sourceEvidenceSummary ? (value.sourceEvidenceSummary as Record<string, number>).accepted : 0
+  let evidenceCount = 0
+  for (const section of value.sections) for (const question of section.questions) evidenceCount += question.sourceEvidence?.length ?? 0
+  if (evidenceCount > evidenceAccepted) invalid()
+  const retainedEvidence = value.sourceEvidenceSummary ? (value.sourceEvidenceSummary as Record<string, number>).retained : undefined
+  if (retainedEvidence !== undefined && evidenceCount !== retainedEvidence) invalid()
 
   if (compactJsonByteLength(value) > RESULT_LIMITS.totalBytes) oversized()
 }

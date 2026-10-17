@@ -757,3 +757,34 @@ test('escaped backticks inside sensitive template values do not expose later tex
   assert.doesNotMatch(result.content, /FAKE_ESCAPED_TEMPLATE_TAIL_T10T/)
   assert.ok(result.content.includes('KEEP_AFTER_TEMPLATE'))
 })
+
+test('multiline secret redaction preserves source line coordinates', () => {
+  const source = [
+    'api_key: |',
+    '  first-secret-line',
+    '  second-secret-line',
+    'after: true'
+  ].join('\n')
+  const result = redactSensitiveContent(source)
+  assert.equal(result.content.split('\n').length, source.split('\n').length)
+  assert.ok(result.content.includes('after: true'))
+  assert.doesNotMatch(result.content, /first-secret-line|second-secret-line/)
+
+  const privateKey = [
+    '-----BEGIN PRIVATE KEY-----',
+    'private-material-line-1',
+    'private-material-line-2',
+    '-----END PRIVATE KEY-----',
+    'const finalLine = true'
+  ].join('\n')
+  const keyResult = redactSensitiveContent(privateKey)
+  assert.equal(keyResult.content.split('\n').length, privateKey.split('\n').length)
+  assert.ok(keyResult.content.includes('const finalLine = true'))
+  assert.doesNotMatch(keyResult.content, /private-material/)
+
+  const bearer = 'Bearer\nabcdefghijklmnop\nconst afterBearer = true'
+  const bearerResult = redactSensitiveContent(bearer)
+  assert.equal(bearerResult.content.split('\n').length, bearer.split('\n').length)
+  assert.ok(bearerResult.content.includes('const afterBearer = true'))
+  assert.doesNotMatch(bearerResult.content, /abcdefghijklmnop/)
+})

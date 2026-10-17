@@ -83,7 +83,7 @@ async function makeModuleCapFixture(directoryCount: number, includeRootCode = tr
   return root
 }
 
-function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' = 'normal') {
+function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' | 'evidence' | 'evidence-repair' = 'normal') {
   const originalFetch = globalThis.fetch
   let call = 0
   const invalidReply = '😀'.repeat(11_001) + 'REPAIR-TAIL-SHOULD-BE-CLIPPED'
@@ -92,13 +92,14 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
     const messages = Array.isArray(body.messages) ? body.messages : []
     capture.push({ messages: messages as typeof capture[number]['messages'] })
     call++
-    if (mode === 'repair' && call === 1) {
+    if ((mode === 'repair' || mode === 'evidence-repair') && call === 1) {
       return new Response(JSON.stringify({ choices: [{ message: { content: invalidReply } }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
       })
     }
     const prompt = messages.map((message: { content?: string }) => message.content ?? '').join('\n')
+    const sourceId = prompt.match(/\[sourceId: ([^\]]+)\]/)?.[1]
     const requestedText = prompt.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1]
     if (!requestedText) throw new Error('mock prompt did not include its explicit question quota')
     const requested = Number(requestedText)
@@ -111,7 +112,8 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
         questions: Array.from({ length: count }, (_, index) => ({
           question: `Fixture question ${call}-${index + 1}?`,
           answer: `Fixture answer ${index + 1}.`,
-          followUps: []
+          followUps: [],
+          ...((mode === 'evidence' || mode === 'evidence-repair') && sourceId ? { sourceRefs: [{ sourceId, startLine: 1, endLine: 1 }] } : {})
         }))
       }],
       glossary: {}
@@ -123,6 +125,45 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
   }) as typeof fetch
   return () => { globalThis.fetch = originalFetch }
 }
+
+test('generated evidence is resolved from each actual request and cloned across questions', async () => {
+  const root = await makeFixture()
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restore = installMock(requests, 'evidence')
+  let result: Awaited<ReturnType<typeof generateInterview>>
+  try {
+    result = await generateInterview({
+      scan, granularity: 'fine', roleFocus: 'backend', profile,
+      signal: new AbortController().signal, onProgress: () => undefined
+    })
+  } finally { restore() }
+
+  const requestSources = requests.map((request) => {
+    const prompt = request.messages.map((message) => message.content).join('\n')
+    return new Set(Array.from(prompt.matchAll(/\[sourceId: ([^\]]+)\]/g), (match) => match[1]))
+  })
+  const questions = result!.sections.flatMap((section) => section.questions)
+  assert.ok(questions.length >= 2)
+  assert.ok(questions.every((question) => question.sourceEvidence?.length === 1))
+  assert.ok(questions.some((question, index) => questions.slice(index + 1).some((other) =>
+    question.sourceEvidence![0].sourceId === other.sourceEvidence![0].sourceId)), 'two questions should cite one source')
+  for (const question of questions) {
+    const requestIndex = Number(question.question.match(/^Fixture question (\d+)-/)?.[1]) - 1
+    assert.ok(requestSources[requestIndex]?.has(question.sourceEvidence![0].sourceId), 'evidence must belong to the request that produced the question')
+    assert.equal(question.sourceEvidence![0].path.includes('..'), false)
+    assert.ok(question.sourceEvidence![0].excerpt.length > 0)
+  }
+  assert.equal(result!.sourceEvidenceSummary?.asked, questions.length)
+  assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
+  assert.equal(result!.sourceEvidenceSummary?.retained, questions.reduce((count, question) => count + (question.sourceEvidence?.length ?? 0), 0))
+  for (const question of questions) {
+    assert.match(question.sourceEvidence![0].snapshotHash, /^[a-f0-9]{64}$/)
+    for (const other of questions) if (other !== question && other.sourceEvidence?.[0].sourceId === question.sourceEvidence![0].sourceId) {
+      assert.notStrictEqual(question.sourceEvidence![0], other.sourceEvidence![0], 'each result field must own a cloned evidence object')
+    }
+  }
+})
 
 function addOversizedLegalTree(scan: Awaited<ReturnType<typeof scanProject>>): void {
   const children: FileNode[] = Array.from({ length: 3996 }, (_, index) => {
@@ -221,7 +262,8 @@ test('approved real scan bounds actual model messages for coarse, medium, and fi
       assert.equal(result!.contextTruncation?.requestTruncated, false,
         'the reserved warning allowance lets the complete built context fit without request-level clipping')
       const firstUserMessage = requests[0].messages.find((message) => message.role === 'user')
-      assert.ok(firstUserMessage?.content.includes(renderBatch(built.headerText, built.treeText, built.batches[0])),
+      const normalizeSourceIds = (value: string): string => value.replace(/\[sourceId: [^\]]+\]/g, '[sourceId]')
+      assert.ok(firstUserMessage && normalizeSourceIds(firstUserMessage.content).includes(normalizeSourceIds(renderBatch(built.headerText, built.treeText, built.batches[0]))),
         'the first coarse request should preserve the complete rendered batch, including tree and headers')
       assert.ok(firstUserMessage?.content.includes(CONTEXT_TRUNCATION_WARNING),
         'the full context should still disclose the omitted tree and file content')
@@ -277,6 +319,29 @@ test('JSON repair retry carries prior messages and still stays inside the coarse
   assert.ok(requests[1].messages.some((message) => message.role === 'user' && message.content.includes('请只依据实际提供的上下文作答，不要假设已看到省略内容。')),
     'the repair request should explicitly mark context removed to fit its prior reply')
   assertRequestsStayBounded(requests, 'coarse')
+})
+
+test('JSON repair evidence is resolved against the shrunken retry request manifest', async () => {
+  const root = await makeFixture()
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restore = installMock(requests, 'evidence-repair')
+  let result: Awaited<ReturnType<typeof generateInterview>>
+  try {
+    result = await generateInterview({
+      scan, granularity: 'coarse', roleFocus: 'backend', profile,
+      signal: new AbortController().signal, onProgress: () => undefined
+    })
+  } finally { restore() }
+  assert.equal(requests.length, 2)
+  const retry = requests[1].messages.map((message) => message.content).join('\n')
+  const retryIds = new Set(Array.from(retry.matchAll(/\[sourceId: ([^\]]+)\]/g), (match) => match[1]))
+  const questions = result!.sections.flatMap((section) => section.questions)
+  assert.ok(questions.length > 0)
+  assert.ok(questions.every((question) => question.sourceEvidence?.length === 1))
+  assert.ok(questions.every((question) => retryIds.has(question.sourceEvidence![0].sourceId)))
+  assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
+  assert.equal(result!.sourceEvidenceSummary?.retained, questions.length)
 })
 
 test('ordinary projects produce no truncation metadata or warning', async () => {

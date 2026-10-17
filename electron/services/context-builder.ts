@@ -1,5 +1,6 @@
 // 按颗粒度组装送入大模型的项目上下文（字符预算控制 + 细粒度分批）
 import path from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   contentReadFailureReason,
   contentReadWarning,
@@ -38,6 +39,8 @@ const CONTENT_READ_WARNING_RESERVE = 2200
 export interface ContextFile {
   relPath: string
   content: string
+  sourceId: string
+  snapshotHash: string
   truncated: boolean
   redacted: boolean
   redactionMatches: number
@@ -72,6 +75,19 @@ export interface BuiltContext {
   contentReadSummary: ContentReadSummary
   /** 模块批的数量（0 表示没有按模块分批）。进度提示用它区分"全局+模块"与"仅全局"。 */
   moduleCount: number
+}
+
+export interface RenderedSourceFile extends ContextFile {
+  /** Number of complete, original lines actually included in a particular request. */
+  citableLineCount: number
+}
+
+function withTransmittedSnapshot(file: ContextFile, citableLineCount: number): RenderedSourceFile {
+  return {
+    ...file,
+    snapshotHash: createHash('sha256').update(`${file.relPath}\0${file.content}`).digest('hex'),
+    citableLineCount
+  }
 }
 
 /**
@@ -174,15 +190,16 @@ async function pickFiles(
   let contentTruncated = false
   for (let index = 0; index < candidates.length; index++) {
     const { f } = candidates[index]
+    const sourceId = randomUUID()
     const separatorChars = 1
-    const plainTitle = `### 文件：${f.relPath}`
+    const plainTitle = `### 文件：${f.relPath} [sourceId: ${sourceId}]`
     const plainOverhead = plainTitle.length + 9 + separatorChars
     const remaining = budgetChars - warningReserve - renderedChars - plainOverhead
     if (remaining < 0) {
       contentTruncated = true
       continue
     }
-    const truncatedTitle = `### 文件：${f.relPath}（内容过长已截断）`
+    const truncatedTitle = `### 文件：${f.relPath}（内容过长已截断） [sourceId: ${sourceId}]`
     const truncatedOverhead = truncatedTitle.length + 9 + separatorChars
     const availableWithNotice = budgetChars - warningReserve - renderedChars - truncatedOverhead
     const contentMarker = '…（内容已截断）'
@@ -202,22 +219,32 @@ async function pickFiles(
     // of matched secrets that can enter ContextFile, batches, or renderBatch.
     const redaction = redactSensitiveContent(rawContent)
     const content = redaction.content
-    const truncated = content.length > remaining
-    if (truncated && availableWithNotice < contentMarker.length) {
+    const truncated = numberSourceLines(content).length > remaining
+    if (truncated && availableWithNotice < numberSourceLines(contentMarker).length) {
       contentTruncated = true
       continue
     }
-    const selectedContent = truncated
-      ? safeClipText(content, availableWithNotice, contentMarker)
-      : content
+    let selectedContent = content
+    if (truncated) {
+      let low = 0
+      let high = Math.min(content.length, availableWithNotice)
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2)
+        if (numberSourceLines(safeClipText(content, mid, contentMarker)).length <= availableWithNotice) low = mid
+        else high = mid - 1
+      }
+      selectedContent = safeClipText(content, low, contentMarker)
+    }
     out.push({
       relPath: f.relPath,
       content: selectedContent,
+      sourceId,
+      snapshotHash: createHash('sha256').update(`${f.relPath}\0${selectedContent}`).digest('hex'),
       truncated,
       redacted: redaction.totalMatches > 0,
       redactionMatches: redaction.totalMatches
     })
-    renderedChars += (truncated ? truncatedOverhead : plainOverhead) + selectedContent.length
+    renderedChars += (truncated ? truncatedOverhead : plainOverhead) + numberSourceLines(selectedContent).length
     contentTruncated ||= truncated
     if (redaction.totalMatches > 0) {
       contentSecurity.redactedFiles++
@@ -448,9 +475,21 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
 export function renderBatch(headerText: string, treeText: string, batch: ContextBatch): string {
   const header = headerText.replace('（见下方文件树）', treeText)
   const parts = batch.files.map((f) =>
-    [`### 文件：${f.relPath}${f.truncated ? '（内容过长已截断）' : ''}`, '```', f.content, '```'].join('\n')
+    [`### 文件：${f.relPath}${f.truncated ? '（内容过长已截断）' : ''} [sourceId: ${f.sourceId}]`, '```', numberSourceLines(f.content), '```'].join('\n')
   )
   return [header, '', '## 文件内容', ...parts].join('\n')
+}
+
+function numberSourceLines(content: string): string {
+  const lines = content.split(/\r\n|\n|\r/)
+  if (/(?:\r\n|\n|\r)$/.test(content)) lines.pop()
+  return lines.map((line, index) => `${index + 1} | ${line}`).join('\n')
+}
+
+function sourceLines(content: string): string[] {
+  const lines = content.split(/\r\n|\n|\r/)
+  if (/(?:\r\n|\n|\r)$/.test(content)) lines.pop()
+  return lines
 }
 
 /** Fit prompt overhead by clipping/removing whole file entries while keeping Markdown fences balanced. */
@@ -460,9 +499,12 @@ export function renderBatchWithinBudget(
   batch: ContextBatch,
   maxChars: number,
   requestTruncationMarker = ''
-): { text: string; truncated: boolean } {
+): { text: string; truncated: boolean; files: RenderedSourceFile[] } {
   const text = renderBatch(headerText, treeText, batch)
-  if (text.length <= maxChars) return { text, truncated: false }
+  if (text.length <= maxChars) return { text, truncated: false, files: batch.files.map((file) => withTransmittedSnapshot(
+    file,
+    file.truncated ? (file.content.match(/\r\n|\n|\r/g) ?? []).length : sourceLines(file.content).length
+  )) }
   const outputBudget = maxChars - requestTruncationMarker.length
   const base = renderBatch(headerText, treeText, { ...batch, files: [] })
   if (outputBudget < 0 || base.length > outputBudget) throw new Error('模型请求固定上下文超出支持范围。')
@@ -473,26 +515,38 @@ export function renderBatchWithinBudget(
   for (let index = 0; index < batch.files.length; index++) {
     const file = batch.files[index]
     const separator = 1
-    const plainTitle = `### 文件：${file.relPath}${file.truncated ? '（内容过长已截断）' : ''}`
-    const plainCost = separator + plainTitle.length + 9 + file.content.length
+    const plainTitle = `### 文件：${file.relPath}${file.truncated ? '（内容过长已截断）' : ''} [sourceId: ${file.sourceId}]`
+    const plainCost = separator + plainTitle.length + 9 + numberSourceLines(file.content).length
     if (renderedChars + plainCost <= outputBudget) {
       files.push(file)
       renderedChars += plainCost
       continue
     }
 
-    const clippedTitle = `### 文件：${file.relPath}（内容过长已截断）`
+    const clippedTitle = `### 文件：${file.relPath}（内容过长已截断） [sourceId: ${file.sourceId}]`
     const clipMarker = '…（内容已截断）'
     const contentAllowance = outputBudget - renderedChars - separator - clippedTitle.length - 9
     if (contentAllowance >= clipMarker.length) {
-      const content = safeClipText(file.content, contentAllowance, clipMarker)
+      let low = 0
+      let high = Math.min(file.content.length, contentAllowance)
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2)
+        const candidate = safeClipText(file.content, mid, clipMarker)
+        if (numberSourceLines(candidate).length <= contentAllowance) low = mid
+        else high = mid - 1
+      }
+      const content = safeClipText(file.content, low, clipMarker)
       files.push({ ...file, content, truncated: true })
-      renderedChars += separator + clippedTitle.length + 9 + content.length
+      renderedChars += separator + clippedTitle.length + 9 + numberSourceLines(content).length
     }
     truncated = true
     break
   }
   if (files.length < batch.files.length) truncated = true
   const rendered = renderBatch(headerText, treeText, { ...batch, files })
-  return { text: `${rendered}${requestTruncationMarker}`, truncated: truncated || files.length < batch.files.length }
+  const renderedFiles = files.map((file) => withTransmittedSnapshot(
+    file,
+    file.truncated ? (file.content.match(/\r\n|\n|\r/g) ?? []).length : sourceLines(file.content).length
+  ))
+  return { text: `${rendered}${requestTruncationMarker}`, truncated: truncated || files.length < batch.files.length, files: renderedFiles }
 }

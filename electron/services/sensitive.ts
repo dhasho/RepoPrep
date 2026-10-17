@@ -788,11 +788,19 @@ function redactSecretAssignments(source: string, scanComments = true): { content
   const chunks: string[] = []
   let cursor = 0
   for (const span of uniqueSpans) {
-    chunks.push(source.slice(cursor, span.start), span.replacement ?? ASSIGNMENT_REDACTION)
+    chunks.push(source.slice(cursor, span.start), preserveLineBreaks(source.slice(span.start, span.end), span.replacement ?? ASSIGNMENT_REDACTION))
     cursor = span.end
   }
   chunks.push(source.slice(cursor))
   return { content: chunks.join(''), count: uniqueSpans.length, spans: uniqueSpans }
+}
+
+/** Keep source line coordinates stable while replacing matched secret text. */
+function preserveLineBreaks(original: string, replacement: string): string {
+  const originalBreaks = original.match(/\r\n|\r|\n/g) ?? []
+  const replacementBreaks = replacement.match(/\r\n|\r|\n/g)?.length ?? 0
+  if (originalBreaks.length <= replacementBreaks) return replacement
+  return `${replacement}${originalBreaks.slice(replacementBreaks).join('')}`
 }
 
 // Ordered from most specific to least specific; no expression uses nested
@@ -864,7 +872,7 @@ export function redactSensitiveContent(content: string): RedactionResult {
       // String.replace substitution syntax is normally applied by the native
       // replace implementation; because we count through a callback, expand
       // capture references explicitly here.
-      return replacement
+      return preserveLineBreaks(args[0], replacement)
     })
   }
   const connections = redactConnectionCredentials(output)

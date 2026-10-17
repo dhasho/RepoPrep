@@ -15,6 +15,15 @@ export interface ContentReadSummary {
 
 export const CONTENT_READ_LIMITS = { attempts: 100_000, samples: 50, path: 2048 } as const
 
+export const SOURCE_EVIDENCE_LIMITS = {
+  perQuestion: 3,
+  linesPerReference: 30,
+  excerptCharsPerReference: 3000,
+  totalExcerptChars: 100_000,
+  pathChars: 2048,
+  snapshotHashChars: 64
+} as const
+
 export const CONTENT_READ_MESSAGES = {
   allFailed: '没有可读取的候选文件，无法分析项目内容。请检查文件权限后重新扫描。'
 } as const

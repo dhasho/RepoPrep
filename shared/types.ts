@@ -145,6 +145,27 @@ export interface QuestionItem {
   question: string
   answer: string // Markdown，专业名词用 [[名词]] 标记
   followUps: FollowUp[]
+  /** Bounded evidence resolved by the main process from the exact request context. */
+  sourceEvidence?: SourceEvidence[]
+}
+
+export interface SourceEvidence {
+  sourceId: string
+  snapshotHash: string
+  path: string
+  startLine: number
+  endLine: number
+  excerpt: string
+}
+
+export interface SourceEvidenceSummary {
+  /** Count of refs normalized from valid model question objects across all replies. */
+  asked: number
+  /** Refs whose ids and ranges passed validation against their request manifest. */
+  accepted: number
+  rejected: number
+  /** Accepted refs still attached after question and total excerpt budgets are applied. */
+  retained?: number
 }
 
 export interface Section {
@@ -171,6 +192,8 @@ export interface InterviewResult {
   contextTruncation?: ContextTruncationMetadata
   /** Present only when one or more candidate files could not be read. */
   contentReadSummary?: import('./content-read').ContentReadSummary
+  /** Optional for version-1 history compatibility. Counts range validation, not semantic support. */
+  sourceEvidenceSummary?: SourceEvidenceSummary
 }
 
 export interface ContextTruncationMetadata {
