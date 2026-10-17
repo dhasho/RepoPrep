@@ -75,8 +75,15 @@ async function loadIsolatedResultStore(userData) {
   const storageContract = await load(storageContractPath)
   const displayNamePath = path.resolve(here, '..', 'electron', 'services', 'project-display-name.ts')
   const displayName = await load(displayNamePath)
+  const credentialVaultPath = path.resolve(here, '..', 'electron', 'services', 'credential-vault.ts')
+  const credentialVault = await load(credentialVaultPath)
+  const forbiddenCredentialCrypto = {
+    isAvailable: async () => { throw new Error('unexpected credential crypto access in result-only test') },
+    encrypt: async () => { throw new Error('unexpected credential encryption in result-only test') },
+    decrypt: async () => { throw new Error('unexpected credential decryption in result-only test') }
+  }
   const storePath = path.resolve(here, '..', 'electron', 'services', 'store.ts')
-  return load(storePath, (id) => {
+  const store = await load(storePath, (id) => {
     if (id === 'electron') return { app: { getPath: (name) => {
       assert.equal(name, 'userData')
       return userData
@@ -86,8 +93,12 @@ async function loadIsolatedResultStore(userData) {
     if (id === '@shared/storage-contract') return storageContract
     if (id === './atomic-json') return atomic
     if (id === './project-display-name') return displayName
+    if (id === './credential-vault') return credentialVault
+    if (id === './native-credential-crypto') return { nativeCredentialCrypto: forbiddenCredentialCrypto }
     return nativeRequire(id)
   })
+  store.setCredentialCryptoForTests(forbiddenCredentialCrypto)
+  return store
 }
 
 test('real generation warning flows through contract, IPC, Markdown and built ResultPage', async () => {
