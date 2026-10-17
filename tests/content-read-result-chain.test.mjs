@@ -4,8 +4,12 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
+import vm from 'node:vm'
+import ts from 'typescript'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import * as sharedTypes from '../shared/types.ts'
 import { IPC } from '../shared/ipc.ts'
 import { assertInterviewResultContract } from '../shared/result-contract.ts'
 import { resultToMarkdown } from '../electron/services/markdown-export.ts'
@@ -44,6 +48,48 @@ async function renderResultPage(result) {
   }
 }
 
+async function loadIsolatedResultStore(userData) {
+  const nativeRequire = createRequire(import.meta.url)
+  const options = { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }
+  const evaluate = (code, filename, suppliedRequire) => {
+    const module = { exports: {} }
+    const wrapper = vm.runInThisContext(`(function (exports, require, module, __filename, __dirname) { ${code}\n})`, { filename })
+    wrapper(module.exports, suppliedRequire, module, filename, path.dirname(filename))
+    return module.exports
+  }
+  const load = async (file, suppliedRequire = nativeRequire) => evaluate(
+    ts.transpileModule(await fs.readFile(file, 'utf8'), options).outputText,
+    file,
+    suppliedRequire
+  )
+  const contentReadPath = path.resolve(here, '..', 'shared', 'content-read.ts')
+  const contentRead = await load(contentReadPath)
+  const contractPath = path.resolve(here, '..', 'shared', 'result-contract.ts')
+  const contract = await load(contractPath, (id) => {
+    if (id === './content-read.ts') return contentRead
+    throw new Error(`unexpected contract dependency: ${id}`)
+  })
+  const atomicPath = path.resolve(here, '..', 'electron', 'services', 'atomic-json.ts')
+  const atomic = await load(atomicPath)
+  const storageContractPath = path.resolve(here, '..', 'shared', 'storage-contract.ts')
+  const storageContract = await load(storageContractPath)
+  const displayNamePath = path.resolve(here, '..', 'electron', 'services', 'project-display-name.ts')
+  const displayName = await load(displayNamePath)
+  const storePath = path.resolve(here, '..', 'electron', 'services', 'store.ts')
+  return load(storePath, (id) => {
+    if (id === 'electron') return { app: { getPath: (name) => {
+      assert.equal(name, 'userData')
+      return userData
+    } } }
+    if (id === '@shared/types') return sharedTypes
+    if (id === '@shared/result-contract') return contract
+    if (id === '@shared/storage-contract') return storageContract
+    if (id === './atomic-json') return atomic
+    if (id === './project-display-name') return displayName
+    return nativeRequire(id)
+  })
+}
+
 test('real generation warning flows through contract, IPC, Markdown and built ResultPage', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue71-render-integration-'))
   const allowedRoot = path.resolve(os.tmpdir())
@@ -52,14 +98,34 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
   assert.ok(path.basename(root).startsWith('issue71-render-integration-'))
 
   const readme = path.join(root, 'README.md')
+  const sourceFile = path.join(root, 'src', 'evidence.ts')
   const originalOpen = fs.open
   const originalFetch = globalThis.fetch
   try {
     await fs.writeFile(readme, '# Synthetic project\n')
     await fs.writeFile(path.join(root, 'package.json'), '{"name":"synthetic"}')
+    const sourceContent = [
+      'export function createClient() {',
+      '  const region = "test-region"',
+      '  const endpoint = `https://${region}.example.invalid`',
+      '  const timeoutMs = 1000',
+      '  const headers = { "content-type": "application/json" }',
+      '  const retryCount = 2',
+      '  const retriesEnabled = retryCount > 0',
+      '  const requestOptions = { headers, timeoutMs }',
+      '  const clientName = "synthetic-client"',
+      '  const shouldRetry = retriesEnabled && Boolean(clientName)',
+      '  const logRequests = false',
+      "  const apiKey = 'synthetic-api-secret';",
+      '  return connect(endpoint, apiKey, requestOptions, shouldRetry, logRequests)',
+      '}'
+    ].join('\n')
+    await fs.mkdir(path.dirname(sourceFile), { recursive: true })
+    await fs.writeFile(sourceFile, sourceContent, 'utf8')
     const scan = await scanProject(root)
     const progressDetails = []
     const providerMessages = []
+    const requestEvidence = []
     fs.open = async (filePath, ...args) => {
       if (String(filePath) === readme) {
         throw Object.assign(new Error(`private-root ${root} synthetic secret`), { code: 'EACCES' })
@@ -69,13 +135,35 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     globalThis.fetch = async (_input, init) => {
       const requestBody = JSON.parse(String(init?.body))
       providerMessages.push(...(requestBody.messages ?? []).map((message) => message.content ?? ''))
+      const prompt = requestBody.messages?.find((message) => message.role === 'user')?.content ?? ''
+      const sourceBlock = prompt.match(/### 文件：src\/evidence\.ts \[sourceId: ([^\]]+)\]\n```\n([\s\S]*?)\n```/)
+      assert.ok(sourceBlock, 'primary user context contains the scanned evidence file and request source ID')
+      const numberedLines = Array.from(sourceBlock[2].matchAll(/^(\d+) \| (.*)$/gm), (match) => ({
+        line: Number(match[1]),
+        content: match[2]
+      }))
+      const secretLine = numberedLines.find((line) => line.content.includes('apiKey'))
+      assert.equal(secretLine?.line, 12, 'synthetic secret is present at the expected original source line')
+      assert.match(secretLine.content, /REDACTED/i, 'the request context contains the redacted assignment')
+      const endLine = numberedLines.find((line) => line.line === 13)
+      assert.ok(endLine)
+      assert.ok(!prompt.includes('synthetic-api-secret'), 'raw secret never enters the primary model context')
+      requestEvidence.push({
+        sourceId: sourceBlock[1],
+        startLine: secretLine.line,
+        endLine: endLine.line,
+        excerpt: `${secretLine.content}\n${endLine.content}`,
+        redactedContent: numberedLines.map((line) => line.content).join('\n')
+      })
+      const quota = Number(prompt.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1] ?? 20)
       return new Response(JSON.stringify({
         choices: [{ message: { content: JSON.stringify({
           projectSummary: 'Synthetic generated summary',
-          sections: [{ title: 'Synthetic section', questions: Array.from({ length: 20 }, (_, index) => ({
+          sections: [{ title: 'Synthetic section', questions: Array.from({ length: quota }, (_, index) => ({
             question: `Question ${index + 1}`,
             answer: `Answer ${index + 1}`,
-            followUps: []
+            followUps: [],
+            sourceRefs: [{ sourceId: sourceBlock[1], startLine: secretLine.line, endLine: endLine.line }]
           })) }],
           glossary: {}
         }) } }]
@@ -91,17 +179,6 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
       onProgress: (_step, detail) => { if (detail) progressDetails.push(detail) }
     })
 
-    const sourceEvidence = {
-      sourceId: 'synthetic-source',
-      snapshotHash: 'c'.repeat(64),
-      path: 'src/<module>.ts',
-      startLine: 4,
-      endLine: 5,
-      excerpt: 'const token = "[REDACTED]";\nreturn token'
-    }
-    result.sections[0].questions[0].sourceEvidence = [{ ...sourceEvidence }]
-    result.sourceEvidenceSummary = { asked: 1, accepted: 1, rejected: 0, retained: 1 }
-
     assert.ok(result.contentReadSummary)
     assert.doesNotThrow(() => assertInterviewResultContract(result))
     assert.doesNotThrow(() => validateIpcArgs(IPC.exportMarkdown, [result]))
@@ -115,29 +192,83 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     assert.ok(progressDetails.some((detail) => detail.includes('内容读取不完整') && detail.includes('README.md')))
     assert.ok(!providerMessages.join('\n').includes(root))
     assert.ok(!providerMessages.join('\n').includes('synthetic secret'))
+    assert.ok(!providerMessages.join('\n').includes('synthetic-api-secret'))
     assert.ok(!progressDetails.join('\n').includes(root))
     assert.ok(!progressDetails.join('\n').includes('synthetic secret'))
+
+    const resultQuestions = result.sections.flatMap((section) => section.questions)
+    assert.ok(resultQuestions.length >= 2)
+    assert.ok(resultQuestions.every((question) => question.sourceEvidence?.length === 1))
+    assert.equal(resultQuestions[0].sourceEvidence[0].sourceId, requestEvidence[0].sourceId)
+    assert.ok(resultQuestions.slice(1).some((question) => question.sourceEvidence[0].sourceId === requestEvidence[0].sourceId),
+      'multiple generated questions cite the same source from the actual request')
+    const expectedHash = createHash('sha256')
+      .update(`src/evidence.ts\0${requestEvidence[0].redactedContent}`, 'utf8')
+      .digest('hex')
+    for (const [index, question] of resultQuestions.entries()) {
+      const evidence = question.sourceEvidence[0]
+      assert.equal(evidence.path, 'src/evidence.ts')
+      assert.equal(evidence.sourceId, requestEvidence[0].sourceId)
+      assert.equal(evidence.snapshotHash, expectedHash)
+      assert.equal(evidence.startLine, 12)
+      assert.equal(evidence.endLine, 13)
+      assert.equal(evidence.excerpt, requestEvidence[0].excerpt)
+      if (index > 0) assert.notStrictEqual(evidence, resultQuestions[0].sourceEvidence[0], 'each question retains its own evidence clone')
+    }
+    assert.ok(result.sourceEvidenceSummary.accepted >= resultQuestions.length)
+    assert.ok(!JSON.stringify(result).includes('synthetic-api-secret'), 'generated result contains only the redacted request excerpt')
 
     const markdown = resultToMarkdown(result)
     assert.ok(markdown.includes('尝试读取'))
     assert.ok(markdown.includes('README\\.md'))
-    assert.ok(!markdown.includes('synthetic secret'))
+    assert.ok(!markdown.includes('synthetic-api-secret'))
     assert.ok(!markdown.includes(root))
-    assert.ok(markdown.includes('src/<module>.ts'))
-    assert.ok(markdown.includes('L4–L5'))
-    assert.ok(markdown.includes(sourceEvidence.snapshotHash))
-    assert.ok(markdown.includes(sourceEvidence.excerpt))
+    assert.ok(markdown.includes('src/evidence.ts'))
+    assert.ok(markdown.includes('L12–L13'))
+    assert.ok(markdown.includes(expectedHash))
+    assert.ok(markdown.includes(requestEvidence[0].excerpt))
+    assert.equal(markdown.split(expectedHash).length - 1, resultQuestions.length)
 
-    const html = await renderResultPage(result)
+    const userData = path.join(root, 'isolated-user-data')
+    await fs.mkdir(userData)
+    const store = await loadIsolatedResultStore(userData)
+    store.saveResult(root, result)
+    const storedPath = path.join(userData, 'projects', `${createHash('sha1').update(root).digest('hex')}.json`)
+    const storedBytes = await fs.readFile(storedPath, 'utf8')
+    assert.ok(!storedBytes.includes('synthetic-api-secret'), 'saved JSON contains only redacted evidence')
+    await fs.writeFile(sourceFile, 'changed after generating the interview\n', 'utf8')
+    await fs.rm(sourceFile)
+    const loaded = store.loadResult(root)
+    assert.deepEqual(loaded.sections.flatMap((section) => section.questions).map((question) => question.sourceEvidence),
+      resultQuestions.map((question) => question.sourceEvidence), 'reload retains the original, independently cloned source evidence')
+
+    const reloadedMarkdown = resultToMarkdown(loaded)
+    assert.ok(reloadedMarkdown.includes(requestEvidence[0].excerpt))
+    assert.ok(reloadedMarkdown.includes(expectedHash))
+    assert.ok(!reloadedMarkdown.includes('changed after generating'))
+    assert.ok(!reloadedMarkdown.includes('synthetic-api-secret'))
+    const html = await renderResultPage(loaded)
     assert.ok(html.includes('role="alert"'))
     assert.ok(html.includes('README.md'))
-    assert.ok(!html.includes('synthetic secret'))
+    assert.ok(html.includes('src/evidence.ts（L12–L13）'))
+    assert.ok(html.includes(expectedHash))
+    assert.ok(!html.includes('synthetic-api-secret'))
     assert.ok(!html.includes(root))
+    const { JSDOM } = await import('jsdom')
+    const rendered = new JSDOM(html)
+    const evidenceDetails = rendered.window.document.querySelector('details')
+    assert.ok(evidenceDetails)
+    evidenceDetails.querySelector('summary')?.dispatchEvent(new rendered.window.MouseEvent('click', { bubbles: true }))
+    assert.equal(evidenceDetails.open, true, 'the source quote remains expandable after history reload and source deletion')
+    assert.ok(evidenceDetails.textContent.includes(requestEvidence[0].excerpt))
+    rendered.window.close()
 
     fs.open = originalOpen
+    await fs.writeFile(sourceFile, sourceContent, 'utf8')
     const normalProgressDetails = []
+    const normalScan = await scanProject(root)
     const normalResult = await generateInterview({
-      scan,
+      scan: normalScan,
       granularity: 'medium',
       roleFocus: 'backend',
       profile: { id: 'p1', name: 'Mock', baseUrl: 'https://mock.invalid/v1', apiKey: 'synthetic-key', model: 'mock' },
