@@ -1,7 +1,7 @@
 # Offline generation evaluation
 
 - Mode: offline-pipeline-and-scorer-calibration
-- Run: cc06d281-1af5-4521-8b60-fec4bd520521
+- Run: 1b67ecf9-e992-47f4-8a1f-7fa2b6edd2d4
 - Corpus: repoprep-eval-corpus-v1
 - Synthetic response: fixture-context-keyword-v1-evidence-json-repair
 - Node: v24.16.0
@@ -20,18 +20,18 @@ Evidence coverage counts questions with at least one retained canonical referenc
 
 ### react-state
 
-Pipeline alerts: none; forbidden hits 0; input 2697 chars; 57 ms. Retained refs 20; coverage 20/20; Production generateInterview resolved returned IDs and line ranges against the request manifest; this does not establish semantic support.
-Baseline alerts: known_fact_keyword_missing; forbidden hits 0; input 427 chars; 9 ms. Baseline provided no code source manifest; source references were unavailable.
+Pipeline alerts: none; forbidden hits 0; input 2697 chars; 53 ms. Retained refs 20; coverage 20/20; Production generateInterview resolved returned IDs and line ranges against the request manifest; this does not establish semantic support.
+Baseline alerts: known_fact_keyword_missing; forbidden hits 0; input 427 chars; 5 ms. Baseline provided no code source manifest; source references were unavailable.
 
 ### node-routes
 
-Pipeline alerts: none; forbidden hits 0; input 5290 chars; 22 ms. Retained refs 20; coverage 20/20; Production generateInterview resolved returned IDs and line ranges against the request manifest; this does not establish semantic support.
-Baseline alerts: none; forbidden hits 0; input 403 chars; 6 ms. Baseline provided no code source manifest; source references were unavailable.
+Pipeline alerts: none; forbidden hits 0; input 5290 chars; 19 ms. Retained refs 20; coverage 20/20; Production generateInterview resolved returned IDs and line ranges against the request manifest; this does not establish semantic support.
+Baseline alerts: none; forbidden hits 0; input 403 chars; 3 ms. Baseline provided no code source manifest; source references were unavailable.
 
 ### python-cli
 
-Pipeline alerts: none; forbidden hits 0; input 11477 chars; 28 ms. Retained refs 25; coverage 25/25; Production generateInterview resolved returned IDs and line ranges against the request manifest; this does not establish semantic support.
-Baseline alerts: none; forbidden hits 0; input 395 chars; 6 ms. Baseline provided no code source manifest; source references were unavailable.
+Pipeline alerts: none; forbidden hits 0; input 11477 chars; 20 ms. Retained refs 25; coverage 25/25; Production generateInterview resolved returned IDs and line ranges against the request manifest; this does not establish semantic support.
+Baseline alerts: none; forbidden hits 0; input 395 chars; 5 ms. Baseline provided no code source manifest; source references were unavailable.
 
 Human review coverage: 0/137 pending. See review-template.json.
 
