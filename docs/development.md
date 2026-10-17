@@ -4,7 +4,8 @@
 
 - 使用 Node.js 22.15.0 或更高的 22.x，或 24.0.0 及以上版本；项目建议使用 Node.js 24+。
 - 在仓库根目录运行 `npm ci`，按 `package-lock.json` 安装依赖。
-- `npm run dev` 启动开发应用；`npm run build` 构建；`npm run dist` 打包 Windows 安装程序。
+- `npm run dev` 在 `http://127.0.0.1:5186/` 启动开发应用；renderer 的 HMR 使用同一端口。若端口已被占用，启动会直接失败；请先确认并释放该端口，或修改 `electron.vite.config.ts` 中的 `renderer.server.port`。不要直接结束身份不明的占用进程。
+- `npm run build` 构建；`npm run dist` 打包 Windows 安装程序。`npm run preview` 构建并预览本地构建产物，不另开开发服务器端口。
 - `npm run typecheck` 执行 TypeScript 检查。其他测试命令和适用范围见[验证指南](validation.md)。
 
 ## Electron 二进制
