@@ -144,33 +144,22 @@ test('读取不完整的持久化结果在 Markdown 中显示受控原因、转�
   assert.ok(md.includes('另有 1 次读取失败未列出'))
 })
 
-test('源码依据导出保存的脱敏快照、原始行号和hash，并使用无法被片段逃逸的动态围栏', () => {
-  const secretSafeExcerpt = 'const token = "[REDACTED]";\n```ts\n~~~~\nreturn token'
+test('Markdown export omits legacy source evidence excerpts and hashes', () => {
   const result = makeResult({
-    sections: [{
-      id: 's1', title: 'Evidence', questions: [{
-        id: 'q1', question: 'Question?', answer: 'Answer.', followUps: [],
-        sourceEvidence: [{
-          sourceId: 'source-1', snapshotHash: 'b'.repeat(64), path: 'src/a`b|[x].ts',
-          startLine: 4, endLine: 7, excerpt: secretSafeExcerpt
-        }]
+    sections: [{ id: 's1', title: 'Legacy', questions: [{
+      id: 'q1', question: 'Question?', answer: 'Answer.', followUps: [], sourceEvidence: [{
+        sourceId: 'source-1', snapshotHash: 'b'.repeat(64), path: 'src/legacy.ts',
+        startLine: 4, endLine: 7, excerpt: 'LEGACY_SOURCE_EXCERPT'
       }]
-    }],
+    }] }],
     sourceEvidenceSummary: { asked: 1, accepted: 1, rejected: 0, retained: 1 }
   })
-  assert.doesNotThrow(() => assertInterviewResultContract(result, path.isAbsolute))
-  assert.doesNotThrow(() => validateIpcArgs(IPC.exportMarkdown, [result]))
-  const md = resultToMarkdown(result)
-  assert.ok(md.includes('`` src/a`b|[x].ts ``'), 'path uses a delimiter longer than embedded backtick runs')
-  assert.ok(md.includes('L4–L7'))
-  assert.ok(md.includes('b'.repeat(64)))
-  assert.ok(md.includes('\n````\n'), 'fence exceeds the longest embedded backtick run')
-  assert.ok(md.includes('~~~~'), 'content containing a longer tilde run remains inside the chosen fence')
-  assert.ok(md.includes(secretSafeExcerpt), 'stored redacted snippet is exported as a fenced code block')
-  assert.ok(md.includes('生成时保存的脱敏快照'))
-  assert.ok(md.includes('不代表它在语义上支持答案'))
+  const markdown = resultToMarkdown(result)
+  assert.ok(markdown.includes('Answer.'))
+  assert.ok(!markdown.includes('LEGACY_SOURCE_EXCERPT'))
+  assert.ok(!markdown.includes('b'.repeat(64)))
+  assert.ok(!markdown.includes('源码依据'))
 })
-
 test('正常结果和旧结果不显示内容读取警告', () => {
   assert.ok(!resultToMarkdown(makeResult()).includes('内容读取不完整'))
   assert.ok(!resultToMarkdown(makeResult({

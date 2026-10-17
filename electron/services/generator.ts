@@ -12,12 +12,11 @@ import type {
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
 import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
-import { contentReadWarning, SOURCE_EVIDENCE_LIMITS } from '@shared/content-read'
+import { contentReadWarning } from '@shared/content-read'
 import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
 import { buildCompensationInstruction, selectUniqueQuestions } from './question-dedupe'
-import { resolveSourceRefs, type SourceManifestEntry } from '@shared/source-evidence'
 import type { ScanResult } from './scanner'
 
 export interface GenerateParams {
@@ -47,8 +46,7 @@ function jsonSchemaRule(questionCount: string, granularityDesc: string): string 
           "answer": "参考答案（Markdown 格式）",
           "followUps": [
             { "question": "追问", "answer": "追问参考答案", "followUps": [] }
-          ],
-          "sourceRefs": [{ "sourceId": "文件标题中的 sourceId", "startLine": 1, "endLine": 5 }]
+          ]
         }
       ]
     }
@@ -61,7 +59,6 @@ function jsonSchemaRule(questionCount: string, granularityDesc: string): string 
 1. 共 ${questionCount}，按主题分 3-6 个 section；${granularityDesc}
 2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明"（根据常见实现推断）"。
 3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 \`路径\` 注明出处。
-   每题尽量提供 1-3 个 sourceRefs，行号必须来自文件正文中的编号，范围最多 30 行；不要返回路径或代码片段字段。
 4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。
 5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。
 6. 问题口吻是面试官向候选人提问，例如"你为什么选择 X 而不是 Y？""这个模块的 Y 是怎么实现的？"`
@@ -127,7 +124,6 @@ interface RawQuestion {
   question?: unknown
   answer?: unknown
   followUps?: unknown
-  sourceRefs?: unknown
 }
 interface RawSection {
   title?: unknown
@@ -158,16 +154,14 @@ type ParsedBatch = {
   projectSummary: string
   sections: Section[]
   glossary: Record<string, string>
-  sourceEvidenceSummary?: { asked: number; accepted: number; rejected: number }
 }
 
-function normalizeParsed(raw: unknown, manifest: readonly SourceManifestEntry[]): ParsedBatch {
+function normalizeParsed(raw: unknown): ParsedBatch {
   if (!raw || typeof raw !== 'object') throw new Error('模型输出不是 JSON 对象')
   const obj = raw as RawResult
   const projectSummary = typeof obj.projectSummary === 'string' ? obj.projectSummary.trim() : ''
 
   const sections: Section[] = []
-  const sourceEvidenceSummary = { asked: 0, accepted: 0, rejected: 0 }
   if (Array.isArray(obj.sections)) {
     for (const s of obj.sections) {
       if (!s || typeof s !== 'object') continue
@@ -181,16 +175,11 @@ function normalizeParsed(raw: unknown, manifest: readonly SourceManifestEntry[])
           const question = typeof qo.question === 'string' ? qo.question.trim() : ''
           const answer = typeof qo.answer === 'string' ? qo.answer.trim() : ''
           if (!question || !answer) continue
-          const resolved = resolveSourceRefs(qo.sourceRefs, manifest)
-          sourceEvidenceSummary.asked += resolved.asked
-          sourceEvidenceSummary.accepted += resolved.accepted
-          sourceEvidenceSummary.rejected += resolved.rejected
           questions.push({
             id: randomUUID(),
             question,
             answer,
-            followUps: normalizeFollowUps(qo.followUps, 1),
-            ...(resolved.evidence.length ? { sourceEvidence: resolved.evidence } : {})
+            followUps: normalizeFollowUps(qo.followUps, 1)
           })
         }
       }
@@ -212,7 +201,7 @@ function normalizeParsed(raw: unknown, manifest: readonly SourceManifestEntry[])
       if (typeof v === 'string' && v.trim()) glossary[k] = v.trim()
     }
   }
-  return { projectSummary, sections, glossary, sourceEvidenceSummary }
+  return { projectSummary, sections, glossary }
 }
 
 /** 调用大模型并解析出结构化结果，失败自动带错误重试一次 */
@@ -223,8 +212,7 @@ async function callForJson(
   minimumContextChars: number,
   budget: number,
   signal: AbortSignal,
-  onRequestTruncation: () => void,
-  getManifest: () => readonly SourceManifestEntry[]
+  onRequestTruncation: () => void
 ): Promise<ParsedBatch> {
   let lastError = ''
   let previousReply = ''
@@ -235,7 +223,7 @@ async function callForJson(
     if (!validateMessageCharBudget(fitted.messages, budget)) throw new Error('模型请求内容超出支持范围。')
     const reply = await chatCompletion(profile, fitted.messages, { signal, timeoutMs: 600_000 })
     try {
-      return normalizeParsed(JSON.parse(extractJson(reply)), getManifest())
+      return normalizeParsed(JSON.parse(extractJson(reply)))
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       previousReply = reply
@@ -331,7 +319,6 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     onCompensate: (detail) => reportProgress('补充请求（题量不足）', detail, 94),
     requestBatch: (index, quota, extraInstruction) => {
       const contextText = renderBatch(built.headerText, built.treeText, built.batches[index])
-      let finalManifest: readonly SourceManifestEntry[] = []
       const minimumContextChars = renderBatch(
         built.headerText,
         built.treeText,
@@ -345,13 +332,6 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           contextLimit,
           REQUEST_TRUNCATION_MARKER
         )
-        finalManifest = bounded.files.map((file) => ({
-          sourceId: file.sourceId,
-          snapshotHash: file.snapshotHash,
-          path: file.relPath,
-          content: file.content,
-          citableLineCount: file.citableLineCount
-        }))
         const userPrompt = buildUserPrompt({
           contextText: bounded.text,
           granularity,
@@ -383,8 +363,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         minimumContextChars,
         CONTEXT_CHAR_BUDGETS[granularity],
         signal,
-        markRequestTruncation,
-        () => finalManifest
+        markRequestTruncation
       )
     }
   })
@@ -436,11 +415,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         return entries
       }, [] as Array<[string, number]>))
     },
-    ...(built.contentReadSummary.failedReads > 0 ? { contentReadSummary: built.contentReadSummary } : {}),
-    sourceEvidenceSummary: {
-      ...merged.sourceEvidenceSummary,
-      retained: capped.sections.reduce((total, section) => total + section.questions.reduce((count, question) => count + (question.sourceEvidence?.length ?? 0), 0), 0)
-    }
+    ...(built.contentReadSummary.failedReads > 0 ? { contentReadSummary: built.contentReadSummary } : {})
   }
   try {
     assertInterviewResultContract(result)
@@ -482,7 +457,6 @@ export interface MergeResult {
   collected: number
   /** 合并时跳过的重复题数量 */
   duplicates: number
-  sourceEvidenceSummary: { asked: number; accepted: number; rejected: number }
 }
 
 /**
@@ -510,33 +484,17 @@ export async function mergeWithCompensation(
     compensationRounds: 0,
     collected: 0,
     duplicates: 0,
-    sourceEvidenceSummary: { asked: 0, accepted: 0, rejected: 0 }
   }
   /** 每批实际贡献的题量，用于挑出"给得最少"的批次做补偿 */
   const delivered = quotas.map(() => 0)
   const seen = new Set<string>()
   const retainedByBatch: Section[][] = quotas.map(() => [])
-  let sourceEvidenceChars = 0
 
   const absorb = (parsed: ParsedBatch, quota: number, index: number): number => {
-    merged.sourceEvidenceSummary.asked += parsed.sourceEvidenceSummary?.asked ?? 0
-    merged.sourceEvidenceSummary.accepted += parsed.sourceEvidenceSummary?.accepted ?? 0
-    merged.sourceEvidenceSummary.rejected += parsed.sourceEvidenceSummary?.rejected ?? 0
     const unique = selectUniqueQuestions(parsed.sections, quota, seen)
     merged.droppedByQuota += unique.dropped
     merged.duplicates += unique.duplicates
     if (unique.kept > 0) {
-      for (const section of unique.sections) for (const question of section.questions) {
-        const kept = []
-        for (const evidence of question.sourceEvidence ?? []) {
-          if (sourceEvidenceChars + evidence.excerpt.length <= SOURCE_EVIDENCE_LIMITS.totalExcerptChars) {
-            kept.push(evidence)
-            sourceEvidenceChars += evidence.excerpt.length
-          }
-        }
-        if (kept.length) question.sourceEvidence = kept
-        else delete question.sourceEvidence
-      }
       if (!merged.projectSummary && parsed.projectSummary) merged.projectSummary = parsed.projectSummary
       merged.sections.push(...unique.sections)
       retainedByBatch[index].push(...unique.sections)

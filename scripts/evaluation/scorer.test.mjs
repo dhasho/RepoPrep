@@ -23,64 +23,17 @@ test('positive result with portable fixture identity passes contract and quota',
   assert.deepEqual(report.alerts, [])
 })
 
-test('old results without evidence remain scoreable and external evidence is marked contract-only', () => {
+test('legacy results with source evidence remain contract-valid but new scoring reports no evidence metrics', () => {
+  const evidence = { sourceId: 'declared-source', snapshotHash: 'b'.repeat(64), path: 'src/App.jsx', startLine: 1, endLine: 1, excerpt: 'useState(0)' }
   const oldResult = valid(['How does useState work?', 'Where is the filter applied?'])
+  oldResult.sections[0].questions[0].sourceEvidence = [{ ...evidence }]
+  oldResult.sourceEvidenceSummary = { asked: 1, accepted: 1, rejected: 0, retained: 1 }
   const report = scoreCase(oldResult, fixture)
   assert.equal(report.contract.pass, true)
-  assert.deepEqual(report.sourceEvidence.questionCoverage, { questionsWithRetainedEvidence: 0, reportedEvidenceBearingQuestions: 0, totalQuestions: 2, rate: 0 })
-  assert.equal(report.sourceEvidence.declaredStats, null)
-  assert.equal(report.sourceEvidence.verification, 'external-result-contract-only')
-  const evidence = { sourceId: 'declared-source', snapshotHash: 'b'.repeat(64), path: 'src/App.jsx', startLine: 1, endLine: 1, excerpt: 'useState(0)' }
-  const externalResult = valid(['How does useState work?', 'Where is the filter applied?'])
-  externalResult.sections[0].questions[0].sourceEvidence = [{ ...evidence }]
-  externalResult.sections[0].questions[1].sourceEvidence = [{ ...evidence }]
-  externalResult.sourceEvidenceSummary = { asked: 2, accepted: 2, rejected: 0, retained: 2 }
-  const externalWithDeclaredCounts = scoreCase(externalResult, fixture)
-  assert.equal(externalWithDeclaredCounts.contract.pass, true)
-  assert.equal(externalWithDeclaredCounts.sourceEvidence.verification, 'external-result-contract-only')
-  assert.match(externalWithDeclaredCounts.sourceEvidence.scopeNote, /does not prove any reference was sent to a model/)
-})
-
-test('production-resolved canonical evidence and summary counts agree; clone refs satisfy contract', () => {
-  const evidence = { sourceId: 'source-1', snapshotHash: 'a'.repeat(64), path: 'src/App.jsx', startLine: 1, endLine: 1, excerpt: 'const state = useState(0)' }
-  const result = valid(['How does useState work?', 'Where is the filter applied?'])
-  result.sections[0].questions[0].sourceEvidence = [{ ...evidence }]
-  result.sections[0].questions[1].sourceEvidence = [{ ...evidence }]
-  result.sourceEvidenceSummary = { asked: 3, accepted: 2, rejected: 1, retained: 2 }
-  const report = scoreCase(result, fixture, { evidenceVerification: 'production-request-resolved' })
-  assert.equal(report.contract.pass, true)
-  assert.equal(report.sourceEvidence.sourceEvidenceContract.pass, true)
-  assert.equal(report.sourceEvidence.questionCoverage.questionsWithRetainedEvidence, 2)
-  assert.equal(report.sourceEvidence.retainedCanonicalRefs.length, 2)
-  assert.deepEqual(report.sourceEvidence.declaredStats, { asked: 3, accepted: 2, rejected: 1, retained: 2, actualRetained: 2, retainedCountMatchesActual: true })
-})
-
-test('illegal evidence contract and retained-summary mismatch cannot pass', () => {
-  const evidence = { sourceId: 'source-1', snapshotHash: 'a'.repeat(64), path: 'src/App.jsx', startLine: 1, endLine: 1, excerpt: 'useState(0)' }
-  const result = valid(['How does useState work?', 'Where is the filter applied?'])
-  result.sections[0].questions[0].sourceEvidence = [{ ...evidence }]
-  result.sections[0].questions[1].sourceEvidence = [{ ...evidence }]
-  result.sourceEvidenceSummary = { asked: 2, accepted: 2, rejected: 0, retained: 1 }
-  const report = scoreCase(result, fixture, { evidenceVerification: 'production-request-resolved' })
-  assert.equal(report.contract.pass, false)
-  assert.equal(report.sourceEvidence.sourceEvidenceContract.pass, false)
-  assert.ok(report.alerts.includes('invalid_source_evidence_contract'))
-  const malformed = valid(['How does useState work?', 'Where is the filter applied?'])
-  malformed.sections[0].questions[0].sourceEvidence = [{ ...evidence, snapshotHash: 'bad' }]
-  const malformedScore = scoreCase(malformed, fixture)
-  assert.equal(malformedScore.contract.pass, false)
-  assert.equal(malformedScore.sourceEvidence.sourceEvidenceContract.pass, false)
-  assert.ok(malformedScore.alerts.includes('invalid_source_evidence_contract'))
-  const emptyObject = valid(['How does useState work?', 'Where is the filter applied?'])
-  emptyObject.sections[0].questions[0].sourceEvidence = [{}]
-  const emptyObjectScore = scoreCase(emptyObject, fixture)
-  assert.equal(emptyObjectScore.contract.pass, false)
-  assert.equal(emptyObjectScore.sourceEvidence.sourceEvidenceContract.pass, false)
-  assert.equal(emptyObjectScore.sourceEvidence.questionCoverage.questionsWithRetainedEvidence, 0)
-  assert.equal(emptyObjectScore.sourceEvidence.questionCoverage.reportedEvidenceBearingQuestions, 1)
-  assert.equal(emptyObjectScore.sourceEvidence.questionCoverage.rate, 0)
-  assert.deepEqual(emptyObjectScore.sourceEvidence.retainedCanonicalRefs, [])
-  assert.ok(emptyObjectScore.alerts.includes('invalid_source_evidence_contract'))
+  assert.equal(Object.hasOwn(report, 'sourceEvidence'), false)
+  const newResult = valid(['How does useState work?', 'Where is the filter applied?'])
+  assert.equal(Object.hasOwn(newResult, 'sourceEvidenceSummary'), false)
+  assert.equal(scoreCase(newResult, fixture).contract.pass, true)
 })
 
 test('malformed arrays and null sections safely report contract failure', () => {
@@ -97,8 +50,7 @@ test('human review template binds fingerprints to a run and remains pending unti
   run.reportDigest = calculateReportDigest(run)
   const manifest = { ...run }
   const template = makeReviewTemplate(run)
-  assert.deepEqual(template.ratings[0].sourceEvidence, [evidence])
-  assert.match(template.rubric.factualCorrectness, /does not prove semantic support/)
+  assert.deepEqual(template.ratings[0].sourceEvidence, [evidence], 'historical evidence stays bound when present')
   assert.equal(validateReview(template, manifest).status, 'pending')
   template.ratings[0].factualCorrectness = 5
   template.ratings[0].projectRelevance = 4

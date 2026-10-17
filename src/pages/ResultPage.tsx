@@ -389,25 +389,6 @@ function QuestionCard({
         </span>
       </button>
 
-      {q.sourceEvidence?.length ? (
-        <div className="px-4 pb-3">
-          {q.sourceEvidence.map((evidence, evidenceIndex) => (
-            <details key={`${evidence.sourceId}-${evidenceIndex}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-              <summary className="cursor-pointer font-medium text-indigo-700">
-                源码依据：{evidence.path}（L{evidence.startLine}–L{evidence.endLine}）
-              </summary>
-              <div className="mt-2 space-y-2 text-xs text-slate-600">
-                <p>以下内容来自生成时保存的脱敏源码快照；范围已校验，但不代表答案的语义或事实正确。</p>
-                <p>快照 SHA-256：<code className="break-all" title={evidence.snapshotHash}>{evidence.snapshotHash}</code></p>
-                <pre className="max-h-96 overflow-auto rounded-md bg-slate-900 p-3 text-xs leading-5 text-slate-100"><code>{evidence.excerpt}</code></pre>
-              </div>
-            </details>
-          ))}
-        </div>
-      ) : (
-        <p className="px-4 pb-3 text-xs text-slate-400">暂无源码依据</p>
-      )}
-
       {expanded && (
         <div className="border-t border-slate-100 px-4 pb-4 pt-3">
           <MarkdownView markdown={q.answer} onTerm={onTerm} />

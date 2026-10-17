@@ -92,32 +92,25 @@ async function makeModuleCapFixture(directoryCount: number, includeRootCode = tr
   return root
 }
 
-function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' | 'evidence' | 'evidence-repair' | 'evidence-repair-stale' | 'evidence-cross-batch' = 'normal') {
+function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' = 'normal') {
   const originalFetch = globalThis.fetch
   let call = 0
-  let moduleASourceId: string | undefined
   const invalidReply = '😀'.repeat(11_001) + 'REPAIR-TAIL-SHOULD-BE-CLIPPED'
   globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {}
     const messages = Array.isArray(body.messages) ? body.messages : []
     capture.push({ messages: messages as typeof capture[number]['messages'] })
     call++
-    if (['repair', 'evidence-repair', 'evidence-repair-stale'].includes(mode) && call === 1) {
+    if (mode === 'repair' && call === 1) {
       return new Response(JSON.stringify({ choices: [{ message: { content: invalidReply } }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
       })
     }
     const prompt = messages.map((message: { content?: string }) => message.content ?? '').join('\n')
-    const sourceId = prompt.match(/\[sourceId: ([^\]]+)\]/)?.[1]
-    const currentSources = sourceEntries({ messages: messages as typeof capture[number]['messages'] })
-    const currentSourceId = currentSources.keys().next().value as string | undefined
-    const moduleName = prompt.match(/本次只分析项目的单个模块「([^」]+)」/)?.[1]
-    if (mode === 'evidence-cross-batch' && moduleName === 'module-a') moduleASourceId = currentSourceId
     const requestedText = prompt.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1]
     if (!requestedText) throw new Error('mock prompt did not include its explicit question quota')
-    const requested = Number(requestedText)
-    const count = mode === 'short' ? 1 : requested
+    const count = mode === 'short' ? 1 : Number(requestedText)
     const result = {
       projectSummary: 'A bounded synthetic fixture.',
       sections: [{
@@ -126,20 +119,7 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
         questions: Array.from({ length: count }, (_, index) => ({
           question: `Fixture question ${call}-${index + 1}?`,
           answer: `Fixture answer ${index + 1}.`,
-          followUps: [],
-          ...((mode === 'evidence' || mode === 'evidence-repair') && sourceId ? { sourceRefs: [{ sourceId, startLine: 1, endLine: 1 }] } : {}),
-          ...(mode === 'evidence-repair-stale' && currentSourceId ? {
-            sourceRefs: [
-              staleFirstRequestRef(capture[0], { messages: messages as typeof capture[number]['messages'] }),
-              { sourceId: currentSourceId, startLine: 1, endLine: 1 }
-            ]
-          } : {}),
-          ...(mode === 'evidence-cross-batch' && moduleName === 'module-b' && moduleASourceId && currentSourceId ? {
-            sourceRefs: [
-              { sourceId: moduleASourceId, startLine: 1, endLine: 1 },
-              { sourceId: currentSourceId, startLine: 1, endLine: 1 }
-            ]
-          } : {})
+          followUps: []
         }))
       }],
       glossary: {}
@@ -152,41 +132,11 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
   return () => { globalThis.fetch = originalFetch }
 }
 
-function sourceEntries(request: { messages: Array<{ role: string; content: string }> }): Map<string, number> {
-  const prompt = request.messages.map((message) => message.content).join('\n')
-  const entries = new Map<string, number>()
-  const files = /### 文件：[^\n]*\[sourceId: ([^\]]+)\]\n```\n([\s\S]*?)\n```/g
-  for (const match of prompt.matchAll(files)) {
-    const numberedLines = Array.from(match[2].matchAll(/^(\d+) \| (.*)$/gm))
-    if (!numberedLines.length) continue
-    let citable = Number(numberedLines[numberedLines.length - 1][1])
-    if (numberedLines[numberedLines.length - 1][2].includes('…（内容已截断）')) citable--
-    entries.set(match[1], citable)
-  }
-  return entries
-}
-
-function staleFirstRequestRef(
-  first: { messages: Array<{ role: string; content: string }> } | undefined,
-  retry: { messages: Array<{ role: string; content: string }> }
-): { sourceId: string; startLine: number; endLine: number } {
-  if (!first) throw new Error('missing initial model request')
-  const initialEntries = sourceEntries(first)
-  const retryEntries = sourceEntries(retry)
-  for (const [sourceId, initialLines] of initialEntries) {
-    const retryLines = retryEntries.get(sourceId) ?? 0
-    if (initialLines > retryLines) {
-      return { sourceId, startLine: retryLines + 1, endLine: retryLines + 1 }
-    }
-  }
-  throw new Error('repair request did not shrink any source range from the initial request')
-}
-
-test('generated evidence is resolved from each actual request and cloned across questions', async () => {
+test('generation requests retain ordinary source text without source-reference overhead or result evidence', async () => {
   const root = await makeFixture()
   const scan = await scanProject(root)
   const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
-  const restore = installMock(requests, 'evidence')
+  const restore = installMock(requests)
   let result: Awaited<ReturnType<typeof generateInterview>>
   try {
     result = await generateInterview({
@@ -195,30 +145,11 @@ test('generated evidence is resolved from each actual request and cloned across 
     })
   } finally { restore() }
 
-  const requestSources = requests.map((request) => {
-    const prompt = request.messages.map((message) => message.content).join('\n')
-    return new Set(Array.from(prompt.matchAll(/\[sourceId: ([^\]]+)\]/g), (match) => match[1]))
-  })
-  const questions = result!.sections.flatMap((section) => section.questions)
-  assert.ok(questions.length >= 2)
-  assert.ok(questions.every((question) => question.sourceEvidence?.length === 1))
-  assert.ok(questions.some((question, index) => questions.slice(index + 1).some((other) =>
-    question.sourceEvidence![0].sourceId === other.sourceEvidence![0].sourceId)), 'two questions should cite one source')
-  for (const question of questions) {
-    const requestIndex = Number(question.question.match(/^Fixture question (\d+)-/)?.[1]) - 1
-    assert.ok(requestSources[requestIndex]?.has(question.sourceEvidence![0].sourceId), 'evidence must belong to the request that produced the question')
-    assert.equal(question.sourceEvidence![0].path.includes('..'), false)
-    assert.ok(question.sourceEvidence![0].excerpt.length > 0)
-  }
-  assert.equal(result!.sourceEvidenceSummary?.asked, questions.length)
-  assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
-  assert.equal(result!.sourceEvidenceSummary?.retained, questions.reduce((count, question) => count + (question.sourceEvidence?.length ?? 0), 0))
-  for (const question of questions) {
-    assert.match(question.sourceEvidence![0].snapshotHash, /^[a-f0-9]{64}$/)
-    for (const other of questions) if (other !== question && other.sourceEvidence?.[0].sourceId === question.sourceEvidence![0].sourceId) {
-      assert.notStrictEqual(question.sourceEvidence![0], other.sourceEvidence![0], 'each result field must own a cloned evidence object')
-    }
-  }
+  const serializedRequests = JSON.stringify(requests)
+  assert.ok(serializedRequests.includes('CORE_SOURCE_KEEP'), 'the model still receives ordinary project source input')
+  assert.doesNotMatch(serializedRequests, /sourceRefs|sourceId|\b\d+ \| /)
+  assert.doesNotMatch(JSON.stringify(result!), /sourceEvidence|sourceEvidenceSummary|snapshotHash|sourceId/)
+  assert.ok(result!.sections.flatMap((section) => section.questions).length > 0)
 })
 
 function addOversizedLegalTree(scan: Awaited<ReturnType<typeof scanProject>>): void {
@@ -318,8 +249,7 @@ test('approved real scan bounds actual model messages for coarse, medium, and fi
       assert.equal(result!.contextTruncation?.requestTruncated, false,
         'the reserved warning allowance lets the complete built context fit without request-level clipping')
       const firstUserMessage = requests[0].messages.find((message) => message.role === 'user')
-      const normalizeSourceIds = (value: string): string => value.replace(/\[sourceId: [^\]]+\]/g, '[sourceId]')
-      assert.ok(firstUserMessage && normalizeSourceIds(firstUserMessage.content).includes(normalizeSourceIds(renderBatch(built.headerText, built.treeText, built.batches[0]))),
+      assert.ok(firstUserMessage && firstUserMessage.content.includes(renderBatch(built.headerText, built.treeText, built.batches[0])),
         'the first coarse request should preserve the complete rendered batch, including tree and headers')
       assert.ok(firstUserMessage?.content.includes(CONTEXT_TRUNCATION_WARNING),
         'the full context should still disclose the omitted tree and file content')
@@ -375,98 +305,6 @@ test('JSON repair retry carries prior messages and still stays inside the coarse
   assert.ok(requests[1].messages.some((message) => message.role === 'user' && message.content.includes('请只依据实际提供的上下文作答，不要假设已看到省略内容。')),
     'the repair request should explicitly mark context removed to fit its prior reply')
   assertRequestsStayBounded(requests, 'coarse')
-})
-
-test('JSON repair evidence is resolved against the shrunken retry request manifest', async () => {
-  const root = await makeFixture()
-  const scan = await scanProject(root)
-  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
-  const restore = installMock(requests, 'evidence-repair')
-  let result: Awaited<ReturnType<typeof generateInterview>>
-  try {
-    result = await generateInterview({
-      scan, granularity: 'coarse', roleFocus: 'backend', profile,
-      signal: new AbortController().signal, onProgress: () => undefined
-    })
-  } finally { restore() }
-  assert.equal(requests.length, 2)
-  const retry = requests[1].messages.map((message) => message.content).join('\n')
-  const retryIds = new Set(Array.from(retry.matchAll(/\[sourceId: ([^\]]+)\]/g), (match) => match[1]))
-  const questions = result!.sections.flatMap((section) => section.questions)
-  assert.ok(questions.length > 0)
-  assert.ok(questions.every((question) => question.sourceEvidence?.length === 1))
-  assert.ok(questions.every((question) => retryIds.has(question.sourceEvidence![0].sourceId)))
-  assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
-  assert.equal(result!.sourceEvidenceSummary?.retained, questions.length)
-})
-
-test('JSON repair rejects first-attempt lines omitted from the retry but keeps retry-visible evidence', async () => {
-  const root = await makeManyLineFixture()
-  const scan = await scanProject(root)
-  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
-  const restore = installMock(requests, 'evidence-repair-stale')
-  let result: Awaited<ReturnType<typeof generateInterview>>
-  try {
-    result = await generateInterview({
-      scan, granularity: 'coarse', roleFocus: 'backend', profile,
-      signal: new AbortController().signal, onProgress: () => undefined
-    })
-  } finally { restore() }
-
-  assert.equal(requests.length, 2)
-  const initialSources = sourceEntries(requests[0])
-  const retrySources = sourceEntries(requests[1])
-  const stale = Array.from(initialSources).find(([sourceId, lineCount]) => lineCount > (retrySources.get(sourceId) ?? 0))
-  assert.ok(stale, 'the fixture must expose lines in attempt one that the fitted repair request omits')
-  const questions = result!.sections.flatMap((section) => section.questions)
-  assert.ok(questions.length > 0)
-  assert.ok(questions.every((question) => question.sourceEvidence?.length === 1))
-  for (const question of questions) {
-    const evidence = question.sourceEvidence![0]
-    assert.ok(retrySources.has(evidence.sourceId), 'only the retry request can authorize a persisted citation')
-    assert.ok(evidence.sourceId !== stale![0] || evidence.endLine <= (retrySources.get(stale![0]) ?? 0))
-  }
-  assert.ok((result!.sourceEvidenceSummary?.rejected ?? 0) > 0, 'the first-request-only range must count as rejected')
-  assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
-  assert.equal(result!.sourceEvidenceSummary?.retained, questions.length)
-})
-
-test('module B cannot cite a source ID exclusive to module A', async () => {
-  const root = await makeFixture()
-  await fs.mkdir(path.join(root, 'module-a'), { recursive: true })
-  await fs.mkdir(path.join(root, 'module-b'), { recursive: true })
-  await fs.writeFile(path.join(root, 'module-a', 'service.ts'), 'export const MODULE_A_ONLY = true\n')
-  await fs.writeFile(path.join(root, 'module-b', 'service.ts'), 'export const MODULE_B_ONLY = true\n')
-  const scan = await scanProject(root)
-  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
-  const restore = installMock(requests, 'evidence-cross-batch')
-  let result: Awaited<ReturnType<typeof generateInterview>>
-  try {
-    result = await generateInterview({
-      scan, granularity: 'fine', roleFocus: 'backend', profile,
-      signal: new AbortController().signal, onProgress: () => undefined
-    })
-  } finally { restore() }
-
-  const moduleARequestIndex = requests.findIndex((request) => request.messages.some((message) => message.content.includes('只分析项目的单个模块「module-a」')))
-  const moduleBRequestIndex = requests.findIndex((request) => request.messages.some((message) => message.content.includes('只分析项目的单个模块「module-b」')))
-  assert.ok(moduleARequestIndex >= 0 && moduleBRequestIndex > moduleARequestIndex, 'module A must be requested before module B')
-  const moduleAIds = new Set(sourceEntries(requests[moduleARequestIndex]).keys())
-  const moduleBIds = new Set(sourceEntries(requests[moduleBRequestIndex]).keys())
-  assert.ok([...moduleAIds].some((sourceId) => !moduleBIds.has(sourceId)), 'the fixture needs a source ID exclusive to module A')
-  const moduleBQuestions = result!.sections.flatMap((section) => section.questions).filter((question) => {
-    const callNo = Number(question.question.match(/^Fixture question (\d+)-/)?.[1])
-    const prompt = requests[callNo - 1]?.messages.map((message) => message.content).join('\n') ?? ''
-    return prompt.includes('单个模块「module-b」')
-  })
-  assert.ok(moduleBQuestions.length > 0)
-  for (const question of moduleBQuestions) {
-    assert.equal(question.sourceEvidence?.length, 1)
-    assert.ok(moduleBIds.has(question.sourceEvidence![0].sourceId))
-    assert.ok(!moduleAIds.has(question.sourceEvidence![0].sourceId))
-  }
-  assert.ok((result!.sourceEvidenceSummary?.rejected ?? 0) >= moduleBQuestions.length)
-  assert.equal(result!.sourceEvidenceSummary?.retained, result!.sections.flatMap((section) => section.questions).reduce((count, question) => count + (question.sourceEvidence?.length ?? 0), 0))
 })
 
 test('ordinary projects produce no truncation metadata or warning', async () => {

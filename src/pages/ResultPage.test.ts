@@ -104,42 +104,22 @@ test('真实 ResultPage 显示读取失败原因、相对路径和样本省略�
   assert.ok(!html.includes('C:\\synthetic'), 'project absolute path is not exposed in the warning')
 })
 
-test('真实 ResultPage 用原生可展开区域展示保存的源码快照，旧结果显示暂无源码依据', async () => {
-  const evidence = {
-    sourceId: 'source-1',
-    snapshotHash: 'a'.repeat(64),
-    path: 'src/<module>.ts',
-    startLine: 7,
-    endLine: 8,
-    excerpt: 'const sample = "<script>alert(1)</script>";\nreturn sample'
-  }
-  const html = await render(makeResult({
+test('旧结果仍显示答案，但不再显示源码依据或空状态占位', async () => {
+  const legacy = await render(makeResult({
     sections: [{ id: 's1', title: 'Section', questions: [{
-      id: 'q1', question: 'Question?', answer: 'Answer.', followUps: [], sourceEvidence: [evidence]
+      id: 'q1', question: 'Question?', answer: 'Answer.', followUps: [], sourceEvidence: [{
+        sourceId: 'source-1', snapshotHash: 'a'.repeat(64), path: 'src/legacy.ts', startLine: 7, endLine: 8,
+        excerpt: 'LEGACY_SOURCE_EXCERPT'
+      }]
     }] }],
     sourceEvidenceSummary: { asked: 1, accepted: 1, rejected: 0, retained: 1 }
   }))
-  assert.ok(html.includes('<details'))
-  assert.ok(html.includes('<summary'))
-  assert.ok(html.includes('src/&lt;module&gt;.ts（L7–L8）'), 'shows canonical relative path and original line range')
-  assert.ok(html.includes('生成时保存的脱敏源码快照'))
-  assert.ok(html.includes(evidence.snapshotHash))
-  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'), 'snippet is rendered as escaped text')
-  assert.ok(!html.includes('<script>alert(1)</script>'))
-  assert.ok(html.includes('不代表答案的语义或事实正确'))
-  const { JSDOM } = await import('jsdom')
-  const rendered = new JSDOM(html)
-  const details = rendered.window.document.querySelector('details')
-  assert.ok(details)
-  details.querySelector('summary')?.dispatchEvent(new rendered.window.MouseEvent('click', { bubbles: true }))
-  assert.equal(details.open, true, 'native summary click expands the saved source snapshot')
-  assert.ok(details.textContent?.includes(evidence.excerpt))
-  rendered.window.close()
 
-  const legacy = await render(makeResult())
-  assert.ok(legacy.includes('暂无源码依据'))
+  assert.ok(legacy.includes('Question?'))
+  assert.ok(!legacy.includes('源码依据'))
+  assert.ok(!legacy.includes('LEGACY_SOURCE_EXCERPT'))
+  assert.ok(!legacy.includes('暂无源码依据'))
 })
-
 test('真实 ResultPage 可同时显示两类警告，正常结果与旧结果不会误报', async () => {
   const both = await render(makeResult({
     contextTruncation: { treeTruncated: false, contentTruncated: true, requestTruncated: false },

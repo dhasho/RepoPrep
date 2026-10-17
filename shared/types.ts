@@ -145,7 +145,7 @@ export interface QuestionItem {
   question: string
   answer: string // Markdown，专业名词用 [[名词]] 标记
   followUps: FollowUp[]
-  /** Bounded evidence resolved by the main process from the exact request context. */
+  /** Legacy version-1 history field; new generation results do not create or display it. */
   sourceEvidence?: SourceEvidence[]
 }
 
@@ -192,7 +192,7 @@ export interface InterviewResult {
   contextTruncation?: ContextTruncationMetadata
   /** Present only when one or more candidate files could not be read. */
   contentReadSummary?: import('./content-read').ContentReadSummary
-  /** Optional for version-1 history compatibility. Counts range validation, not semantic support. */
+  /** Legacy version-1 history field retained so old results continue to validate. */
   sourceEvidenceSummary?: SourceEvidenceSummary
 }
 

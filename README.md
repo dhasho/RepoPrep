@@ -7,7 +7,7 @@ RepoPrep 是一款桌面应用：读取本地项目代码与文档，生成面�
 - 聚焦项目本身的架构、模块和实现生成问题。
 - 提供答案中的专业名词解释，并支持结合项目继续追问。
 - 可配置 OpenAI 兼容模型服务与模型。
-- 按项目保存结果和生成时源码依据，支持导出 Markdown。
+- 按项目保存生成结果，支持导出 Markdown。
 - 支持后台生成，完成后再查看结果。
 
 可选择问题深度：
@@ -33,7 +33,7 @@ npm run dev
 
 所选项目的相关代码与文档会发送给你配置的模型服务，用于生成内容。
 
-使用细节见[源码依据](docs/source-evidence.md)、[密钥保护](docs/credential-security.md)和[1.0 升级说明](docs/upgrade-1.0.md)。
+安全细节见[历史来源字段兼容说明](docs/source-evidence.md)、[密钥保护](docs/credential-security.md)和[1.0 升级说明](docs/upgrade-1.0.md)。
 
 开发环境与常见问题见[开发指南](docs/development.md)。项目规范、验证命令和版本策略见[项目规范](docs/project-standards.md)、[验证指南](docs/validation.md)和[版本策略](docs/VERSIONING.md)。
 

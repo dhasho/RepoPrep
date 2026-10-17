@@ -210,7 +210,7 @@ test('invalid save cannot overwrite prior result; invalid history is controlled 
   assert.equal(await fs.readFile(file, 'utf8'), invalidRaw, 'invalid history remains unmodified for controlled recovery')
 })
 
-test('real result store round-trips independent source evidence and preserves the captured snapshot after source edits and deletion', async () => {
+test('real result store preserves legacy source fields so historical answers remain readable after source deletion', async () => {
   const { store, root } = await makeHarness()
   const projectPath = path.join(root, 'synthetic-project')
   const sourceFile = path.join(projectPath, 'src', 'module.ts')
@@ -246,8 +246,10 @@ test('real result store round-trips independent source evidence and preserves th
     [evidence()], [evidence()]
   ], 'history retains cloned evidence independently from current source files')
   const markdown = resultToMarkdown(reloaded)
-  assert.equal(markdown.split(snapshotHash).length - 1, 2, 'each question exports its own evidence hash')
-  assert.equal(markdown.split(excerpt).length - 1, 2, 'export uses the captured excerpt after source deletion')
+  assert.equal(markdown.split(snapshotHash).length - 1, 0, 'legacy hashes are not repeated in Markdown exports')
+  assert.equal(markdown.split(excerpt).length - 1, 0, 'legacy source excerpts are not exported')
+  assert.ok(markdown.includes('A1'))
+  assert.ok(markdown.includes('A2'))
   assert.ok(!markdown.includes('changed after generation'))
   assert.ok(!JSON.stringify(reloaded).includes(rawSecret), 'saved history contains only the redacted excerpt')
   assert.ok(!markdown.includes(rawSecret), 'Markdown never exports the raw source secret')

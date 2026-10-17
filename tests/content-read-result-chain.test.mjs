@@ -136,7 +136,6 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     const scan = await scanProject(root)
     const progressDetails = []
     const providerMessages = []
-    const requestEvidence = []
     fs.open = async (filePath, ...args) => {
       if (String(filePath) === readme) {
         throw Object.assign(new Error(`private-root ${root} synthetic secret`), { code: 'EACCES' })
@@ -147,25 +146,10 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
       const requestBody = JSON.parse(String(init?.body))
       providerMessages.push(...(requestBody.messages ?? []).map((message) => message.content ?? ''))
       const prompt = requestBody.messages?.find((message) => message.role === 'user')?.content ?? ''
-      const sourceBlock = prompt.match(/### 文件：src\/evidence\.ts \[sourceId: ([^\]]+)\]\n```\n([\s\S]*?)\n```/)
-      assert.ok(sourceBlock, 'primary user context contains the scanned evidence file and request source ID')
-      const numberedLines = Array.from(sourceBlock[2].matchAll(/^(\d+) \| (.*)$/gm), (match) => ({
-        line: Number(match[1]),
-        content: match[2]
-      }))
-      const secretLine = numberedLines.find((line) => line.content.includes('apiKey'))
-      assert.equal(secretLine?.line, 12, 'synthetic secret is present at the expected original source line')
-      assert.match(secretLine.content, /REDACTED/i, 'the request context contains the redacted assignment')
-      const endLine = numberedLines.find((line) => line.line === 13)
-      assert.ok(endLine)
+      assert.ok(prompt.includes('### 文件：src/evidence.ts'), 'primary user context contains ordinary project source')
+      assert.match(prompt, /apiKey[^\n]*REDACTED/i, 'the request context contains the redacted assignment')
+      assert.doesNotMatch(prompt, /sourceId|\b\d+ \| /, 'source identifiers and line numbering add no request overhead')
       assert.ok(!prompt.includes('synthetic-api-secret'), 'raw secret never enters the primary model context')
-      requestEvidence.push({
-        sourceId: sourceBlock[1],
-        startLine: secretLine.line,
-        endLine: endLine.line,
-        excerpt: `${secretLine.content}\n${endLine.content}`,
-        redactedContent: numberedLines.map((line) => line.content).join('\n')
-      })
       const quota = Number(prompt.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1] ?? 20)
       return new Response(JSON.stringify({
         choices: [{ message: { content: JSON.stringify({
@@ -174,7 +158,7 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
             question: `Question ${index + 1}`,
             answer: `Answer ${index + 1}`,
             followUps: [],
-            sourceRefs: [{ sourceId: sourceBlock[1], startLine: secretLine.line, endLine: endLine.line }]
+            sourceRefs: [{ sourceId: 'ignored-legacy-reference', startLine: 12, endLine: 13 }]
           })) }],
           glossary: {}
         }) } }]
@@ -193,12 +177,6 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     assert.ok(result.contentReadSummary)
     assert.doesNotThrow(() => assertInterviewResultContract(result))
     assert.doesNotThrow(() => validateIpcArgs(IPC.exportMarkdown, [result]))
-    const badRange = structuredClone(result)
-    badRange.sections[0].questions[0].sourceEvidence[0].startLine = 0
-    assert.throws(() => validateIpcArgs(IPC.exportMarkdown, [badRange]), /格式无效|无效|参数/)
-    const oversizedEvidence = structuredClone(result)
-    oversizedEvidence.sections[0].questions[0].sourceEvidence[0].excerpt = 'x'.repeat(3001)
-    assert.throws(() => validateIpcArgs(IPC.exportMarkdown, [oversizedEvidence]), /格式无效|无效|参数/)
     assert.ok(providerMessages.some((message) => message.includes('内容读取不完整') && message.includes('README.md')))
     assert.ok(progressDetails.some((detail) => detail.includes('内容读取不完整') && detail.includes('README.md')))
     assert.ok(!providerMessages.join('\n').includes(root))
@@ -209,36 +187,17 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
 
     const resultQuestions = result.sections.flatMap((section) => section.questions)
     assert.ok(resultQuestions.length >= 2)
-    assert.ok(resultQuestions.every((question) => question.sourceEvidence?.length === 1))
-    assert.equal(resultQuestions[0].sourceEvidence[0].sourceId, requestEvidence[0].sourceId)
-    assert.ok(resultQuestions.slice(1).some((question) => question.sourceEvidence[0].sourceId === requestEvidence[0].sourceId),
-      'multiple generated questions cite the same source from the actual request')
-    const expectedHash = createHash('sha256')
-      .update(`src/evidence.ts\0${requestEvidence[0].redactedContent}`, 'utf8')
-      .digest('hex')
-    for (const [index, question] of resultQuestions.entries()) {
-      const evidence = question.sourceEvidence[0]
-      assert.equal(evidence.path, 'src/evidence.ts')
-      assert.equal(evidence.sourceId, requestEvidence[0].sourceId)
-      assert.equal(evidence.snapshotHash, expectedHash)
-      assert.equal(evidence.startLine, 12)
-      assert.equal(evidence.endLine, 13)
-      assert.equal(evidence.excerpt, requestEvidence[0].excerpt)
-      if (index > 0) assert.notStrictEqual(evidence, resultQuestions[0].sourceEvidence[0], 'each question retains its own evidence clone')
-    }
-    assert.ok(result.sourceEvidenceSummary.accepted >= resultQuestions.length)
-    assert.ok(!JSON.stringify(result).includes('synthetic-api-secret'), 'generated result contains only the redacted request excerpt')
+    assert.ok(resultQuestions.every((question) => !Object.hasOwn(question, 'sourceEvidence')))
+    assert.ok(!Object.hasOwn(result, 'sourceEvidenceSummary'))
+    assert.ok(!JSON.stringify(result).includes('synthetic-api-secret'), 'generated result contains no raw secret')
 
     const markdown = resultToMarkdown(result)
     assert.ok(markdown.includes('尝试读取'))
     assert.ok(markdown.includes('README\\.md'))
     assert.ok(!markdown.includes('synthetic-api-secret'))
     assert.ok(!markdown.includes(root))
-    assert.ok(markdown.includes('src/evidence.ts'))
-    assert.ok(markdown.includes('L12–L13'))
-    assert.ok(markdown.includes(expectedHash))
-    assert.ok(markdown.includes(requestEvidence[0].excerpt))
-    assert.equal(markdown.split(expectedHash).length - 1, resultQuestions.length)
+    assert.ok(!markdown.includes('源码依据'))
+    assert.ok(!markdown.includes('sourceId'))
 
     const userData = path.join(root, 'isolated-user-data')
     await fs.mkdir(userData)
@@ -246,33 +205,23 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     store.saveResult(root, result)
     const storedPath = path.join(userData, 'projects', `${createHash('sha1').update(root).digest('hex')}.json`)
     const storedBytes = await fs.readFile(storedPath, 'utf8')
-    assert.ok(!storedBytes.includes('synthetic-api-secret'), 'saved JSON contains only redacted evidence')
+    assert.ok(!storedBytes.includes('synthetic-api-secret'), 'saved JSON contains no raw secret')
+    assert.doesNotMatch(storedBytes, /sourceEvidence|sourceEvidenceSummary|sourceRefs|sourceId/)
     await fs.writeFile(sourceFile, 'changed after generating the interview\n', 'utf8')
     await fs.rm(sourceFile)
     const loaded = store.loadResult(root)
-    assert.deepEqual(loaded.sections.flatMap((section) => section.questions).map((question) => question.sourceEvidence),
-      resultQuestions.map((question) => question.sourceEvidence), 'reload retains the original, independently cloned source evidence')
-
     const reloadedMarkdown = resultToMarkdown(loaded)
-    assert.ok(reloadedMarkdown.includes(requestEvidence[0].excerpt))
-    assert.ok(reloadedMarkdown.includes(expectedHash))
+    assert.ok(!reloadedMarkdown.includes('源码依据'))
+    assert.ok(!reloadedMarkdown.includes('sourceId'))
     assert.ok(!reloadedMarkdown.includes('changed after generating'))
     assert.ok(!reloadedMarkdown.includes('synthetic-api-secret'))
     const html = await renderResultPage(loaded)
     assert.ok(html.includes('role="alert"'))
     assert.ok(html.includes('README.md'))
-    assert.ok(html.includes('src/evidence.ts（L12–L13）'))
-    assert.ok(html.includes(expectedHash))
+    assert.ok(!html.includes('源码依据'))
+    assert.ok(!html.includes('sourceId'))
     assert.ok(!html.includes('synthetic-api-secret'))
     assert.ok(!html.includes(root))
-    const { JSDOM } = await import('jsdom')
-    const rendered = new JSDOM(html)
-    const evidenceDetails = rendered.window.document.querySelector('details')
-    assert.ok(evidenceDetails)
-    evidenceDetails.querySelector('summary')?.dispatchEvent(new rendered.window.MouseEvent('click', { bubbles: true }))
-    assert.equal(evidenceDetails.open, true, 'the source quote remains expandable after history reload and source deletion')
-    assert.ok(evidenceDetails.textContent.includes(requestEvidence[0].excerpt))
-    rendered.window.close()
 
     fs.open = originalOpen
     await fs.writeFile(sourceFile, sourceContent, 'utf8')

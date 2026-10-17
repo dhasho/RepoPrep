@@ -8,14 +8,14 @@ export function calculateReportDigest(report) {
   return `sha256:${createHash('sha256').update(JSON.stringify({ runId: report.runId, corpusVersion: report.corpusVersion, configHash: report.configHash, sourceHashes: report.sourceHashes, fixtureHashes: report.fixtureHashes, cases: report.cases.map(c => ({ id: c.id, output: c.output, baseline: c.baseline })), questions: report.questions })).digest('hex')}`
 }
 export const RUBRIC = Object.freeze({
-  factualCorrectness: '1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture. A valid source path/line range only proves the excerpt was available; it does not prove semantic support for the answer.',
+  factualCorrectness: '1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.',
   projectRelevance: '1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.',
   semanticDuplication: '1 duplicates another question; 2 near duplicate; 3 partial overlap; 4 distinct with minor overlap; 5 clearly distinct.'
 })
 
 export function makeReviewTemplate(run) {
   const entries = run.questions.map(q => ({
-    fingerprint: fingerprintQuestion(q.question, { caseId: q.caseId, variant: q.variant, answer: q.answer, followUps: q.followUps ?? [], sourceEvidence: q.sourceEvidence ?? [] }), caseId: q.caseId, variant: q.variant, question: q.question, answer: q.answer, followUps: q.followUps ?? [], sourceEvidence: q.sourceEvidence ?? [],
+    fingerprint: fingerprintQuestion(q.question, { caseId: q.caseId, variant: q.variant, answer: q.answer, followUps: q.followUps ?? [], sourceEvidence: q.sourceEvidence ?? [] }), caseId: q.caseId, variant: q.variant, question: q.question, answer: q.answer, followUps: q.followUps ?? [], ...(Object.hasOwn(q, 'sourceEvidence') ? { sourceEvidence: q.sourceEvidence } : {}),
     factualCorrectness: null, projectRelevance: null, semanticDuplication: null, note: ''
   }))
   return { schemaVersion: 'repoprep-human-review-v2', runId: run.runId, corpusVersion: run.corpusVersion, configHash: run.configHash, reportDigest: run.reportDigest, rubric: RUBRIC, ratings: entries }
@@ -29,7 +29,7 @@ export function validateReview(review, manifest) {
   const seen = new Set()
   for (const entry of review.ratings) {
     const bound = expected.get(entry.fingerprint)
-    if (!bound || entry.caseId !== bound.caseId || entry.variant !== bound.variant || entry.question !== bound.question || entry.answer !== bound.answer || JSON.stringify(entry.followUps) !== JSON.stringify(bound.followUps ?? []) || JSON.stringify(entry.sourceEvidence) !== JSON.stringify(bound.sourceEvidence ?? [])) throw new Error(`unknown question fingerprint: ${entry.fingerprint}`)
+    if (!bound || entry.caseId !== bound.caseId || entry.variant !== bound.variant || entry.question !== bound.question || entry.answer !== bound.answer || JSON.stringify(entry.followUps) !== JSON.stringify(bound.followUps ?? []) || JSON.stringify(entry.sourceEvidence ?? []) !== JSON.stringify(bound.sourceEvidence ?? [])) throw new Error(`unknown question fingerprint: ${entry.fingerprint}`)
     if (seen.has(entry.fingerprint)) throw new Error(`duplicate question fingerprint: ${entry.fingerprint}`)
     seen.add(entry.fingerprint)
     for (const dimension of dimensions) if (entry[dimension] !== null && (!Number.isInteger(entry[dimension]) || entry[dimension] < 1 || entry[dimension] > 5)) throw new Error(`rating out of range for ${dimension}`)
