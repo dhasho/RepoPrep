@@ -539,7 +539,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
 
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="scan-limit-heading">
         <h2 id="scan-limit-heading" className="text-sm font-semibold text-slate-800">扫描安全上限</h2>
-        <p className="mt-1 text-xs text-slate-500">项目较大时，扫描会在达到上限后停止并提示扫描不完整。留空使用默认值，修改后在下一次扫描或生成时生效。</p>
+        <p className="mt-1 text-xs text-slate-500">项目较大时，扫描会在达到上限后停止并提示扫描不完整。默认最多纳入 50,000 个文件和 100,000 个树节点，单文件内容上限为 1 MiB；留空使用默认值，修改后在下一次扫描或生成时生效。</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {([
             ['maxFiles', '最多扫描文件数'],

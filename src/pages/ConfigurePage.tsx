@@ -78,7 +78,7 @@ export default function ConfigurePage({ overview, existingResult, settings, init
                   {overview.truncation.byTreeNodes && `树节点数达到上限 ${overview.truncation.limits.maxTreeNodes}；`}
                   {overview.truncation.oversizedFiles > 0 && `${overview.truncation.oversizedFiles} 个文件超过单文件大小上限未纳入阅读；`}
                   {overview.truncation.estimatedSkipped > 0 && `估计至少还有 ${overview.truncation.estimatedSkipped} 项未扫描；`}
-                  生成结果可能遗漏内容。可在「设置 → 高级设置」调整扫描上限后重新扫描。
+                  生成结果可能遗漏内容。可在「设置 → 扫描安全上限」调整扫描上限后重新扫描。
                 </div>
               )}
               {overview.languages.length > 0 && (

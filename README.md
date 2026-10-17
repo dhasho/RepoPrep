@@ -33,6 +33,8 @@ npm run dev
 
 所选项目的相关代码与文档会发送给你配置的模型服务，用于生成内容。
 
+扫描默认最多纳入 50,000 个文件和 100,000 个树节点，单个文件最多读取 1 MiB；可在「设置 → 扫描安全上限」调整，最高分别为 250,000 个文件、500,000 个树节点和 8 MiB。扫描会排除 Git 元数据、常见构建产物与 worktree 容器，并跳过嵌套 Git linked worktree，避免把其他 checkout 当作所选项目内容。
+
 安全细节见[历史来源字段兼容说明](docs/source-evidence.md)、[密钥保护](docs/credential-security.md)和[1.0 升级说明](docs/upgrade-1.0.md)。
 
 开发环境与常见问题见[开发指南](docs/development.md)。项目规范、验证命令和版本策略见[项目规范](docs/project-standards.md)、[验证指南](docs/validation.md)和[版本策略](docs/VERSIONING.md)。

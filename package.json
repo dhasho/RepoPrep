@@ -1,6 +1,6 @@
 {
   "name": "repoprep",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "读取本地项目，自动生成面试问题、答案与追问，支持专业名词点词解释",
   "main": "out/main/index.js",
   "author": "RepoPrep",

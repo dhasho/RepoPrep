@@ -1,6 +1,6 @@
 {
   "schemaVersion": "repoprep-eval-report-v2",
-  "runId": "6ec48528-5faf-4944-8df5-79f14f63153d",
+  "runId": "b43dee37-5d88-4e34-a22c-dd6307440bdd",
   "corpusVersion": "repoprep-eval-corpus-v1",
   "mode": "offline-pipeline-and-scorer-calibration",
   "responseId": "fixture-context-keyword-v1-json-repair",
@@ -65,9 +65,9 @@
     "electron/services/result-store-contract.test.ts": "e56333c0f8ec24c1b25a153de29a9c2c6c21fb47b6d5bcaee74e290b3a390622",
     "electron/services/scan-cache.test.ts": "f0939d1ae76dda6cf71dbd6ae048abb06addd323e2c3ca053d4c8e1906f23741",
     "electron/services/scan-cache.ts": "c47da10ed52e15121ac0455c381fdce862da93f3914fae0ad67293abb014b57f",
-    "electron/services/scan-limits.test.ts": "3a9ecc1155a9fd5d76d940937a8df3e467d6cad4433265c4fe0667673d2b3dee",
-    "electron/services/scanner-gitignore.test.ts": "50c75ac126c61498ced39ff3917ce1a150d57397fdddd728f9a9377f7279df67",
-    "electron/services/scanner.ts": "2a1a23158ce140cf52e06aaa47d7d0b21ace08294854207c305157a9e3bb075d",
+    "electron/services/scan-limits.test.ts": "a5b6ac3022c126a41004e6156ce1cf7f680400bf13eb42f1c9ed53a6daae6ee8",
+    "electron/services/scanner-gitignore.test.ts": "0f63ee9b6cf2c1e36c5e27b2610691e8a901bb8196253a7fe4dc47f3b8ba9e86",
+    "electron/services/scanner.ts": "91c4eb94306592d1b3f75bce9d9a2ece1b7639e50b2fbe59430839a02ef53efb",
     "electron/services/security-integration.test.ts": "ad24cbe0525909de1224ba9bb6f9ae54b5f2f01744712cfe0faa1e347062267e",
     "electron/services/sensitive.test.ts": "a3b1289e5bc03e7afed74ed8d20ed723831b22d3c4e3ae29937c2d68cc1a2708",
     "electron/services/sensitive.ts": "0b6605b2066d8f627356e29839b8281e1d78af05444194947f4d72e08cfc92cc",
@@ -82,28 +82,28 @@
     "shared/result-contract.test.ts": "dc9b452355349ef719c5bb6c8159d29fe825a3a9cd3b8582b6118f8882beaa5f",
     "shared/result-contract.ts": "be132b3a93ee14415de69273b2fc81ff01228acdf40e747c4482e5bf5c61e71d",
     "shared/storage-contract.ts": "13222b409e69877165e521eb912d6d9d3e8b51fc6ac9f78964a965a5051d90d2",
-    "shared/types.ts": "82b2d60523f98f59dbd1cfc3eee943bc3d53748d8f20303498489332b91125e2",
+    "shared/types.ts": "ecf4e80bcd54332f84b2e6324335fb536b3fa0f00a147ebda117a528165e8e09",
     "scripts/evaluation/scorer.mjs": "a68bba4123a92012393cc3df3cc469b641c7ec6effc3703044cb59e6c8d29934",
     "scripts/evaluation/review.mjs": "d8a66e8c43bf23ec18c8b2669e4ea85ee89286f6fc84419f2f7c5393a2bb02ee",
     "scripts/evaluation/offline-runner.mjs": "7882102d3d0420b2fc9ea75c9860f23b3a1fa16aa13df055f0202b46c79bd438",
     "scripts/evaluation/scorer.test.mjs": "16c2c9581ce6566196b956d1ce9eca2f682fb88c4e4e89b8459e8316879b4c8d",
-    "scripts/evaluation/review-cli.test.mjs": "54779f97bb5bdeefd0f52aea2e0b491f4c306da6a6fbe9e7dd6804c99412b04b",
-    "package.json": "41bd5895878f48a0e94443de5284b42605009c5bdfe37a39be27c55216357aa6",
-    "package-lock.json": "6373ed5658ddadd2e04371154c39e7c874c0a5ee1d0719486a96d9c0cb98eefb"
+    "scripts/evaluation/review-cli.test.mjs": "79d1ae95ff3edde58804a46d407d62ccfb8ff13703b58f8ee8717e6c0b9b1a39",
+    "package.json": "15787f918ba9f74bc11518a47183d7535a08ff85d1eb0a186932da672a5c3b55",
+    "package-lock.json": "70556c917406ca2a8d4176b89cd201bcac6b5e3cc46446fe93a37117ee16cf14"
   },
   "fixtureHashes": {
-    "react-state/App.jsx": "69292ceb221033a187fe519c0f098da9fd9950a48c6f520f11c5dad7f0321792",
-    "react-state/package.json": "780e10a9838fb7d559e9c68adb18cff59ff7fda84fb14e2aaf1557887837a470",
-    "react-state/README.md": "8a23f2e9b22df21062deb8faf3c6802c3d64857b868c1ef970ca53f3509f9c9a",
-    "node-routes/README.md": "22e8682572d85e9d3dc98545ba8ea76c370dfc2eddc54346c2db25bebcdc9908",
-    "node-routes/server.mjs": "1a8681d3cdff1d676a87df1f2e02555dafc56253d60c569488ef74285d4cc1a3",
-    "python-cli/preview.py": "677e7d1bd35b0dd0da2f32e966983392b51c34c910bd37cfb333441ea984304c",
-    "python-cli/README.md": "18047c395f4c6ba175b0d6990de5959e56b1f0573475998e29a067dfad23812e",
-    "corpus.json": "73e33ceb4dd04af6c6a002fa9eab9678fb1d35900e01af5095f332bc04033481"
+    "react-state/App.jsx": "190a3d9e3aa624bd0d407d262d57482d72f9156b108c499ef4d095c1e0585201",
+    "react-state/package.json": "c38779c73b872c5445512e1be49b95175cdc095b2ad3dcd682fa1080bedb6a7f",
+    "react-state/README.md": "8af9750410ca7fd98a4d99d7516d15cee403429c6bbbddae8fbe2bb723c247df",
+    "node-routes/README.md": "090d138df481f1acbb8ea1053a275fb5b99af4df0bf9d8e2a0d048e5aca01bd1",
+    "node-routes/server.mjs": "ed603cac4dd68e957187ed35a41e3f0065d2248118ce22c8c5ee293cea8cf831",
+    "python-cli/preview.py": "b4415e4bdf8f735cbed79d6e6363fa49d368f1a8f86b00b2aded55fd85ebf20e",
+    "python-cli/README.md": "a7d22661118564569d3db61c845082f4002b0ee6736ba4b47cbdaaf2de00b14f",
+    "corpus.json": "b8aa54bf274279d6bd6c18be3cdd667d6c69fbe351c734c9942f1ae82511f6c5"
   },
-  "reportDigest": "sha256:8b733cd6713aa1f536713c3d4692445fa50215e51dd7cd056e82f5695f8c412c",
+  "reportDigest": "sha256:bbcbb4e8922c4af126faab6e8dc989f8b962a21fdb1325ebe4d4da37c85a9ff9",
   "baselineDefinition": "same case budget and synthetic profile; one request containing README plus production-rendered file tree; always valid JSON",
-  "generatedAt": "2026-10-17T09:57:50.851Z",
+  "generatedAt": "2026-10-17T10:04:27.898Z",
   "cases": [
     {
       "id": "react-state",
@@ -113,7 +113,7 @@
         "target": 20,
         "max": 25
       },
-      "elapsedMs": 61,
+      "elapsedMs": 53,
       "requestCount": 1,
       "failedRequests": 0,
       "repairRequestCount": 0,
@@ -124,7 +124,7 @@
       "finalContract": {
         "pass": true
       },
-      "inputChars": 2359,
+      "inputChars": 2347,
       "tokens": null,
       "progressEvents": [
         {
@@ -153,8 +153,8 @@
       ],
       "requests": [
         {
-          "inputChars": 2359,
-          "receivedAt": 1792231070762,
+          "inputChars": 2347,
+          "receivedAt": 1792231467814,
           "attempt": "initial",
           "messages": [
             {
@@ -163,7 +163,7 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：react-state\n主要语言：JavaScript 33.3%、JSON 33.3%、Markdown 33.3%\n文件总数（不含忽略项）：3\n\n## 项目文件树\n```\nreact-state/\n  App.jsx (1KB)\n  package.json (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# Tiny React state example\r\n\r\nThis fixture is a small React view. `useState` stores a search string and `filter` selects matching items in memory. There is no Redux or server-side rendering.\r\n\n```\n### 文件：package.json\n```\n{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}\r\n\n```\n### 文件：App.jsx\n```\nimport { useState } from 'react'\r\n\r\nconst items = ['amber', 'blue', 'coral']\r\nexport function App() {\r\n  const [query, setQuery] = useState(() => localStorage.getItem('query') ?? '')\r\n  const visible = items.filter(item => item.includes(query))\r\n  return <input value={query} onChange={event => { setQuery(event.target.value); localStorage.setItem('query', event.target.value) }} aria-label={`Matches: ${visible.length}`} />\r\n}\r\n\n```\n\n# 出题任务\n\n- 颗粒度：中粒度（模块级）。围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n- 题量硬性约束：约 20 题。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 约 20 题，按主题分 3-6 个 section；围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：react-state\n主要语言：JavaScript 33.3%、JSON 33.3%、Markdown 33.3%\n文件总数（不含忽略项）：3\n\n## 项目文件树\n```\nreact-state/\n  App.jsx (1KB)\n  package.json (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# Tiny React state example\n\nThis fixture is a small React view. `useState` stores a search string and `filter` selects matching items in memory. There is no Redux or server-side rendering.\n\n```\n### 文件：package.json\n```\n{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}\n\n```\n### 文件：App.jsx\n```\nimport { useState } from 'react'\n\nconst items = ['amber', 'blue', 'coral']\nexport function App() {\n  const [query, setQuery] = useState(() => localStorage.getItem('query') ?? '')\n  const visible = items.filter(item => item.includes(query))\n  return <input value={query} onChange={event => { setQuery(event.target.value); localStorage.setItem('query', event.target.value) }} aria-label={`Matches: ${visible.length}`} />\n}\n\n```\n\n# 出题任务\n\n- 颗粒度：中粒度（模块级）。围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n- 题量硬性约束：约 20 题。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 约 20 题，按主题分 3-6 个 section；围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             }
           ],
           "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does React shape the data flow in this project? (response 1, angle 1)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using useState here? (response 1, angle 1)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around localStorage? (response 1, angle 1)\",\"answer\":\"The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports localStorage?\",\"answer\":\"Only the visible mention of localStorage is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of filter from the shown code? (response 1, angle 1)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect React, and how would you verify it? (response 1, angle 1)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"How does useState shape the data flow in this project? (response 1, angle 2)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using localStorage here? (response 1, angle 2)\",\"answer\":\"The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports localStorage?\",\"answer\":\"Only the visible mention of localStorage is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around filter? (response 1, angle 2)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of React from the shown code? (response 1, angle 2)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect useState, and how would you verify it? (response 1, angle 2)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"How does localStorage shape the data flow in this project? (response 1, angle 3)\",\"answer\":\"The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports localStorage?\",\"answer\":\"Only the visible mention of localStorage is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using filter here? (response 1, angle 3)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around React? (response 1, angle 3)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of useState from the shown code? (response 1, angle 3)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect localStorage, and how would you verify it? (response 1, angle 3)\",\"answer\":\"The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports localStorage?\",\"answer\":\"Only the visible mention of localStorage is used.\",\"followUps\":[]}]},{\"question\":\"How does filter shape the data flow in this project? (response 1, angle 4)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using React here? (response 1, angle 4)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around useState? (response 1, angle 4)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of localStorage from the shown code? (response 1, angle 4)\",\"answer\":\"The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports localStorage?\",\"answer\":\"Only the visible mention of localStorage is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect filter, and how would you verify it? (response 1, angle 4)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
@@ -464,7 +464,7 @@
       ],
       "output": {
         "version": 1,
-        "createdAt": "2026-10-17T09:57:50.774Z",
+        "createdAt": "2026-10-17T10:04:27.826Z",
         "projectName": "react-state",
         "projectPath": "/fixtures/react-state",
         "granularity": "medium",
@@ -474,12 +474,12 @@
         "projectSummary": "Synthetic offline response grounded in keywords present in the submitted prompt.",
         "sections": [
           {
-            "id": "c3c8ea85-cbd7-45ba-b73c-b9b8af67a566",
+            "id": "5619b06c-628f-423c-9028-f5924b22d2ce",
             "title": "Visible implementation",
             "summary": "Questions use only matched fixture facts.",
             "questions": [
               {
-                "id": "96d4f0b9-d9de-404f-b541-206fe43de17c",
+                "id": "b909a359-536b-4a0c-baf2-b64cb32f45c5",
                 "question": "How does React shape the data flow in this project? (response 1, angle 1)",
                 "answer": "The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -491,7 +491,7 @@
                 ]
               },
               {
-                "id": "2e5b12b1-0cad-4473-b785-94e97c3f1f70",
+                "id": "887405e3-2b7a-4b8f-84a6-7588871f8d49",
                 "question": "What trade-off follows from using useState here? (response 1, angle 1)",
                 "answer": "The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -503,7 +503,7 @@
                 ]
               },
               {
-                "id": "3360f7e6-2b1e-4f81-92d7-8fb932b0787d",
+                "id": "b4260502-2690-463a-9e28-821a9035306e",
                 "question": "Which boundary should be checked around localStorage? (response 1, angle 1)",
                 "answer": "The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -515,7 +515,7 @@
                 ]
               },
               {
-                "id": "a2b3ffaa-6ac2-46b1-8ff5-3a1f8de791ed",
+                "id": "624cfe67-a98c-43d0-91da-10c7c38e97e0",
                 "question": "How would you explain the behavior of filter from the shown code? (response 1, angle 1)",
                 "answer": "The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -527,7 +527,7 @@
                 ]
               },
               {
-                "id": "fa5d12a5-4b17-4ffc-b2a3-82dba6505696",
+                "id": "22ef3cdb-c845-4490-a14c-fc63403679b0",
                 "question": "What change could affect React, and how would you verify it? (response 1, angle 1)",
                 "answer": "The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -539,7 +539,7 @@
                 ]
               },
               {
-                "id": "4ef8e6ea-a708-494f-9bb6-e6a130059442",
+                "id": "6f0ac6c7-f520-4c7f-89c0-b8f0c4b2f0c4",
                 "question": "How does useState shape the data flow in this project? (response 1, angle 2)",
                 "answer": "The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -551,7 +551,7 @@
                 ]
               },
               {
-                "id": "3ef3a44a-cbc9-4c48-a862-5766591559a9",
+                "id": "cf87f679-070f-417e-b09d-9b65d0d9edd2",
                 "question": "What trade-off follows from using localStorage here? (response 1, angle 2)",
                 "answer": "The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -563,7 +563,7 @@
                 ]
               },
               {
-                "id": "7278a1b6-6ff5-48ea-bafa-5aee32424bb8",
+                "id": "ca0e1ca5-12f9-4099-8ae4-9cf43bc79108",
                 "question": "Which boundary should be checked around filter? (response 1, angle 2)",
                 "answer": "The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -575,7 +575,7 @@
                 ]
               },
               {
-                "id": "51ea8424-6089-497e-b4df-11a3dd0f1837",
+                "id": "7911a30c-d2e0-4a7c-b887-43779d6fd91c",
                 "question": "How would you explain the behavior of React from the shown code? (response 1, angle 2)",
                 "answer": "The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -587,7 +587,7 @@
                 ]
               },
               {
-                "id": "42a9a8d7-3f32-4937-9a4e-2c2635fa61a3",
+                "id": "68cc4a20-c7e3-431d-bc50-8ff7becbf3ef",
                 "question": "What change could affect useState, and how would you verify it? (response 1, angle 2)",
                 "answer": "The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -599,7 +599,7 @@
                 ]
               },
               {
-                "id": "70689084-0da6-4c1c-aa5b-5ef7dc991dfd",
+                "id": "01ce7396-e202-440e-8e2f-81a30ff20079",
                 "question": "How does localStorage shape the data flow in this project? (response 1, angle 3)",
                 "answer": "The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -611,7 +611,7 @@
                 ]
               },
               {
-                "id": "0ee22dfa-abb6-4483-b28a-3cf7e4486407",
+                "id": "a9b788d6-47aa-4c61-818c-4596fc192889",
                 "question": "What trade-off follows from using filter here? (response 1, angle 3)",
                 "answer": "The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -623,7 +623,7 @@
                 ]
               },
               {
-                "id": "6dbf5e76-b4ce-4931-8f60-c98ef99f7d91",
+                "id": "1121652d-3828-4452-8a70-0ca49c86e8b7",
                 "question": "Which boundary should be checked around React? (response 1, angle 3)",
                 "answer": "The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -635,7 +635,7 @@
                 ]
               },
               {
-                "id": "7827cc9c-d811-47ed-9397-53d2d527e99d",
+                "id": "dcb1d2fb-dca5-45df-9209-13cc7fb39f64",
                 "question": "How would you explain the behavior of useState from the shown code? (response 1, angle 3)",
                 "answer": "The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -647,7 +647,7 @@
                 ]
               },
               {
-                "id": "3e21884c-216a-478f-b9b7-5f185998ec14",
+                "id": "b0861381-1e4e-4e8d-a9b0-e927c0779768",
                 "question": "What change could affect localStorage, and how would you verify it? (response 1, angle 3)",
                 "answer": "The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -659,7 +659,7 @@
                 ]
               },
               {
-                "id": "4c9bb934-e93a-494e-9561-e4f0c6d559ae",
+                "id": "a596f7d7-29d9-40b0-a3fe-4d70046b915d",
                 "question": "How does filter shape the data flow in this project? (response 1, angle 4)",
                 "answer": "The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -671,7 +671,7 @@
                 ]
               },
               {
-                "id": "312c88ed-0429-43dd-b522-aa4c358593b8",
+                "id": "a6a92c3b-c56e-4431-959f-69fb62393d82",
                 "question": "What trade-off follows from using React here? (response 1, angle 4)",
                 "answer": "The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -683,7 +683,7 @@
                 ]
               },
               {
-                "id": "98f05694-652c-48f6-8298-1c2a6d576105",
+                "id": "044e197e-f3fc-4a4d-af5c-071dde30cec0",
                 "question": "Which boundary should be checked around useState? (response 1, angle 4)",
                 "answer": "The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -695,7 +695,7 @@
                 ]
               },
               {
-                "id": "089ecf72-9f9f-40e1-ad7d-33c32967c135",
+                "id": "4398654f-9df6-4fd4-96c4-a9d5c3c52a2a",
                 "question": "How would you explain the behavior of localStorage from the shown code? (response 1, angle 4)",
                 "answer": "The supplied context mentions localStorage. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -707,7 +707,7 @@
                 ]
               },
               {
-                "id": "61681010-f7c4-46a5-848e-7cdf46ac25c7",
+                "id": "5c56a656-1c11-4bab-9e73-251cb7203897",
                 "question": "What change could affect filter, and how would you verify it? (response 1, angle 4)",
                 "answer": "The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -731,7 +731,7 @@
       },
       "baseline": {
         "definition": "same case budget and synthetic profile; one request containing README plus production-rendered file tree; always valid JSON",
-        "elapsedMs": 5,
+        "elapsedMs": 6,
         "requestCount": 1,
         "failedRequests": 0,
         "repairRequestCount": 0,
@@ -742,12 +742,12 @@
         "finalContract": {
           "pass": true
         },
-        "inputChars": 427,
+        "inputChars": 424,
         "tokens": null,
         "requests": [
           {
-            "inputChars": 427,
-            "receivedAt": 1792231070783,
+            "inputChars": 424,
+            "receivedAt": 1792231467833,
             "attempt": "initial",
             "messages": [
               {
@@ -756,7 +756,7 @@
               },
               {
                 "role": "user",
-                "content": "# Tiny React state example\r\n\r\nThis fixture is a small React view. `useState` stores a search string and `filter` selects matching items in memory. There is no Redux or server-side rendering.\r\n\n\n## Project tree\nreact-state/\n  App.jsx (1KB)\n  package.json (1KB)\n  README.md (1KB)\n\nGenerate exactly 20 questions based only on this context."
+                "content": "# Tiny React state example\n\nThis fixture is a small React view. `useState` stores a search string and `filter` selects matching items in memory. There is no Redux or server-side rendering.\n\n\n## Project tree\nreact-state/\n  App.jsx (1KB)\n  package.json (1KB)\n  README.md (1KB)\n\nGenerate exactly 20 questions based only on this context."
               }
             ],
             "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does React shape the data flow in this project? (response 2, angle 1)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using useState here? (response 2, angle 1)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around filter? (response 2, angle 1)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of React from the shown code? (response 2, angle 1)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect useState, and how would you verify it? (response 2, angle 1)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"How does filter shape the data flow in this project? (response 2, angle 2)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using React here? (response 2, angle 2)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around useState? (response 2, angle 2)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of filter from the shown code? (response 2, angle 2)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect React, and how would you verify it? (response 2, angle 2)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"How does useState shape the data flow in this project? (response 2, angle 3)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using filter here? (response 2, angle 3)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around React? (response 2, angle 3)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of useState from the shown code? (response 2, angle 3)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect filter, and how would you verify it? (response 2, angle 3)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"How does React shape the data flow in this project? (response 2, angle 4)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using useState here? (response 2, angle 4)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around filter? (response 2, angle 4)\",\"answer\":\"The supplied context mentions filter. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports filter?\",\"answer\":\"Only the visible mention of filter is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of React from the shown code? (response 2, angle 4)\",\"answer\":\"The supplied context mentions React. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports React?\",\"answer\":\"Only the visible mention of React is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect useState, and how would you verify it? (response 2, angle 4)\",\"answer\":\"The supplied context mentions useState. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports useState?\",\"answer\":\"Only the visible mention of useState is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
@@ -1067,7 +1067,7 @@
         "target": 20,
         "max": 25
       },
-      "elapsedMs": 23,
+      "elapsedMs": 20,
       "requestCount": 2,
       "failedRequests": 0,
       "repairRequestCount": 1,
@@ -1078,7 +1078,7 @@
       "finalContract": {
         "pass": true
       },
-      "inputChars": 4686,
+      "inputChars": 4656,
       "tokens": null,
       "progressEvents": [
         {
@@ -1107,8 +1107,8 @@
       ],
       "requests": [
         {
-          "inputChars": 2258,
-          "receivedAt": 1792231070800,
+          "inputChars": 2243,
+          "receivedAt": 1792231467853,
           "attempt": "initial",
           "messages": [
             {
@@ -1117,16 +1117,16 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：node-routes\n主要语言：Markdown 50%、JavaScript 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\nnode-routes/\n  README.md (1KB)\n  server.mjs (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# Minimal Node HTTP routes\r\n\r\nThis Node.js example uses `node:http` and `createServer` to serve two routes: `/health` and `/items`. It has no Express dependency or database connection.\r\n\n```\n### 文件：server.mjs\n```\nimport { createServer } from 'node:http'\r\n\r\nconst routes = new Map([\r\n  ['/health', () => ({ status: 'ok' })],\r\n  ['/items', () => ({ items: ['one', 'two'] })]\r\n])\r\n\r\nexport const server = createServer((request, response) => {\r\n  const handler = routes.get(new URL(request.url, 'http://localhost').pathname)\r\n  response.writeHead(handler ? 200 : 404, { 'content-type': 'application/json' })\r\n  response.end(JSON.stringify(handler ? handler() : { error: 'not found' }))\r\n})\r\n\n```\n\n# 出题任务\n\n- 颗粒度：中粒度（模块级）。围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n- 题量硬性约束：约 20 题。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 约 20 题，按主题分 3-6 个 section；围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：node-routes\n主要语言：Markdown 50%、JavaScript 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\nnode-routes/\n  README.md (1KB)\n  server.mjs (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# Minimal Node HTTP routes\n\nThis Node.js example uses `node:http` and `createServer` to serve two routes: `/health` and `/items`. It has no Express dependency or database connection.\n\n```\n### 文件：server.mjs\n```\nimport { createServer } from 'node:http'\n\nconst routes = new Map([\n  ['/health', () => ({ status: 'ok' })],\n  ['/items', () => ({ items: ['one', 'two'] })]\n])\n\nexport const server = createServer((request, response) => {\n  const handler = routes.get(new URL(request.url, 'http://localhost').pathname)\n  response.writeHead(handler ? 200 : 404, { 'content-type': 'application/json' })\n  response.end(JSON.stringify(handler ? handler() : { error: 'not found' }))\n})\n\n```\n\n# 出题任务\n\n- 颗粒度：中粒度（模块级）。围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n- 题量硬性约束：约 20 题。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 约 20 题，按主题分 3-6 个 section；围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             }
           ],
           "rawResponse": "synthetic scheduled format fault: this is not JSON",
-          "elapsedMs": 1,
+          "elapsedMs": 0,
           "rawJsonValid": false
         },
         {
-          "inputChars": 2428,
-          "receivedAt": 1792231070808,
+          "inputChars": 2413,
+          "receivedAt": 1792231467858,
           "attempt": "repair",
           "messages": [
             {
@@ -1135,7 +1135,7 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：node-routes\n主要语言：Markdown 50%、JavaScript 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\nnode-routes/\n  README.md (1KB)\n  server.mjs (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# Minimal Node HTTP routes\r\n\r\nThis Node.js example uses `node:http` and `createServer` to serve two routes: `/health` and `/items`. It has no Express dependency or database connection.\r\n\n```\n### 文件：server.mjs\n```\nimport { createServer } from 'node:http'\r\n\r\nconst routes = new Map([\r\n  ['/health', () => ({ status: 'ok' })],\r\n  ['/items', () => ({ items: ['one', 'two'] })]\r\n])\r\n\r\nexport const server = createServer((request, response) => {\r\n  const handler = routes.get(new URL(request.url, 'http://localhost').pathname)\r\n  response.writeHead(handler ? 200 : 404, { 'content-type': 'application/json' })\r\n  response.end(JSON.stringify(handler ? handler() : { error: 'not found' }))\r\n})\r\n\n```\n\n# 出题任务\n\n- 颗粒度：中粒度（模块级）。围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n- 题量硬性约束：约 20 题。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 约 20 题，按主题分 3-6 个 section；围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：node-routes\n主要语言：Markdown 50%、JavaScript 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\nnode-routes/\n  README.md (1KB)\n  server.mjs (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# Minimal Node HTTP routes\n\nThis Node.js example uses `node:http` and `createServer` to serve two routes: `/health` and `/items`. It has no Express dependency or database connection.\n\n```\n### 文件：server.mjs\n```\nimport { createServer } from 'node:http'\n\nconst routes = new Map([\n  ['/health', () => ({ status: 'ok' })],\n  ['/items', () => ({ items: ['one', 'two'] })]\n])\n\nexport const server = createServer((request, response) => {\n  const handler = routes.get(new URL(request.url, 'http://localhost').pathname)\n  response.writeHead(handler ? 200 : 404, { 'content-type': 'application/json' })\n  response.end(JSON.stringify(handler ? handler() : { error: 'not found' }))\n})\n\n```\n\n# 出题任务\n\n- 颗粒度：中粒度（模块级）。围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n- 题量硬性约束：约 20 题。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 约 20 题，按主题分 3-6 个 section；围绕模块/功能层面出题：各模块的职责与实现方式、数据流转、模块间接口与协作、关键业务流程、状态与存储设计。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             },
             {
               "role": "assistant",
@@ -1445,7 +1445,7 @@
       ],
       "output": {
         "version": 1,
-        "createdAt": "2026-10-17T09:57:50.810Z",
+        "createdAt": "2026-10-17T10:04:27.859Z",
         "projectName": "node-routes",
         "projectPath": "/fixtures/node-routes",
         "granularity": "medium",
@@ -1455,12 +1455,12 @@
         "projectSummary": "Synthetic offline response grounded in keywords present in the submitted prompt.",
         "sections": [
           {
-            "id": "ab2e77fe-0d47-47f6-b6c1-f80dd5238551",
+            "id": "c104a19b-f9c6-4989-9632-0f2b69f3fc51",
             "title": "Visible implementation",
             "summary": "Questions use only matched fixture facts.",
             "questions": [
               {
-                "id": "bad20bdc-0474-4452-8e6e-82d80bdc8643",
+                "id": "aec852ba-24c8-4a53-a731-aaa1cb815fc3",
                 "question": "How does Node.js shape the data flow in this project? (response 4, angle 1)",
                 "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1472,7 +1472,7 @@
                 ]
               },
               {
-                "id": "f8f7119c-0805-49c5-a3a8-636fd9478c30",
+                "id": "0784c266-454e-4205-860c-0395e9cb14da",
                 "question": "What trade-off follows from using node:http here? (response 4, angle 1)",
                 "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1484,7 +1484,7 @@
                 ]
               },
               {
-                "id": "d1532536-5399-4708-b97e-9f2df70e931e",
+                "id": "dae27ea3-0142-4de6-b6bd-48702b3daa4e",
                 "question": "Which boundary should be checked around routes? (response 4, angle 1)",
                 "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1496,7 +1496,7 @@
                 ]
               },
               {
-                "id": "0c3f52b7-cf87-48ab-9b23-8a9bdf2b883f",
+                "id": "d10a01db-7d7c-4209-8a4c-75636eaeaaf4",
                 "question": "How would you explain the behavior of /health from the shown code? (response 4, angle 1)",
                 "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1508,7 +1508,7 @@
                 ]
               },
               {
-                "id": "73657747-c955-416c-8d77-b4b3eab99358",
+                "id": "899622b0-079d-4826-9602-da18b7b52aed",
                 "question": "What change could affect Node.js, and how would you verify it? (response 4, angle 1)",
                 "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1520,7 +1520,7 @@
                 ]
               },
               {
-                "id": "477467ce-b69b-4bc3-8ab1-fc7bdebadda1",
+                "id": "c5903085-cc5a-48c9-bcdf-bca94fb70278",
                 "question": "How does node:http shape the data flow in this project? (response 4, angle 2)",
                 "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1532,7 +1532,7 @@
                 ]
               },
               {
-                "id": "ce437192-5654-49cc-8d71-5ad190c51d14",
+                "id": "645d7e57-4a06-4f28-b46c-fa96446e926d",
                 "question": "What trade-off follows from using routes here? (response 4, angle 2)",
                 "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1544,7 +1544,7 @@
                 ]
               },
               {
-                "id": "beb37403-8122-4df3-abca-9213f768b06b",
+                "id": "59191aed-1d67-4c9b-a644-37aa2089a94d",
                 "question": "Which boundary should be checked around /health? (response 4, angle 2)",
                 "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1556,7 +1556,7 @@
                 ]
               },
               {
-                "id": "5d3559e3-9cfa-4972-a108-3da67d496216",
+                "id": "6bbb16c7-1c16-45d5-8c4a-e77ac798a566",
                 "question": "How would you explain the behavior of Node.js from the shown code? (response 4, angle 2)",
                 "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1568,7 +1568,7 @@
                 ]
               },
               {
-                "id": "d1f4b5d4-3e2b-4539-9724-ef22d400520d",
+                "id": "2bbb875e-eca1-426b-8bf4-edf4f78bb3ec",
                 "question": "What change could affect node:http, and how would you verify it? (response 4, angle 2)",
                 "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1580,7 +1580,7 @@
                 ]
               },
               {
-                "id": "f2f0af38-7ce4-40ac-9444-cc5f243bbe1f",
+                "id": "8cdd4ff5-d02a-46b5-87b7-e462f1411648",
                 "question": "How does routes shape the data flow in this project? (response 4, angle 3)",
                 "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1592,7 +1592,7 @@
                 ]
               },
               {
-                "id": "e47d46d1-875a-46f7-8e83-886e45659db5",
+                "id": "a5e01fce-b003-43b8-ba49-25fcf5cdf1c5",
                 "question": "What trade-off follows from using /health here? (response 4, angle 3)",
                 "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1604,7 +1604,7 @@
                 ]
               },
               {
-                "id": "13401bfb-67eb-4fc4-ab89-3bd5f8b1f78e",
+                "id": "a3887236-66a7-4424-9a21-5036ff90b497",
                 "question": "Which boundary should be checked around Node.js? (response 4, angle 3)",
                 "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1616,7 +1616,7 @@
                 ]
               },
               {
-                "id": "2d6a1eb7-42e9-42af-8750-971fd2607a14",
+                "id": "d3c205a1-7310-493a-a861-8095d3312f12",
                 "question": "How would you explain the behavior of node:http from the shown code? (response 4, angle 3)",
                 "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1628,7 +1628,7 @@
                 ]
               },
               {
-                "id": "9ca99b03-7dbd-42b7-9dc1-e43429b413f2",
+                "id": "38e4979e-741d-42e2-be34-5ad54afc87e0",
                 "question": "What change could affect routes, and how would you verify it? (response 4, angle 3)",
                 "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1640,7 +1640,7 @@
                 ]
               },
               {
-                "id": "6ce078d3-51a8-4055-a435-c60a2234ea31",
+                "id": "9dd27e2a-db3a-4811-ba6f-c20be5c29f20",
                 "question": "How does /health shape the data flow in this project? (response 4, angle 4)",
                 "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1652,7 +1652,7 @@
                 ]
               },
               {
-                "id": "216366da-e05b-4ea6-86b4-d95f3163fb32",
+                "id": "eb067609-ecbe-4916-9076-2bd5c9ab32cd",
                 "question": "What trade-off follows from using Node.js here? (response 4, angle 4)",
                 "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1664,7 +1664,7 @@
                 ]
               },
               {
-                "id": "24e56477-2982-42cd-ba2c-f4e5d7189e8b",
+                "id": "cbf78696-e0a5-46f7-a07c-0dca01b02d44",
                 "question": "Which boundary should be checked around node:http? (response 4, angle 4)",
                 "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1676,7 +1676,7 @@
                 ]
               },
               {
-                "id": "15cb5756-e026-4aeb-be99-ea3b1d8bfbbc",
+                "id": "df32e5c6-8ded-4999-9e96-fde2b262d5fb",
                 "question": "How would you explain the behavior of routes from the shown code? (response 4, angle 4)",
                 "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1688,7 +1688,7 @@
                 ]
               },
               {
-                "id": "49950a0b-7466-490d-8b82-097fa5fa0b39",
+                "id": "b0e09ed3-717d-410f-be5f-63efc33bfa1c",
                 "question": "What change could affect /health, and how would you verify it? (response 4, angle 4)",
                 "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -1723,12 +1723,12 @@
         "finalContract": {
           "pass": true
         },
-        "inputChars": 403,
+        "inputChars": 400,
         "tokens": null,
         "requests": [
           {
-            "inputChars": 403,
-            "receivedAt": 1792231070814,
+            "inputChars": 400,
+            "receivedAt": 1792231467864,
             "attempt": "initial",
             "messages": [
               {
@@ -1737,7 +1737,7 @@
               },
               {
                 "role": "user",
-                "content": "# Minimal Node HTTP routes\r\n\r\nThis Node.js example uses `node:http` and `createServer` to serve two routes: `/health` and `/items`. It has no Express dependency or database connection.\r\n\n\n## Project tree\nnode-routes/\n  README.md (1KB)\n  server.mjs (1KB)\n\nGenerate exactly 20 questions based only on this context."
+                "content": "# Minimal Node HTTP routes\n\nThis Node.js example uses `node:http` and `createServer` to serve two routes: `/health` and `/items`. It has no Express dependency or database connection.\n\n\n## Project tree\nnode-routes/\n  README.md (1KB)\n  server.mjs (1KB)\n\nGenerate exactly 20 questions based only on this context."
               }
             ],
             "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does Node.js shape the data flow in this project? (response 5, angle 1)\",\"answer\":\"The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports Node.js?\",\"answer\":\"Only the visible mention of Node.js is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using node:http here? (response 5, angle 1)\",\"answer\":\"The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports node:http?\",\"answer\":\"Only the visible mention of node:http is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around routes? (response 5, angle 1)\",\"answer\":\"The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports routes?\",\"answer\":\"Only the visible mention of routes is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of /health from the shown code? (response 5, angle 1)\",\"answer\":\"The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports /health?\",\"answer\":\"Only the visible mention of /health is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect Node.js, and how would you verify it? (response 5, angle 1)\",\"answer\":\"The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports Node.js?\",\"answer\":\"Only the visible mention of Node.js is used.\",\"followUps\":[]}]},{\"question\":\"How does node:http shape the data flow in this project? (response 5, angle 2)\",\"answer\":\"The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports node:http?\",\"answer\":\"Only the visible mention of node:http is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using routes here? (response 5, angle 2)\",\"answer\":\"The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports routes?\",\"answer\":\"Only the visible mention of routes is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around /health? (response 5, angle 2)\",\"answer\":\"The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports /health?\",\"answer\":\"Only the visible mention of /health is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of Node.js from the shown code? (response 5, angle 2)\",\"answer\":\"The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports Node.js?\",\"answer\":\"Only the visible mention of Node.js is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect node:http, and how would you verify it? (response 5, angle 2)\",\"answer\":\"The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports node:http?\",\"answer\":\"Only the visible mention of node:http is used.\",\"followUps\":[]}]},{\"question\":\"How does routes shape the data flow in this project? (response 5, angle 3)\",\"answer\":\"The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports routes?\",\"answer\":\"Only the visible mention of routes is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using /health here? (response 5, angle 3)\",\"answer\":\"The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports /health?\",\"answer\":\"Only the visible mention of /health is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around Node.js? (response 5, angle 3)\",\"answer\":\"The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports Node.js?\",\"answer\":\"Only the visible mention of Node.js is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of node:http from the shown code? (response 5, angle 3)\",\"answer\":\"The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports node:http?\",\"answer\":\"Only the visible mention of node:http is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect routes, and how would you verify it? (response 5, angle 3)\",\"answer\":\"The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports routes?\",\"answer\":\"Only the visible mention of routes is used.\",\"followUps\":[]}]},{\"question\":\"How does /health shape the data flow in this project? (response 5, angle 4)\",\"answer\":\"The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports /health?\",\"answer\":\"Only the visible mention of /health is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using Node.js here? (response 5, angle 4)\",\"answer\":\"The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports Node.js?\",\"answer\":\"Only the visible mention of Node.js is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around node:http? (response 5, angle 4)\",\"answer\":\"The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports node:http?\",\"answer\":\"Only the visible mention of node:http is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of routes from the shown code? (response 5, angle 4)\",\"answer\":\"The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports routes?\",\"answer\":\"Only the visible mention of routes is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect /health, and how would you verify it? (response 5, angle 4)\",\"answer\":\"The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports /health?\",\"answer\":\"Only the visible mention of /health is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
@@ -2047,7 +2047,7 @@
         "target": 32,
         "max": 40
       },
-      "elapsedMs": 21,
+      "elapsedMs": 19,
       "requestCount": 4,
       "failedRequests": 0,
       "repairRequestCount": 0,
@@ -2058,7 +2058,7 @@
       "finalContract": {
         "pass": true
       },
-      "inputChars": 10517,
+      "inputChars": 10477,
       "tokens": null,
       "progressEvents": [
         {
@@ -2103,8 +2103,8 @@
       ],
       "requests": [
         {
-          "inputChars": 1806,
-          "receivedAt": 1792231070826,
+          "inputChars": 1803,
+          "receivedAt": 1792231467876,
           "attempt": "initial",
           "messages": [
             {
@@ -2113,7 +2113,7 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# CSV preview CLI\r\n\r\nThis Python CLI uses `argparse` for arguments, `pathlib` for paths, and `csv` to count records. `--dry-run` prints the count without writing an output file.\r\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n- 题量硬性约束：严格 16 题（全局架构层面，实现细节由其他批次负责，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 16 题（全局架构层面，实现细节由其他批次负责，不要多出），按主题分 3-6 个 section；围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# CSV preview CLI\n\nThis Python CLI uses `argparse` for arguments, `pathlib` for paths, and `csv` to count records. `--dry-run` prints the count without writing an output file.\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n- 题量硬性约束：严格 16 题（全局架构层面，实现细节由其他批次负责，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 16 题（全局架构层面，实现细节由其他批次负责，不要多出），按主题分 3-6 个 section；围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             }
           ],
           "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does argparse shape the data flow in this project? (response 6, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using csv here? (response 6, angle 1)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around dry-run? (response 6, angle 1)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect argparse, and how would you verify it? (response 6, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
@@ -2121,8 +2121,8 @@
           "rawJsonValid": true
         },
         {
-          "inputChars": 2262,
-          "receivedAt": 1792231070829,
+          "inputChars": 2245,
+          "receivedAt": 1792231467879,
           "attempt": "initial",
           "messages": [
             {
@@ -2131,7 +2131,7 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：preview.py\n```\nimport argparse\r\nimport csv\r\nfrom pathlib import Path\r\n\r\ndef main():\r\n    parser = argparse.ArgumentParser(description=\"Preview a CSV file\")\r\n    parser.add_argument(\"input\", type=Path)\r\n    parser.add_argument(\"--dry-run\", action=\"store_true\")\r\n    args = parser.parse_args()\r\n    with args.input.open(newline=\"\", encoding=\"utf-8\") as source:\r\n        rows = list(csv.DictReader(source))\r\n    print(f\"{len(rows)} rows\")\r\n    if not args.dry_run:\r\n        Path(\"preview.txt\").write_text(str(len(rows)), encoding=\"utf-8\")\r\n\r\nif __name__ == \"__main__\":\r\n    main()\r\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n- 题量硬性约束：严格 16 题（只针对本模块，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 16 题（只针对本模块，不要多出），按主题分 3-6 个 section；本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：preview.py\n```\nimport argparse\nimport csv\nfrom pathlib import Path\n\ndef main():\n    parser = argparse.ArgumentParser(description=\"Preview a CSV file\")\n    parser.add_argument(\"input\", type=Path)\n    parser.add_argument(\"--dry-run\", action=\"store_true\")\n    args = parser.parse_args()\n    with args.input.open(newline=\"\", encoding=\"utf-8\") as source:\n        rows = list(csv.DictReader(source))\n    print(f\"{len(rows)} rows\")\n    if not args.dry_run:\n        Path(\"preview.txt\").write_text(str(len(rows)), encoding=\"utf-8\")\n\nif __name__ == \"__main__\":\n    main()\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n- 题量硬性约束：严格 16 题（只针对本模块，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 16 题（只针对本模块，不要多出），按主题分 3-6 个 section；本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             }
           ],
           "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does argparse shape the data flow in this project? (response 7, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using csv here? (response 7, angle 1)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around dry-run? (response 7, angle 1)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect argparse, and how would you verify it? (response 7, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
@@ -2139,8 +2139,8 @@
           "rawJsonValid": true
         },
         {
-          "inputChars": 2688,
-          "receivedAt": 1792231070832,
+          "inputChars": 2685,
+          "receivedAt": 1792231467882,
           "attempt": "initial",
           "messages": [
             {
@@ -2149,7 +2149,7 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# CSV preview CLI\r\n\r\nThis Python CLI uses `argparse` for arguments, `pathlib` for paths, and `csv` to count records. `--dry-run` prints the count without writing an output file.\r\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n- 题量硬性约束：严格 8 题（全局架构层面，实现细节由其他批次负责，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n- 补充说明：这是补充请求：此前该部分已保留 5 题，总量还差 15 题。请再补充 8 个此前没有覆盖到的考察点，不要重复已有问题。\n以下是已保留的问题，请避开这些问题：\n- How does argparse shape the data flow in this project? (response 6, angle 1)\n- What trade-off follows from using csv here? (response 6, angle 1)\n- Which boundary should be checked around dry-run? (response 6, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)\n- What change could affect argparse, and how would you verify it? (response 6, angle 1)\n- How does argparse shape the data flow in this project? (response 7, angle 1)\n- What trade-off follows from using csv here? (response 7, angle 1)\n- Which boundary should be checked around dry-run? (response 7, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)\n- What change could affect argparse, and how would you verify it? (response 7, angle 1)\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 8 题（全局架构层面，实现细节由其他批次负责，不要多出），按主题分 3-6 个 section；围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：README.md\n```\n# CSV preview CLI\n\nThis Python CLI uses `argparse` for arguments, `pathlib` for paths, and `csv` to count records. `--dry-run` prints the count without writing an output file.\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n- 题量硬性约束：严格 8 题（全局架构层面，实现细节由其他批次负责，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n- 补充说明：这是补充请求：此前该部分已保留 5 题，总量还差 15 题。请再补充 8 个此前没有覆盖到的考察点，不要重复已有问题。\n以下是已保留的问题，请避开这些问题：\n- How does argparse shape the data flow in this project? (response 6, angle 1)\n- What trade-off follows from using csv here? (response 6, angle 1)\n- Which boundary should be checked around dry-run? (response 6, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)\n- What change could affect argparse, and how would you verify it? (response 6, angle 1)\n- How does argparse shape the data flow in this project? (response 7, angle 1)\n- What trade-off follows from using csv here? (response 7, angle 1)\n- Which boundary should be checked around dry-run? (response 7, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)\n- What change could affect argparse, and how would you verify it? (response 7, angle 1)\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 8 题（全局架构层面，实现细节由其他批次负责，不要多出），按主题分 3-6 个 section；围绕代码实现层面出题：关键函数的实现思路、算法与数据结构、边界条件处理、并发/异步控制、性能优化点、错误处理与容错。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             }
           ],
           "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does argparse shape the data flow in this project? (response 8, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using csv here? (response 8, angle 1)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around dry-run? (response 8, angle 1)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of pathlib from the shown code? (response 8, angle 1)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect argparse, and how would you verify it? (response 8, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"How does csv shape the data flow in this project? (response 8, angle 2)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using dry-run here? (response 8, angle 2)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around pathlib? (response 8, angle 2)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
@@ -2157,8 +2157,8 @@
           "rawJsonValid": true
         },
         {
-          "inputChars": 3761,
-          "receivedAt": 1792231070834,
+          "inputChars": 3744,
+          "receivedAt": 1792231467884,
           "attempt": "initial",
           "messages": [
             {
@@ -2167,11 +2167,11 @@
             },
             {
               "role": "user",
-              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：preview.py\n```\nimport argparse\r\nimport csv\r\nfrom pathlib import Path\r\n\r\ndef main():\r\n    parser = argparse.ArgumentParser(description=\"Preview a CSV file\")\r\n    parser.add_argument(\"input\", type=Path)\r\n    parser.add_argument(\"--dry-run\", action=\"store_true\")\r\n    args = parser.parse_args()\r\n    with args.input.open(newline=\"\", encoding=\"utf-8\") as source:\r\n        rows = list(csv.DictReader(source))\r\n    print(f\"{len(rows)} rows\")\r\n    if not args.dry_run:\r\n        Path(\"preview.txt\").write_text(str(len(rows)), encoding=\"utf-8\")\r\n\r\nif __name__ == \"__main__\":\r\n    main()\r\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n- 题量硬性约束：严格 7 题（只针对本模块，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n- 补充说明：这是补充请求：此前该部分已保留 5 题，总量还差 7 题。请再补充 7 个此前没有覆盖到的考察点，不要重复已有问题。\n以下是已保留的问题，请避开这些问题：\n- How does argparse shape the data flow in this project? (response 7, angle 1)\n- What trade-off follows from using csv here? (response 7, angle 1)\n- Which boundary should be checked around dry-run? (response 7, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)\n- What change could affect argparse, and how would you verify it? (response 7, angle 1)\n- How does argparse shape the data flow in this project? (response 6, angle 1)\n- What trade-off follows from using csv here? (response 6, angle 1)\n- Which boundary should be checked around dry-run? (response 6, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)\n- What change could affect argparse, and how would you verify it? (response 6, angle 1)\n- How does argparse shape the data flow in this project? (response 8, angle 1)\n- What trade-off follows from using csv here? (response 8, angle 1)\n- Which boundary should be checked around dry-run? (response 8, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 8, angle 1)\n- What change could affect argparse, and how would you verify it? (response 8, angle 1)\n- How does csv shape the data flow in this project? (response 8, angle 2)\n- What trade-off follows from using dry-run here? (response 8, angle 2)\n- Which boundary should be checked around pathlib? (response 8, angle 2)\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 7 题（只针对本模块，不要多出），按主题分 3-6 个 section；本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
+              "content": "# 待分析的项目\n\n项目根目录：python-cli\n主要语言：Python 50%、Markdown 50%\n文件总数（不含忽略项）：2\n\n## 项目文件树\n```\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n```\n\n## 文件内容\n### 文件：preview.py\n```\nimport argparse\nimport csv\nfrom pathlib import Path\n\ndef main():\n    parser = argparse.ArgumentParser(description=\"Preview a CSV file\")\n    parser.add_argument(\"input\", type=Path)\n    parser.add_argument(\"--dry-run\", action=\"store_true\")\n    args = parser.parse_args()\n    with args.input.open(newline=\"\", encoding=\"utf-8\") as source:\n        rows = list(csv.DictReader(source))\n    print(f\"{len(rows)} rows\")\n    if not args.dry_run:\n        Path(\"preview.txt\").write_text(str(len(rows)), encoding=\"utf-8\")\n\nif __name__ == \"__main__\":\n    main()\n\n```\n\n# 出题任务\n\n- 颗粒度：细粒度（实现级）。本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n- 题量硬性约束：严格 7 题（只针对本模块，不要多出）。总题量已由系统预先分配，**超出配额的部分会被丢弃**，因此请把配额用在最有价值的考察点上，不要为了凑数而出题。\n- 考察方向：通用方向——不限定方向，从整体工程能力角度全面考察。\n- 补充说明：这是补充请求：此前该部分已保留 5 题，总量还差 7 题。请再补充 7 个此前没有覆盖到的考察点，不要重复已有问题。\n以下是已保留的问题，请避开这些问题：\n- How does argparse shape the data flow in this project? (response 7, angle 1)\n- What trade-off follows from using csv here? (response 7, angle 1)\n- Which boundary should be checked around dry-run? (response 7, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)\n- What change could affect argparse, and how would you verify it? (response 7, angle 1)\n- How does argparse shape the data flow in this project? (response 6, angle 1)\n- What trade-off follows from using csv here? (response 6, angle 1)\n- Which boundary should be checked around dry-run? (response 6, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)\n- What change could affect argparse, and how would you verify it? (response 6, angle 1)\n- How does argparse shape the data flow in this project? (response 8, angle 1)\n- What trade-off follows from using csv here? (response 8, angle 1)\n- Which boundary should be checked around dry-run? (response 8, angle 1)\n- How would you explain the behavior of pathlib from the shown code? (response 8, angle 1)\n- What change could affect argparse, and how would you verify it? (response 8, angle 1)\n- How does csv shape the data flow in this project? (response 8, angle 2)\n- What trade-off follows from using dry-run here? (response 8, angle 2)\n- Which boundary should be checked around pathlib? (response 8, angle 2)\n\n## 输出 JSON 结构\n```json\n{\n  \"projectSummary\": \"对项目的一段整体介绍（80-200字，说明这是什么项目、用了什么技术、整体结构如何）\",\n  \"sections\": [\n    {\n      \"title\": \"主题名称，如：整体架构 / 核心模块：xxx / 性能与安全\",\n      \"summary\": \"该主题考察点的一句话说明\",\n      \"questions\": [\n        {\n          \"question\": \"面试问题\",\n          \"answer\": \"参考答案（Markdown 格式）\",\n          \"followUps\": [\n            { \"question\": \"追问\", \"answer\": \"追问参考答案\", \"followUps\": [] }\n          ]\n        }\n      ]\n    }\n  ],\n  \"glossary\": { \"名词\": \"该名词 1-2 句通俗解释\" }\n}\n```\n\n## 出题规则\n1. 共 严格 7 题（只针对本模块，不要多出），按主题分 3-6 个 section；本次只分析项目的单个模块「（根目录文件）」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。\n2. 问题必须基于提供的项目真实信息（文件树、配置、源码），禁止编造项目中不存在的技术细节；若某方面信息不足，可基于常见实现合理推断，但答案中要注明\"（根据常见实现推断）\"。\n3. answer 用 Markdown 书写（可用列表、代码块），150-400 字；代码引用要用 `路径` 注明出处。\n4. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字。追问内部可再嵌套一层 followUps（可为空数组）。\n5. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可），这些名词就像飞书文档里的专有名词标注。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致，给出面向初级工程师的通俗解释。\n6. 问题口吻是面试官向候选人提问，例如\"你为什么选择 X 而不是 Y？\"\"这个模块的 Y 是怎么实现的？\"\n\n再次强调：只输出 JSON 对象本身。"
             }
           ],
           "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does argparse shape the data flow in this project? (response 9, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using csv here? (response 9, angle 1)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around dry-run? (response 9, angle 1)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of pathlib from the shown code? (response 9, angle 1)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect argparse, and how would you verify it? (response 9, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"How does csv shape the data flow in this project? (response 9, angle 2)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using dry-run here? (response 9, angle 2)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
-          "elapsedMs": 1,
+          "elapsedMs": 0,
           "rawJsonValid": true
         }
       ],
@@ -2529,7 +2529,7 @@
       ],
       "output": {
         "version": 1,
-        "createdAt": "2026-10-17T09:57:50.836Z",
+        "createdAt": "2026-10-17T10:04:27.885Z",
         "projectName": "python-cli",
         "projectPath": "/fixtures/python-cli",
         "granularity": "fine",
@@ -2539,12 +2539,12 @@
         "projectSummary": "Synthetic offline response grounded in keywords present in the submitted prompt.",
         "sections": [
           {
-            "id": "1835c989-20ab-4bef-b120-9abc20fd964e",
+            "id": "02bcf87d-eb4c-46d1-b210-82a14ec9ba83",
             "title": "Visible implementation",
             "summary": "Questions use only matched fixture facts.",
             "questions": [
               {
-                "id": "2b93c169-af87-4a4b-abbd-59f6087ccf18",
+                "id": "6c8dbfdd-6a14-44d0-b6a3-b1eaba49ac70",
                 "question": "How does argparse shape the data flow in this project? (response 6, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2556,7 +2556,7 @@
                 ]
               },
               {
-                "id": "ddb162f1-0833-4aa9-b2d5-f167edf8b711",
+                "id": "ae5dd75d-e98c-4a37-9eb4-72f3e1e11c54",
                 "question": "What trade-off follows from using csv here? (response 6, angle 1)",
                 "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2568,7 +2568,7 @@
                 ]
               },
               {
-                "id": "10ebb535-4a4c-4522-81c3-2395e929e8ce",
+                "id": "737ca317-c610-4575-9ff4-7ccd1d5ab8d5",
                 "question": "Which boundary should be checked around dry-run? (response 6, angle 1)",
                 "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2580,7 +2580,7 @@
                 ]
               },
               {
-                "id": "73314edc-d153-421d-beb7-e2e1fc30d3e3",
+                "id": "f5e8f347-68a5-4796-9ed4-9c722905bdee",
                 "question": "How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)",
                 "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2592,7 +2592,7 @@
                 ]
               },
               {
-                "id": "31ec4ad3-6e7d-48aa-9c5c-ffe1bc114d4c",
+                "id": "b188e321-0de8-4fed-bd27-5fe11ab5017c",
                 "question": "What change could affect argparse, and how would you verify it? (response 6, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2606,12 +2606,12 @@
             ]
           },
           {
-            "id": "6a6d2fc7-c204-492c-aa88-ea9031df5499",
+            "id": "fe1ba0b0-ad82-47ce-83cf-82a1017b07ff",
             "title": "Visible implementation",
             "summary": "Questions use only matched fixture facts.",
             "questions": [
               {
-                "id": "a7adafe2-f10d-4266-9598-16467fe4ebd9",
+                "id": "1babb0ce-aaa8-42dc-b363-96635195d514",
                 "question": "How does argparse shape the data flow in this project? (response 7, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2623,7 +2623,7 @@
                 ]
               },
               {
-                "id": "a293abf5-9ea7-42fd-bd0b-fe0e6d8d2563",
+                "id": "37f63743-fc91-4c6c-9e67-2a1e51e6a296",
                 "question": "What trade-off follows from using csv here? (response 7, angle 1)",
                 "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2635,7 +2635,7 @@
                 ]
               },
               {
-                "id": "4d050488-ef02-477a-956c-8673e14aaad4",
+                "id": "40d0d04a-89b0-4b20-be7f-a35e55a68da1",
                 "question": "Which boundary should be checked around dry-run? (response 7, angle 1)",
                 "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2647,7 +2647,7 @@
                 ]
               },
               {
-                "id": "6ecf8720-cabf-4087-baca-620c977f691a",
+                "id": "f646eaa1-8c62-4ccb-8f80-2fb164b08760",
                 "question": "How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)",
                 "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2659,7 +2659,7 @@
                 ]
               },
               {
-                "id": "78bd92f7-ae01-40d9-a14e-ec8c72080dd2",
+                "id": "a0678699-9d72-4087-8c31-6691255310b1",
                 "question": "What change could affect argparse, and how would you verify it? (response 7, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2673,12 +2673,12 @@
             ]
           },
           {
-            "id": "29d166ae-af48-4189-9333-fc8aa36dc606",
+            "id": "9f202864-b26a-4fd8-bf1c-2ff0de33fca0",
             "title": "Visible implementation",
             "summary": "Questions use only matched fixture facts.",
             "questions": [
               {
-                "id": "2153661a-4241-44b1-bd67-b7d4b5e9f4d7",
+                "id": "85aa20fa-9319-45fd-af49-57e53e4c001c",
                 "question": "How does argparse shape the data flow in this project? (response 8, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2690,7 +2690,7 @@
                 ]
               },
               {
-                "id": "2265ca05-c78d-42d0-aa8b-50409186628b",
+                "id": "69b1a821-742c-4514-b283-01ec71fb0b7e",
                 "question": "What trade-off follows from using csv here? (response 8, angle 1)",
                 "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2702,7 +2702,7 @@
                 ]
               },
               {
-                "id": "496db6ce-8556-4b50-8b34-3fc6d395a7fc",
+                "id": "ecc44b43-ea55-4994-83e0-0c4182cd261f",
                 "question": "Which boundary should be checked around dry-run? (response 8, angle 1)",
                 "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2714,7 +2714,7 @@
                 ]
               },
               {
-                "id": "844e29c0-c28a-417d-9b09-4fe3535abe80",
+                "id": "361feff5-08db-4d27-9e20-5bf7c7aba685",
                 "question": "How would you explain the behavior of pathlib from the shown code? (response 8, angle 1)",
                 "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2726,7 +2726,7 @@
                 ]
               },
               {
-                "id": "466ca98b-ab32-4cc8-9339-be5ce77d9389",
+                "id": "ee25c73c-dcdc-48ca-a602-47197d79b773",
                 "question": "What change could affect argparse, and how would you verify it? (response 8, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2738,7 +2738,7 @@
                 ]
               },
               {
-                "id": "cb0d9e92-26ac-46db-b376-66371f194121",
+                "id": "5cef4dd9-c71b-4a4d-b908-55b909fc5d54",
                 "question": "How does csv shape the data flow in this project? (response 8, angle 2)",
                 "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2750,7 +2750,7 @@
                 ]
               },
               {
-                "id": "3c95605b-352c-4858-afb6-50301a8e72eb",
+                "id": "f829a30f-efb1-45e6-b3eb-d28e43adb3c4",
                 "question": "What trade-off follows from using dry-run here? (response 8, angle 2)",
                 "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2762,7 +2762,7 @@
                 ]
               },
               {
-                "id": "9412ba47-1dfe-428a-8468-aa66b9758ddb",
+                "id": "360c5e35-1eee-4a5d-ab6c-0a32b0890dce",
                 "question": "Which boundary should be checked around pathlib? (response 8, angle 2)",
                 "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2776,12 +2776,12 @@
             ]
           },
           {
-            "id": "3202e2ab-97e4-4236-bda3-1f4d0e801579",
+            "id": "b2707b5a-7122-4d8c-9792-2484adf4bcb0",
             "title": "Visible implementation",
             "summary": "Questions use only matched fixture facts.",
             "questions": [
               {
-                "id": "721a68b7-27e5-47cc-a7d1-1f122f7b315e",
+                "id": "71036b2b-f450-4e40-bdcc-5b8bc95eb285",
                 "question": "How does argparse shape the data flow in this project? (response 9, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2793,7 +2793,7 @@
                 ]
               },
               {
-                "id": "f938ce85-2e50-4680-907f-053755f9deb8",
+                "id": "f1bb0764-4ae4-4cae-9d5d-c6273396b109",
                 "question": "What trade-off follows from using csv here? (response 9, angle 1)",
                 "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2805,7 +2805,7 @@
                 ]
               },
               {
-                "id": "a1df6931-b38c-472c-bcbb-d5f9900235e4",
+                "id": "b7dc763f-dd79-415c-ac7f-e3a981c1b8ed",
                 "question": "Which boundary should be checked around dry-run? (response 9, angle 1)",
                 "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2817,7 +2817,7 @@
                 ]
               },
               {
-                "id": "fa293621-a6de-4e56-be86-38650ebd31f2",
+                "id": "4c62fcf6-6542-431f-a3dc-52e5aca4420a",
                 "question": "How would you explain the behavior of pathlib from the shown code? (response 9, angle 1)",
                 "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2829,7 +2829,7 @@
                 ]
               },
               {
-                "id": "60cf5c9e-85a7-42cd-a52e-e55add34e54a",
+                "id": "206f300f-31d4-4762-ad9c-2afa89115c0e",
                 "question": "What change could affect argparse, and how would you verify it? (response 9, angle 1)",
                 "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2841,7 +2841,7 @@
                 ]
               },
               {
-                "id": "0ba2ec61-a5a1-4df5-aa51-8fe1624ab597",
+                "id": "3dab5d95-df03-40be-83b9-bcc03284ef9a",
                 "question": "How does csv shape the data flow in this project? (response 9, angle 2)",
                 "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2853,7 +2853,7 @@
                 ]
               },
               {
-                "id": "bfe99bff-4fe3-4a3e-aa9c-0b6e24e08019",
+                "id": "48437e25-5c67-450d-86f7-284a567673dd",
                 "question": "What trade-off follows from using dry-run here? (response 9, angle 2)",
                 "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
                 "followUps": [
@@ -2877,7 +2877,7 @@
       },
       "baseline": {
         "definition": "same case budget and synthetic profile; one request containing README plus production-rendered file tree; always valid JSON",
-        "elapsedMs": 5,
+        "elapsedMs": 4,
         "requestCount": 1,
         "failedRequests": 0,
         "repairRequestCount": 0,
@@ -2888,12 +2888,12 @@
         "finalContract": {
           "pass": true
         },
-        "inputChars": 395,
+        "inputChars": 392,
         "tokens": null,
         "requests": [
           {
-            "inputChars": 395,
-            "receivedAt": 1792231070842,
+            "inputChars": 392,
+            "receivedAt": 1792231467890,
             "attempt": "initial",
             "messages": [
               {
@@ -2902,11 +2902,11 @@
               },
               {
                 "role": "user",
-                "content": "# CSV preview CLI\r\n\r\nThis Python CLI uses `argparse` for arguments, `pathlib` for paths, and `csv` to count records. `--dry-run` prints the count without writing an output file.\r\n\n\n## Project tree\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n\nGenerate exactly 32 questions based only on this context."
+                "content": "# CSV preview CLI\n\nThis Python CLI uses `argparse` for arguments, `pathlib` for paths, and `csv` to count records. `--dry-run` prints the count without writing an output file.\n\n\n## Project tree\npython-cli/\n  preview.py (1KB)\n  README.md (1KB)\n\nGenerate exactly 32 questions based only on this context."
               }
             ],
             "rawResponse": "{\"projectSummary\":\"Synthetic offline response grounded in keywords present in the submitted prompt.\",\"sections\":[{\"title\":\"Visible implementation\",\"summary\":\"Questions use only matched fixture facts.\",\"questions\":[{\"question\":\"How does argparse shape the data flow in this project? (response 10, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using csv here? (response 10, angle 1)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around dry-run? (response 10, angle 1)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of pathlib from the shown code? (response 10, angle 1)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect argparse, and how would you verify it? (response 10, angle 1)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"How does csv shape the data flow in this project? (response 10, angle 2)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using dry-run here? (response 10, angle 2)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around pathlib? (response 10, angle 2)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of argparse from the shown code? (response 10, angle 2)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect csv, and how would you verify it? (response 10, angle 2)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"How does dry-run shape the data flow in this project? (response 10, angle 3)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using pathlib here? (response 10, angle 3)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around argparse? (response 10, angle 3)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of csv from the shown code? (response 10, angle 3)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect dry-run, and how would you verify it? (response 10, angle 3)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How does pathlib shape the data flow in this project? (response 10, angle 4)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using argparse here? (response 10, angle 4)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around csv? (response 10, angle 4)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of dry-run from the shown code? (response 10, angle 4)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect pathlib, and how would you verify it? (response 10, angle 4)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"How does argparse shape the data flow in this project? (response 10, angle 5)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using csv here? (response 10, angle 5)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around dry-run? (response 10, angle 5)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of pathlib from the shown code? (response 10, angle 5)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect argparse, and how would you verify it? (response 10, angle 5)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"How does csv shape the data flow in this project? (response 10, angle 6)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using dry-run here? (response 10, angle 6)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"Which boundary should be checked around pathlib? (response 10, angle 6)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]},{\"question\":\"How would you explain the behavior of argparse from the shown code? (response 10, angle 6)\",\"answer\":\"The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports argparse?\",\"answer\":\"Only the visible mention of argparse is used.\",\"followUps\":[]}]},{\"question\":\"What change could affect csv, and how would you verify it? (response 10, angle 6)\",\"answer\":\"The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports csv?\",\"answer\":\"Only the visible mention of csv is used.\",\"followUps\":[]}]},{\"question\":\"How does dry-run shape the data flow in this project? (response 10, angle 7)\",\"answer\":\"The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports dry-run?\",\"answer\":\"Only the visible mention of dry-run is used.\",\"followUps\":[]}]},{\"question\":\"What trade-off follows from using pathlib here? (response 10, angle 7)\",\"answer\":\"The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.\",\"followUps\":[{\"question\":\"What detail in the supplied context supports pathlib?\",\"answer\":\"Only the visible mention of pathlib is used.\",\"followUps\":[]}]}]}],\"glossary\":{}}",
-            "elapsedMs": 1,
+            "elapsedMs": 0,
             "rawJsonValid": true
           }
         ],

@@ -43,15 +43,15 @@ export interface SettingsSaveRequest extends Omit<Settings, 'profiles'> { profil
 
 /** 扫描安全上限的合法区间（设置校验与扫描器夹取共用同一份） */
 export const SCAN_LIMIT_BOUNDS = {
-  maxFiles: { min: 1, max: 20_000 },
-  maxTreeNodes: { min: 1, max: 10_000 },
-  maxContentFileBytes: { min: 1024, max: 512 * 1024 }
+  maxFiles: { min: 1, max: 250_000 },
+  maxTreeNodes: { min: 1, max: 500_000 },
+  maxContentFileBytes: { min: 1024, max: 8 * 1024 * 1024 }
 } as const
 
 export const DEFAULT_SCAN_LIMITS: ScanLimits = {
-  maxFiles: 8000,
-  maxTreeNodes: 4000,
-  maxContentFileBytes: 256 * 1024
+  maxFiles: 50_000,
+  maxTreeNodes: 100_000,
+  maxContentFileBytes: 1024 * 1024
 }
 
 export interface TestConnectionResult {

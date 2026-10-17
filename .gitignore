@@ -7,6 +7,7 @@ build/
 .zcode/
 *.tsbuildinfo
 .worktrees/
+.validation/
 
 # 渲染测试的临时打包产物（test:renderer 生成）
 .render-test/

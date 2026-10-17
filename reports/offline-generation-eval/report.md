@@ -1,7 +1,7 @@
 # Offline generation evaluation
 
 - Mode: offline-pipeline-and-scorer-calibration
-- Run: 6ec48528-5faf-4944-8df5-79f14f63153d
+- Run: b43dee37-5d88-4e34-a22c-dd6307440bdd
 - Corpus: repoprep-eval-corpus-v1
 - Synthetic response: fixture-context-keyword-v1-json-repair
 - Node: v24.16.0
@@ -18,18 +18,18 @@ Baseline: same case budget and synthetic profile; one request containing README 
 
 ### react-state
 
-Pipeline alerts: none; forbidden hits 0; input 2359 chars; 61 ms.
-Baseline alerts: known_fact_keyword_missing; forbidden hits 0; input 427 chars; 5 ms.
+Pipeline alerts: none; forbidden hits 0; input 2347 chars; 53 ms.
+Baseline alerts: known_fact_keyword_missing; forbidden hits 0; input 424 chars; 6 ms.
 
 ### node-routes
 
-Pipeline alerts: none; forbidden hits 0; input 4686 chars; 23 ms.
-Baseline alerts: none; forbidden hits 0; input 403 chars; 4 ms.
+Pipeline alerts: none; forbidden hits 0; input 4656 chars; 20 ms.
+Baseline alerts: none; forbidden hits 0; input 400 chars; 4 ms.
 
 ### python-cli
 
-Pipeline alerts: none; forbidden hits 0; input 10517 chars; 21 ms.
-Baseline alerts: none; forbidden hits 0; input 395 chars; 5 ms.
+Pipeline alerts: none; forbidden hits 0; input 10477 chars; 19 ms.
+Baseline alerts: none; forbidden hits 0; input 392 chars; 4 ms.
 
 Human review coverage: 0/137 pending. See review-template.json.
 

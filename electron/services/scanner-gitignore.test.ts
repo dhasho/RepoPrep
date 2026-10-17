@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import ignore from 'ignore'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
@@ -342,6 +343,219 @@ test('编辑被忽略的嵌套 .gitignore 后缓存触发新扫描', async () =>
     assert.equal(updated.reason, 'changed')
     assert.ok(updated.scan.files.some((file) => file.relPath === 'sub/skipme.txt'))
     assert.ok(!updated.scan.files.some((file) => file.relPath === 'sub/keep.txt'))
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('真实 Git linked worktrees 与 worktree 容器不进入主项目扫描或消耗小预算', async () => {
+  const root = await makeProject({})
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  try {
+    await fs.writeFile(path.join(root, '.gitignore'), '!.worktrees/\n!.worktrees/**\n')
+    await fs.writeFile(path.join(root, 'main.ts'), 'export const primary = true')
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    git('add', '.gitignore', 'main.ts')
+    git('commit', '-qm', 'fixture')
+    const conventional = path.join(root, '.worktrees', 'included-by-negation')
+    const arbitrary = path.join(root, 'checkout with [special] ! chars')
+    await fs.mkdir(path.dirname(conventional), { recursive: true })
+    git('worktree', 'add', '--detach', '--quiet', conventional, 'HEAD')
+    git('worktree', 'add', '--detach', '--quiet', arbitrary, 'HEAD')
+    await fs.writeFile(path.join(arbitrary, 'large.ts'), 'x'.repeat(200))
+
+    const selectedWorktree = await scanProject(arbitrary)
+    assert.ok(selectedWorktree.files.some((file) => file.relPath === 'main.ts'), 'a selected linked worktree root remains scannable')
+    assert.equal(selectedWorktree.files.some((file) => file.relPath === '.git'), false, 'the selected worktree .git pointer is metadata')
+
+    const scan = await scanProject(root, { maxFiles: 2, maxTreeNodes: 2, maxContentFileBytes: 64 })
+    assert.ok(scan.files.some((file) => file.relPath === 'main.ts'), 'primary checkout source must remain scan eligible')
+    assert.equal(scan.files.some((file) => file.relPath.includes('included-by-negation')), false)
+    assert.equal(scan.files.some((file) => file.relPath.includes('special')), false)
+    assert.equal(scan.truncation?.byFileCount ?? false, false, 'worktree files must not consume file budget')
+    assert.equal(scan.truncation?.byTreeNodes ?? false, false, 'worktree directories must not consume tree budget')
+    assert.equal(scan.truncation?.oversizedFiles ?? 0, 0, 'oversized worktree files must not affect reported omissions')
+    await fs.mkdir(path.join(root, 'nested-repo', '.git'), { recursive: true })
+    await fs.writeFile(path.join(root, 'nested-repo', '.git', 'config'), '[core]\n')
+    await fs.writeFile(path.join(root, 'nested-repo', 'code.ts'), 'ordinary nested repository remains visible')
+    const withNestedRepo = await scanProject(root, { maxFiles: 20, maxTreeNodes: 100 })
+    assert.ok(withNestedRepo.files.some((file) => file.relPath === 'nested-repo/code.ts'), 'nested ordinary repositories must remain scan eligible')
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('目录在扫描后变成 linked worktree 会使缓存失效，worktree 内普通文件变化不使缓存失效', async () => {
+  const root = await makeProject({})
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  const candidate = path.join(root, 'arbitrary checkout name')
+  try {
+    await fs.writeFile(path.join(root, 'main.ts'), 'primary source')
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    git('add', 'main.ts')
+    git('commit', '-qm', 'fixture')
+    await fs.mkdir(candidate)
+    const cache = new ProjectScanCache()
+    const before = await cache.getFresh(root)
+    assert.equal(before.status, 'scanned')
+    git('worktree', 'add', '--detach', '--quiet', candidate, 'HEAD')
+    const after = await cache.getFresh(root)
+    assert.equal(after.status, 'scanned', 'the changed directory marker and names must invalidate prior scan')
+    assert.equal(after.scan.files.some((file) => file.relPath.startsWith('arbitrary checkout name/')), false)
+    await fs.writeFile(path.join(candidate, 'main.ts'), 'changed only inside excluded checkout')
+    await fs.writeFile(path.join(candidate, 'new child.ts'), 'also remains excluded')
+    assert.equal((await cache.getFresh(root)).status, 'reused', 'changes below the excluded checkout must not poison primary-project cache')
+
+    await fs.unlink(path.join(candidate, '.git'))
+    const markerRemoved = await cache.getFresh(root)
+    assert.equal(markerRemoved.status, 'scanned', 'removing the worktree marker must invalidate its exclusion')
+    assert.ok(markerRemoved.scan.files.some((file) => file.relPath === 'arbitrary checkout name/main.ts'))
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('linked worktree admin metadata changes invalidate the cached exclusion', async () => {
+  const root = await makeProject({})
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  const candidate = path.join(root, 'admin metadata checkout')
+  try {
+    await fs.writeFile(path.join(root, 'main.ts'), 'primary source')
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    git('add', 'main.ts')
+    git('commit', '-qm', 'fixture')
+    git('worktree', 'add', '--detach', '--quiet', candidate, 'HEAD')
+    const cache = new ProjectScanCache()
+    const first = await cache.getFresh(root)
+    assert.equal(first.status, 'scanned')
+    assert.equal(first.scan.files.some((file) => file.relPath.startsWith('admin metadata checkout/')), false)
+
+    const marker = await fs.readFile(path.join(candidate, '.git'), 'utf8')
+    const adminDir = marker.match(/^gitdir:\s*(.+)\s*$/im)?.[1]
+    assert.ok(adminDir)
+    const resolvedAdminDir = path.resolve(candidate, adminDir)
+    await fs.writeFile(path.join(resolvedAdminDir, 'commondir'), 'invalid-common-directory\n')
+    const changed = await cache.getFresh(root)
+    assert.equal(changed.status, 'scanned', 'the changed commondir identity must invalidate the prior snapshot')
+    assert.ok(changed.scan.files.some((file) => file.relPath === 'admin metadata checkout/main.ts'))
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('外部 linked-worktree 指针在访问 admin metadata 前被拒绝', async (t) => {
+  const root = await makeProject({})
+  const external = path.join(root, '..', `external-admin-${path.basename(root)}`)
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  const open = fs.open.bind(fs)
+  let externalOpens = 0
+  t.mock.method(fs, 'open', async (filePath: string | Buffer | URL, flags: string | number, ...rest: unknown[]) => {
+    if (String(filePath).startsWith(external)) externalOpens++
+    return (open as (...args: unknown[]) => Promise<import('node:fs/promises').FileHandle>)(filePath, flags, ...rest)
+  })
+  try {
+    await fs.writeFile(path.join(root, 'main.ts'), 'primary source')
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    git('add', 'main.ts')
+    git('commit', '-qm', 'fixture')
+    const outsideCheckout = path.join(root, 'outside pointer checkout')
+    await fs.mkdir(outsideCheckout)
+    await fs.writeFile(path.join(outsideCheckout, '.git'), `gitdir: ${external}${path.sep}worktrees${path.sep}foreign\n`)
+    await fs.writeFile(path.join(outsideCheckout, 'foreign.ts'), 'local source')
+    await scanProject(root)
+    assert.equal(externalOpens, 0, 'lexically external admin paths must be rejected before open')
+
+  } finally {
+    await removeProject(root)
+    await fs.rm(external, { recursive: true, force: true })
+  }
+})
+
+test('symlink admin metadata is rejected before opening its target', async (t) => {
+  const root = await makeProject({})
+  const external = path.join(root, '..', `external-common-${path.basename(root)}`)
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  const open = fs.open.bind(fs)
+  let externalOpens = 0
+  t.mock.method(fs, 'open', async (filePath: string | Buffer | URL, flags: string | number, ...rest: unknown[]) => {
+    if (String(filePath).startsWith(external)) externalOpens++
+    return (open as (...args: unknown[]) => Promise<import('node:fs/promises').FileHandle>)(filePath, flags, ...rest)
+  })
+  try {
+    await fs.writeFile(path.join(root, 'main.ts'), 'primary source')
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    git('add', 'main.ts')
+    git('commit', '-qm', 'fixture')
+    const checkout = path.join(root, 'symlink metadata checkout')
+    const adminDir = path.join(root, '.git', 'worktrees', 'symlink-case')
+    await fs.mkdir(checkout)
+    await fs.mkdir(adminDir, { recursive: true })
+    await fs.writeFile(path.join(checkout, '.git'), `gitdir: ${adminDir}\n`)
+    await fs.writeFile(path.join(adminDir, 'gitdir'), `${path.join(checkout, '.git')}\n`)
+    await fs.mkdir(external, { recursive: true })
+    await fs.writeFile(path.join(external, 'common'), `${path.relative(adminDir, path.join(root, '.git'))}\n`)
+    try {
+      await fs.symlink(path.join(external, 'common'), path.join(adminDir, 'commondir'), 'file')
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (['EPERM', 'EACCES', 'ENOTSUP'].includes(code ?? '')) return t.skip('symlink creation unavailable on this host')
+      throw error
+    }
+    await scanProject(root)
+    assert.equal(externalOpens, 0, 'symlink admin metadata must be rejected before opening its target')
+  } finally {
+    await removeProject(root)
+    await fs.rm(external, { recursive: true, force: true })
+  }
+})
+
+test('admin 目录在元数据 open 时被替换后，在读取任何字节前拒绝该文件句柄', async (t) => {
+  const root = await makeProject({})
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  const candidate = path.join(root, 'racing worktree')
+  let replaced = false
+  let metadataReads = 0
+  const nativeOpen = fs.open.bind(fs)
+  try {
+    await fs.writeFile(path.join(root, 'main.ts'), 'primary source')
+    git('init', '-q')
+    git('config', 'user.name', 'Fixture')
+    git('config', 'user.email', 'fixture@example.invalid')
+    git('add', 'main.ts')
+    git('commit', '-qm', 'fixture')
+    git('worktree', 'add', '--detach', '--quiet', candidate, 'HEAD')
+    const marker = await fs.readFile(path.join(candidate, '.git'), 'utf8')
+    const adminDir = path.resolve(candidate, marker.match(/^gitdir:\s*(.+)\s*$/im)![1])
+    const commonPath = path.join(adminDir, 'commondir')
+    const displacedAdmin = `${adminDir}-displaced`
+    t.mock.method(fs, 'open', async (filePath: Parameters<typeof fs.open>[0], flags: Parameters<typeof fs.open>[1]) => {
+      const handle = await nativeOpen(filePath, flags)
+      if (!replaced && path.resolve(String(filePath)) === path.resolve(commonPath)) {
+        replaced = true
+        await fs.rename(adminDir, displacedAdmin)
+        await fs.mkdir(adminDir)
+        return {
+          stat: (...args: Parameters<typeof handle.stat>) => handle.stat(...args),
+          read: async (...args: Parameters<typeof handle.read>) => { metadataReads++; return handle.read(...args) },
+          close: () => handle.close()
+        }
+      }
+      return handle
+    })
+
+    await scanProject(root)
+    assert.equal(replaced, true, 'the fixture must replace the admin ancestor at the open boundary')
+    assert.equal(metadataReads, 0, 'the approved handle must not be read after its ancestor identity changes')
   } finally {
     await removeProject(root)
   }

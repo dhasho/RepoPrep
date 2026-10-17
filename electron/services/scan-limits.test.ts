@@ -111,9 +111,9 @@ test('resolveScanLimits：缺省用默认值，越界与非法值被夹取', () 
   assert.deepEqual(resolveScanLimits({ maxFiles: 100 }), { ...DEFAULT_SCAN_LIMITS, maxFiles: 100 })
   // 越界夹取
   assert.equal(resolveScanLimits({ maxFiles: 0 }).maxFiles, 1)
-  assert.equal(resolveScanLimits({ maxFiles: 999_999 }).maxFiles, 20_000)
+  assert.equal(resolveScanLimits({ maxFiles: 999_999 }).maxFiles, 250_000)
   assert.equal(resolveScanLimits({ maxTreeNodes: -5 }).maxTreeNodes, 1)
-  assert.equal(resolveScanLimits({ maxContentFileBytes: 999_999_999 }).maxContentFileBytes, 512 * 1024)
+  assert.equal(resolveScanLimits({ maxContentFileBytes: 999_999_999 }).maxContentFileBytes, 8 * 1024 * 1024)
   // 非法值回退默认
   assert.equal(resolveScanLimits({ maxFiles: Number.NaN }).maxFiles, DEFAULT_SCAN_LIMITS.maxFiles)
   assert.equal(resolveScanLimits({ maxFiles: 1.5 }).maxFiles, 1, '小数向下取整')
@@ -147,7 +147,7 @@ test('扫描缓存：不同上限的结果互不串用，同上限可复用', as
 })
 
 test('renderScanWarnings：按触发原因渲染警告，未触发返回空串', () => {
-  const limits = { maxFiles: 8000, maxTreeNodes: 4000, maxContentFileBytes: 256 * 1024 }
+  const limits = { maxFiles: 50_000, maxTreeNodes: 100_000, maxContentFileBytes: 1024 * 1024 }
   const base: ScanTruncation = {
     byFileCount: false,
     byTreeNodes: false,
@@ -158,14 +158,14 @@ test('renderScanWarnings：按触发原因渲染警告，未触发返回空串',
   assert.equal(renderScanWarnings(base), '', '未触发任何上限时不应有警告')
 
   const file = renderScanWarnings({ ...base, byFileCount: true, estimatedSkipped: 7 })
-  assert.ok(file.includes('文件数达到上限（8000）'))
+  assert.ok(file.includes('文件数达到上限（50000）'))
   assert.ok(file.includes('至少还有 7 项未扫描'))
   assert.ok(file.includes('不完整'), '警告必须说明上下文不完整')
 
   const tree = renderScanWarnings({ ...base, byTreeNodes: true })
-  assert.ok(tree.includes('树节点数达到上限（4000）'))
+  assert.ok(tree.includes('树节点数达到上限（100000）'))
 
   const oversize = renderScanWarnings({ ...base, oversizedFiles: 3 })
   assert.ok(oversize.includes('3 个文件超过单文件大小上限'))
-  assert.ok(oversize.includes('256KB'))
+  assert.ok(oversize.includes('1024KB'))
 })

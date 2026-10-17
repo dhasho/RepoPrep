@@ -19,7 +19,12 @@ import { projectDisplayName } from './project-display-name.ts'
 /** 始终忽略的目录/文件（无论有没有 .gitignore） */
 const ALWAYS_IGNORE = [
   'node_modules/',
+  '.git',
   '.git/',
+  '.worktrees/',
+  '.worktree/',
+  '.git-worktrees/',
+  'worktrees/',
   '.hg/',
   '.svn/',
   '.zcode/',
@@ -109,10 +114,61 @@ const KEY_FILE_RULES: { match: (base: string, relDir: string) => boolean; reason
 ]
 
 /** 单文件送入模型的上限（同时用于题量配额的模块体量估计，故导出） */
-export const MAX_CONTENT_FILE_BYTES = 256 * 1024
+export const MAX_CONTENT_FILE_BYTES = DEFAULT_SCAN_LIMITS.maxContentFileBytes
 
 export function scanLimitsKey(limits: ScanLimits): string {
   return `${limits.maxFiles}/${limits.maxTreeNodes}/${limits.maxContentFileBytes}`
+}
+
+async function readSmallVerifiedFile(
+  filePath: string,
+  maxBytes: number,
+  rootPath: string,
+  rootIdentity: FileSystemIdentity | undefined,
+  ancestors: Array<{ path: string; identity: FileSystemIdentity | undefined }>
+): Promise<{ content: string; identity: FileSystemIdentity; size: number; mtimeMs: number; ctimeMs: number }> {
+  if (!rootIdentity) throw new Error('missing root identity')
+  const checkPathChain = async (expectedFile: FileSystemIdentity): Promise<void> => {
+    if (await fs.realpath(rootPath) !== rootPath) throw new Error('changed root')
+    const rootStat = await fs.lstat(rootPath, { bigint: true })
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink() || !sameFileSystemIdentity(rootIdentity, identityFromBigIntStats(rootStat))) throw new Error('changed root')
+    for (const ancestor of ancestors) {
+      if (ancestor.path === rootPath) continue
+      const stats = await fs.lstat(ancestor.path, { bigint: true })
+      if (!stats.isDirectory() || stats.isSymbolicLink() || !sameFileSystemIdentity(ancestor.identity, identityFromBigIntStats(stats))) throw new Error('changed ancestor')
+    }
+    const stats = await fs.lstat(filePath, { bigint: true })
+    if (!stats.isFile() || stats.isSymbolicLink() || !sameFileSystemIdentity(expectedFile, identityFromBigIntStats(stats))) throw new Error('changed file')
+  }
+
+  for (const ancestor of ancestors) {
+    if (ancestor.path === rootPath) continue
+    const stats = await fs.lstat(ancestor.path, { bigint: true })
+    if (!stats.isDirectory() || stats.isSymbolicLink() || !sameFileSystemIdentity(ancestor.identity, identityFromBigIntStats(stats))) throw new Error('changed ancestor')
+  }
+  const before = await fs.lstat(filePath, { bigint: true })
+  const identity = identityFromBigIntStats(before)
+  if (!before.isFile() || before.isSymbolicLink() || !identity || before.size > BigInt(maxBytes)) throw new Error('invalid metadata')
+  await checkPathChain(identity)
+  const flags = fsSync.constants.O_RDONLY | (process.platform === 'win32' ? 0 : (fsSync.constants.O_NOFOLLOW ?? 0))
+  const handle = await fs.open(filePath, flags)
+  try {
+    await checkPathChain(identity)
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || !sameFileSystemIdentity(identity, identityFromBigIntStats(opened))) throw new Error('changed metadata')
+    const buffer = Buffer.alloc(Number(opened.size))
+    let offset = 0
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset)
+      if (bytesRead <= 0) throw new Error('short metadata read')
+      offset += bytesRead
+    }
+    if (!sameFileSystemIdentity(identity, identityFromBigIntStats(await handle.stat({ bigint: true })))) throw new Error('changed metadata')
+    await checkPathChain(identity)
+    return { content: buffer.toString('utf8'), identity, size: Number(before.size), mtimeMs: Number(before.mtimeMs), ctimeMs: Number(before.ctimeMs) }
+  } finally {
+    await handle.close()
+  }
 }
 
 export function resolveScanLimits(partial?: Partial<ScanLimits>): ScanLimits {
@@ -251,6 +307,93 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   // 目录规则）在另一套实例里，后加载的内层规则优先于外层，与 Git 的层级语义一致。
   const alwaysIg = ignore().add(ALWAYS_IGNORE)
   const gitIg = ignore()
+  const rootGitDirectory = path.join(scanRoot, '.git')
+  let trustedGitDirectory: string | undefined
+  let trustedGitDirectoryIdentity: FileSystemIdentity | undefined
+  try {
+    const gitStat = await fs.lstat(rootGitDirectory, { bigint: true })
+    const gitIdentity = identityFromBigIntStats(gitStat)
+    if (gitStat.isDirectory() && !gitStat.isSymbolicLink() && gitIdentity) {
+      trustedGitDirectory = rootGitDirectory
+      trustedGitDirectoryIdentity = gitIdentity
+    }
+  } catch { /* a non-Git project has no trusted linked-worktree metadata root */ }
+  const snapshotFilesByPath = new Map<string, SnapshotEntry>()
+  for (const entry of snapshotEntries) if (entry.type === 'file') snapshotFilesByPath.set(entry.path, entry)
+
+  /** Detect only linked worktrees whose admin metadata is inside this selected project's .git directory. */
+  async function isLinkedWorktreeDirectory(absDir: string, relDir: string): Promise<boolean> {
+    if (!trustedGitDirectory) return false
+    const markerPath = path.join(absDir, '.git')
+    try {
+      const markerStat = await fs.lstat(markerPath)
+      if (!markerStat.isFile() || markerStat.isSymbolicLink()) return false
+      const dirStat = await fs.lstat(absDir, { bigint: true })
+      if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) return false
+      const dirIdentity = identityFromBigIntStats(dirStat)
+      if (!dirIdentity) return false
+      const marker = await readSmallVerifiedFile(markerPath, 4096, scanRoot, rootIdentity, [
+        { path: scanRoot, identity: rootIdentity },
+        { path: absDir, identity: dirIdentity }
+      ])
+      const pointer = /^gitdir:\s*(.+)\s*$/im.exec(marker.content)?.[1]
+      if (!pointer) return false
+      const adminDir = path.resolve(absDir, pointer)
+      const worktreesRoot = path.join(trustedGitDirectory, 'worktrees')
+      const relativeAdmin = path.relative(worktreesRoot, adminDir)
+      if (!relativeAdmin || relativeAdmin.startsWith('..') || path.isAbsolute(relativeAdmin) || path.dirname(relativeAdmin) !== '.') return false
+      const worktreesStat = await fs.lstat(worktreesRoot, { bigint: true })
+      if (!worktreesStat.isDirectory() || worktreesStat.isSymbolicLink()) return false
+      const worktreesIdentity = identityFromBigIntStats(worktreesStat)
+      const gitIdentity = trustedGitDirectoryIdentity
+      if (!worktreesIdentity || !gitIdentity) return false
+      const adminStat = await fs.lstat(adminDir, { bigint: true })
+      if (!adminStat.isDirectory() || adminStat.isSymbolicLink()) return false
+      const adminIdentity = identityFromBigIntStats(adminStat)
+      if (!adminIdentity) return false
+      const [commonStat, gitdirStat] = await Promise.all([
+        fs.lstat(path.join(adminDir, 'commondir')),
+        fs.lstat(path.join(adminDir, 'gitdir'))
+      ])
+      if (!commonStat.isFile() || !gitdirStat.isFile()) return false
+      const [commonValue, gitdirValue] = await Promise.all([
+        readSmallVerifiedFile(path.join(adminDir, 'commondir'), 4096, scanRoot, rootIdentity, [
+          { path: scanRoot, identity: rootIdentity },
+          { path: rootGitDirectory, identity: gitIdentity },
+          { path: worktreesRoot, identity: worktreesIdentity },
+          { path: adminDir, identity: adminIdentity }
+        ]),
+        readSmallVerifiedFile(path.join(adminDir, 'gitdir'), 4096, scanRoot, rootIdentity, [
+          { path: scanRoot, identity: rootIdentity },
+          { path: rootGitDirectory, identity: gitIdentity },
+          { path: worktreesRoot, identity: worktreesIdentity },
+          { path: adminDir, identity: adminIdentity }
+        ])
+      ])
+      const commonPath = path.resolve(adminDir, commonValue.content.trim())
+      const linkedMarkerPath = path.resolve(adminDir, gitdirValue.content.trim())
+      if (commonPath !== trustedGitDirectory || linkedMarkerPath !== path.resolve(markerPath)) return false
+      const metadataPrefix = `.git/worktrees/${relativeAdmin.split(path.sep).join('/')}`
+      const observedMetadata = [
+        { path: `${relDir}/.git`, file: marker },
+        { path: `${metadataPrefix}/commondir`, file: commonValue },
+        { path: `${metadataPrefix}/gitdir`, file: gitdirValue }
+      ]
+      for (const { path: snapshotPath, file } of observedMetadata) {
+        const recorded = snapshotFilesByPath.get(snapshotPath)
+        if (recorded) {
+          if (!sameFileSystemIdentity(recorded.identity, file.identity)) { snapshotValid = false; contentReadable = false }
+        } else {
+          const entry: SnapshotEntry = { path: snapshotPath, type: 'file', size: file.size, mtimeMs: file.mtimeMs, ctimeMs: file.ctimeMs, identity: file.identity }
+          snapshotEntries.push(entry)
+          snapshotFilesByPath.set(snapshotPath, entry)
+        }
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
 
   /** 目录与文件使用唯一规范路径，保留行尾斜杠的目录限定语义。 */
   const isIgnored = (rel: string, isDir: boolean): boolean => {
@@ -355,6 +498,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
     for (const entry of entries) {
       const rel = relDir ? `${relDir}/${entry.name}` : entry.name
       if (isIgnored(rel, entry.isDirectory())) continue
+      if (entry.isDirectory() && await isLinkedWorktreeDirectory(path.join(absDir, entry.name), rel)) continue
       if (files.length >= eff.maxFiles || treeNodes >= eff.maxTreeNodes) {
         if (files.length >= eff.maxFiles) byFileCount = true
         if (treeNodes >= eff.maxTreeNodes) byTreeNodes = true
@@ -381,12 +525,13 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
         const identity = identityFromBigIntStats(fileStat)
         if (!identity) { snapshotValid = false; contentReadable = false }
         const size = Number(fileStat.size)
-        let snapshotFile = snapshotEntries.find((entry) => entry.path === rel && entry.type === 'file')
+        let snapshotFile = snapshotFilesByPath.get(rel)
         if (snapshotFile) {
           if (!identity || !sameFileSystemIdentity(snapshotFile.identity, identity)) { snapshotValid = false; contentReadable = false }
         } else {
           snapshotFile = { path: rel, type: 'file', size, mtimeMs: Number(fileStat.mtimeMs), ctimeMs: Number(fileStat.ctimeMs), identity }
           snapshotEntries.push(snapshotFile)
+          snapshotFilesByPath.set(rel, snapshotFile)
         }
         treeNodes++
         const sensitive = classifySensitivePath(rel, sensitivePolicyRoot)
