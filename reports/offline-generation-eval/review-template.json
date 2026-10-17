@@ -1,17 +1,17 @@
 {
-  "schemaVersion": "repoprep-human-review-v1",
-  "runId": "e2d4d9e2-47dd-4ede-83a1-9041ff400c20",
+  "schemaVersion": "repoprep-human-review-v2",
+  "runId": "8461c5ab-ebe8-4479-a065-f2a580104558",
   "corpusVersion": "repoprep-eval-corpus-v1",
-  "configHash": "d4e2965a0f9dd238d3e56487b2717c78f352793dda410bcf7728332473471ad1",
-  "reportDigest": "sha256:0337e5f0230b4597f90faadc179a36be4d0a2ae294f8c4fe56bbd571964969c6",
+  "configHash": "4fb388ba39e982b92fe1869e662fc95a7f0dfbd9632ee8458911b1a7fe95e416",
+  "reportDigest": "sha256:daaddeb1c1d17c473361c788ac8ebea96a7beba0567d34856406b52e17d507d7",
   "rubric": {
-    "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.",
+    "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture. A valid source path/line range only proves the excerpt was available; it does not prove semantic support for the answer.",
     "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
     "semanticDuplication": "1 duplicates another question; 2 near duplicate; 3 partial overlap; 4 distinct with minor overlap; 5 clearly distinct."
   },
   "ratings": [
     {
-      "fingerprint": "5d0ec738e8b6446d6e789573bd668212aa4ae466498561e13fe60238bdfd06e7",
+      "fingerprint": "73b99c3d60f569f28774f07d2bb97d974384540b8731ac31e9581226e288f7d8",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does React shape the data flow in this project? (response 1, angle 1)",
@@ -23,13 +23,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "f0af702922f0a8b78f24af2a13d393883bc973da459c78b5e08ec5dcdca1a6f5",
+      "fingerprint": "9cef31a4c70de5ecaa8d747b4a456b9e6d01266be2ada28cacb5683e838212ed",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using useState here? (response 1, angle 1)",
@@ -41,13 +51,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "76669cea0a441bb37958e876675ccfa583e11bf3d13d9fb7fa266af5bc65806b",
+      "fingerprint": "a98afbf5719724c0ee3819e10e8619918ab0a7b7b8311398d3f47c429d5e4cda",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around localStorage? (response 1, angle 1)",
@@ -59,13 +79,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
+          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "path": "App.jsx",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { useState } from 'react'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e5668637da57142c89ad31a27b7c2d91efd6fa28350042de7e8e1af725623026",
+      "fingerprint": "35ef7d5d12e2d7f188273d1dc05e73b4a6c0d92c7d4875fb021d48312f9f2a80",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of filter from the shown code? (response 1, angle 1)",
@@ -77,13 +107,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c79ad7b1d440faa682146319323bd75656c1797331a8a1305d6630e6a848b77b",
+      "fingerprint": "2a028f09b0d48609c4782121ab677f2b4c32a96861ae01be1551da0a5f6d027a",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect React, and how would you verify it? (response 1, angle 1)",
@@ -95,13 +135,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "d22110db00669b952eeef5349218120f9c12a78ef8cf5f292914ab231a4665cb",
+      "fingerprint": "66cb8700f4a0eda436a37ab2fc3d021b8d17719ab899c62e93470d79fa317c21",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does useState shape the data flow in this project? (response 1, angle 2)",
@@ -113,13 +163,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
+          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "path": "App.jsx",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { useState } from 'react'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5462bcfea64e033e0ecff6e1eb1494118d4957c0cfeb8336f9c42e926aef4a0d",
+      "fingerprint": "de836b0a8776849a0bf6e55db9e7a9dd30b49f717a656151b0ca371f7a3b0b15",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using localStorage here? (response 1, angle 2)",
@@ -131,13 +191,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "27fc260528909a935a7e4221099fca354fe110dc81801d5a1440e2d74831332a",
+      "fingerprint": "e12a75301d38c0a23807a88cd5c36fd60a8e112460e6ad336fe2e06680504310",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around filter? (response 1, angle 2)",
@@ -149,13 +219,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "50d7a29171fbb68c26c244d6fa0a96028b77ddc44c9c89d62a6d9a627497d698",
+      "fingerprint": "a263d5626cdff459d8ccedd278e4fbdd5f0d5404aaf328fe5c2c6eecd9874cad",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of React from the shown code? (response 1, angle 2)",
@@ -167,13 +247,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
+          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "path": "App.jsx",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { useState } from 'react'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "50b7eec14f28fa033457e3d000ca3d468e9c8bba81ae251cf97bbd85bb4e4f8c",
+      "fingerprint": "6612ba7c74e7a894439f7b19fe15a732753f9e5331488640ddf3516535deb05e",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect useState, and how would you verify it? (response 1, angle 2)",
@@ -185,13 +275,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "4f6c1ffb8a89dc365d16860e2c132b2456a2d68d2db5078843b23f6d96b4a0d7",
+      "fingerprint": "dbd9b23da78ccf73c574a6d3f637c99427d12a5ebd6e220ba2aedd79b4597d39",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does localStorage shape the data flow in this project? (response 1, angle 3)",
@@ -203,13 +303,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "1e1042f5dfda80512b21116ad2d96a8a50f4384e9186c02bf8dff5408ce6fe25",
+      "fingerprint": "1401ce6a1eea7b5c45b5689fcfd8c2028a0a83919a1cbbbab4b4e9de4923894a",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using filter here? (response 1, angle 3)",
@@ -221,13 +331,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
+          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "path": "App.jsx",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { useState } from 'react'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "f973433d4d9d32e0653732c54a25356b4701a78ccacb3d708436b7680cc03922",
+      "fingerprint": "9cb95de6d1080bcc6d49e82e53a1fc5d996f0342ea2323e9ee575e64a873af71",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around React? (response 1, angle 3)",
@@ -239,13 +359,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e9ca9f400067e4ac649fe6cefcf5405ffbe6c219f3fd449e3eec8ca228f53b05",
+      "fingerprint": "c88c285b2b95b835114afba431b25f3906d2c70e774025aba6bcdd4e6a4b3599",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of useState from the shown code? (response 1, angle 3)",
@@ -257,13 +387,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e2cfe10d9c033acf006ae430328d791b3794d83cc6c67a01ed95d345d4a4ffcb",
+      "fingerprint": "9b98ba4023cead3b3ce5e2a0b656726a6e99c10cca96ad32c9e6d8cd266f6eb0",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect localStorage, and how would you verify it? (response 1, angle 3)",
@@ -275,13 +415,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
+          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "path": "App.jsx",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { useState } from 'react'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "ee8206a2894000504b43b5093c10d018da54dc1e9837c49b13d433bc4cd28626",
+      "fingerprint": "f1f14939f6c5ad47342d9c868eec00c4a0c6d2f5635a1dcd28ffbf125672b3ad",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does filter shape the data flow in this project? (response 1, angle 4)",
@@ -293,13 +443,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "27a829547da78b53834ef9abc347ab581e9071e4a510f042d556257c5b7403e5",
+      "fingerprint": "34dc54669a6475acf01e57d930bb0c263a61fb4977f3be8be8c41ddece9970d2",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using React here? (response 1, angle 4)",
@@ -311,13 +471,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "84a321f69390e5613e06d4007ecfd1437fb01ed89b1d15bc86a688f33177e84a",
+      "fingerprint": "147dfb0f9758125081ea6a580b23dccfa7495390d6c09444d41f8f8a8ec102ec",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around useState? (response 1, angle 4)",
@@ -329,13 +499,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
+          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "path": "App.jsx",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { useState } from 'react'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5372b392e962f452bcfc933ba75831e82bf8c767de6f6bb9ced125254f9590b7",
+      "fingerprint": "1122b7280665e504e9bfd031b315468e5549fda6dd89d11c822b27ec0fa473a3",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of localStorage from the shown code? (response 1, angle 4)",
@@ -347,13 +527,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
+          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Tiny React state example"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "76b8f608becf27c9c71510ea56fea5092a9d4337475c314671014574babdc2b3",
+      "fingerprint": "72ca6ef8db9fdba823ba2a2717c83294d452d7e6884000169a0caa3c2859ed5c",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect filter, and how would you verify it? (response 1, angle 4)",
@@ -365,13 +555,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
+          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "path": "package.json",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "{\"name\":\"fixture-react-state\",\"private\":true,\"dependencies\":{\"react\":\"18.3.1\"}}"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "961785ef0406104b304f928d32728e89e9d7efac5d7ab54345f303f43f5369cc",
+      "fingerprint": "18d15393be27a80cc27f4c7aac2c79e90e83cd1f669084991e12d7f1704f712a",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How does React shape the data flow in this project? (response 2, angle 1)",
@@ -383,13 +583,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "9420adf978289434bdd4c131f743e28742c34f1dcb8cf92f70e230e82fa18627",
+      "fingerprint": "cb5468b7f939076b0d76729eb7387273c571b1fb739a1777b987df3f244d0542",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What trade-off follows from using useState here? (response 2, angle 1)",
@@ -401,13 +602,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "ae999d54224c925d427228d207f3f0598357a4dede41851ee36d8676c39d4c70",
+      "fingerprint": "c25cb8eb56af81fe446d596afaeb29f49d4206f130afabe5c115c7d62fe7a4ba",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "Which boundary should be checked around filter? (response 2, angle 1)",
@@ -419,13 +621,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "268182b2e1c9ed010d894686b5f6733cce88c4311fb4ac3260d33179c6b0c979",
+      "fingerprint": "7c4e583280c4f1af9ae618e7210425b0bb1409f3d6dea574eaabbd2a853ad13d",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How would you explain the behavior of React from the shown code? (response 2, angle 1)",
@@ -437,13 +640,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "24af44845bc0c88963f0fd6740ea87926afa4e9f08ac2c678cfa0ada7e68307a",
+      "fingerprint": "988f89f4f57ca070034f0c792515200136c95afce080ac3f5462e20b3b0ecb3a",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What change could affect useState, and how would you verify it? (response 2, angle 1)",
@@ -455,13 +659,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "d17125e41a326a3f9eddd2b25faa5d3c4cdd8588c268844ca50304d4dc339ba2",
+      "fingerprint": "9d23aa1651592c8b4c3ab8d9086d5a1f99e9ef3fc09055abf46fe26cb4109761",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How does filter shape the data flow in this project? (response 2, angle 2)",
@@ -473,13 +678,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "70e38e0d7b39b7714408c01b581bcd20fd691a15a0546e20c18a0aab2301b9d3",
+      "fingerprint": "f7e773ba8f9edc4a948ae4b96b73e088a69c5087ac13a849590783dc138ce75c",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What trade-off follows from using React here? (response 2, angle 2)",
@@ -491,13 +697,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "36046d2238de7adf559a4136d3b100f591f4b38065ca11e46e42444eeb35667b",
+      "fingerprint": "cc1e7c25d826e7b762c5ec9c13d6eabfe3b9c7830e73ac61f8b12e20d9e3dd6d",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "Which boundary should be checked around useState? (response 2, angle 2)",
@@ -509,13 +716,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "6f965a6de4ee81ffc65fd8c368bbde3875e7125ac97e1cd9b26f4b1f2a4081f0",
+      "fingerprint": "f66b2c67965d01284545e506c911e3749f5798cca07656f6c78303cb2218ab84",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How would you explain the behavior of filter from the shown code? (response 2, angle 2)",
@@ -527,13 +735,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e54d353ab277a331b081f4e491ebe408ec77cd09dc8155438c56a1ec8f8747d6",
+      "fingerprint": "e1941ad055f7339a577047a3a188a0cc2fe9b1d854e2e356aa737b1b00cea50d",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What change could affect React, and how would you verify it? (response 2, angle 2)",
@@ -545,13 +754,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "1c7c094641d552d92c2550105d25ce650c7dc31b37f39d13529b0227f8146c2d",
+      "fingerprint": "dbc96d7dafede2612906941b0aad7b7034c175fa3ee4bb7eb6ef68525ee2aa68",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How does useState shape the data flow in this project? (response 2, angle 3)",
@@ -563,13 +773,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c173887e0e212543a4a9de52f3e3ea022583434c794b4f268004eb11acf11475",
+      "fingerprint": "c3c39c027ace3f58b1a2a6d14231acf0f394cdc6055b26b5a691077e2e67dc39",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What trade-off follows from using filter here? (response 2, angle 3)",
@@ -581,13 +792,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "61786ef4ec8084c53acb26722e5f87cfb2a02be7b0dbb18d1003b67caf82a981",
+      "fingerprint": "2be90eaa8bd0e199e557adc29b4541cb1958294145fb062aa045f0d11736aeb5",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "Which boundary should be checked around React? (response 2, angle 3)",
@@ -599,13 +811,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e216db3074e86dec5f5d302611618a967d1ca385969c1530481832b109727461",
+      "fingerprint": "c0ab0657275036feb719bb3257e7946073c94bf1763454cb372cde13c5f88903",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How would you explain the behavior of useState from the shown code? (response 2, angle 3)",
@@ -617,13 +830,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b0a1fe224f999973303c661172894ca5f8851dcfdeab3438be05de35544bab27",
+      "fingerprint": "ab8301eb90e1867ba1810ae92e1ae03186cc93bb1ac6cc311b5d6ef53819fe19",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What change could affect filter, and how would you verify it? (response 2, angle 3)",
@@ -635,13 +849,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "38f79b56ba9243b04303bf79280644a8c3304154cb211d8abb1cce990b69886d",
+      "fingerprint": "f16b2245b48c5e1b7390ac956509ad103c47725f05fb139e31e78da55163a7a9",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How does React shape the data flow in this project? (response 2, angle 4)",
@@ -653,13 +868,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "0faa583895e50597254d7c2f3ca6bca81ae4e7fdb40ee5c6566b76e79c4bcedc",
+      "fingerprint": "66aaf3f0ca5e85e6a569dabc07a4fec9969c1b46fb78ac93692b69b962f5e1b8",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What trade-off follows from using useState here? (response 2, angle 4)",
@@ -671,13 +887,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "9a7a3bdd6a2f64a4b417c4a45d1b5c803e56f230a764ab3b5f95afc21dda1469",
+      "fingerprint": "90ccf98364e16b997a2c8d57407ec2f5af78fd93e136216506a0c29fa6632ac3",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "Which boundary should be checked around filter? (response 2, angle 4)",
@@ -689,13 +906,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b30c5d12d8010415304bbfae31643852f9bcaae34b54c351b0b143c9393e1efb",
+      "fingerprint": "accac5895b008a99776fa8a3f1dce320e21cbd57cba7da2fda36b6c6e5d47930",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "How would you explain the behavior of React from the shown code? (response 2, angle 4)",
@@ -707,13 +925,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "a6afd28cfa834b4b083389ab9cd96838644f9d2646f5b44c603a2aaafd5c4016",
+      "fingerprint": "e3b18b2af19f53110a2a05ea7b59a2effaac50e404d09fc32a4a2367b350db4d",
       "caseId": "react-state",
       "variant": "baseline",
       "question": "What change could affect useState, and how would you verify it? (response 2, angle 4)",
@@ -725,13 +944,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "1abe8d4a07a9e24141d1abfe7da01658a399d8677832360a57ff59a45ef1f528",
+      "fingerprint": "fc02f2b0353480a58afae03ee408e818b6f1161104ec45fbcf2c6b196d89e929",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does Node.js shape the data flow in this project? (response 4, angle 1)",
@@ -743,13 +963,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "eb6324f90a261a04b57dcd2530045caacff3bd6de14389acb1aff0715bd1f42e",
+      "fingerprint": "d586b8fbc6906ac537e0de0f07daa83d2841e83fcf45c513f3deeac89f39a7a6",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using node:http here? (response 4, angle 1)",
@@ -761,13 +991,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e6ea538af4f68bae32ad4ccc3ce81f20c8657574614166a3c34c468bb054e9ae",
+      "fingerprint": "044b8c241985d877ab5f5b1ec69fc4903678148f144389c1268be1f0f19e763a",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around routes? (response 4, angle 1)",
@@ -779,13 +1019,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e3891ea60b64469ba1c7bd0fbefba499e9d76d11d439d5a37aec8c72200c5003",
+      "fingerprint": "ed4118005140909181ac1d194434906faf2a15a944d2bc6ba97eb208f2892882",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of /health from the shown code? (response 4, angle 1)",
@@ -797,13 +1047,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8ba84f5598181392bf0e136112e2fac54f1bb9a452b698d0986e235a08785b0b",
+      "fingerprint": "3a05926c72162a00f09f8b2f0c2f8c455e423565bc826d2c422917bedaf4b983",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect Node.js, and how would you verify it? (response 4, angle 1)",
@@ -815,13 +1075,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "f67bcc6c1a7d390e85d4a79523da95d85d772b25b17f353e631382234f222ab0",
+      "fingerprint": "ee0e168e0e5ebf3995a704180982354881b046a0a2674fb0d7a9c95fe7df36f2",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does node:http shape the data flow in this project? (response 4, angle 2)",
@@ -833,13 +1103,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8ac1c2d337e409175810e165ebb62f57ed8aa1d5c7f16616fb57a2adbc78f1f9",
+      "fingerprint": "7c78863a005fb7bc61d216481782ab524fe4377c7b6e9ae18dc6ae7ad0f70ad6",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using routes here? (response 4, angle 2)",
@@ -851,13 +1131,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5975e2dc456cd2ed27edde626e40180e83fe86cf152966e345a9bd1e71d7d443",
+      "fingerprint": "b05742306618eb729eeb8d65c8e87b0aeaf2a0d5fe1eb459a51639c52d4e3d61",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around /health? (response 4, angle 2)",
@@ -869,13 +1159,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "0f43d0c4e95698bb9aee06a62ca353d7651e68b8a9a7b5af7be426d936794585",
+      "fingerprint": "c7dbb5124f2a08654e40bde884fdc854372ba357d55e147caa4b568247499f2a",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of Node.js from the shown code? (response 4, angle 2)",
@@ -887,13 +1187,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "d47a33243393dfc9ce1d3a9577410a775c2455fd321347c3175bb1d394c7664d",
+      "fingerprint": "84a246c9f3791a43b876fda11cbc9f01b6b4b84c47f4ab3e5a931a891d6e39c2",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect node:http, and how would you verify it? (response 4, angle 2)",
@@ -905,13 +1215,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "1a8437ca11ecd30fcfb6ff4e7bd30d5e9806861d5cc8d27d6f78d56fc251432d",
+      "fingerprint": "b2872aa86826380c903919f64df6b183bb1d7752bdd9feab39d285029d63380d",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does routes shape the data flow in this project? (response 4, angle 3)",
@@ -923,13 +1243,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5341080546ad2760b28a40cd855f068180b642b7945a59a0a6fe03679a6d8c71",
+      "fingerprint": "5aa7631d65cc65e579aa970f91375bdbd2d53ec23c52b8af341c8f83c358d6b3",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using /health here? (response 4, angle 3)",
@@ -941,13 +1271,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "ce9621d29bdddc225c8626c4e6e6e49d0663c84709de860fd6df3f192851c8c3",
+      "fingerprint": "5a63e05df441aadcd21ad509937b21e3c1035d8bacc3f7d7b93080c932f8efa9",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around Node.js? (response 4, angle 3)",
@@ -959,13 +1299,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "ce99b98f88f18f48ea5168f6e41839def77efc3283eafaab8751dbb4a99cc518",
+      "fingerprint": "ac9d20c5f6f2743ddf9fbaed2cf850b02e6ebe1e76e8dd126e2f1821a5e10474",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of node:http from the shown code? (response 4, angle 3)",
@@ -977,13 +1327,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "9e2b8a95e3761d8d5f01e886e7163e4887ee72e28a2cffd15399b3afadd6cf1b",
+      "fingerprint": "b3b41d79a4a5c13e29ca031b567485b8c3619f8ea97c8b78fb13e6057d6a0e71",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect routes, and how would you verify it? (response 4, angle 3)",
@@ -995,13 +1355,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "19a5ef3e64f95bcbffa6a54db90e7ab1ed575bed0148ce73c1400eccf8b89fbb",
+      "fingerprint": "f98078855c0cc5ce4714a346424ad1e7efff16cb19a7a06f146bc0d6d049936d",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does /health shape the data flow in this project? (response 4, angle 4)",
@@ -1013,13 +1383,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "7c2c300c7e9a90776a34475cef919e0c903282d47637dbf699738d13a2c29d0d",
+      "fingerprint": "465c198770e92bc266dee347e747c9919cb4298738d870d3786228346e2bab1e",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using Node.js here? (response 4, angle 4)",
@@ -1031,13 +1411,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "2c73f1b2f7a90aaeb102078424a771229e2528e7814435152c43352f1a66660d",
+      "fingerprint": "e06f1f2c62c8ba3639cd0ad0fb723941ca2d0deb5e0a6ed337b8854bba7c171c",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around node:http? (response 4, angle 4)",
@@ -1049,13 +1439,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b38a2b1dee8644f9627d51a37f2572dd8835a82ba8968a0c66df5f523ce59608",
+      "fingerprint": "4066900591e51defc7356083aef94866694b3cf5c10d474c659979672244d7aa",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of routes from the shown code? (response 4, angle 4)",
@@ -1067,13 +1467,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
+          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# Minimal Node HTTP routes"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "919ed4a1db53ce1fd61f7c7425164670e7c76fc16565588351089da101e2486f",
+      "fingerprint": "f7cce5c4f3d482ebf24a963d969cb08f2662fa6f0eab1954fb4acbf3f54c1fde",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect /health, and how would you verify it? (response 4, angle 4)",
@@ -1085,13 +1495,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
+          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "path": "server.mjs",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import { createServer } from 'node:http'"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "1a56b329b1628c8c0ef59d333d1caaf243ea3dc7f8f577ea348d4cf4ebe3c05b",
+      "fingerprint": "14dad7777a7554b239202cd6c1a2da12d6d78a5c07c46d7aef58548664e1eb9d",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How does Node.js shape the data flow in this project? (response 5, angle 1)",
@@ -1103,13 +1523,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "6808ddc14d413b10195ce75f3cd5de183d3a1b8ea95afec0dfd94f2023339cfb",
+      "fingerprint": "32c9e613ff2f35846ee494dc1a475cbe5110b09e31edb34fbe99a20ccb86e821",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What trade-off follows from using node:http here? (response 5, angle 1)",
@@ -1121,13 +1542,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "70e6432ab86e125356bd8cbf78b5ad37d0c2aa4c5210237483dc8dbeb8ecc150",
+      "fingerprint": "156293ea13395f7c879eced1a90df7dfcb89ce54d13c70de8719553c71a1b639",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "Which boundary should be checked around routes? (response 5, angle 1)",
@@ -1139,13 +1561,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "a0a52ff28a6277186974cab6eae649b3e2a9ec3ec20a141e86aeafc6833dd096",
+      "fingerprint": "9254b1008050dc4148294e9c4d20a2b9c80b3179c14e700ad5c190dfeebfb712",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How would you explain the behavior of /health from the shown code? (response 5, angle 1)",
@@ -1157,13 +1580,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "63eca8d6f5669b22c2546bc577c0107456889bc4d03667231a128815bd4e1da1",
+      "fingerprint": "d4070ae707dd67670beae78a328fd75f302875c050441a407b5f55626cf299d6",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What change could affect Node.js, and how would you verify it? (response 5, angle 1)",
@@ -1175,13 +1599,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5a989eaceb1aca1c470b7369f9964a4db2c4a7a3aa37c4cb5d8b6d184457b160",
+      "fingerprint": "ff7de183a95d6f4ab42d098fc3b63687d26f4e76ea66c9e5f8273afaa6bdd51f",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How does node:http shape the data flow in this project? (response 5, angle 2)",
@@ -1193,13 +1618,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8157e06589f883ec4175bcf1aeac2c5d34d7e1660e06d09a99fece1422ba113f",
+      "fingerprint": "5e31b615357e60c6e1b09a21ba2439c2d3b5004c167e6e77477c4ae6e0fd870a",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What trade-off follows from using routes here? (response 5, angle 2)",
@@ -1211,13 +1637,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "7892cde7d0cb29fe3e3ef42e83835e36a94f6a7ac8e3cbfb413993b78fd91fd2",
+      "fingerprint": "65d006862b2c6b1fe2071f6276e983766d6cce48dc5c3a54667e2001d380dec8",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "Which boundary should be checked around /health? (response 5, angle 2)",
@@ -1229,13 +1656,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "669139e766a28e0d38815126b358038ae6036b26bcddcd6003d944724aa6ff2b",
+      "fingerprint": "7919cdfa8a7190197cd9a42ac4c665c50ba1633c72e94889dd0b28fe65e5be9d",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How would you explain the behavior of Node.js from the shown code? (response 5, angle 2)",
@@ -1247,13 +1675,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e4ed60da0aef52a5fb2095f820a169526aa4ef5431e10d421cec491001e76db1",
+      "fingerprint": "d4558d4e2c143e94d2a455c210697c89140e33e8b1277628f25f85b5393cddfc",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What change could affect node:http, and how would you verify it? (response 5, angle 2)",
@@ -1265,13 +1694,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "41e17a9b70afd634470ea0a8ed71434a209670cb7a0596ad4362ce95f6f3e316",
+      "fingerprint": "e23b6b75abdff5d60c5ad2368b7099fc497c6ee8bbd80088f7527b3919d97e50",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How does routes shape the data flow in this project? (response 5, angle 3)",
@@ -1283,13 +1713,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "2bff830cbece9204cb7bf8d6c1032e7c6e6b985af11b12031d6cf557e73085e1",
+      "fingerprint": "25686731b15f85bb1fb2291671b0ac35dc86060794f307aad9b47174d487ad72",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What trade-off follows from using /health here? (response 5, angle 3)",
@@ -1301,13 +1732,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "070331cb0d00d22a789d5307c014228bbe25079dc3c42b9aec8eeb8132f37c74",
+      "fingerprint": "b1e19530b010619919de2c3b2f9c2e2955749215295c6674c8a5c4449f7af909",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "Which boundary should be checked around Node.js? (response 5, angle 3)",
@@ -1319,13 +1751,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5d7722dd120fe2b088188e9ae4c4f044da9b8ba4632f13bae589217ec080a572",
+      "fingerprint": "df83170404fe4598e0d8267107fb7285ac10203ca80b1e4f1c7c30fab2e499e8",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How would you explain the behavior of node:http from the shown code? (response 5, angle 3)",
@@ -1337,13 +1770,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b277779f0d9293d38fa30b52e96a2a4f68c8a01901b64e22f7c6ca650efb0855",
+      "fingerprint": "896cf51dfc9b13f565544c71a0195b56e7ee7ec58d2e6cd3e6d725f959a14c4f",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What change could affect routes, and how would you verify it? (response 5, angle 3)",
@@ -1355,13 +1789,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "a07af7442cba94e552907089a99f74405aa0886cf09283c5694b1844320d7d1e",
+      "fingerprint": "50a51a8f7df0cdb38bda112c41734bf9cfd0d129481cbadda6f3a90f25fed2e7",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How does /health shape the data flow in this project? (response 5, angle 4)",
@@ -1373,13 +1808,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "2ae7216b75a001020ee5211379fa35590be61df0be8088d2a81ff0408b051ef7",
+      "fingerprint": "d899f96a26f507d6d51f1b6b283b994e7ccc17c62d4f20eb11a86e756838b85c",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What trade-off follows from using Node.js here? (response 5, angle 4)",
@@ -1391,13 +1827,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5aee4e3f428e897695fb6c8ac0a75c035cf4214bb23449967aaa0cb7c113aa25",
+      "fingerprint": "abbde8e1ef805fa00c50ec3f519059270fadc66f8a01f0f79f162b6f182db59a",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "Which boundary should be checked around node:http? (response 5, angle 4)",
@@ -1409,13 +1846,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "d5da28eb5c45e759cb6705204caff5781f84152f7636663570a910d0a753980d",
+      "fingerprint": "2b5835705ca2e0fa6c1bcbca8479c8741da4ff281a03392d08604b28f812aa9d",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "How would you explain the behavior of routes from the shown code? (response 5, angle 4)",
@@ -1427,13 +1865,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "719f4ac28c521035dee2eb9bee819614905ad599c052d628b7b17cd7d172b539",
+      "fingerprint": "4d01121cd950f74cb5abf2fd8bfc211a3122ee043d211412b0fe337eb6a5e065",
       "caseId": "node-routes",
       "variant": "baseline",
       "question": "What change could affect /health, and how would you verify it? (response 5, angle 4)",
@@ -1445,13 +1884,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8b4f6d3a286142d8ad0cdbd71376f63cb6b46a356c610868c9f3eb1b3e786a74",
+      "fingerprint": "9ffe0e8742ea3d053f7e1defbd00b4d1cd9810fe71a30ccbdbc1c253453e135b",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 6, angle 1)",
@@ -1463,13 +1903,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c1ac5770b5f68b6cbb317f775512f0fcf845bc55b3cd42d991bc3772fd72b025",
+      "fingerprint": "2f61005bcd2c13eacfad838595913ec9506244f776b37d22c886fb2efdcdcb47",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 6, angle 1)",
@@ -1481,13 +1931,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "48ca08065e67c101bf1bf7605b5781ddbbd27ace4e42167490f064590acbcc97",
+      "fingerprint": "adc4b443308aeb82ceb8074f83ae526a8883193ea66e5dfc2e87a0b5efe86aaf",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 6, angle 1)",
@@ -1499,13 +1959,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "0706aeafbe8b0dd31a8fc53e5ec50b387fd97d6cad799bb95934178feeaab5e1",
+      "fingerprint": "6e25570818df38771996c640fe6f0c2a7b878afa2429db5e9b6c213a808bdd95",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)",
@@ -1517,13 +1987,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b697c19e055f20a85cfd39d9c315cffc4a5d17f3207562dc73fee1a2b6ff84bb",
+      "fingerprint": "438ede0455e8f0d53294f28a16b0ec6be48a2ca19e25a33274aa440bb26f4bff",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 6, angle 1)",
@@ -1535,13 +2015,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "cdce42aa05ce45cbc6d7d9f01baf967b2f8b8d55199681653e299cb40bfcfcd3",
+      "fingerprint": "b09c3e7407e33bda5f7b1e6c3d1c1bb3bf6d7e6019720508189fb2d334f223b8",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 7, angle 1)",
@@ -1553,13 +2043,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8e29d3e6660a897e1a1667ff1319a39346af464301737c247dba789bdaf72389",
+      "fingerprint": "04f314d6112ca5cb97eaea4d52b332176ba34711ee0fa4cda552da0b788d1a3d",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 7, angle 1)",
@@ -1571,13 +2071,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "4b07e127378459478deef315fac017a688bf2954fc0869f33364649983dc3cf0",
+      "fingerprint": "f34714c94ed8f0105a93987277491a0e6db69aae55380448f2f10ac8876dd91a",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 7, angle 1)",
@@ -1589,13 +2099,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "1d238c0bccd7bf1c940b3005d76f34d33653c1cfbfbe9edd90ed7148596a5cf8",
+      "fingerprint": "d5cf9d2fb23ceef6504a40cde05ccc86550484b7acff7ed5f0088eb063381f80",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)",
@@ -1607,13 +2127,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "40ed5852487f89df1945b12075d5e9b78fe4eb81534e23c98f16b47d8a172973",
+      "fingerprint": "3678772b47c354a9f166ccf1035aab05553efaf55e51a591d93fba9954c88e83",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 7, angle 1)",
@@ -1625,13 +2155,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "bac41ab9a4077ffe28dd005bc7a74d84ee59995c2a54ba12c377b9fc09312acb",
+      "fingerprint": "8dc6ebe3fc10d5deabf279a0ddcc896b3d292dbfbf34d70148fc4aaabc491dc4",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 8, angle 1)",
@@ -1643,13 +2183,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "aac3cf66edccb34c0170ac3b70d93ed58e0feabe73d34c09559fbf1c3f45f84b",
+      "fingerprint": "94fdd08fb930d9e9ada8da60b4cb0ff476d683b0c5f90d383870e81f8f6370ec",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 8, angle 1)",
@@ -1661,13 +2211,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e7112e3fdb35b304c6f6c3724b55b3367494c5079d256c26f28e57695ab51d27",
+      "fingerprint": "c45dc228d17de5471baaea6c81b8732c73b621e8cc09851f9e929f5d74a11616",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 8, angle 1)",
@@ -1679,13 +2239,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "875579a272298574556edafab4edea0960333a9b66980c8e7a61f433009bb018",
+      "fingerprint": "541c1f27467dc30e4ccc720cca0d3314e5b1fa76bc2272d6cb91a50536562d96",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 8, angle 1)",
@@ -1697,13 +2267,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "cccebe8d3ff93681ef570aa8f19ea0393fe3a038cd0b41269cb0f032dd7bd0e1",
+      "fingerprint": "d6ce006c2fbb939f1453da5d9dcf33f5797350a9116adc2426a3b0e361896015",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 8, angle 1)",
@@ -1715,13 +2295,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "9cc4b2509480ca01d1a270e8d70fa6941661206de9e28e285a577821bcad1fe4",
+      "fingerprint": "e0079cf11fb7e4c770b76510ba819b99ed354ba15da6e3171d4ca252b3558c0c",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does csv shape the data flow in this project? (response 8, angle 2)",
@@ -1733,13 +2323,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "2ca4d56da73ef6e06444f4041815129e48b3f75b2ad78a335ce0ce7cacfd3215",
+      "fingerprint": "1cf95bc0b66d284c4305d0a4ec7935909cd06cf47a6f716aa3230dc1a08c1048",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using dry-run here? (response 8, angle 2)",
@@ -1751,13 +2351,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "70714bfad6b92e4c12a5430142f4998c3b58a7c90a1ef1a235977918dc18a70f",
+      "fingerprint": "472a7a75aecc365cc82525d9041ab08b0f827144a8b4e25ac833ec9554d3fd1c",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around pathlib? (response 8, angle 2)",
@@ -1769,13 +2379,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
+          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "path": "README.md",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "# CSV preview CLI"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "55d3955f1f707be1110ea83f8166d3e4a7ed60cea8a704e1f5ca3f6fa83c1176",
+      "fingerprint": "1c00bdbc6a1700cc12cd09e5134062af692d6d39df3cc6104b525ac36a17f6ed",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 9, angle 1)",
@@ -1787,13 +2407,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "bc0416929a3d267f4c6f52ca151fb10d8475d172948311e88e9d2f9a6ff2b24d",
+      "fingerprint": "d9edec44f34f9f295e474548e9ffce38a707a9ed06403fe7d280bea7fbdee796",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 9, angle 1)",
@@ -1805,13 +2435,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "dbd23cf310a356e2d727757c9d2d9767596a9ac12c1832f1140b5a59daae6c84",
+      "fingerprint": "1e026a2bba6762488889048952529b78a8ef53f1761c43cb4052208016412c66",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 9, angle 1)",
@@ -1823,13 +2463,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c4734d7d7e5f663c305cdf20a16864028ffa5bcc28a52410e1c7b110b4f6a158",
+      "fingerprint": "812e0dece88fdab0ed05718bf3159ca69bb49ec0399151bf3540b12854d9ab34",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 9, angle 1)",
@@ -1841,13 +2491,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5960e729c53ef7f219b89b96531cb8dc5bfb57d75d653ebf4c8e4ce3bf394303",
+      "fingerprint": "2c359619cbfdc610d29c6ad8ef6f07757a3c1de9b175e5a06ca3a027d872b0e3",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 9, angle 1)",
@@ -1859,13 +2519,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c80982a74433a66b1faed855f9c80506eb2a694b55bb195303a3a74eaa21af57",
+      "fingerprint": "23b5f69c30bcc5fed9da0716235d9211aa00f67d2be5b4079e15e7418e247f71",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does csv shape the data flow in this project? (response 9, angle 2)",
@@ -1877,13 +2547,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "99f2f428c0772648765abb26c76475a50516f660f339365cb26ac3f116e25c3d",
+      "fingerprint": "0d2586657a2a586028dab2d36c8ac8455db4c427badd8f8c336e3a1ef49f573e",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using dry-run here? (response 9, angle 2)",
@@ -1895,13 +2575,23 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [
+        {
+          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
+          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "path": "preview.py",
+          "startLine": 1,
+          "endLine": 1,
+          "excerpt": "import argparse"
+        }
+      ],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "5e8c944fe2f27741dc2cce196a3db2b83917173bec857b9cae02131ee9cd8690",
+      "fingerprint": "49a4e13325a11935f4534f3c91655100eaa535b67a9b8dedad5ab521e2e7df86",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does argparse shape the data flow in this project? (response 10, angle 1)",
@@ -1913,13 +2603,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "295485415eebdbf1853926eac10a56a0ab1e0d90af6bba4086f143252b49c86f",
+      "fingerprint": "c93cf3e878268cd1f728c11b245aca7e7ecb864393ff8fcd0d71c609cab4f680",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using csv here? (response 10, angle 1)",
@@ -1931,13 +2622,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "4942ced80b53b729cba06c60d667761a4788ad2c9fb410f8c62af09d8e9f77fd",
+      "fingerprint": "5519b833b17137f8610336218853ad0aa6ff17a833776be8ae11b324e8ba4721",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "Which boundary should be checked around dry-run? (response 10, angle 1)",
@@ -1949,13 +2641,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "41d19160627e2632b6b727190a9cba9c0d91733431d2a2d16f8869958556d9b8",
+      "fingerprint": "272561b3c5fdd9aaac69fac52289f6aab9a5aa98266194707d71262d5e3a6a7f",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 10, angle 1)",
@@ -1967,13 +2660,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "3b651e4b8484e6e3cd86cb78701ab5d438858fccc51a6cf1aa5be7d69de137c0",
+      "fingerprint": "fb2dfa34b9da5606e60175da556370edcef5de1a893c868ae70247fc85ab102b",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What change could affect argparse, and how would you verify it? (response 10, angle 1)",
@@ -1985,13 +2679,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b3fb5760fb73a8e66be581b053a90b862100b8d874f1e42ad5f07a96f2a133e3",
+      "fingerprint": "d997ab5c6ab6054ac66c243a79d56aa5898b4f34010d609f4fce372fc916bfb2",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does csv shape the data flow in this project? (response 10, angle 2)",
@@ -2003,13 +2698,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "95534511ee4811f6eca6d760ddcc86d06988287b3f253892722732ebd5b2924e",
+      "fingerprint": "081efa78a91697c7ade8bafa0824141b5b1ef4b45dbdf29f3b81dd986b354949",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using dry-run here? (response 10, angle 2)",
@@ -2021,13 +2717,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "45c16cbb411a191f10aad02d50f8700ca489661433e094196e113885f3516b8a",
+      "fingerprint": "97d63eb4f1f148f221d0e2d82a75cddd156e66c0c96a4f1b1ed58fa7da6ebbcb",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "Which boundary should be checked around pathlib? (response 10, angle 2)",
@@ -2039,13 +2736,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "aedfa45f002deaebc0149ce35c0d0e645fb3b43a1ff06827803bf5e232e7c1cf",
+      "fingerprint": "78fbc34fe314409978adbd8ed4154792babb8f0a7086c77b8d3682d35d206e61",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How would you explain the behavior of argparse from the shown code? (response 10, angle 2)",
@@ -2057,13 +2755,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "73629a7d0236fd771f2bb52e100bdb96b6f655dda5f0644326ec090764c30858",
+      "fingerprint": "5960cf56be4ee16845a4052414a3541fb8bf8ac3edfd4ab78d73ffd4f16b5e47",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What change could affect csv, and how would you verify it? (response 10, angle 2)",
@@ -2075,13 +2774,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "9c288c6077c22adfdda7a80185e50e3930e28f6d325048dbb388e217b85fd030",
+      "fingerprint": "1e05333a820c6ecafa78005e823e0dbece41edd4de4d4e92a8040546fb3c0b4a",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does dry-run shape the data flow in this project? (response 10, angle 3)",
@@ -2093,13 +2793,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c2d38a4c4cc5d10b5bf5b7aba434e9c8568e792dc2215e5efe5234c72792ae88",
+      "fingerprint": "bddf5a63e4f1f3822d4973f89804540634368a2cc33d445a5d770b83d6753bbb",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using pathlib here? (response 10, angle 3)",
@@ -2111,13 +2812,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "cd80e8aa3c31e5c3d7ccdce526e13383514ea2d5ee5dd587ba9615da0b4cf796",
+      "fingerprint": "fef3bf3c872a0c71815d862bbe2e5fc805ff99dcf43a439cf3cb6c78c5c8fad8",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "Which boundary should be checked around argparse? (response 10, angle 3)",
@@ -2129,13 +2831,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "120c2863e6693caf53c437a492131252c9b853b7f7e25c016f832efb8ae447b2",
+      "fingerprint": "a586091239e432571c77b2318d33edfe1ecc087a988b6e419db902202a6b5fe6",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How would you explain the behavior of csv from the shown code? (response 10, angle 3)",
@@ -2147,13 +2850,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8981305000e099a416ade74de66bcc063075984ce7af7f676dd34890a94c5438",
+      "fingerprint": "f3e43b6fbbcca4932f4f8a6e7ccd45b03fdbbf7f41ae35d6fd9d34baaba800c3",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What change could affect dry-run, and how would you verify it? (response 10, angle 3)",
@@ -2165,13 +2869,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b934328e4427a136be6044788373918841a8c61bc9160ee3bd690a175c5f72ae",
+      "fingerprint": "43e76f35f5a3b187222ec65942123d501fb6f2aea81bd4d6cad894b0f91e45ca",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does pathlib shape the data flow in this project? (response 10, angle 4)",
@@ -2183,13 +2888,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "a685aaf20f6bca2d1878807cb65cf1f2f1d3863bde1d0f48e0b560f01a95f8b0",
+      "fingerprint": "e8cd2cc021dc488abd87e8b7d71d8a112178b09ab2e8ed59b5774f5d3c51db35",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using argparse here? (response 10, angle 4)",
@@ -2201,13 +2907,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "384abdace040aa8efe3542b1b5c8f6e35765c4fe552bcb517f7c71906f3aa642",
+      "fingerprint": "1bd39140ec2bb2cd98286935f111bb1abf313807bc1a50513ce37e11cf8334bc",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "Which boundary should be checked around csv? (response 10, angle 4)",
@@ -2219,13 +2926,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "bfe1b8dc15063dda31648c7b93f1b73179ceeee7dbf2372548a4c6a1293c7ca1",
+      "fingerprint": "66bb62942da82fe35d431e844ac486bb6e4ab55ee35993a8440be02c05adae7c",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How would you explain the behavior of dry-run from the shown code? (response 10, angle 4)",
@@ -2237,13 +2945,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "ca197d27f01f2a1f30a58e3477d57effdf40e65dfc6f60e332e219c63a10d312",
+      "fingerprint": "c59e88c93d17d46e84e95f77b4aefbeaaf9b8a09dc96cea3a4a58aeb81473040",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What change could affect pathlib, and how would you verify it? (response 10, angle 4)",
@@ -2255,13 +2964,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "bd6edcc9a903e55fdc9cfc603ba62de225b0fcc2056d9c315b988d888b058a0f",
+      "fingerprint": "eac5dbf481d3dc11b47b65c5b9fbc7b8c436eb32c10418dd77923522993c156e",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does argparse shape the data flow in this project? (response 10, angle 5)",
@@ -2273,13 +2983,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "70ae9a7f677f21b1267c0d7d1525f158757f6dd4ab7802b3d4d99de74ba97ca7",
+      "fingerprint": "572c1deb4f3fce9b9ba277b98e5ebeda01d14b5c943c7df4f0d080ad19b3741e",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using csv here? (response 10, angle 5)",
@@ -2291,13 +3002,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "f114e7ca66d5aedad787f9b39120b335bb2cebf6bdaa86365b46d73a9dc1e9b7",
+      "fingerprint": "a0df937baa5c20af67acd3f34a3ca5f13be6196ddcc49671578568c432b430e8",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "Which boundary should be checked around dry-run? (response 10, angle 5)",
@@ -2309,13 +3021,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "8bdcc3f9a1e3ef3a56bad3f77ddceb82698ecf70bd082aa5d40406a0be77c432",
+      "fingerprint": "7460646d0d0678b7d98fdfb3a9f081c87b8638930635f090d0878b7a5f2642f3",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 10, angle 5)",
@@ -2327,13 +3040,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "91319ce3b180d36a0f6aec73728e721849243a7fe5a35b61a8ab28e9288e98ce",
+      "fingerprint": "a8405250ce40aa7bcf7b95a488c26fea2d78e719b70d925e21b708fa3b9ca136",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What change could affect argparse, and how would you verify it? (response 10, angle 5)",
@@ -2345,13 +3059,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "c8eb23edabcd895a416b22598670b212729ddeee610ae7ce4f78bb66ebe6f4d3",
+      "fingerprint": "380b83a86431a50312da73c439adb541ad7fc230dfbde3afc097c2ba82cc6c0b",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does csv shape the data flow in this project? (response 10, angle 6)",
@@ -2363,13 +3078,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "a0e5d50d64a3b4cfd24dd9dc5955e5f67912d50b6ce94b2237e8cf6e5818e0b0",
+      "fingerprint": "78b990028852bd0bb96f103e0bd26fcfdcb3f66a86a7344bbbd570d6e0f60e4d",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using dry-run here? (response 10, angle 6)",
@@ -2381,13 +3097,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "852fa1c063cedac3cc0adb036a54676613293cdafe8e80ac2eaeb2a931dda881",
+      "fingerprint": "b8957dc0b1018703bb6f88ec1786386d31963e9e49171c89d4f3f5a071c75eb3",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "Which boundary should be checked around pathlib? (response 10, angle 6)",
@@ -2399,13 +3116,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "f645f86296d62cb859eb7f0c5b737f66b7ca9bbfcaedb59211d4d657b557861e",
+      "fingerprint": "602f324e8fdd2d63368e08f10ca5609c88a99efc94634b4c4c8eb6c6221ac57e",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How would you explain the behavior of argparse from the shown code? (response 10, angle 6)",
@@ -2417,13 +3135,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "283b82535e951e048c164f7013d746d2bfdb5d0cb444fc536e683a52a718533d",
+      "fingerprint": "3e19348efc4acae61c1f33a224791d3816a6bd8912470d73bca9eec9a73441d6",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What change could affect csv, and how would you verify it? (response 10, angle 6)",
@@ -2435,13 +3154,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "e75cfd5f2236ad5c80d8a15cebd753eec2b8fdec2486c938ca3f1dc16741e12d",
+      "fingerprint": "51df341cf9911e0993b2f50705437dc10e2b3d9ef444342845bfa1e14255c5c7",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "How does dry-run shape the data flow in this project? (response 10, angle 7)",
@@ -2453,13 +3173,14 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
       "note": ""
     },
     {
-      "fingerprint": "b86c2d502d9893c8d701c46c135f85522f8a597d2cdde28cd3705b8d429f429e",
+      "fingerprint": "58c5462479d1119bdd49c3ced482a176025fc115f51f35839068ae55b514d54b",
       "caseId": "python-cli",
       "variant": "baseline",
       "question": "What trade-off follows from using pathlib here? (response 10, angle 7)",
@@ -2471,6 +3192,7 @@
           "followUps": []
         }
       ],
+      "sourceEvidence": [],
       "factualCorrectness": null,
       "projectRelevance": null,
       "semanticDuplication": null,
