@@ -12,6 +12,19 @@ body {
   @apply bg-slate-100 text-slate-800 antialiased;
 }
 
+.app-titlebar {
+  -webkit-app-region: drag;
+}
+
+.app-titlebar-actions,
+.app-titlebar-actions button {
+  -webkit-app-region: no-drag;
+}
+
+.app-titlebar-actions {
+  margin-right: max(138px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)));
+}
+
 /* 飞书风格：可点击的专业名词 */
 .term-link {
   @apply cursor-pointer text-indigo-600;

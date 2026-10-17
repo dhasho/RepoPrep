@@ -64,7 +64,8 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   const readyPromise = new Promise((resolve) => { ready = resolve })
 
   class FakeWindow {
-    constructor() {
+    constructor(options) {
+      this.options = options
       this.destroyed = false
       this.sent = []
       this.webContents = {
@@ -202,6 +203,27 @@ const explainRequest = (requestId = randomUUID()) => ({
   projectSummary: 'demo',
   question: '怎样处理超时？',
   snippet: '模型请求片段'
+})
+
+test('Windows uses native caption controls over the application titlebar without changing renderer isolation', async () => {
+  const h = await createHarness()
+  const options = h.window.options
+
+  if (process.platform === 'win32') {
+    assert.equal(options.titleBarStyle, 'hidden')
+    assert.deepEqual(options.titleBarOverlay, { color: '#ffffff', symbolColor: '#475569', height: 48 })
+  } else {
+    assert.equal(options.titleBarStyle, undefined)
+    assert.equal(options.titleBarOverlay, undefined)
+  }
+  assert.equal(options.minWidth, 1100)
+  assert.deepEqual(options.webPreferences, {
+    preload: options.webPreferences.preload,
+    sandbox: true,
+    contextIsolation: true,
+    nodeIntegration: false,
+    webviewTag: false
+  })
 })
 
 test('trusted renderer reaches the exact generation-timeout business message through the real IPC guard', async () => {

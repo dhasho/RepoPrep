@@ -75,6 +75,10 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: 'RepoPrep',
+    ...(process.platform === 'win32' ? {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#ffffff', symbolColor: '#475569', height: 48 }
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
