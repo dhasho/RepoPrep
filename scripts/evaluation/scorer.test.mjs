@@ -27,7 +27,7 @@ test('old results without evidence remain scoreable and external evidence is mar
   const oldResult = valid(['How does useState work?', 'Where is the filter applied?'])
   const report = scoreCase(oldResult, fixture)
   assert.equal(report.contract.pass, true)
-  assert.deepEqual(report.sourceEvidence.questionCoverage, { questionsWithRetainedEvidence: 0, totalQuestions: 2, rate: 0 })
+  assert.deepEqual(report.sourceEvidence.questionCoverage, { questionsWithRetainedEvidence: 0, reportedEvidenceBearingQuestions: 0, totalQuestions: 2, rate: 0 })
   assert.equal(report.sourceEvidence.declaredStats, null)
   assert.equal(report.sourceEvidence.verification, 'external-result-contract-only')
   const evidence = { sourceId: 'declared-source', snapshotHash: 'b'.repeat(64), path: 'src/App.jsx', startLine: 1, endLine: 1, excerpt: 'useState(0)' }
@@ -71,6 +71,16 @@ test('illegal evidence contract and retained-summary mismatch cannot pass', () =
   assert.equal(malformedScore.contract.pass, false)
   assert.equal(malformedScore.sourceEvidence.sourceEvidenceContract.pass, false)
   assert.ok(malformedScore.alerts.includes('invalid_source_evidence_contract'))
+  const emptyObject = valid(['How does useState work?', 'Where is the filter applied?'])
+  emptyObject.sections[0].questions[0].sourceEvidence = [{}]
+  const emptyObjectScore = scoreCase(emptyObject, fixture)
+  assert.equal(emptyObjectScore.contract.pass, false)
+  assert.equal(emptyObjectScore.sourceEvidence.sourceEvidenceContract.pass, false)
+  assert.equal(emptyObjectScore.sourceEvidence.questionCoverage.questionsWithRetainedEvidence, 0)
+  assert.equal(emptyObjectScore.sourceEvidence.questionCoverage.reportedEvidenceBearingQuestions, 1)
+  assert.equal(emptyObjectScore.sourceEvidence.questionCoverage.rate, 0)
+  assert.deepEqual(emptyObjectScore.sourceEvidence.retainedCanonicalRefs, [])
+  assert.ok(emptyObjectScore.alerts.includes('invalid_source_evidence_contract'))
 })
 
 test('malformed arrays and null sections safely report contract failure', () => {

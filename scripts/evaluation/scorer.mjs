@@ -38,7 +38,7 @@ export function scoreCase(result, fixture, { evidenceVerification = 'external-re
     const intOrNull = value => Number.isSafeInteger(value) ? value : null
     return { questionIndex, sourceId: textOrNull(ref.sourceId), snapshotHash: textOrNull(ref.snapshotHash), path: textOrNull(ref.path), startLine: intOrNull(ref.startLine), endLine: intOrNull(ref.endLine), excerpt: textOrNull(ref.excerpt) }
   }))
-  const evidenceBearingQuestions = questions.filter(question => question.sourceEvidence.length > 0).length
+  const reportedEvidenceBearingQuestions = questions.filter(question => question.sourceEvidence.length > 0).length
   const summary = result && typeof result === 'object' && result.sourceEvidenceSummary && typeof result.sourceEvidenceSummary === 'object'
     ? result.sourceEvidenceSummary
     : null
@@ -53,7 +53,12 @@ export function scoreCase(result, fixture, { evidenceVerification = 'external-re
       : evidenceVerification === 'baseline-no-source-manifest'
         ? 'Baseline provided no code source manifest; source references were unavailable.'
         : 'External result evidence can be checked against result contract and declared counts only; this does not prove any reference was sent to a model or semantically supports an answer.',
-    questionCoverage: { questionsWithRetainedEvidence: evidenceBearingQuestions, totalQuestions: questions.length, rate: questions.length ? evidenceBearingQuestions / questions.length : 0 },
+    questionCoverage: {
+      questionsWithRetainedEvidence: sourceEvidenceContractPass ? reportedEvidenceBearingQuestions : 0,
+      reportedEvidenceBearingQuestions,
+      totalQuestions: questions.length,
+      rate: questions.length && sourceEvidenceContractPass ? reportedEvidenceBearingQuestions / questions.length : 0
+    },
     retainedCanonicalRefs: sourceEvidenceContractPass ? reportedEvidenceRefs : [],
     declaredStats: summary ? {
       asked: Number.isSafeInteger(summary.asked) ? summary.asked : null,
