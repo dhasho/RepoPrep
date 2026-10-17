@@ -1,9 +1,9 @@
 {
   "schemaVersion": "repoprep-human-review-v2",
-  "runId": "8461c5ab-ebe8-4479-a065-f2a580104558",
+  "runId": "cc06d281-1af5-4521-8b60-fec4bd520521",
   "corpusVersion": "repoprep-eval-corpus-v1",
   "configHash": "4fb388ba39e982b92fe1869e662fc95a7f0dfbd9632ee8458911b1a7fe95e416",
-  "reportDigest": "sha256:daaddeb1c1d17c473361c788ac8ebea96a7beba0567d34856406b52e17d507d7",
+  "reportDigest": "sha256:66872bd74dfa140a946fb072db0aa693a86395e3b12b8af42ea80bea0bed6f63",
   "rubric": {
     "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture. A valid source path/line range only proves the excerpt was available; it does not prove semantic support for the answer.",
     "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
@@ -11,7 +11,7 @@
   },
   "ratings": [
     {
-      "fingerprint": "73b99c3d60f569f28774f07d2bb97d974384540b8731ac31e9581226e288f7d8",
+      "fingerprint": "e40bec8de32ee52ee87cc92082619c1a7a26b6ad262b6334ab76c7a2119cb4f7",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does React shape the data flow in this project? (response 1, angle 1)",
@@ -25,8 +25,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -39,7 +39,7 @@
       "note": ""
     },
     {
-      "fingerprint": "9cef31a4c70de5ecaa8d747b4a456b9e6d01266be2ada28cacb5683e838212ed",
+      "fingerprint": "29aa0bb5330bec231c06220b50ea99b2708f56f114da939d76ee8e2453b02fd1",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using useState here? (response 1, angle 1)",
@@ -53,8 +53,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -67,7 +67,7 @@
       "note": ""
     },
     {
-      "fingerprint": "a98afbf5719724c0ee3819e10e8619918ab0a7b7b8311398d3f47c429d5e4cda",
+      "fingerprint": "b5e6a283e8b8efdbe6dbeaa854b1ce4836027f0d3b13f1c377c02190c30d58ae",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around localStorage? (response 1, angle 1)",
@@ -81,8 +81,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
-          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "sourceId": "1cbae753-ec7f-4a98-983b-84903a0f810f",
+          "snapshotHash": "5cf8bd06b1437eefe24b8dca0956aa4688d9973ddef030660ea8672675c077a3",
           "path": "App.jsx",
           "startLine": 1,
           "endLine": 1,
@@ -95,7 +95,7 @@
       "note": ""
     },
     {
-      "fingerprint": "35ef7d5d12e2d7f188273d1dc05e73b4a6c0d92c7d4875fb021d48312f9f2a80",
+      "fingerprint": "d86bce7649ca3c7ee73fdd76a93fb7a55a5640a3896719e3b6d60e71dc0da476",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of filter from the shown code? (response 1, angle 1)",
@@ -109,8 +109,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -123,7 +123,7 @@
       "note": ""
     },
     {
-      "fingerprint": "2a028f09b0d48609c4782121ab677f2b4c32a96861ae01be1551da0a5f6d027a",
+      "fingerprint": "0f178555d30f7715c370c768c7bc44a7de5fe7152e8326222f54238c20048016",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect React, and how would you verify it? (response 1, angle 1)",
@@ -137,8 +137,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -151,7 +151,7 @@
       "note": ""
     },
     {
-      "fingerprint": "66cb8700f4a0eda436a37ab2fc3d021b8d17719ab899c62e93470d79fa317c21",
+      "fingerprint": "53ea35f800e42ec19b7f776dbb113ac8b7de875ae21259583968eeb558002bf4",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does useState shape the data flow in this project? (response 1, angle 2)",
@@ -165,8 +165,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
-          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "sourceId": "1cbae753-ec7f-4a98-983b-84903a0f810f",
+          "snapshotHash": "5cf8bd06b1437eefe24b8dca0956aa4688d9973ddef030660ea8672675c077a3",
           "path": "App.jsx",
           "startLine": 1,
           "endLine": 1,
@@ -179,7 +179,7 @@
       "note": ""
     },
     {
-      "fingerprint": "de836b0a8776849a0bf6e55db9e7a9dd30b49f717a656151b0ca371f7a3b0b15",
+      "fingerprint": "4c84fbc95988a4640ea6fee0dfb919e9afb9f8fdd3d45431dc74c711a15534e2",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using localStorage here? (response 1, angle 2)",
@@ -193,8 +193,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -207,7 +207,7 @@
       "note": ""
     },
     {
-      "fingerprint": "e12a75301d38c0a23807a88cd5c36fd60a8e112460e6ad336fe2e06680504310",
+      "fingerprint": "6059d612dda7cac881ef841e7def97dc73fc0bfdd5d941ed1ede20399ccefb56",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around filter? (response 1, angle 2)",
@@ -221,8 +221,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -235,7 +235,7 @@
       "note": ""
     },
     {
-      "fingerprint": "a263d5626cdff459d8ccedd278e4fbdd5f0d5404aaf328fe5c2c6eecd9874cad",
+      "fingerprint": "2442bf2a4071ef5a4db7dfec1c70ed78ac6e198c1de2d2defce759506903f267",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of React from the shown code? (response 1, angle 2)",
@@ -249,8 +249,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
-          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "sourceId": "1cbae753-ec7f-4a98-983b-84903a0f810f",
+          "snapshotHash": "5cf8bd06b1437eefe24b8dca0956aa4688d9973ddef030660ea8672675c077a3",
           "path": "App.jsx",
           "startLine": 1,
           "endLine": 1,
@@ -263,7 +263,7 @@
       "note": ""
     },
     {
-      "fingerprint": "6612ba7c74e7a894439f7b19fe15a732753f9e5331488640ddf3516535deb05e",
+      "fingerprint": "319ed772ca649195efddf79a1f1f78878933d27a082f1d3384f0cfb41513e463",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect useState, and how would you verify it? (response 1, angle 2)",
@@ -277,8 +277,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -291,7 +291,7 @@
       "note": ""
     },
     {
-      "fingerprint": "dbd9b23da78ccf73c574a6d3f637c99427d12a5ebd6e220ba2aedd79b4597d39",
+      "fingerprint": "aa497c06c56666906e8beee3b259504d1844d54bf65ae2a242b9d1333031fde4",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does localStorage shape the data flow in this project? (response 1, angle 3)",
@@ -305,8 +305,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -319,7 +319,7 @@
       "note": ""
     },
     {
-      "fingerprint": "1401ce6a1eea7b5c45b5689fcfd8c2028a0a83919a1cbbbab4b4e9de4923894a",
+      "fingerprint": "36be5136ebac01b8bd9ccd54d62c91f9b40863a37cfcd911c47a2cc024261d86",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using filter here? (response 1, angle 3)",
@@ -333,8 +333,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
-          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "sourceId": "1cbae753-ec7f-4a98-983b-84903a0f810f",
+          "snapshotHash": "5cf8bd06b1437eefe24b8dca0956aa4688d9973ddef030660ea8672675c077a3",
           "path": "App.jsx",
           "startLine": 1,
           "endLine": 1,
@@ -347,7 +347,7 @@
       "note": ""
     },
     {
-      "fingerprint": "9cb95de6d1080bcc6d49e82e53a1fc5d996f0342ea2323e9ee575e64a873af71",
+      "fingerprint": "6342680e09e06a053022ed3af8a2c68cd6d9977ce0a111851623f1255608ff77",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around React? (response 1, angle 3)",
@@ -361,8 +361,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -375,7 +375,7 @@
       "note": ""
     },
     {
-      "fingerprint": "c88c285b2b95b835114afba431b25f3906d2c70e774025aba6bcdd4e6a4b3599",
+      "fingerprint": "d2c028780605057dc1cedcc8f7a92511f255674efd050edf4a3c67689185c9ea",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of useState from the shown code? (response 1, angle 3)",
@@ -389,8 +389,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -403,7 +403,7 @@
       "note": ""
     },
     {
-      "fingerprint": "9b98ba4023cead3b3ce5e2a0b656726a6e99c10cca96ad32c9e6d8cd266f6eb0",
+      "fingerprint": "a908a2ad56000eb07a2d108e5478972689b999105a1e5bb222031399400a486d",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect localStorage, and how would you verify it? (response 1, angle 3)",
@@ -417,8 +417,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
-          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "sourceId": "1cbae753-ec7f-4a98-983b-84903a0f810f",
+          "snapshotHash": "5cf8bd06b1437eefe24b8dca0956aa4688d9973ddef030660ea8672675c077a3",
           "path": "App.jsx",
           "startLine": 1,
           "endLine": 1,
@@ -431,7 +431,7 @@
       "note": ""
     },
     {
-      "fingerprint": "f1f14939f6c5ad47342d9c868eec00c4a0c6d2f5635a1dcd28ffbf125672b3ad",
+      "fingerprint": "940d5ae7696dd3b538caf9f966dc12cebe8bc48f5feeaeeda08eee68baaf194d",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How does filter shape the data flow in this project? (response 1, angle 4)",
@@ -445,8 +445,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -459,7 +459,7 @@
       "note": ""
     },
     {
-      "fingerprint": "34dc54669a6475acf01e57d930bb0c263a61fb4977f3be8be8c41ddece9970d2",
+      "fingerprint": "954ae0c8051c212a27d2fdfdd8573122c46d1657737224e53fa17a97d06273cc",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What trade-off follows from using React here? (response 1, angle 4)",
@@ -473,8 +473,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -487,7 +487,7 @@
       "note": ""
     },
     {
-      "fingerprint": "147dfb0f9758125081ea6a580b23dccfa7495390d6c09444d41f8f8a8ec102ec",
+      "fingerprint": "0e3dcf11d8c368bf1f63d75c057fa2d12999e4cf53f44102f315640816178264",
       "caseId": "react-state",
       "variant": "generation",
       "question": "Which boundary should be checked around useState? (response 1, angle 4)",
@@ -501,8 +501,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "250ceece-4eca-4d3a-830e-1cf93ed4b9f6",
-          "snapshotHash": "53a27b737f8fbea396dddd639ac5124157a8a6d0ea480d66b9c87ecea8a98582",
+          "sourceId": "1cbae753-ec7f-4a98-983b-84903a0f810f",
+          "snapshotHash": "5cf8bd06b1437eefe24b8dca0956aa4688d9973ddef030660ea8672675c077a3",
           "path": "App.jsx",
           "startLine": 1,
           "endLine": 1,
@@ -515,7 +515,7 @@
       "note": ""
     },
     {
-      "fingerprint": "1122b7280665e504e9bfd031b315468e5549fda6dd89d11c822b27ec0fa473a3",
+      "fingerprint": "5ca6b087049214b99d556207dc735d097fee5c13ea7e9e8a3e769651677d575f",
       "caseId": "react-state",
       "variant": "generation",
       "question": "How would you explain the behavior of localStorage from the shown code? (response 1, angle 4)",
@@ -529,8 +529,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f9faf3c2-509b-4e06-8693-2c6f6d5417bf",
-          "snapshotHash": "23e9dae1a8e444523e6700f132b6c47b1dcbcc7ddd4f6c9d108a45659ce23726",
+          "sourceId": "2ae74d9d-1465-4c09-9865-063b2c031cb4",
+          "snapshotHash": "7180892a0a1048b62cec93673e0fe8879f97695209fede54ee8f64de6c92355d",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -543,7 +543,7 @@
       "note": ""
     },
     {
-      "fingerprint": "72ca6ef8db9fdba823ba2a2717c83294d452d7e6884000169a0caa3c2859ed5c",
+      "fingerprint": "1ab2defe40e181124c7370773133380df952925a0574d612a4872e5ec4122ef9",
       "caseId": "react-state",
       "variant": "generation",
       "question": "What change could affect filter, and how would you verify it? (response 1, angle 4)",
@@ -557,8 +557,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "81441b15-2a35-4cec-bebf-1c297edf05b8",
-          "snapshotHash": "3bb159287ccb5bac927f8ee5debbf594e90bfd38919d8e76f7f581888915c55e",
+          "sourceId": "83bfe4d3-41cb-4baa-be28-607e277e137f",
+          "snapshotHash": "46dab22cabc11da9bef8e8fbb103801fdbf1202b80cfa546614663930f23f7dd",
           "path": "package.json",
           "startLine": 1,
           "endLine": 1,
@@ -951,7 +951,7 @@
       "note": ""
     },
     {
-      "fingerprint": "fc02f2b0353480a58afae03ee408e818b6f1161104ec45fbcf2c6b196d89e929",
+      "fingerprint": "184fc7bb5d1b18a4d9c1b357f13b892821c6261fa8af30382cb6c2cfb51cf6ec",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does Node.js shape the data flow in this project? (response 4, angle 1)",
@@ -965,8 +965,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -979,7 +979,7 @@
       "note": ""
     },
     {
-      "fingerprint": "d586b8fbc6906ac537e0de0f07daa83d2841e83fcf45c513f3deeac89f39a7a6",
+      "fingerprint": "80414a34942b4a95aa4bfe19cc75533ee3836b7ced89955a40362a7429f650fa",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using node:http here? (response 4, angle 1)",
@@ -993,8 +993,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1007,7 +1007,7 @@
       "note": ""
     },
     {
-      "fingerprint": "044b8c241985d877ab5f5b1ec69fc4903678148f144389c1268be1f0f19e763a",
+      "fingerprint": "6822b75f8feb23896c2436f2fe0cf6089da38d39f3929c388896ee580603ef16",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around routes? (response 4, angle 1)",
@@ -1021,8 +1021,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1035,7 +1035,7 @@
       "note": ""
     },
     {
-      "fingerprint": "ed4118005140909181ac1d194434906faf2a15a944d2bc6ba97eb208f2892882",
+      "fingerprint": "8f75df06056c51e586093e76d2f169badc2d5ac953f579d8818b8ed1b467100a",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of /health from the shown code? (response 4, angle 1)",
@@ -1049,8 +1049,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1063,7 +1063,7 @@
       "note": ""
     },
     {
-      "fingerprint": "3a05926c72162a00f09f8b2f0c2f8c455e423565bc826d2c422917bedaf4b983",
+      "fingerprint": "cd688b9b1931e92c0700dbf2d965def37a31d25fcf5a4eb7571301ff59406b77",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect Node.js, and how would you verify it? (response 4, angle 1)",
@@ -1077,8 +1077,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1091,7 +1091,7 @@
       "note": ""
     },
     {
-      "fingerprint": "ee0e168e0e5ebf3995a704180982354881b046a0a2674fb0d7a9c95fe7df36f2",
+      "fingerprint": "709e023f28cf3f0eeb7cc5ee4f00a4cef66392a08e55d63b8b3dda7e9901d6a2",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does node:http shape the data flow in this project? (response 4, angle 2)",
@@ -1105,8 +1105,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1119,7 +1119,7 @@
       "note": ""
     },
     {
-      "fingerprint": "7c78863a005fb7bc61d216481782ab524fe4377c7b6e9ae18dc6ae7ad0f70ad6",
+      "fingerprint": "da2e10b0063264badc0cb1b6b97020eefe56df2d3c0d4b8a8b96d9c82189bccd",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using routes here? (response 4, angle 2)",
@@ -1133,8 +1133,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1147,7 +1147,7 @@
       "note": ""
     },
     {
-      "fingerprint": "b05742306618eb729eeb8d65c8e87b0aeaf2a0d5fe1eb459a51639c52d4e3d61",
+      "fingerprint": "a8d12725abe0215858b58f795beb0fa3113913ad97be18e11a1fbd7c59fc61ee",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around /health? (response 4, angle 2)",
@@ -1161,8 +1161,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1175,7 +1175,7 @@
       "note": ""
     },
     {
-      "fingerprint": "c7dbb5124f2a08654e40bde884fdc854372ba357d55e147caa4b568247499f2a",
+      "fingerprint": "9a48812d357797a68b8d8508707b2217938ff66e8e42f4de3a746b7bcdda5d66",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of Node.js from the shown code? (response 4, angle 2)",
@@ -1189,8 +1189,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1203,7 +1203,7 @@
       "note": ""
     },
     {
-      "fingerprint": "84a246c9f3791a43b876fda11cbc9f01b6b4b84c47f4ab3e5a931a891d6e39c2",
+      "fingerprint": "f06f060e23c6e976803e49f9330dfce21d79908e5313c5f1f91a2d42ad40353b",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect node:http, and how would you verify it? (response 4, angle 2)",
@@ -1217,8 +1217,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1231,7 +1231,7 @@
       "note": ""
     },
     {
-      "fingerprint": "b2872aa86826380c903919f64df6b183bb1d7752bdd9feab39d285029d63380d",
+      "fingerprint": "c1b1f0319a9027cd20081f4ecd7bdd0ac7175f8d7c0fbcacac8af15cbfd87819",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does routes shape the data flow in this project? (response 4, angle 3)",
@@ -1245,8 +1245,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1259,7 +1259,7 @@
       "note": ""
     },
     {
-      "fingerprint": "5aa7631d65cc65e579aa970f91375bdbd2d53ec23c52b8af341c8f83c358d6b3",
+      "fingerprint": "d60edb9df1575936d3641a533b8580b00fd5705729f73fccfe60746ddc47a08f",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using /health here? (response 4, angle 3)",
@@ -1273,8 +1273,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1287,7 +1287,7 @@
       "note": ""
     },
     {
-      "fingerprint": "5a63e05df441aadcd21ad509937b21e3c1035d8bacc3f7d7b93080c932f8efa9",
+      "fingerprint": "5f2e58e85685c8b8991a1087dd69dc3d7b77b81e2808b0f9160399fdee5447b7",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around Node.js? (response 4, angle 3)",
@@ -1301,8 +1301,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1315,7 +1315,7 @@
       "note": ""
     },
     {
-      "fingerprint": "ac9d20c5f6f2743ddf9fbaed2cf850b02e6ebe1e76e8dd126e2f1821a5e10474",
+      "fingerprint": "33b459d9a171835eb96596e641604c95fa03299e18aae1d0867708dc38403ca1",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of node:http from the shown code? (response 4, angle 3)",
@@ -1329,8 +1329,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1343,7 +1343,7 @@
       "note": ""
     },
     {
-      "fingerprint": "b3b41d79a4a5c13e29ca031b567485b8c3619f8ea97c8b78fb13e6057d6a0e71",
+      "fingerprint": "88cf7f80eff56dc66063e8be5b46eb787b12ebc358a6e8760ab92779b2556603",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect routes, and how would you verify it? (response 4, angle 3)",
@@ -1357,8 +1357,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1371,7 +1371,7 @@
       "note": ""
     },
     {
-      "fingerprint": "f98078855c0cc5ce4714a346424ad1e7efff16cb19a7a06f146bc0d6d049936d",
+      "fingerprint": "b500a0c9159eff58ca4c5f956c67a11f8b3dce387eb1736330580399f5274ecf",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How does /health shape the data flow in this project? (response 4, angle 4)",
@@ -1385,8 +1385,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1399,7 +1399,7 @@
       "note": ""
     },
     {
-      "fingerprint": "465c198770e92bc266dee347e747c9919cb4298738d870d3786228346e2bab1e",
+      "fingerprint": "56234da5a0c015177f4fc8d1b92ab4f5128ad9af972fc9063a44a0ee816da84c",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What trade-off follows from using Node.js here? (response 4, angle 4)",
@@ -1413,8 +1413,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1427,7 +1427,7 @@
       "note": ""
     },
     {
-      "fingerprint": "e06f1f2c62c8ba3639cd0ad0fb723941ca2d0deb5e0a6ed337b8854bba7c171c",
+      "fingerprint": "e864f1314b963eb427833451ecfc9a261a1cb1a390bb243a08a1753036283f89",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "Which boundary should be checked around node:http? (response 4, angle 4)",
@@ -1441,8 +1441,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1455,7 +1455,7 @@
       "note": ""
     },
     {
-      "fingerprint": "4066900591e51defc7356083aef94866694b3cf5c10d474c659979672244d7aa",
+      "fingerprint": "38c3a306635194dab524ed6c21a3d3d052bbe9ff2d6cf0b9e460727e1a22d566",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "How would you explain the behavior of routes from the shown code? (response 4, angle 4)",
@@ -1469,8 +1469,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "f75ad55f-5320-4ce3-8f11-e5ec03223d84",
-          "snapshotHash": "a393de85ccd18101449cb5dacb8296c1e8086813431be1c617a8e331b07a28b8",
+          "sourceId": "62b4fb42-6b73-445c-98d6-1116ad9328cf",
+          "snapshotHash": "199b0a4d44b610338a4efa3e5281977f505881ab84b445d12d2c9eb73b737521",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1483,7 +1483,7 @@
       "note": ""
     },
     {
-      "fingerprint": "f7cce5c4f3d482ebf24a963d969cb08f2662fa6f0eab1954fb4acbf3f54c1fde",
+      "fingerprint": "2ce30adc75f203d70b5e80af3e68a7615315135591be68f03494bd381c47594f",
       "caseId": "node-routes",
       "variant": "generation",
       "question": "What change could affect /health, and how would you verify it? (response 4, angle 4)",
@@ -1497,8 +1497,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "3549ffa6-8779-4d2f-9bae-b312bb10d31f",
-          "snapshotHash": "af75e3cbfef3194da85e279f250af7d7cda8cfdf68ff88ff311c3b0a641789f9",
+          "sourceId": "54d5bc4a-3b78-4c85-9a9a-4012e6f47f71",
+          "snapshotHash": "d13e6d0b4c886c99241611142f058dbd2683d805d40394916cea7ee27d654512",
           "path": "server.mjs",
           "startLine": 1,
           "endLine": 1,
@@ -1891,7 +1891,7 @@
       "note": ""
     },
     {
-      "fingerprint": "9ffe0e8742ea3d053f7e1defbd00b4d1cd9810fe71a30ccbdbc1c253453e135b",
+      "fingerprint": "de1d959e71826d02e7fe2e3a9103ea87bd8fabb2aa2e22b5b266b8eccd969ccf",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 6, angle 1)",
@@ -1905,8 +1905,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1919,7 +1919,7 @@
       "note": ""
     },
     {
-      "fingerprint": "2f61005bcd2c13eacfad838595913ec9506244f776b37d22c886fb2efdcdcb47",
+      "fingerprint": "faf3c72a8d94275a316cc19f87e0c1196da2e1855411edce20e80b501a171c73",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 6, angle 1)",
@@ -1933,8 +1933,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1947,7 +1947,7 @@
       "note": ""
     },
     {
-      "fingerprint": "adc4b443308aeb82ceb8074f83ae526a8883193ea66e5dfc2e87a0b5efe86aaf",
+      "fingerprint": "45a956e3a98cd61ab0751afbbc23de1e8e46441ced111d8afd8a89d4172ab756",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 6, angle 1)",
@@ -1961,8 +1961,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -1975,7 +1975,7 @@
       "note": ""
     },
     {
-      "fingerprint": "6e25570818df38771996c640fe6f0c2a7b878afa2429db5e9b6c213a808bdd95",
+      "fingerprint": "a40cb8053ba619091a1ed04a6e6aa10182c665f681923c90b70e65fa5b2a9d50",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 6, angle 1)",
@@ -1989,8 +1989,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2003,7 +2003,7 @@
       "note": ""
     },
     {
-      "fingerprint": "438ede0455e8f0d53294f28a16b0ec6be48a2ca19e25a33274aa440bb26f4bff",
+      "fingerprint": "391d49213c4ef443c44de4284b15ce7006191a8c2ee206737231cb07d3efdfc1",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 6, angle 1)",
@@ -2017,8 +2017,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2031,7 +2031,7 @@
       "note": ""
     },
     {
-      "fingerprint": "b09c3e7407e33bda5f7b1e6c3d1c1bb3bf6d7e6019720508189fb2d334f223b8",
+      "fingerprint": "cc99bafb5cfd9904fa7c9dadf72a80dbe1d86fb1eed5b62b465ce49c6ee0796d",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 7, angle 1)",
@@ -2045,8 +2045,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2059,7 +2059,7 @@
       "note": ""
     },
     {
-      "fingerprint": "04f314d6112ca5cb97eaea4d52b332176ba34711ee0fa4cda552da0b788d1a3d",
+      "fingerprint": "429fe2fc8a5a6ae8b0cdba7b64b5fc63d5b70d8cc2ae51bb316cb32e0294f82b",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 7, angle 1)",
@@ -2073,8 +2073,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2087,7 +2087,7 @@
       "note": ""
     },
     {
-      "fingerprint": "f34714c94ed8f0105a93987277491a0e6db69aae55380448f2f10ac8876dd91a",
+      "fingerprint": "d3f4f0b32313195d886edc82cb3bbd889e6ece071e3cee2bab632232348b9e9c",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 7, angle 1)",
@@ -2101,8 +2101,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2115,7 +2115,7 @@
       "note": ""
     },
     {
-      "fingerprint": "d5cf9d2fb23ceef6504a40cde05ccc86550484b7acff7ed5f0088eb063381f80",
+      "fingerprint": "dc2fd706252ca0642ae49f338b5f6c6e3983ee33a6d826841e34b37401f523be",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 7, angle 1)",
@@ -2129,8 +2129,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2143,7 +2143,7 @@
       "note": ""
     },
     {
-      "fingerprint": "3678772b47c354a9f166ccf1035aab05553efaf55e51a591d93fba9954c88e83",
+      "fingerprint": "0625f73b2029fdf2000e1807fbc08e42fa8d16c17191def1b2a2c8bc62a3c983",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 7, angle 1)",
@@ -2157,8 +2157,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2171,7 +2171,7 @@
       "note": ""
     },
     {
-      "fingerprint": "8dc6ebe3fc10d5deabf279a0ddcc896b3d292dbfbf34d70148fc4aaabc491dc4",
+      "fingerprint": "39955b76c879bb455471f913f6b48b5011a422900af6bd8988ddaa4cdf3217e5",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 8, angle 1)",
@@ -2185,8 +2185,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2199,7 +2199,7 @@
       "note": ""
     },
     {
-      "fingerprint": "94fdd08fb930d9e9ada8da60b4cb0ff476d683b0c5f90d383870e81f8f6370ec",
+      "fingerprint": "76411345d6204f78771e7475644ddf74f33be063a5d739063728e243b26c6c41",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 8, angle 1)",
@@ -2213,8 +2213,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2227,7 +2227,7 @@
       "note": ""
     },
     {
-      "fingerprint": "c45dc228d17de5471baaea6c81b8732c73b621e8cc09851f9e929f5d74a11616",
+      "fingerprint": "d05d15e58fac22c2cca55d2c2f8da205d22510a273a560dc2b665d79d035c3b7",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 8, angle 1)",
@@ -2241,8 +2241,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2255,7 +2255,7 @@
       "note": ""
     },
     {
-      "fingerprint": "541c1f27467dc30e4ccc720cca0d3314e5b1fa76bc2272d6cb91a50536562d96",
+      "fingerprint": "b5cad759ce23cf711a68e219c4381936e24f7e6ef5aeafc57f2479a3ecbb1b3d",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 8, angle 1)",
@@ -2269,8 +2269,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2283,7 +2283,7 @@
       "note": ""
     },
     {
-      "fingerprint": "d6ce006c2fbb939f1453da5d9dcf33f5797350a9116adc2426a3b0e361896015",
+      "fingerprint": "43126c03c8cc2a4012641c4004bc58bab5d3f0e9872bb9798346acc58eacc41a",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 8, angle 1)",
@@ -2297,8 +2297,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2311,7 +2311,7 @@
       "note": ""
     },
     {
-      "fingerprint": "e0079cf11fb7e4c770b76510ba819b99ed354ba15da6e3171d4ca252b3558c0c",
+      "fingerprint": "c52edda16f90217d14573d56d230ac9670fcae350c32f4a39b60f00091c5c021",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does csv shape the data flow in this project? (response 8, angle 2)",
@@ -2325,8 +2325,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2339,7 +2339,7 @@
       "note": ""
     },
     {
-      "fingerprint": "1cf95bc0b66d284c4305d0a4ec7935909cd06cf47a6f716aa3230dc1a08c1048",
+      "fingerprint": "2d1c41b0397e84db9c8fbb591c95b3353d2eff1b67aab6a9601aa7b71770763c",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using dry-run here? (response 8, angle 2)",
@@ -2353,8 +2353,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2367,7 +2367,7 @@
       "note": ""
     },
     {
-      "fingerprint": "472a7a75aecc365cc82525d9041ab08b0f827144a8b4e25ac833ec9554d3fd1c",
+      "fingerprint": "add73e7c3c7333107a5c21401cf79da30d69de940927668766f689897d1255b3",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around pathlib? (response 8, angle 2)",
@@ -2381,8 +2381,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "327bd6d4-5e82-4183-996b-6482327c0d38",
-          "snapshotHash": "de4cc59488a3095834588004f33a23f6151f7d1bfbafc6398c64bc265864d6ec",
+          "sourceId": "c51bfdbe-be9e-4c51-acb5-19efa890f6bd",
+          "snapshotHash": "4e57bfa954c787cd1bd8bedf8bce3a6dbe8f54f8df3c213b1bcc64b3c982dc7e",
           "path": "README.md",
           "startLine": 1,
           "endLine": 1,
@@ -2395,7 +2395,7 @@
       "note": ""
     },
     {
-      "fingerprint": "1c00bdbc6a1700cc12cd09e5134062af692d6d39df3cc6104b525ac36a17f6ed",
+      "fingerprint": "2feb9de470966f6066d9298457f3206e701d3c0fe3670b7ef458755cca5f32ed",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 9, angle 1)",
@@ -2409,8 +2409,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2423,7 +2423,7 @@
       "note": ""
     },
     {
-      "fingerprint": "d9edec44f34f9f295e474548e9ffce38a707a9ed06403fe7d280bea7fbdee796",
+      "fingerprint": "f3d5704ae51949339117a29ca53f884d3d72babfc7de181a6591a64017ce69aa",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 9, angle 1)",
@@ -2437,8 +2437,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2451,7 +2451,7 @@
       "note": ""
     },
     {
-      "fingerprint": "1e026a2bba6762488889048952529b78a8ef53f1761c43cb4052208016412c66",
+      "fingerprint": "b3a4e2616199cef86d09161b3a16a4d74b4b78c90ab20eea64f9034b6637fb4e",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 9, angle 1)",
@@ -2465,8 +2465,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2479,7 +2479,7 @@
       "note": ""
     },
     {
-      "fingerprint": "812e0dece88fdab0ed05718bf3159ca69bb49ec0399151bf3540b12854d9ab34",
+      "fingerprint": "44f3b424ac7a5f4b7456a0f0c6fa645044be8728aa5cc5ceead3488d7a619085",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 9, angle 1)",
@@ -2493,8 +2493,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2507,7 +2507,7 @@
       "note": ""
     },
     {
-      "fingerprint": "2c359619cbfdc610d29c6ad8ef6f07757a3c1de9b175e5a06ca3a027d872b0e3",
+      "fingerprint": "358afb5a7dd35796799cd5cf75c5c1cb94aefd489bd01fe588b02ec14ba64c2e",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 9, angle 1)",
@@ -2521,8 +2521,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2535,7 +2535,7 @@
       "note": ""
     },
     {
-      "fingerprint": "23b5f69c30bcc5fed9da0716235d9211aa00f67d2be5b4079e15e7418e247f71",
+      "fingerprint": "443e4765be31375ddf498835a382bf5916a16fdc7b73506ce339b87241e6dc53",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "How does csv shape the data flow in this project? (response 9, angle 2)",
@@ -2549,8 +2549,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
@@ -2563,7 +2563,7 @@
       "note": ""
     },
     {
-      "fingerprint": "0d2586657a2a586028dab2d36c8ac8455db4c427badd8f8c336e3a1ef49f573e",
+      "fingerprint": "75382b3cf23b72f2d2f9e37fad4a680afef8d4473c9ff8b782975344cfba8f46",
       "caseId": "python-cli",
       "variant": "generation",
       "question": "What trade-off follows from using dry-run here? (response 9, angle 2)",
@@ -2577,8 +2577,8 @@
       ],
       "sourceEvidence": [
         {
-          "sourceId": "6a35b8c4-9426-49b1-8e9f-293eafc5b9e2",
-          "snapshotHash": "c59582c2de71476a3acacd645dec9ca0ec85960a8f0eb0672b3c940ce7284bd4",
+          "sourceId": "d084c17c-bb76-4662-a2cb-7ec8536de64b",
+          "snapshotHash": "e28a95c78b2243736eebbd2bbd5c770afe43801561d69148341e0f79c3a564df",
           "path": "preview.py",
           "startLine": 1,
           "endLine": 1,
