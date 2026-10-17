@@ -450,13 +450,9 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🔭</span>
-          <span className="select-none text-[15px] font-semibold tracking-wide text-slate-800">RepoPrep</span>
-          <span className="ml-1 hidden select-none text-xs text-slate-400 sm:inline">项目面试题生成器</span>
-        </div>
-        <div className="flex items-center gap-1">
+      <header className="app-titlebar relative flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+        <span className="app-titlebar-title pointer-events-none absolute left-1/2 -translate-x-1/2 select-none text-[15px] font-semibold tracking-wide text-slate-800">RepoPrep</span>
+        <div className="app-titlebar-actions ml-auto flex items-center gap-1">
           {view !== 'select' && view !== 'settings' && (
             <button className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" onClick={() => requestNavigation({ kind: 'select' })}>
               切换项目

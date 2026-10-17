@@ -6,6 +6,7 @@ import { contentReadWarning } from '@shared/content-read'
 import { formatContextTruncationWarning } from '@shared/context-budget'
 import { api } from '../lib/ipc'
 import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf } from '../lib/question-numbering'
+import { summarizeQuestions } from '../lib/question-summary'
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
 import TermPopover from '../components/TermPopover'
 
@@ -97,6 +98,18 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
     }
 
   const query = search.trim().toLowerCase()
+  const navigationSummaries = useMemo(
+    () => summarizeQuestions(result.sections.flatMap((section) => section.questions.map((question) => question.question))),
+    [result.sections]
+  )
+  const sectionQuestionOffsets = useMemo(() => {
+    let offset = 0
+    return result.sections.map((section) => {
+      const current = offset
+      offset += section.questions.length
+      return current
+    })
+  }, [result.sections])
   /**
    * 过滤后的条目自带**原始下标**。
    *
@@ -121,6 +134,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
           const text = [
             q.question,
             q.answer,
+            navigationSummaries[sectionQuestionOffsets[q.sectionIndex] + q.questionIndex] ?? '',
             ...q.followUps.flatMap((f) => [f.question, f.answer, ...(f.followUps ?? []).flatMap((g) => [g.question, g.answer])])
           ]
             .map(stripTermMarks)
@@ -129,7 +143,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
         })
       }))
       .filter((s) => s.questions.length > 0)
-  }, [query, result.sections])
+  }, [navigationSummaries, query, result.sections, sectionQuestionOffsets])
 
   const totalQuestions = result.sections.reduce((a, s) => a + s.questions.length, 0)
   const shownQuestions = filtered.reduce((a, s) => a + s.questions.length, 0)
@@ -195,6 +209,8 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
               {s.questions.map((q, qi) => (
                 <button
                   key={q.id ?? `${s.id}-${q.questionIndex}-${qi}`}
+                  aria-label={`跳转到问题：${stripTermMarks(q.question)}`}
+                  title={stripTermMarks(q.question)}
                   className={`mb-0.5 flex w-full gap-1.5 rounded-lg px-2 py-1.5 text-left text-[13px] leading-5 ${
                     activeId === q.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
                   }`}
@@ -209,7 +225,9 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                       numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })
                     )}
                   </span>
-                  <span className="line-clamp-2">{stripTermMarks(q.question)}</span>
+                  <span className="min-w-0 flex-1 whitespace-nowrap">
+                    {navigationSummaries[sectionQuestionOffsets[q.sectionIndex] + q.questionIndex]}
+                  </span>
                 </button>
               ))}
             </div>
@@ -232,9 +250,6 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                   {GRANULARITY_META[result.granularity].label}
                 </span>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5">{ROLE_META[result.roleFocus].label}方向</span>
-                <span>{totalQuestions} 题</span>
-                <span>{Object.keys(result.glossary).length} 个名词</span>
-                <span>{result.modelUsed}</span>
                 <span>{new Date(result.createdAt).toLocaleString('zh-CN')}</span>
               </p>
               {result.contentReadSummary && result.contentReadSummary.failedReads > 0 && (

@@ -8,6 +8,8 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import type React from 'react'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { summarizeQuestion, summarizeQuestions } from '../lib/question-summary.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import type { InterviewResult, Settings } from '../../shared/types.ts'
 
@@ -19,6 +21,7 @@ type ResultPageProps = {
   result: InterviewResult
   settings: Settings
   onRegenerate: () => void
+  initialSearch?: string
 }
 
 function makeResult(overrides: Partial<InterviewResult> = {}): InterviewResult {
@@ -38,7 +41,71 @@ function makeResult(overrides: Partial<InterviewResult> = {}): InterviewResult {
   }
 }
 
-async function render(result: InterviewResult): Promise<string> {
+test('导航摘要覆盖 12 个真实技术问题并保留其核心意图', () => {
+  const questions = [
+    '请介绍 RepoPrep 的整体架构，主进程、preload、渲染进程各自负责什么？',
+    'preload 暴露的 window.api 是如何设计的？IPC 通道契约如何保证两端一致？',
+    '渲染进程的页面状态流转如何管理？navigationEpoch 和组件状态如何协作？',
+    '后台生成任务在渲染进程如何建模？GenerationSession 如何隔离不同任务？',
+    'scanner 扫描本地项目时如何处理 .gitignore、构建产物和嵌套 worktree？',
+    'ProjectScanCache 的缓存键与失效策略是什么？为什么 removeRecent 需要同步失效？',
+    'project-content-reader 读取内容时如何防止路径穿越和超大文件？读取失败如何汇总给用户和模型？',
+    'sensitive 模块的敏感信息脱敏流程是怎样的？脱敏统计如何进入结果？',
+    '一次生成请求从 IPC.generateRun 到 saveResult 时的完整数据流是怎样的？',
+    'context-builder 如何按粒度组装上下文？CONTEXT_CHAR_BUDGETS 如何限制整体请求？',
+    'question-budget 如何保证题量落在目标区间？它与补偿请求如何协作？',
+    'llm.ts 与 sse-parser 如何消费流式响应？如何处理 DONE、错误事件和读取中断？'
+  ]
+  assert.deepEqual(summarizeQuestions(questions), [
+    '整体架构与进程协作',
+    'preload接口与IPC契约',
+    '页面状态流转',
+    '后台生成任务建模与隔离',
+    '项目扫描与忽略规则',
+    '缓存键与失效策略',
+    '内容读取边界与错误处理',
+    '敏感信息脱敏流程',
+    '生成请求数据流',
+    '上下文组装与预算',
+    '题量分配与补偿',
+    '流式响应与异常处理'
+  ])
+})
+
+test('通用摘要压缩礼貌语、英文问句框架和文件名，但不硬截断长标识符', () => {
+  assert.equal(summarizeQuestion('请介绍RepoPrep的整体架构'), 'RepoPrep整体架构')
+  assert.equal(summarizeQuestion('Could you explain .gitignore rule handling?'), '.gitignore rule handling')
+  assert.equal(summarizeQuestion('How does the cache invalidation strategy work?'), 'cache invalidation strategy')
+  assert.equal(summarizeQuestion('扫描缓存的缓存键与失效策略是什么'), '缓存键与失效策略')
+})
+
+test('导航摘要长度有界且相同主题的问题会带上区分信息', () => {
+  const longIdentifier = 'How does ExtremelyLongProjectConfigurationManager handle invalidation and cache refresh strategies?'
+  const longSummary = summarizeQuestion(longIdentifier)
+  assert.ok(Array.from(longSummary).length <= 32)
+  assert.ok(longSummary.endsWith('Project'), 'a long identifier is compacted at a whole-word boundary')
+
+  const labels = summarizeQuestions([
+    '系统扫描缓存失效原因如何快速查找',
+    '系统扫描缓存失效时机如何快速定位'
+  ], 14)
+  assert.notEqual(labels[0], labels[1])
+  assert.ok(labels.every((label) => Array.from(label).length <= 14))
+
+  const longDescriptors = summarizeQuestions([
+    `同一主题 ${'d'.repeat(500)}`,
+    `同一主题 ${'e'.repeat(500)}`
+  ], 14)
+  assert.ok(longDescriptors.every((label) => Array.from(label).length <= 14))
+})
+
+test('无词边界的超长文本使用短中性摘要', () => {
+  const labels = [summarizeQuestion('w'.repeat(500)), summarizeQuestion('😀'.repeat(100))]
+  assert.deepEqual(labels, ['问题摘要', '问题摘要'])
+  assert.ok(labels.every((label) => Array.from(label).length <= 32))
+})
+
+async function render(result: InterviewResult, initialSearch = ''): Promise<string> {
   await fs.access(bundlePath)
 
   const { JSDOM } = await import('jsdom')
@@ -59,7 +126,8 @@ async function render(result: InterviewResult): Promise<string> {
     return renderToStaticMarkup(React.createElement(ResultPage, {
       result,
       settings,
-      onRegenerate: () => undefined
+      onRegenerate: () => undefined,
+      initialSearch
     }))
   } finally {
     if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow)
@@ -80,6 +148,41 @@ test('真实 ResultPage 显示截断提示，普通结果和缺省元数据的�
   const legacyResult = makeResult()
   delete legacyResult.contextTruncation
   assert.ok(!(await render(legacyResult)).includes(contextWarning), 'legacy results without metadata do not show a warning')
+})
+
+test('导航展示紧凑摘要但保留完整问题，结果头部不显示统计数和模型名', async () => {
+  const originalQuestion = '请介绍RepoPrep的整体架构，主进程、preload、渲染进程各自负责什么'
+  const html = await render(makeResult({
+    modelUsed: 'secret-model-label',
+    sections: [{ id: 's1', title: '系统架构', questions: [{ id: 'q1', question: originalQuestion, answer: '完整答案内容。', followUps: [] }] }],
+    glossary: { IPC: '进程通信' }
+  }))
+
+  assert.ok(html.includes('整体架构与进程协作'))
+  assert.ok(html.includes(`title="${originalQuestion}"`), 'full source question remains available on the navigation control')
+  assert.ok(html.includes(`aria-label="跳转到问题：${originalQuestion}"`))
+  assert.ok(html.includes(originalQuestion), 'the original question remains in the result card')
+  assert.ok(!html.includes('secret-model-label'))
+  assert.ok(!html.includes('1 题'))
+  assert.ok(!html.includes('1 个名词'))
+  assert.ok(html.includes('中粒度') && html.includes('后端方向'), 'granularity and role remain in the result header')
+})
+
+test('搜索也能命中导航摘要，过滤不改变原题编号或完整内容', async () => {
+  const originalQuestion = 'scanner 扫描本地项目时如何处理 .gitignore、构建产物和嵌套 worktree？'
+  const html = await render(makeResult({
+    sections: [{ id: 's1', title: '扫描', questions: [
+      { id: 'q1', question: originalQuestion, answer: '扫描答案。', followUps: [] },
+      { id: 'q2', question: '缓存键与失效策略是什么？', answer: '缓存答案。', followUps: [] }
+    ] }]
+  }), '忽略规则')
+
+  assert.ok(html.includes('value="忽略规则"'))
+  assert.ok(html.includes('项目扫描与忽略规则'))
+  assert.ok(html.includes(`aria-label="跳转到问题：${originalQuestion}"`))
+  assert.ok(html.includes(originalQuestion), 'the card still shows the full original question')
+  assert.ok(!html.includes('缓存键与失效策略是什么？'), 'only the question matching its summary remains visible')
+  assert.ok(html.includes('Q01') && !html.includes('Q02'), 'the filtered question retains its original stable number')
 })
 
 test('真实 ResultPage 显示读取失败原因、相对路径和样本省略次数', async () => {
@@ -216,7 +319,7 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     const closeA = container.querySelector<HTMLButtonElement>('button[title="关闭"]')
     assert.ok(closeA)
     await act(async () => { closeA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-    const questionA = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('QUESTION_A'))
+    const questionA = [...container.querySelectorAll('aside button')].find((button) => button.getAttribute('aria-label')?.includes('QUESTION_A'))
     assert.ok(questionA)
     await act(async () => { questionA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
     assert.ok(container.textContent?.includes('ANSWER_A TermA context'), 'A question is expanded before the identity change')
@@ -263,7 +366,7 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     assert.ok(!container.textContent?.includes('GLOSSARY_A'), 'A popover is gone before B can be interacted with')
     assert.equal((container.querySelector('input') as HTMLInputElement).value, '', 'search resets for the new result')
     assert.ok(!container.textContent?.includes('ANSWER_B TermB context'), 'expanded state resets')
-    const navB = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('QUESTION_B'))
+    const navB = [...container.querySelectorAll('aside button')].find((button) => button.getAttribute('aria-label')?.includes('QUESTION_B'))
     assert.ok(navB && !navB.className.includes('bg-indigo-50'), 'active question resets even with the same question id')
 
     await act(async () => { navB!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })

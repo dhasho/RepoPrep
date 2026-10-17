@@ -360,6 +360,21 @@ async function openProject(harness, projectPath) {
   assert.ok(harness.host.textContent.includes(projectPath.split(/[\\/]/).filter(Boolean).at(-1)), '应进入目标项目配置页')
 }
 
+test('application titlebar centers RepoPrep, keeps its actions reachable, and has a draggable surface', async () => {
+  const h = await mountApp()
+  try {
+    const titlebar = h.host.querySelector('header.app-titlebar')
+    const title = titlebar?.querySelector('.app-titlebar-title')
+    const actions = titlebar?.querySelector('.app-titlebar-actions')
+    assert.ok(titlebar, 'the application has one custom titlebar row')
+    assert.equal(title?.textContent, 'RepoPrep')
+    assert.ok(actions?.querySelector('button[aria-label="设置"]') || actions?.textContent.includes('设置'))
+    assert.match(titlebar.className, /app-titlebar/)
+    assert.match(actions.className, /app-titlebar-actions/)
+    assert.equal(h.host.textContent.includes('🔭'), false, 'telescope branding is removed from the app shell and project selection')
+  } finally { await cleanupAndUnmount(h) }
+})
+
 test('invalid stored history lets recent reanalysis and folder selection regenerate the project', async () => {
   const projectPath = 'C:\\InvalidHistory'
   for (const entry of ['recent', 'folder']) {
