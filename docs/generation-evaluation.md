@@ -4,18 +4,20 @@
 
 ## 评测范围
 
-当前报告描述的是离线流水线和评分器校准。它通过生产 `scanProject`、`generateInterview`、context builder、题量规划、合并/补偿、result contract 和 LLM HTTP client 跑三份版本化小型 fixture。React 状态与 Node HTTP 路由使用 medium，Python CLI 使用 fine。Python fine 模式的本地响应服务在初轮每批只返回一题，确认生产生成器会走补偿请求。离线响应根据当前请求文本中实际出现的 fixture 关键词构造，不会仅因知道 case 名称就输出所有事实。
+当前报告描述的是离线流水线和评分器校准。它通过生产 `scanProject`、`generateInterview`、context builder、题量规划、合并/补偿、result contract 和 LLM HTTP client 跑三份版本化小型 fixture。React 状态与 Node HTTP 路由使用 medium，Python CLI 使用 fine。Python fine 模式的本地响应服务在初轮每批只返回一题，确认生产生成器会走补偿请求；Node HTTP 路由 case 的首个原始回复故意为非法 JSON，后续合法回复经生产 repair 请求返回。runner 会断言两条容错路径实际触发。离线响应根据当前请求文本中实际出现的 fixture 关键词构造，不会仅因知道 case 名称就输出所有事实。
 
-`reports/offline-generation-eval/report.json` 保存逐题结果、每次本地请求消息与原始返回文本、case 指标、baseline、hash 和配置；`report.md` 是概览。输出路径可作为 `npm run eval:offline -- <directory>` 传入。报告只写 fixture URI 作为项目身份，不包含机器绝对路径或 API key。响应固定标识 `fixture-context-keyword-v1`，`tokens` 为 `null`，字符数仅为请求输入字符数。
+`reports/offline-generation-eval/report.json` 保存逐题结果、每次本地请求消息与原始返回文本、case 指标、baseline、hash 和配置；`report.md` 是概览。输出路径可作为 `npm run eval:offline -- <directory>` 传入。报告使用 `/fixtures/<case>` 作为跨平台 absolute path contract 占位，不包含机器绝对路径或 API key。响应固定标识 `fixture-context-keyword-v1-node-json-repair`，baseline 每 case 返回一次有效 JSON；Node 生成 case 的格式故障校准独立记录，不表示质量提升。`tokens` 为 `null`，字符数仅为请求输入字符数。报告记录生成时的 Node 版本。
 
 ## 指标含义
 
 - Contract：生产结果是否通过 `assertInterviewResultContract`。
+- Raw format/repair：按本地 HTTP 返回记录 JSON 可解析/不可解析次数和 repair 请求数；Node case 注入一次无效 JSON，再确认生产 repair 得到有效 JSON。最终 contract 单独记分，不能用它覆盖原始格式失败。
 - Quota：题量是否处于 `shared/types.ts` 对应 granularity 的 min/max 范围。
 - Duplicate rate：将题面交给生产 `normalizeQuestionKey` 后，重复键数除以题量。它只检查文字重复，不识别语义重复。
 - Known fact keyword coverage：每个 fixture 事实配置的关键词是否至少在题目、答案或追问中出现。它是可观察关键词覆盖，不代表事实正确率。
 - Forbidden assertion hits：在题目、答案和追问中查找 fixture 明确禁止的断言模式；命中只提示需复核，不代表通用内容审核。
 - Requests、failed requests、elapsed ms、input chars：生产生成过程及 baseline 请求数、失败数、耗时与输入字符量。每 case 失败会使 CLI 非零退出，不生成“成功”报告。
+- Source hashes：完整记录 `electron/services` 与 `shared` 下的 TypeScript 文件，以及评测脚本、`package.json` 和 `package-lock.json` 的 SHA-256。
 - Baseline：每 case 用同一个 synthetic profile 和同一预算，向本地响应器发出一次请求，上下文仅包含 README 与生产渲染的文件树。它是一个离线流程对照，不能用来估计真实模型改进。
 
 ## 人工评价
@@ -32,7 +34,14 @@
 
 导入器的 `validateReview(review, manifest)` API 严格校验 run、corpus、config、fingerprint 是否存在且唯一，分数必须是整数 1–5 或 `null`。未知题、重复题、越界分数和错 run 会拒绝。未填或部分填写均保持 pending，`reviewedCount` 仅统计三个维度齐全的题，coverage 以题目数为分母；不把 pending 当作通过，也不把缺失分数纳入平均值。将来对真实生成结果复用同一流程时，生成符合 report manifest 的题目 fingerprint 并构造同样绑定字段即可；本次未运行真实模型评价。
 
-填写副本后可运行 `node scripts/evaluation/review.mjs import reports/offline-generation-eval/report.json <filled-review.json>`。成功导入会校验绑定并更新报告中的 coverage、reviewedCount 和仅基于完整评分的维度均分；任一绑定或评分错误会非零退出。
+人工复核 CLI 通过 `npm run eval:review --` 启动，它使用项目的 TypeScript strip 和 shared alias 注册器：
+
+```bash
+npm run eval:review -- template reports/offline-generation-eval/report.json review-template.json
+npm run eval:review -- import reports/offline-generation-eval/report.json <filled-review.json>
+```
+
+成功导入会校验绑定并更新报告中的 coverage、reviewedCount 和仅基于完整评分的维度均分；同时写出 `review-report.md`。任一绑定或评分错误会非零退出。
 
 ## 校准边界
 

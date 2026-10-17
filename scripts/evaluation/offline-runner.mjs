@@ -1,8 +1,7 @@
 import { createServer } from 'node:http'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { scanProject, treeToText } from '../../electron/services/scanner.ts'
 import { generateInterview } from '../../electron/services/generator.ts'
@@ -53,8 +52,16 @@ const server = createServer(async (req, res) => {
   serverRequests.push({ inputChars, receivedAt: Date.now(), attempt: body.messages.some(message => message.role === 'assistant') ? 'repair' : 'initial', messages: body.messages, rawResponse: null, elapsedMs: null })
   const requestRecord = serverRequests.at(-1)
   const isBaseline = body.messages[0]?.content.includes('README+tree baseline') ?? false
-  const response = synthesize(body, isBaseline)
+  const shouldInjectRepairFault = activeFixture.id === 'node-routes' && !isBaseline && requestRecord.attempt === 'initial' && !activeFixture.repairFaultInjected
+  let response = synthesize(body, isBaseline)
+  if (shouldInjectRepairFault) {
+    activeFixture.repairFaultInjected = true
+    response = 'synthetic scheduled format fault: this is not JSON'
+  }
+  let rawJsonValid = true
+  try { JSON.parse(response) } catch { rawJsonValid = false }
   requestRecord.rawResponse = response
+  requestRecord.rawJsonValid = rawJsonValid
   requestRecord.elapsedMs = Date.now() - requestRecord.receivedAt
   res.writeHead(200, { 'content-type': 'application/json' })
   res.end(JSON.stringify({ choices: [{ message: { content: response } }] }))
@@ -72,10 +79,21 @@ globalThis.fetch = (input, init) => {
   return nativeFetch(input, init)
 }
 const outputDir = path.resolve(process.argv[2] ?? path.join(repo, 'reports/offline-generation-eval'))
-const config = { mode: 'offline-pipeline-and-scorer-calibration', responseId: 'fixture-context-keyword-v1', temperature: 0, roleFocus: 'general', timeoutMs: 600000, baseline: 'same case budget and synthetic profile; one request containing README plus production-rendered file tree' }
+const config = { mode: 'offline-pipeline-and-scorer-calibration', responseId: 'fixture-context-keyword-v1-node-json-repair', temperature: 0, roleFocus: 'general', timeoutMs: 600000, baseline: 'same case budget and synthetic profile; one request containing README plus production-rendered file tree, always a valid JSON response', syntheticFaultSchedule: 'node-routes generation: first raw reply is malformed JSON once; production repair request returns valid JSON' }
 const configHash = hash(JSON.stringify(config))
-const sourceFiles = ['electron/services/scanner.ts', 'electron/services/context-builder.ts', 'electron/services/generator.ts', 'electron/services/llm.ts', 'electron/services/question-budget.ts', 'electron/services/question-dedupe.ts', 'shared/types.ts', 'shared/result-contract.ts', 'shared/context-budget.ts', 'scripts/evaluation/scorer.mjs', 'scripts/evaluation/review.mjs', 'scripts/evaluation/offline-runner.mjs', 'scripts/evaluation/scorer.test.mjs', 'package.json']
-const sourceHashes = await hashFiles(sourceFiles)
+async function collectTypescript(root, current = root) {
+  const entries = await readdir(path.join(repo, current), { withFileTypes: true })
+  const files = []
+  for (const entry of entries) {
+    const relative = path.posix.join(current.replaceAll('\\', '/'), entry.name)
+    if (entry.isDirectory()) files.push(...await collectTypescript(root, relative))
+    else if (entry.isFile() && entry.name.endsWith('.ts')) files.push(relative)
+  }
+  return files
+}
+const productionSources = [...await collectTypescript('electron/services'), ...await collectTypescript('shared')].sort()
+const evaluatorSources = ['scripts/evaluation/scorer.mjs', 'scripts/evaluation/review.mjs', 'scripts/evaluation/offline-runner.mjs', 'scripts/evaluation/scorer.test.mjs', 'scripts/evaluation/review-cli.test.mjs', 'package.json', 'package-lock.json']
+const sourceHashes = await hashFiles([...productionSources, ...evaluatorSources])
 const fixtureHashes = {}
 for (const item of corpus.cases) {
   const directory = path.join(here, 'corpus', item.directory)
@@ -86,13 +104,13 @@ fixtureHashes['corpus.json'] = hash(await readFile(path.join(here, 'corpus/corpu
 const cases = []
 try {
   for (const caseDef of corpus.cases) {
-    activeFixture = { ...caseDef, budget: GRANULARITY_QUESTION_BUDGET[caseDef.granularity] }
+    activeFixture = { ...caseDef, budget: GRANULARITY_QUESTION_BUDGET[caseDef.granularity], repairFaultInjected: false }
     if (JSON.stringify(activeFixture.budget) !== JSON.stringify(caseDef.budget)) throw new Error(`fixture budget disagrees with shared source: ${caseDef.id}`)
     const fixtureRoot = path.join(here, 'corpus', caseDef.directory)
     const scan = await scanProject(fixtureRoot)
     const requestStart = serverRequests.length
     const started = Date.now()
-    const profile = { id: 'synthetic-offline', name: 'Offline synthetic', baseUrl: endpoint, apiKey: 'synthetic-never-log', model: 'fixture-context-keyword-v1', temperature: 0 }
+    const profile = { id: 'synthetic-offline', name: 'Offline synthetic', baseUrl: endpoint, apiKey: 'synthetic-never-log', model: config.responseId, temperature: 0 }
     const progressEvents = []
     const result = await generateInterview({ scan, granularity: caseDef.granularity, roleFocus: config.roleFocus, profile, signal: new AbortController().signal, onProgress: (step, detail) => progressEvents.push({ step, detail }) })
     const requests = serverRequests.slice(requestStart)
@@ -100,8 +118,13 @@ try {
     const scored = scoreCase(result, activeFixture)
     if (!scored.contract.pass) throw new Error(`production result failed result contract: ${caseDef.id}`)
     if (caseDef.granularity === 'fine' && !progressEvents.some(event => event.step === '补充请求（题量不足）')) throw new Error('fine-granularity calibration did not exercise production compensation')
+    const repairRequestCount = requests.filter(request => request.attempt === 'repair').length
+    const rawJsonInvalidCount = requests.filter(request => !request.rawJsonValid).length
+    const rawJsonValidCount = requests.filter(request => request.rawJsonValid).length
+    if (caseDef.id === 'node-routes' && (rawJsonInvalidCount !== 1 || repairRequestCount < 1 || rawJsonValidCount < 1)) throw new Error('scheduled malformed-JSON response did not exercise successful production repair')
+    if (caseDef.id === 'node-routes' && !requests.some(request => request.attempt === 'initial' && !request.rawJsonValid && request.rawResponse.includes('not JSON')) || caseDef.id === 'node-routes' && !requests.some(request => request.attempt === 'repair' && request.rawJsonValid)) throw new Error('Node repair trace does not contain both invalid and repaired raw JSON')
     const sanitizedResult = { ...result, projectPath: `/fixtures/${caseDef.id}`, profileId: 'synthetic-offline', modelUsed: config.responseId }
-    cases.push({ id: caseDef.id, granularity: caseDef.granularity, budget: caseDef.budget, elapsedMs: Date.now() - started, requestCount: requests.length, failedRequests: 0, inputChars: requests.reduce((n, req) => n + req.inputChars, 0), tokens: null, progressEvents, requests, scored, questions, output: sanitizedResult, baseline: null })
+    cases.push({ id: caseDef.id, granularity: caseDef.granularity, budget: caseDef.budget, elapsedMs: Date.now() - started, requestCount: requests.length, failedRequests: 0, repairRequestCount, rawJson: { validResponses: rawJsonValidCount, invalidResponses: rawJsonInvalidCount }, finalContract: scored.contract, inputChars: requests.reduce((n, req) => n + req.inputChars, 0), tokens: null, progressEvents, requests, scored, questions, output: sanitizedResult, baseline: null })
 
     const readme = await readFile(path.join(fixtureRoot, 'README.md'), 'utf8')
     const tree = treeToText(scan.tree, 10_000, fixtureRoot)
@@ -117,7 +140,7 @@ try {
     const baselineQuestions = baselineParsed.sections.flatMap(section => section.questions.map(q => ({ ...q, section: section.title })))
     const baselineResult = { ...sanitizedResult, sections: baselineParsed.sections.map((section, i) => ({ id: `baseline-${i}`, title: section.title, summary: section.summary, questions: section.questions.map((q, j) => ({ id: `bq-${i}-${j}`, ...q })) })), projectSummary: baselineParsed.projectSummary, glossary: baselineParsed.glossary }
     const baselineScored = scoreCase(baselineResult, activeFixture)
-    cases.at(-1).baseline = { definition: config.baseline, elapsedMs: Date.now() - baselineStarted, requestCount: baselineRequests.length, failedRequests: 0, inputChars: baselineRequests.reduce((n, req) => n + req.inputChars, 0), tokens: null, requests: baselineRequests, scored: baselineScored, questions: baselineQuestions }
+    cases.at(-1).baseline = { definition: config.baseline, elapsedMs: Date.now() - baselineStarted, requestCount: baselineRequests.length, failedRequests: 0, repairRequestCount: baselineRequests.filter(request => request.attempt === 'repair').length, rawJson: { validResponses: baselineRequests.filter(request => request.rawJsonValid).length, invalidResponses: baselineRequests.filter(request => !request.rawJsonValid).length }, finalContract: baselineScored.contract, inputChars: baselineRequests.reduce((n, req) => n + req.inputChars, 0), tokens: null, requests: baselineRequests, scored: baselineScored, questions: baselineQuestions }
   }
 } finally {
   globalThis.fetch = nativeFetch
@@ -130,19 +153,19 @@ const questions = cases.flatMap(c => [
   ...c.baseline.questions.map(q => ({ caseId: c.id, variant: 'baseline', question: q.question, answer: q.answer, followUps: q.followUps }))
 ].map(q => ({ ...q, fingerprint: fingerprintQuestion(q.question, { caseId: q.caseId, variant: q.variant, answer: q.answer, followUps: q.followUps }) })))
 const reportDigest = `sha256:${hash(JSON.stringify({ runId, corpusVersion: CORPUS_VERSION, configHash, sourceHashes, fixtureHashes, cases: cases.map(c => ({ id: c.id, output: c.output, baseline: c.baseline })), questions }))}`
-const run = { schemaVersion: SCHEMA_VERSION, runId, corpusVersion: CORPUS_VERSION, mode: config.mode, responseId: config.responseId, networkPolicy: { externalHttpAllowed: false, blockedAttempts: externalRequestAttempts, localEndpoint: '127.0.0.1 loopback only' }, config, configHash, sourceHashes, fixtureHashes, reportDigest, baselineDefinition: config.baseline, generatedAt: new Date().toISOString(), cases, questions, humanReview: { status: 'pending', reviewedCount: 0, coverage: 0, templatePath: 'review-template.json' }, limitations: ['This is offline pipeline and scorer calibration using deterministic local responses.', 'Keyword coverage is not factual correctness and does not measure real model quality.', 'Synthetic token counts are unavailable and reported as null.', 'Human review has not been completed; pending is not a passing result.'] }
+const run = { schemaVersion: SCHEMA_VERSION, runId, corpusVersion: CORPUS_VERSION, mode: config.mode, responseId: config.responseId, runtime: { node: process.version }, networkPolicy: { externalHttpAllowed: false, blockedAttempts: externalRequestAttempts, localEndpoint: '127.0.0.1 loopback only' }, config, configHash, sourceHashes, fixtureHashes, reportDigest, baselineDefinition: config.baseline, generatedAt: new Date().toISOString(), cases, questions, humanReview: { status: 'pending', reviewedCount: 0, coverage: 0, templatePath: 'review-template.json' }, limitations: ['This is offline pipeline and scorer calibration using deterministic local responses.', 'Keyword coverage is not factual correctness and does not measure real model quality.', 'Synthetic token counts are unavailable and reported as null.', 'Human review has not been completed; pending is not a passing result.'] }
 const reportDir = outputDir
 await (await import('node:fs/promises')).mkdir(reportDir, { recursive: true })
 await writeFile(path.join(reportDir, 'report.json'), `${JSON.stringify(run, null, 2)}\n`)
 await writeFile(path.join(reportDir, 'review-template.json'), `${JSON.stringify(makeReviewTemplate(run), null, 2)}\n`)
 const md = [
   '# Offline generation evaluation', '',
-  `- Mode: ${run.mode}`, `- Run: ${run.runId}`, `- Corpus: ${run.corpusVersion}`, `- Synthetic response: ${run.responseId}`,
+  `- Mode: ${run.mode}`, `- Run: ${run.runId}`, `- Corpus: ${run.corpusVersion}`, `- Synthetic response: ${run.responseId}`, `- Node: ${run.runtime.node}`,
   `- Config hash: ${run.configHash}`, '- Scope: offline pipeline and scorer calibration; not a real model quality claim.', '',
-  'Baseline: one request per case, same budget and synthetic profile, using README plus the production rendered file tree.', '',
-  '| Case | Granularity | Pipeline q | Baseline q | Δ q | Pipeline fact keywords | Baseline fact keywords | Pipeline duplicate rate | Baseline duplicate rate | Pipeline/base requests |',
-  '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-  ...cases.map(c => `| ${c.id} | ${c.granularity} | ${c.scored.quota.actual} | ${c.baseline.scored.quota.actual} | ${c.scored.quota.actual - c.baseline.scored.quota.actual} | ${c.scored.knownFactCoverage.covered}/${c.scored.knownFactCoverage.total} | ${c.baseline.scored.knownFactCoverage.covered}/${c.baseline.scored.knownFactCoverage.total} | ${(c.scored.duplicateRate.rate * 100).toFixed(1)}% | ${(c.baseline.scored.duplicateRate.rate * 100).toFixed(1)}% | ${c.requestCount}/${c.baseline.requestCount} |`), '',
+  `Baseline: ${config.baseline}. Synthetic fault schedule: ${config.syntheticFaultSchedule}. Baseline uses one valid JSON response; the Node generation case separately calibrates production repair.`, '',
+  '| Case | Granularity | Pipeline q | Baseline q | Δ q | Pipeline fact keywords | Baseline fact keywords | Pipeline duplicate rate | Baseline duplicate rate | Pipeline/base requests | Raw JSON valid/invalid (pipeline/base) | Repair requests (pipeline/base) | Final contract (pipeline/base) |',
+  '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+  ...cases.map(c => `| ${c.id} | ${c.granularity} | ${c.scored.quota.actual} | ${c.baseline.scored.quota.actual} | ${c.scored.quota.actual - c.baseline.scored.quota.actual} | ${c.scored.knownFactCoverage.covered}/${c.scored.knownFactCoverage.total} | ${c.baseline.scored.knownFactCoverage.covered}/${c.baseline.scored.knownFactCoverage.total} | ${(c.scored.duplicateRate.rate * 100).toFixed(1)}% | ${(c.baseline.scored.duplicateRate.rate * 100).toFixed(1)}% | ${c.requestCount}/${c.baseline.requestCount} | ${c.rawJson.validResponses}/${c.rawJson.invalidResponses} (${c.baseline.rawJson.validResponses}/${c.baseline.rawJson.invalidResponses}) | ${c.repairRequestCount}/${c.baseline.repairRequestCount} | ${c.finalContract.pass}/${c.baseline.finalContract.pass} |`), '',
   ...cases.flatMap(c => [`### ${c.id}`, '', `Pipeline alerts: ${c.scored.alerts.length ? c.scored.alerts.join(', ') : 'none'}; forbidden hits ${c.scored.forbiddenAssertionHits.length}; input ${c.inputChars} chars; ${c.elapsedMs} ms.`, `Baseline alerts: ${c.baseline.scored.alerts.length ? c.baseline.scored.alerts.join(', ') : 'none'}; forbidden hits ${c.baseline.scored.forbiddenAssertionHits.length}; input ${c.baseline.inputChars} chars; ${c.baseline.elapsedMs} ms.`, '']),
   `Human review coverage: 0/${questions.length} pending. See review-template.json.`, '',
   'Limitations: keyword coverage only shows that configured terms appeared in generated text; it is not a factual accuracy score. No real model was called. Tokens are null because synthetic token usage is not measured.', '',

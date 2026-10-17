@@ -1,9 +1,9 @@
 {
   "schemaVersion": "repoprep-human-review-v1",
-  "runId": "b0d5dfbb-3388-4968-8366-bcadff241653",
+  "runId": "e2d4d9e2-47dd-4ede-83a1-9041ff400c20",
   "corpusVersion": "repoprep-eval-corpus-v1",
-  "configHash": "b2a13ef1117ff18d9508805c452940e40f1cca9e96e797c44455c36f78c10e31",
-  "reportDigest": "sha256:d4753fdff8271ae34873ffad16259d6712fbca9c5edf14989695c3a6e6cc4ef0",
+  "configHash": "d4e2965a0f9dd238d3e56487b2717c78f352793dda410bcf7728332473471ad1",
+  "reportDigest": "sha256:0337e5f0230b4597f90faadc179a36be4d0a2ae294f8c4fe56bbd571964969c6",
   "rubric": {
     "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.",
     "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
@@ -731,369 +731,9 @@
       "note": ""
     },
     {
-      "fingerprint": "ef0a08608f79804d37a58abe0f86edf5055600e94541de8efb9655a2673a445c",
+      "fingerprint": "1abe8d4a07a9e24141d1abfe7da01658a399d8677832360a57ff59a45ef1f528",
       "caseId": "node-routes",
       "variant": "generation",
-      "question": "How does Node.js shape the data flow in this project? (response 3, angle 1)",
-      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports Node.js?",
-          "answer": "Only the visible mention of Node.js is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "4c51c120288d962164307362a36c206d59726a7464ab78ec3848284b7792414b",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What trade-off follows from using node:http here? (response 3, angle 1)",
-      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports node:http?",
-          "answer": "Only the visible mention of node:http is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "f7eb253d7ff6c1bf7b396fadf9b604684f6b5afbff8d2ddabd3238483dce9b8d",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "Which boundary should be checked around routes? (response 3, angle 1)",
-      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports routes?",
-          "answer": "Only the visible mention of routes is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "2e81b8226f6acc027fd03ffeba16e6604a1b2eaed2b6f62a3089586fa6afa184",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How would you explain the behavior of /health from the shown code? (response 3, angle 1)",
-      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports /health?",
-          "answer": "Only the visible mention of /health is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "b97f32ee95efa53dda4bb516045dd75ce03f469a9fcd9caa2d5691b33f6d6cac",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What change could affect Node.js, and how would you verify it? (response 3, angle 1)",
-      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports Node.js?",
-          "answer": "Only the visible mention of Node.js is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "c30f9619af10b00c87cec5c2719c69ba4c583ccbe2ecb9ace1487f87d48a1045",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How does node:http shape the data flow in this project? (response 3, angle 2)",
-      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports node:http?",
-          "answer": "Only the visible mention of node:http is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "0adb2b68cec6ae0d1b4e9591cdd62eb1ddb73d608675f295010579f27ab83192",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What trade-off follows from using routes here? (response 3, angle 2)",
-      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports routes?",
-          "answer": "Only the visible mention of routes is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "fa5909253da4dfb2b9fb86846179c28d843250e9183c79a7d9606d6869597882",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "Which boundary should be checked around /health? (response 3, angle 2)",
-      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports /health?",
-          "answer": "Only the visible mention of /health is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "6cfb13194b17e928b22d804204de2b7fb9e4edf197232533b3d46a92c3a300e5",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How would you explain the behavior of Node.js from the shown code? (response 3, angle 2)",
-      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports Node.js?",
-          "answer": "Only the visible mention of Node.js is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "d3f085173310c37abc5237b8d50710d323875f704d2d12b631ad2607aebecbf4",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What change could affect node:http, and how would you verify it? (response 3, angle 2)",
-      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports node:http?",
-          "answer": "Only the visible mention of node:http is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "8a5e14a253a610979eb04255152880e999af023af047c270e0495c066fc8de2b",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How does routes shape the data flow in this project? (response 3, angle 3)",
-      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports routes?",
-          "answer": "Only the visible mention of routes is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "fe2072362d3f88266509a921b54224ea4ab27fd7769f9baf2492487ce8cd2e92",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What trade-off follows from using /health here? (response 3, angle 3)",
-      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports /health?",
-          "answer": "Only the visible mention of /health is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "fa5c1f531025f804885fdaad967edef44d27b8a3ebfe291631824c1c71611dc9",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "Which boundary should be checked around Node.js? (response 3, angle 3)",
-      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports Node.js?",
-          "answer": "Only the visible mention of Node.js is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "a27860f0e2e4066bd5f7f8e505caea22259e5214599a0dbf79c0dc535a180e75",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How would you explain the behavior of node:http from the shown code? (response 3, angle 3)",
-      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports node:http?",
-          "answer": "Only the visible mention of node:http is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "85eca14bda69b5541d55770be49bacfbd3722aeba6d904a37101d0d58e727fce",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What change could affect routes, and how would you verify it? (response 3, angle 3)",
-      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports routes?",
-          "answer": "Only the visible mention of routes is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "816f7699dd18a7aba72a7ac2501192d7290dd9ec6dac20c0cce91566f08ba81d",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How does /health shape the data flow in this project? (response 3, angle 4)",
-      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports /health?",
-          "answer": "Only the visible mention of /health is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "9e3b3f95ee478a6cd7303e41599ceadebf88425f8cafa8f09f9234f29e263836",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What trade-off follows from using Node.js here? (response 3, angle 4)",
-      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports Node.js?",
-          "answer": "Only the visible mention of Node.js is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "629f48e0c636e7689ad8af26fd3cab4a21a1dc4c5fd88ea6b5c7179c5f681b3b",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "Which boundary should be checked around node:http? (response 3, angle 4)",
-      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports node:http?",
-          "answer": "Only the visible mention of node:http is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "71b8efb18db7be898ad466e8b20243ff007352d9c8c97a365a9151b1df64c252",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "How would you explain the behavior of routes from the shown code? (response 3, angle 4)",
-      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports routes?",
-          "answer": "Only the visible mention of routes is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "f1726f9156908ce5578a65b8c34636c84523e48c26e53bacd7d45b47af54efe9",
-      "caseId": "node-routes",
-      "variant": "generation",
-      "question": "What change could affect /health, and how would you verify it? (response 3, angle 4)",
-      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports /health?",
-          "answer": "Only the visible mention of /health is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "e66067441ac712e8042ea32f8c073a02f36c8beab5b38db2e267e0871847b1fe",
-      "caseId": "node-routes",
-      "variant": "baseline",
       "question": "How does Node.js shape the data flow in this project? (response 4, angle 1)",
       "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1109,9 +749,9 @@
       "note": ""
     },
     {
-      "fingerprint": "cc3f47b21fe1588675e9914295d6c1524ad245569e96666bbc73b20e51b35ff5",
+      "fingerprint": "eb6324f90a261a04b57dcd2530045caacff3bd6de14389acb1aff0715bd1f42e",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What trade-off follows from using node:http here? (response 4, angle 1)",
       "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1127,9 +767,9 @@
       "note": ""
     },
     {
-      "fingerprint": "d7cfd7fffbe4671cfa9ab18a07de34848ca68b0bcc8055a34fef13e92c548551",
+      "fingerprint": "e6ea538af4f68bae32ad4ccc3ce81f20c8657574614166a3c34c468bb054e9ae",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "Which boundary should be checked around routes? (response 4, angle 1)",
       "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1145,9 +785,9 @@
       "note": ""
     },
     {
-      "fingerprint": "650ac848736c186c57a9b232eefdd960c95c04522eb74a58fa2e4398888c2145",
+      "fingerprint": "e3891ea60b64469ba1c7bd0fbefba499e9d76d11d439d5a37aec8c72200c5003",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How would you explain the behavior of /health from the shown code? (response 4, angle 1)",
       "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1163,9 +803,9 @@
       "note": ""
     },
     {
-      "fingerprint": "fd958b8ef0629001a95f09642a83eeb2b54a608bce8995b24b1a238308cc08f4",
+      "fingerprint": "8ba84f5598181392bf0e136112e2fac54f1bb9a452b698d0986e235a08785b0b",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What change could affect Node.js, and how would you verify it? (response 4, angle 1)",
       "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1181,9 +821,9 @@
       "note": ""
     },
     {
-      "fingerprint": "e5c28b5a326c476d1a4bd5e4729c631dbc74941ab580fef5817acc7256da7a4b",
+      "fingerprint": "f67bcc6c1a7d390e85d4a79523da95d85d772b25b17f353e631382234f222ab0",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How does node:http shape the data flow in this project? (response 4, angle 2)",
       "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1199,9 +839,9 @@
       "note": ""
     },
     {
-      "fingerprint": "71153e98a753b21a8533082e6b023a0d51a682a311654edbd1034bc8c61ede1f",
+      "fingerprint": "8ac1c2d337e409175810e165ebb62f57ed8aa1d5c7f16616fb57a2adbc78f1f9",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What trade-off follows from using routes here? (response 4, angle 2)",
       "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1217,9 +857,9 @@
       "note": ""
     },
     {
-      "fingerprint": "843d3b4fc7c64daa1b8578ff0fafb9563c6c9863691c215b8ef4ef05eb2893cf",
+      "fingerprint": "5975e2dc456cd2ed27edde626e40180e83fe86cf152966e345a9bd1e71d7d443",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "Which boundary should be checked around /health? (response 4, angle 2)",
       "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1235,9 +875,9 @@
       "note": ""
     },
     {
-      "fingerprint": "84149ddb1ac55bafc80cca401e69191158d62909818f3c30caf2e5f958f9337c",
+      "fingerprint": "0f43d0c4e95698bb9aee06a62ca353d7651e68b8a9a7b5af7be426d936794585",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How would you explain the behavior of Node.js from the shown code? (response 4, angle 2)",
       "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1253,9 +893,9 @@
       "note": ""
     },
     {
-      "fingerprint": "ca5b2611fa0d087b8cb7f0d1bb1b94bf2962a6cf48902f1ac9346ff85efd6639",
+      "fingerprint": "d47a33243393dfc9ce1d3a9577410a775c2455fd321347c3175bb1d394c7664d",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What change could affect node:http, and how would you verify it? (response 4, angle 2)",
       "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1271,9 +911,9 @@
       "note": ""
     },
     {
-      "fingerprint": "074f6420e2b747c9f62984a0fa8c292bfae7491983d2371141041b2a9c11a335",
+      "fingerprint": "1a8437ca11ecd30fcfb6ff4e7bd30d5e9806861d5cc8d27d6f78d56fc251432d",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How does routes shape the data flow in this project? (response 4, angle 3)",
       "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1289,9 +929,9 @@
       "note": ""
     },
     {
-      "fingerprint": "13ff62a23ef9e18099ee2c3fb61e7791cb582d30cec31972836adaaddd759cc2",
+      "fingerprint": "5341080546ad2760b28a40cd855f068180b642b7945a59a0a6fe03679a6d8c71",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What trade-off follows from using /health here? (response 4, angle 3)",
       "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1307,9 +947,9 @@
       "note": ""
     },
     {
-      "fingerprint": "7b108b2c27ae3785928c4da7fc712a1871dbb9a48e478efb8e27a8f9689c5f63",
+      "fingerprint": "ce9621d29bdddc225c8626c4e6e6e49d0663c84709de860fd6df3f192851c8c3",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "Which boundary should be checked around Node.js? (response 4, angle 3)",
       "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1325,9 +965,9 @@
       "note": ""
     },
     {
-      "fingerprint": "6b8eb0f6cba6b28ce501c32656bade524744df29f9716f45f074e18ac865cc9e",
+      "fingerprint": "ce99b98f88f18f48ea5168f6e41839def77efc3283eafaab8751dbb4a99cc518",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How would you explain the behavior of node:http from the shown code? (response 4, angle 3)",
       "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1343,9 +983,9 @@
       "note": ""
     },
     {
-      "fingerprint": "7416577e04efe7a635e16ffa825c89b792144a18b144c9ce42ff927da6120eae",
+      "fingerprint": "9e2b8a95e3761d8d5f01e886e7163e4887ee72e28a2cffd15399b3afadd6cf1b",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What change could affect routes, and how would you verify it? (response 4, angle 3)",
       "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1361,9 +1001,9 @@
       "note": ""
     },
     {
-      "fingerprint": "9eff4b2451d28c47e923b1518ddc879083caff32153d71078685af6a6d467b9f",
+      "fingerprint": "19a5ef3e64f95bcbffa6a54db90e7ab1ed575bed0148ce73c1400eccf8b89fbb",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How does /health shape the data flow in this project? (response 4, angle 4)",
       "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1379,9 +1019,9 @@
       "note": ""
     },
     {
-      "fingerprint": "3194a2f1893f4838659ad1a120b862d894dcd330020ae7d75ecd3749467f0032",
+      "fingerprint": "7c2c300c7e9a90776a34475cef919e0c903282d47637dbf699738d13a2c29d0d",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What trade-off follows from using Node.js here? (response 4, angle 4)",
       "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1397,9 +1037,9 @@
       "note": ""
     },
     {
-      "fingerprint": "8ea92381ff1bf001b781fa6fb85b2f0e6fbf4d736661bfad05060439ff6d8d1f",
+      "fingerprint": "2c73f1b2f7a90aaeb102078424a771229e2528e7814435152c43352f1a66660d",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "Which boundary should be checked around node:http? (response 4, angle 4)",
       "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1415,9 +1055,9 @@
       "note": ""
     },
     {
-      "fingerprint": "4bf15bab8435f55501ae3a72475b8587f3415ce5844f641c62b1583a059be8b4",
+      "fingerprint": "b38a2b1dee8644f9627d51a37f2572dd8835a82ba8968a0c66df5f523ce59608",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How would you explain the behavior of routes from the shown code? (response 4, angle 4)",
       "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1433,9 +1073,9 @@
       "note": ""
     },
     {
-      "fingerprint": "ed1299f9552226c28e8297b63c4aebbc1bdef3a8c416b4c60f4627670126d37b",
+      "fingerprint": "919ed4a1db53ce1fd61f7c7425164670e7c76fc16565588351089da101e2486f",
       "caseId": "node-routes",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What change could affect /health, and how would you verify it? (response 4, angle 4)",
       "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1451,15 +1091,15 @@
       "note": ""
     },
     {
-      "fingerprint": "1e71e7c0e89845ef0ebbaa074bd0b0bd0e3c776284d707bdd160a844d1123ecb",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "How does argparse shape the data flow in this project? (response 5, angle 1)",
-      "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "fingerprint": "1a56b329b1628c8c0ef59d333d1caaf243ea3dc7f8f577ea348d4cf4ebe3c05b",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How does Node.js shape the data flow in this project? (response 5, angle 1)",
+      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
-          "question": "What evidence in the supplied context supports argparse?",
-          "answer": "Only the visible mention of argparse is used.",
+          "question": "What evidence in the supplied context supports Node.js?",
+          "answer": "Only the visible mention of Node.js is used.",
           "followUps": []
         }
       ],
@@ -1469,15 +1109,15 @@
       "note": ""
     },
     {
-      "fingerprint": "fc6bfe2ca60ce8e64aaeb10bf352a49abfe21a9dcd3dffd50d5bd41f39b5d1cf",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "What trade-off follows from using csv here? (response 5, angle 1)",
-      "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "fingerprint": "6808ddc14d413b10195ce75f3cd5de183d3a1b8ea95afec0dfd94f2023339cfb",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What trade-off follows from using node:http here? (response 5, angle 1)",
+      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
-          "question": "What evidence in the supplied context supports csv?",
-          "answer": "Only the visible mention of csv is used.",
+          "question": "What evidence in the supplied context supports node:http?",
+          "answer": "Only the visible mention of node:http is used.",
           "followUps": []
         }
       ],
@@ -1487,15 +1127,15 @@
       "note": ""
     },
     {
-      "fingerprint": "b43d6df59d6adec592ffbfae26c24697e98cda889c1bd7b520ecb0990bab6460",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "Which boundary should be checked around dry-run? (response 5, angle 1)",
-      "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "fingerprint": "70e6432ab86e125356bd8cbf78b5ad37d0c2aa4c5210237483dc8dbeb8ecc150",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "Which boundary should be checked around routes? (response 5, angle 1)",
+      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
-          "question": "What evidence in the supplied context supports dry-run?",
-          "answer": "Only the visible mention of dry-run is used.",
+          "question": "What evidence in the supplied context supports routes?",
+          "answer": "Only the visible mention of routes is used.",
           "followUps": []
         }
       ],
@@ -1505,15 +1145,15 @@
       "note": ""
     },
     {
-      "fingerprint": "d9f48835aa5e6b9285cfe0ef9425fac83719b17edcf583909d65b36a26f3aabd",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "How would you explain the behavior of pathlib from the shown code? (response 5, angle 1)",
-      "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "fingerprint": "a0a52ff28a6277186974cab6eae649b3e2a9ec3ec20a141e86aeafc6833dd096",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How would you explain the behavior of /health from the shown code? (response 5, angle 1)",
+      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
-          "question": "What evidence in the supplied context supports pathlib?",
-          "answer": "Only the visible mention of pathlib is used.",
+          "question": "What evidence in the supplied context supports /health?",
+          "answer": "Only the visible mention of /health is used.",
           "followUps": []
         }
       ],
@@ -1523,15 +1163,285 @@
       "note": ""
     },
     {
-      "fingerprint": "5f829363e06b475292eceb79e0c896be8ee4a53c4f76a4c9acf7c841a0f7312a",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "What change could affect argparse, and how would you verify it? (response 5, angle 1)",
-      "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "fingerprint": "63eca8d6f5669b22c2546bc577c0107456889bc4d03667231a128815bd4e1da1",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What change could affect Node.js, and how would you verify it? (response 5, angle 1)",
+      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
-          "question": "What evidence in the supplied context supports argparse?",
-          "answer": "Only the visible mention of argparse is used.",
+          "question": "What evidence in the supplied context supports Node.js?",
+          "answer": "Only the visible mention of Node.js is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5a989eaceb1aca1c470b7369f9964a4db2c4a7a3aa37c4cb5d8b6d184457b160",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How does node:http shape the data flow in this project? (response 5, angle 2)",
+      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports node:http?",
+          "answer": "Only the visible mention of node:http is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "8157e06589f883ec4175bcf1aeac2c5d34d7e1660e06d09a99fece1422ba113f",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What trade-off follows from using routes here? (response 5, angle 2)",
+      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports routes?",
+          "answer": "Only the visible mention of routes is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "7892cde7d0cb29fe3e3ef42e83835e36a94f6a7ac8e3cbfb413993b78fd91fd2",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "Which boundary should be checked around /health? (response 5, angle 2)",
+      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports /health?",
+          "answer": "Only the visible mention of /health is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "669139e766a28e0d38815126b358038ae6036b26bcddcd6003d944724aa6ff2b",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How would you explain the behavior of Node.js from the shown code? (response 5, angle 2)",
+      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports Node.js?",
+          "answer": "Only the visible mention of Node.js is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e4ed60da0aef52a5fb2095f820a169526aa4ef5431e10d421cec491001e76db1",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What change could affect node:http, and how would you verify it? (response 5, angle 2)",
+      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports node:http?",
+          "answer": "Only the visible mention of node:http is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "41e17a9b70afd634470ea0a8ed71434a209670cb7a0596ad4362ce95f6f3e316",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How does routes shape the data flow in this project? (response 5, angle 3)",
+      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports routes?",
+          "answer": "Only the visible mention of routes is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "2bff830cbece9204cb7bf8d6c1032e7c6e6b985af11b12031d6cf557e73085e1",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What trade-off follows from using /health here? (response 5, angle 3)",
+      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports /health?",
+          "answer": "Only the visible mention of /health is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "070331cb0d00d22a789d5307c014228bbe25079dc3c42b9aec8eeb8132f37c74",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "Which boundary should be checked around Node.js? (response 5, angle 3)",
+      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports Node.js?",
+          "answer": "Only the visible mention of Node.js is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5d7722dd120fe2b088188e9ae4c4f044da9b8ba4632f13bae589217ec080a572",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How would you explain the behavior of node:http from the shown code? (response 5, angle 3)",
+      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports node:http?",
+          "answer": "Only the visible mention of node:http is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "b277779f0d9293d38fa30b52e96a2a4f68c8a01901b64e22f7c6ca650efb0855",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What change could affect routes, and how would you verify it? (response 5, angle 3)",
+      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports routes?",
+          "answer": "Only the visible mention of routes is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a07af7442cba94e552907089a99f74405aa0886cf09283c5694b1844320d7d1e",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How does /health shape the data flow in this project? (response 5, angle 4)",
+      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports /health?",
+          "answer": "Only the visible mention of /health is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "2ae7216b75a001020ee5211379fa35590be61df0be8088d2a81ff0408b051ef7",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What trade-off follows from using Node.js here? (response 5, angle 4)",
+      "answer": "The supplied context mentions Node.js. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports Node.js?",
+          "answer": "Only the visible mention of Node.js is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5aee4e3f428e897695fb6c8ac0a75c035cf4214bb23449967aaa0cb7c113aa25",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "Which boundary should be checked around node:http? (response 5, angle 4)",
+      "answer": "The supplied context mentions node:http. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports node:http?",
+          "answer": "Only the visible mention of node:http is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d5da28eb5c45e759cb6705204caff5781f84152f7636663570a910d0a753980d",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "How would you explain the behavior of routes from the shown code? (response 5, angle 4)",
+      "answer": "The supplied context mentions routes. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports routes?",
+          "answer": "Only the visible mention of routes is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "719f4ac28c521035dee2eb9bee819614905ad599c052d628b7b17cd7d172b539",
+      "caseId": "node-routes",
+      "variant": "baseline",
+      "question": "What change could affect /health, and how would you verify it? (response 5, angle 4)",
+      "answer": "The supplied context mentions /health. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports /health?",
+          "answer": "Only the visible mention of /health is used.",
           "followUps": []
         }
       ],
@@ -1721,60 +1631,6 @@
       "note": ""
     },
     {
-      "fingerprint": "413825de35f39ae19725b84f9028603c9fae05e498375b9bb52caa272a3601c7",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "How does csv shape the data flow in this project? (response 7, angle 2)",
-      "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports csv?",
-          "answer": "Only the visible mention of csv is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "f0024bdcb35bc3055722526303b5cdc3e5491c742aa93023a04fdec6fec4d52a",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "What trade-off follows from using dry-run here? (response 7, angle 2)",
-      "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports dry-run?",
-          "answer": "Only the visible mention of dry-run is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "48606361e785e8be8ab9d5d1ba0ffee7f8bd846007cb4d47c47172fd5cecea5c",
-      "caseId": "python-cli",
-      "variant": "generation",
-      "question": "Which boundary should be checked around pathlib? (response 7, angle 2)",
-      "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports pathlib?",
-          "answer": "Only the visible mention of pathlib is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
       "fingerprint": "bac41ab9a4077ffe28dd005bc7a74d84ee59995c2a54ba12c377b9fc09312acb",
       "caseId": "python-cli",
       "variant": "generation",
@@ -1901,9 +1757,27 @@
       "note": ""
     },
     {
-      "fingerprint": "40cea60f82c6c25fb7620a1532500b8d045a7a596014e0522973ba0ecece39f9",
+      "fingerprint": "70714bfad6b92e4c12a5430142f4998c3b58a7c90a1ef1a235977918dc18a70f",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
+      "question": "Which boundary should be checked around pathlib? (response 8, angle 2)",
+      "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports pathlib?",
+          "answer": "Only the visible mention of pathlib is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "55d3955f1f707be1110ea83f8166d3e4a7ed60cea8a704e1f5ca3f6fa83c1176",
+      "caseId": "python-cli",
+      "variant": "generation",
       "question": "How does argparse shape the data flow in this project? (response 9, angle 1)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1919,9 +1793,9 @@
       "note": ""
     },
     {
-      "fingerprint": "ae30a8e08e5c0d021bec06e04b5e8614ebce8dfaa85cc6c910458b54e9c4e4a9",
+      "fingerprint": "bc0416929a3d267f4c6f52ca151fb10d8475d172948311e88e9d2f9a6ff2b24d",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What trade-off follows from using csv here? (response 9, angle 1)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1937,9 +1811,9 @@
       "note": ""
     },
     {
-      "fingerprint": "ee1e1f16e99089997465131d6efdcf7838c7604e9496b9e26fab1962b105230a",
+      "fingerprint": "dbd23cf310a356e2d727757c9d2d9767596a9ac12c1832f1140b5a59daae6c84",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "Which boundary should be checked around dry-run? (response 9, angle 1)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1955,9 +1829,9 @@
       "note": ""
     },
     {
-      "fingerprint": "1e6b4b6542b09a8a5ef7618f6a38499fde414695bb7842b1c453f2832101e00c",
+      "fingerprint": "c4734d7d7e5f663c305cdf20a16864028ffa5bcc28a52410e1c7b110b4f6a158",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How would you explain the behavior of pathlib from the shown code? (response 9, angle 1)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1973,9 +1847,9 @@
       "note": ""
     },
     {
-      "fingerprint": "1f644dc7e474e5ec4a51e9a752052506a63fcb3be417ad0884055b1554550fee",
+      "fingerprint": "5960e729c53ef7f219b89b96531cb8dc5bfb57d75d653ebf4c8e4ce3bf394303",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What change could affect argparse, and how would you verify it? (response 9, angle 1)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -1991,9 +1865,9 @@
       "note": ""
     },
     {
-      "fingerprint": "add6788bd6bf4fe02a3ac5df9a99d83203069603776860b6882c2784fb4ee3a7",
+      "fingerprint": "c80982a74433a66b1faed855f9c80506eb2a694b55bb195303a3a74eaa21af57",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "How does csv shape the data flow in this project? (response 9, angle 2)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -2009,9 +1883,9 @@
       "note": ""
     },
     {
-      "fingerprint": "20130375d9151afa7bb951f171e8c2796da42b3b8c20cc2a0b13525976f3f5cf",
+      "fingerprint": "99f2f428c0772648765abb26c76475a50516f660f339365cb26ac3f116e25c3d",
       "caseId": "python-cli",
-      "variant": "baseline",
+      "variant": "generation",
       "question": "What trade-off follows from using dry-run here? (response 9, angle 2)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
@@ -2027,28 +1901,10 @@
       "note": ""
     },
     {
-      "fingerprint": "ca8d8cc28431661bfc26004f43cec8c61b2e1f48b1e9997f90bb1e5015312504",
+      "fingerprint": "5e8c944fe2f27741dc2cce196a3db2b83917173bec857b9cae02131ee9cd8690",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "Which boundary should be checked around pathlib? (response 9, angle 2)",
-      "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
-      "followUps": [
-        {
-          "question": "What evidence in the supplied context supports pathlib?",
-          "answer": "Only the visible mention of pathlib is used.",
-          "followUps": []
-        }
-      ],
-      "factualCorrectness": null,
-      "projectRelevance": null,
-      "semanticDuplication": null,
-      "note": ""
-    },
-    {
-      "fingerprint": "9113e1a4c6091842415fd6cfc42d5339c25c412868a2e6cc96f6e16f2b99e440",
-      "caseId": "python-cli",
-      "variant": "baseline",
-      "question": "How would you explain the behavior of argparse from the shown code? (response 9, angle 2)",
+      "question": "How does argparse shape the data flow in this project? (response 10, angle 1)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2063,10 +1919,10 @@
       "note": ""
     },
     {
-      "fingerprint": "5d3dba68664e3a2bdbb893ccf626e8ebb560d131b707d7c2c50643f253190ee5",
+      "fingerprint": "295485415eebdbf1853926eac10a56a0ab1e0d90af6bba4086f143252b49c86f",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What change could affect csv, and how would you verify it? (response 9, angle 2)",
+      "question": "What trade-off follows from using csv here? (response 10, angle 1)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2081,10 +1937,10 @@
       "note": ""
     },
     {
-      "fingerprint": "0adf315cdb609133faa0c0ce72382f8182e6d6deb3dfb1b7f86c546ca49a9aff",
+      "fingerprint": "4942ced80b53b729cba06c60d667761a4788ad2c9fb410f8c62af09d8e9f77fd",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How does dry-run shape the data flow in this project? (response 9, angle 3)",
+      "question": "Which boundary should be checked around dry-run? (response 10, angle 1)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2099,10 +1955,10 @@
       "note": ""
     },
     {
-      "fingerprint": "c9dda172c4ed06ddadd869d5133235e9c1f3d1bbe54709f8cb1dbf970ce1a6df",
+      "fingerprint": "41d19160627e2632b6b727190a9cba9c0d91733431d2a2d16f8869958556d9b8",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What trade-off follows from using pathlib here? (response 9, angle 3)",
+      "question": "How would you explain the behavior of pathlib from the shown code? (response 10, angle 1)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2117,10 +1973,10 @@
       "note": ""
     },
     {
-      "fingerprint": "b0c59ac6d1923051395848de42f1bab8ad7fb0c5a26cc920b461cd7dbc43eaad",
+      "fingerprint": "3b651e4b8484e6e3cd86cb78701ab5d438858fccc51a6cf1aa5be7d69de137c0",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "Which boundary should be checked around argparse? (response 9, angle 3)",
+      "question": "What change could affect argparse, and how would you verify it? (response 10, angle 1)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2135,10 +1991,10 @@
       "note": ""
     },
     {
-      "fingerprint": "30a63443a64f89364d9b39a1ff0e824d302c8025426b16d3552f2ecb8f29b904",
+      "fingerprint": "b3fb5760fb73a8e66be581b053a90b862100b8d874f1e42ad5f07a96f2a133e3",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How would you explain the behavior of csv from the shown code? (response 9, angle 3)",
+      "question": "How does csv shape the data flow in this project? (response 10, angle 2)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2153,10 +2009,10 @@
       "note": ""
     },
     {
-      "fingerprint": "1cd8dba937e65a0d2f488d5b44d27fd2c5737cb2d8a0c6a9b9c39a70812a3b23",
+      "fingerprint": "95534511ee4811f6eca6d760ddcc86d06988287b3f253892722732ebd5b2924e",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What change could affect dry-run, and how would you verify it? (response 9, angle 3)",
+      "question": "What trade-off follows from using dry-run here? (response 10, angle 2)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2171,10 +2027,10 @@
       "note": ""
     },
     {
-      "fingerprint": "1cd09a79bd92c0be9d207f178fc2508b369b3ab953285311b0f3025fda7b1528",
+      "fingerprint": "45c16cbb411a191f10aad02d50f8700ca489661433e094196e113885f3516b8a",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How does pathlib shape the data flow in this project? (response 9, angle 4)",
+      "question": "Which boundary should be checked around pathlib? (response 10, angle 2)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2189,10 +2045,10 @@
       "note": ""
     },
     {
-      "fingerprint": "5f4fc755c2c6957fd0c4e7a72faa3bdc5af82debe8725db213f907e501cbd233",
+      "fingerprint": "aedfa45f002deaebc0149ce35c0d0e645fb3b43a1ff06827803bf5e232e7c1cf",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What trade-off follows from using argparse here? (response 9, angle 4)",
+      "question": "How would you explain the behavior of argparse from the shown code? (response 10, angle 2)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2207,10 +2063,10 @@
       "note": ""
     },
     {
-      "fingerprint": "1216fb56f71b2a986cc5a2fb5774eaf1d98280ea9fe3ce636df219692dcda027",
+      "fingerprint": "73629a7d0236fd771f2bb52e100bdb96b6f655dda5f0644326ec090764c30858",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "Which boundary should be checked around csv? (response 9, angle 4)",
+      "question": "What change could affect csv, and how would you verify it? (response 10, angle 2)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2225,10 +2081,10 @@
       "note": ""
     },
     {
-      "fingerprint": "29e3105899c38259e724a582351a40216f2b8a4859e6d4ec8060a2a9bf3831a6",
+      "fingerprint": "9c288c6077c22adfdda7a80185e50e3930e28f6d325048dbb388e217b85fd030",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How would you explain the behavior of dry-run from the shown code? (response 9, angle 4)",
+      "question": "How does dry-run shape the data flow in this project? (response 10, angle 3)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2243,10 +2099,10 @@
       "note": ""
     },
     {
-      "fingerprint": "bcdcc670ce3548eea329c721cc0640cc7e2caa64e052ac7d778d8a8a535dc36e",
+      "fingerprint": "c2d38a4c4cc5d10b5bf5b7aba434e9c8568e792dc2215e5efe5234c72792ae88",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What change could affect pathlib, and how would you verify it? (response 9, angle 4)",
+      "question": "What trade-off follows from using pathlib here? (response 10, angle 3)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2261,10 +2117,10 @@
       "note": ""
     },
     {
-      "fingerprint": "87620c0064f5cd4c7915a7e763e6931ec1de44de54a6b7cffc85a4e16a4cf2a4",
+      "fingerprint": "cd80e8aa3c31e5c3d7ccdce526e13383514ea2d5ee5dd587ba9615da0b4cf796",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How does argparse shape the data flow in this project? (response 9, angle 5)",
+      "question": "Which boundary should be checked around argparse? (response 10, angle 3)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2279,10 +2135,10 @@
       "note": ""
     },
     {
-      "fingerprint": "0071658888ce557edc6a80b329a24e5d8915dd99497db27f39d620847f77195c",
+      "fingerprint": "120c2863e6693caf53c437a492131252c9b853b7f7e25c016f832efb8ae447b2",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What trade-off follows from using csv here? (response 9, angle 5)",
+      "question": "How would you explain the behavior of csv from the shown code? (response 10, angle 3)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2297,10 +2153,10 @@
       "note": ""
     },
     {
-      "fingerprint": "caa820d21f12abedfc145a94b37e87a22d241f4a529dec4cef3af519fb4ca65e",
+      "fingerprint": "8981305000e099a416ade74de66bcc063075984ce7af7f676dd34890a94c5438",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "Which boundary should be checked around dry-run? (response 9, angle 5)",
+      "question": "What change could affect dry-run, and how would you verify it? (response 10, angle 3)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2315,10 +2171,10 @@
       "note": ""
     },
     {
-      "fingerprint": "68438bbcdbbc562c02b93d5187a8438fe5e9864ce5dd4b0fdf4a8cbb9c248b19",
+      "fingerprint": "b934328e4427a136be6044788373918841a8c61bc9160ee3bd690a175c5f72ae",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How would you explain the behavior of pathlib from the shown code? (response 9, angle 5)",
+      "question": "How does pathlib shape the data flow in this project? (response 10, angle 4)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2333,10 +2189,10 @@
       "note": ""
     },
     {
-      "fingerprint": "95ee866b8d4b9996626525c187fcebfa57f994791cc9534ab6669166fb6c00b0",
+      "fingerprint": "a685aaf20f6bca2d1878807cb65cf1f2f1d3863bde1d0f48e0b560f01a95f8b0",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What change could affect argparse, and how would you verify it? (response 9, angle 5)",
+      "question": "What trade-off follows from using argparse here? (response 10, angle 4)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2351,10 +2207,10 @@
       "note": ""
     },
     {
-      "fingerprint": "94c9d71fd41960b6c79c887460c330ab7fca9f68d3b2f524672e8511e06d87b1",
+      "fingerprint": "384abdace040aa8efe3542b1b5c8f6e35765c4fe552bcb517f7c71906f3aa642",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How does csv shape the data flow in this project? (response 9, angle 6)",
+      "question": "Which boundary should be checked around csv? (response 10, angle 4)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2369,10 +2225,10 @@
       "note": ""
     },
     {
-      "fingerprint": "5d3262ef5bfb008a500b932363949fa659ec1616412f967b16c7ea0219881985",
+      "fingerprint": "bfe1b8dc15063dda31648c7b93f1b73179ceeee7dbf2372548a4c6a1293c7ca1",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What trade-off follows from using dry-run here? (response 9, angle 6)",
+      "question": "How would you explain the behavior of dry-run from the shown code? (response 10, angle 4)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2387,10 +2243,10 @@
       "note": ""
     },
     {
-      "fingerprint": "ad06fb643fa6a19ee6408256f7e5e742e7ef57308c77cce85371c8ea2d8137e6",
+      "fingerprint": "ca197d27f01f2a1f30a58e3477d57effdf40e65dfc6f60e332e219c63a10d312",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "Which boundary should be checked around pathlib? (response 9, angle 6)",
+      "question": "What change could affect pathlib, and how would you verify it? (response 10, angle 4)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2405,10 +2261,10 @@
       "note": ""
     },
     {
-      "fingerprint": "5d7b98b2b20d895e2b4bfda7594a78e2d584a1d377fabc8ba018b58242af8460",
+      "fingerprint": "bd6edcc9a903e55fdc9cfc603ba62de225b0fcc2056d9c315b988d888b058a0f",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How would you explain the behavior of argparse from the shown code? (response 9, angle 6)",
+      "question": "How does argparse shape the data flow in this project? (response 10, angle 5)",
       "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2423,10 +2279,10 @@
       "note": ""
     },
     {
-      "fingerprint": "8f98a0f106b6beec48fd2252264afc0f332dfd44ff776c2cc209094e50077535",
+      "fingerprint": "70ae9a7f677f21b1267c0d7d1525f158757f6dd4ab7802b3d4d99de74ba97ca7",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What change could affect csv, and how would you verify it? (response 9, angle 6)",
+      "question": "What trade-off follows from using csv here? (response 10, angle 5)",
       "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2441,10 +2297,10 @@
       "note": ""
     },
     {
-      "fingerprint": "5e98a670d1efb3bf5305ad9fa905d420180c850c02e75fbc02bcfe3be3327bbe",
+      "fingerprint": "f114e7ca66d5aedad787f9b39120b335bb2cebf6bdaa86365b46d73a9dc1e9b7",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "How does dry-run shape the data flow in this project? (response 9, angle 7)",
+      "question": "Which boundary should be checked around dry-run? (response 10, angle 5)",
       "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
@@ -2459,10 +2315,154 @@
       "note": ""
     },
     {
-      "fingerprint": "8b7be1c89ab059d84b26ce3d9f60f591e94883b439b471d86f818f854082e760",
+      "fingerprint": "8bdcc3f9a1e3ef3a56bad3f77ddceb82698ecf70bd082aa5d40406a0be77c432",
       "caseId": "python-cli",
       "variant": "baseline",
-      "question": "What trade-off follows from using pathlib here? (response 9, angle 7)",
+      "question": "How would you explain the behavior of pathlib from the shown code? (response 10, angle 5)",
+      "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports pathlib?",
+          "answer": "Only the visible mention of pathlib is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "91319ce3b180d36a0f6aec73728e721849243a7fe5a35b61a8ab28e9288e98ce",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "What change could affect argparse, and how would you verify it? (response 10, angle 5)",
+      "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports argparse?",
+          "answer": "Only the visible mention of argparse is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c8eb23edabcd895a416b22598670b212729ddeee610ae7ce4f78bb66ebe6f4d3",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "How does csv shape the data flow in this project? (response 10, angle 6)",
+      "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports csv?",
+          "answer": "Only the visible mention of csv is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a0e5d50d64a3b4cfd24dd9dc5955e5f67912d50b6ce94b2237e8cf6e5818e0b0",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "What trade-off follows from using dry-run here? (response 10, angle 6)",
+      "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports dry-run?",
+          "answer": "Only the visible mention of dry-run is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "852fa1c063cedac3cc0adb036a54676613293cdafe8e80ac2eaeb2a931dda881",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "Which boundary should be checked around pathlib? (response 10, angle 6)",
+      "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports pathlib?",
+          "answer": "Only the visible mention of pathlib is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "f645f86296d62cb859eb7f0c5b737f66b7ca9bbfcaedb59211d4d657b557861e",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "How would you explain the behavior of argparse from the shown code? (response 10, angle 6)",
+      "answer": "The supplied context mentions argparse. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports argparse?",
+          "answer": "Only the visible mention of argparse is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "283b82535e951e048c164f7013d746d2bfdb5d0cb444fc536e683a52a718533d",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "What change could affect csv, and how would you verify it? (response 10, angle 6)",
+      "answer": "The supplied context mentions csv. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports csv?",
+          "answer": "Only the visible mention of csv is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e75cfd5f2236ad5c80d8a15cebd753eec2b8fdec2486c938ca3f1dc16741e12d",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "How does dry-run shape the data flow in this project? (response 10, angle 7)",
+      "answer": "The supplied context mentions dry-run. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
+      "followUps": [
+        {
+          "question": "What evidence in the supplied context supports dry-run?",
+          "answer": "Only the visible mention of dry-run is used.",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "b86c2d502d9893c8d701c46c135f85522f8a597d2cdde28cd3705b8d429f429e",
+      "caseId": "python-cli",
+      "variant": "baseline",
+      "question": "What trade-off follows from using pathlib here? (response 10, angle 7)",
       "answer": "The supplied context mentions pathlib. The answer should be limited to that visible behavior; no additional implementation detail is assumed.",
       "followUps": [
         {
