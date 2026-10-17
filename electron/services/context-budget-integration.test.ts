@@ -57,6 +57,15 @@ async function makeFixture(): Promise<string> {
   return root
 }
 
+async function makeManyLineFixture(): Promise<string> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue90-context-budget-'))
+  tempDirs.push(root)
+  const lines = Array.from({ length: 4_000 }, (_, index) => `DOC_LINE_${String(index + 1).padStart(4, '0')} ${'x'.repeat(20)}`)
+  await fs.writeFile(path.join(root, 'README.md'), `${lines.join('\n')}\n`)
+  await fs.writeFile(path.join(root, 'package.json'), '{"name":"many-line-fixture"}')
+  return root
+}
+
 async function makeCombinedWarningFixture(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue90-context-budget-'))
   tempDirs.push(root)
@@ -83,16 +92,17 @@ async function makeModuleCapFixture(directoryCount: number, includeRootCode = tr
   return root
 }
 
-function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' | 'evidence' | 'evidence-repair' = 'normal') {
+function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' | 'evidence' | 'evidence-repair' | 'evidence-repair-stale' | 'evidence-cross-batch' = 'normal') {
   const originalFetch = globalThis.fetch
   let call = 0
+  let moduleASourceId: string | undefined
   const invalidReply = '😀'.repeat(11_001) + 'REPAIR-TAIL-SHOULD-BE-CLIPPED'
   globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : {}
     const messages = Array.isArray(body.messages) ? body.messages : []
     capture.push({ messages: messages as typeof capture[number]['messages'] })
     call++
-    if ((mode === 'repair' || mode === 'evidence-repair') && call === 1) {
+    if (['repair', 'evidence-repair', 'evidence-repair-stale'].includes(mode) && call === 1) {
       return new Response(JSON.stringify({ choices: [{ message: { content: invalidReply } }] }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
@@ -100,6 +110,10 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
     }
     const prompt = messages.map((message: { content?: string }) => message.content ?? '').join('\n')
     const sourceId = prompt.match(/\[sourceId: ([^\]]+)\]/)?.[1]
+    const currentSources = sourceEntries({ messages: messages as typeof capture[number]['messages'] })
+    const currentSourceId = currentSources.keys().next().value as string | undefined
+    const moduleName = prompt.match(/本次只分析项目的单个模块「([^」]+)」/)?.[1]
+    if (mode === 'evidence-cross-batch' && moduleName === 'module-a') moduleASourceId = currentSourceId
     const requestedText = prompt.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1]
     if (!requestedText) throw new Error('mock prompt did not include its explicit question quota')
     const requested = Number(requestedText)
@@ -113,7 +127,19 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
           question: `Fixture question ${call}-${index + 1}?`,
           answer: `Fixture answer ${index + 1}.`,
           followUps: [],
-          ...((mode === 'evidence' || mode === 'evidence-repair') && sourceId ? { sourceRefs: [{ sourceId, startLine: 1, endLine: 1 }] } : {})
+          ...((mode === 'evidence' || mode === 'evidence-repair') && sourceId ? { sourceRefs: [{ sourceId, startLine: 1, endLine: 1 }] } : {}),
+          ...(mode === 'evidence-repair-stale' && currentSourceId ? {
+            sourceRefs: [
+              staleFirstRequestRef(capture[0], { messages: messages as typeof capture[number]['messages'] }),
+              { sourceId: currentSourceId, startLine: 1, endLine: 1 }
+            ]
+          } : {}),
+          ...(mode === 'evidence-cross-batch' && moduleName === 'module-b' && moduleASourceId && currentSourceId ? {
+            sourceRefs: [
+              { sourceId: moduleASourceId, startLine: 1, endLine: 1 },
+              { sourceId: currentSourceId, startLine: 1, endLine: 1 }
+            ]
+          } : {})
         }))
       }],
       glossary: {}
@@ -124,6 +150,36 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
     })
   }) as typeof fetch
   return () => { globalThis.fetch = originalFetch }
+}
+
+function sourceEntries(request: { messages: Array<{ role: string; content: string }> }): Map<string, number> {
+  const prompt = request.messages.map((message) => message.content).join('\n')
+  const entries = new Map<string, number>()
+  const files = /### 文件：[^\n]*\[sourceId: ([^\]]+)\]\n```\n([\s\S]*?)\n```/g
+  for (const match of prompt.matchAll(files)) {
+    const numberedLines = Array.from(match[2].matchAll(/^(\d+) \| (.*)$/gm))
+    if (!numberedLines.length) continue
+    let citable = Number(numberedLines[numberedLines.length - 1][1])
+    if (numberedLines[numberedLines.length - 1][2].includes('…（内容已截断）')) citable--
+    entries.set(match[1], citable)
+  }
+  return entries
+}
+
+function staleFirstRequestRef(
+  first: { messages: Array<{ role: string; content: string }> } | undefined,
+  retry: { messages: Array<{ role: string; content: string }> }
+): { sourceId: string; startLine: number; endLine: number } {
+  if (!first) throw new Error('missing initial model request')
+  const initialEntries = sourceEntries(first)
+  const retryEntries = sourceEntries(retry)
+  for (const [sourceId, initialLines] of initialEntries) {
+    const retryLines = retryEntries.get(sourceId) ?? 0
+    if (initialLines > retryLines) {
+      return { sourceId, startLine: retryLines + 1, endLine: retryLines + 1 }
+    }
+  }
+  throw new Error('repair request did not shrink any source range from the initial request')
 }
 
 test('generated evidence is resolved from each actual request and cloned across questions', async () => {
@@ -342,6 +398,75 @@ test('JSON repair evidence is resolved against the shrunken retry request manife
   assert.ok(questions.every((question) => retryIds.has(question.sourceEvidence![0].sourceId)))
   assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
   assert.equal(result!.sourceEvidenceSummary?.retained, questions.length)
+})
+
+test('JSON repair rejects first-attempt lines omitted from the retry but keeps retry-visible evidence', async () => {
+  const root = await makeManyLineFixture()
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restore = installMock(requests, 'evidence-repair-stale')
+  let result: Awaited<ReturnType<typeof generateInterview>>
+  try {
+    result = await generateInterview({
+      scan, granularity: 'coarse', roleFocus: 'backend', profile,
+      signal: new AbortController().signal, onProgress: () => undefined
+    })
+  } finally { restore() }
+
+  assert.equal(requests.length, 2)
+  const initialSources = sourceEntries(requests[0])
+  const retrySources = sourceEntries(requests[1])
+  const stale = Array.from(initialSources).find(([sourceId, lineCount]) => lineCount > (retrySources.get(sourceId) ?? 0))
+  assert.ok(stale, 'the fixture must expose lines in attempt one that the fitted repair request omits')
+  const questions = result!.sections.flatMap((section) => section.questions)
+  assert.ok(questions.length > 0)
+  assert.ok(questions.every((question) => question.sourceEvidence?.length === 1))
+  for (const question of questions) {
+    const evidence = question.sourceEvidence![0]
+    assert.ok(retrySources.has(evidence.sourceId), 'only the retry request can authorize a persisted citation')
+    assert.ok(evidence.sourceId !== stale![0] || evidence.endLine <= (retrySources.get(stale![0]) ?? 0))
+  }
+  assert.ok((result!.sourceEvidenceSummary?.rejected ?? 0) > 0, 'the first-request-only range must count as rejected')
+  assert.equal(result!.sourceEvidenceSummary?.accepted, questions.length)
+  assert.equal(result!.sourceEvidenceSummary?.retained, questions.length)
+})
+
+test('module B cannot cite a source ID exclusive to module A', async () => {
+  const root = await makeFixture()
+  await fs.mkdir(path.join(root, 'module-a'), { recursive: true })
+  await fs.mkdir(path.join(root, 'module-b'), { recursive: true })
+  await fs.writeFile(path.join(root, 'module-a', 'service.ts'), 'export const MODULE_A_ONLY = true\n')
+  await fs.writeFile(path.join(root, 'module-b', 'service.ts'), 'export const MODULE_B_ONLY = true\n')
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restore = installMock(requests, 'evidence-cross-batch')
+  let result: Awaited<ReturnType<typeof generateInterview>>
+  try {
+    result = await generateInterview({
+      scan, granularity: 'fine', roleFocus: 'backend', profile,
+      signal: new AbortController().signal, onProgress: () => undefined
+    })
+  } finally { restore() }
+
+  const moduleARequestIndex = requests.findIndex((request) => request.messages.some((message) => message.content.includes('只分析项目的单个模块「module-a」')))
+  const moduleBRequestIndex = requests.findIndex((request) => request.messages.some((message) => message.content.includes('只分析项目的单个模块「module-b」')))
+  assert.ok(moduleARequestIndex >= 0 && moduleBRequestIndex > moduleARequestIndex, 'module A must be requested before module B')
+  const moduleAIds = new Set(sourceEntries(requests[moduleARequestIndex]).keys())
+  const moduleBIds = new Set(sourceEntries(requests[moduleBRequestIndex]).keys())
+  assert.ok([...moduleAIds].some((sourceId) => !moduleBIds.has(sourceId)), 'the fixture needs a source ID exclusive to module A')
+  const moduleBQuestions = result!.sections.flatMap((section) => section.questions).filter((question) => {
+    const callNo = Number(question.question.match(/^Fixture question (\d+)-/)?.[1])
+    const prompt = requests[callNo - 1]?.messages.map((message) => message.content).join('\n') ?? ''
+    return prompt.includes('单个模块「module-b」')
+  })
+  assert.ok(moduleBQuestions.length > 0)
+  for (const question of moduleBQuestions) {
+    assert.equal(question.sourceEvidence?.length, 1)
+    assert.ok(moduleBIds.has(question.sourceEvidence![0].sourceId))
+    assert.ok(!moduleAIds.has(question.sourceEvidence![0].sourceId))
+  }
+  assert.ok((result!.sourceEvidenceSummary?.rejected ?? 0) >= moduleBQuestions.length)
+  assert.equal(result!.sourceEvidenceSummary?.retained, result!.sections.flatMap((section) => section.questions).reduce((count, question) => count + (question.sourceEvidence?.length ?? 0), 0))
 })
 
 test('ordinary projects produce no truncation metadata or warning', async () => {
