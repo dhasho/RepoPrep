@@ -1,4 +1,4 @@
-import type { LlmProfile } from '@shared/types'
+import type { LlmProfileDraft } from '@shared/types'
 import { LLM_PROFILE_LIMITS, MAX_LLM_PROFILES } from '@shared/result-contract'
 
 export type ProfileField = 'id' | 'name' | 'baseUrl' | 'apiKey' | 'model'
@@ -40,11 +40,12 @@ function profileFieldError(value: string, field: ProfileField): string | null {
   return null
 }
 
-export function validateProfiles(profiles: readonly LlmProfile[]): ProfileValidationError[] {
+export function validateProfiles(profiles: readonly LlmProfileDraft[]): ProfileValidationError[] {
   const errors: ProfileValidationError[] = []
   profiles.forEach((profile, profileIndex) => {
     for (const field of ['id', 'name', 'baseUrl', 'apiKey', 'model'] as const) {
-      const message = profileFieldError(profile[field], field)
+      const value = field === 'apiKey' ? profile.apiKey ?? '' : profile[field]
+      const message = profileFieldError(value, field)
       if (message) errors.push({ profileIndex, field, message })
     }
   })

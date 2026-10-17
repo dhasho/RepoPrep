@@ -18,7 +18,7 @@
     "test:native-credentials": "npm run build && electron tests/native-credential-storage.cjs",
     "test:scan-cache": "node --test --experimental-strip-types electron/services/project-snapshot.test.ts electron/services/scan-cache.test.ts electron/services/scanner-gitignore.test.ts electron/services/scan-limits.test.ts",
     "test:lib": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test src/lib/log-time.test.ts src/lib/model-detection.test.ts src/lib/settings-save.test.ts src/lib/scan-limit-input.test.ts src/lib/connection-test.test.ts",
-    "test:smoke": "npm run build && electron tests/smoke.cjs",
+    "test:smoke": "npm run build && node tests/run-smoke.cjs",
     "audit:deps": "node scripts/audit-deps.cjs package-lock.json",
     "test:audit-deps": "node --test tests/audit-deps.test.mjs",
     "dist": "electron-vite build && electron-builder --win",

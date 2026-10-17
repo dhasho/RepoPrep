@@ -3,7 +3,7 @@ import test from 'node:test'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import assert from 'node:assert/strict'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import type { LlmProfile, TestConnectionResult } from '../../shared/types.ts'
+import type { LlmProfileDraft, TestConnectionResult } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { ConnectionTestController } from './connection-test.ts'
 
@@ -23,7 +23,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject }
 }
 
-const profile = (id: string, patch: Partial<LlmProfile> = {}): LlmProfile => ({
+const profile = (id: string, patch: Partial<LlmProfileDraft> = {}): LlmProfileDraft => ({
   id,
   name: `Synthetic ${id}`,
   baseUrl: 'https://example.invalid/v1',
@@ -39,7 +39,7 @@ test('ConnectionTestController ignores every kind of late A settlement while B i
   const settlements = ['success', 'business failure', 'IPC rejection'] as const
   for (const settlement of settlements) {
     await t.test(settlement, async () => {
-      const pending: Array<{ requestProfile: LlmProfile; response: Deferred<TestConnectionResult> }> = []
+      const pending: Array<{ requestProfile: LlmProfileDraft; response: Deferred<TestConnectionResult> }> = []
       const controller = new ConnectionTestController({
         testLlm(requestProfile) {
           const response = deferred<TestConnectionResult>()
@@ -96,7 +96,7 @@ test('ConnectionTestController keeps only the latest duplicate request when resp
 })
 
 test('ConnectionTestController invalidates requests across profile configuration edits and deletion', async () => {
-  const pending: Array<{ requestProfile: LlmProfile; response: Deferred<TestConnectionResult> }> = []
+  const pending: Array<{ requestProfile: LlmProfileDraft; response: Deferred<TestConnectionResult> }> = []
   const controller = new ConnectionTestController({
     testLlm(requestProfile) {
       const response = deferred<TestConnectionResult>()

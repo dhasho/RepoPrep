@@ -1,4 +1,4 @@
-import type { LlmProfile, TestConnectionResult } from '@shared/types'
+import type { LlmProfileDraft, TestConnectionResult } from '@shared/types'
 
 export interface ConnectionTestState {
   readonly profileId: string | null
@@ -7,7 +7,7 @@ export interface ConnectionTestState {
 }
 
 interface ConnectionTestControllerOptions {
-  testLlm: (profile: LlmProfile) => Promise<TestConnectionResult>
+  testLlm: (profile: LlmProfileDraft) => Promise<TestConnectionResult>
 }
 
 const IPC_FAILURE: TestConnectionResult = {
@@ -49,7 +49,7 @@ export class ConnectionTestController {
     this.publish({ profileId: null, testing: false, result: null })
   }
 
-  async run(profile: LlmProfile): Promise<void> {
+  async run(profile: LlmProfileDraft): Promise<void> {
     if (!this.active) return
 
     const requestProfile = { ...profile }

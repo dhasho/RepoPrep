@@ -1,13 +1,13 @@
 // 配置页：项目概览 + 颗粒度/方向选择 + 开始生成
 import { useState } from 'react'
-import type { GenerateOptions, Granularity, InterviewResult, ProjectOverview, RoleFocus, Settings } from '@shared/types'
+import type { GenerateOptions, Granularity, InterviewResult, ProjectOverview, RoleFocus, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
 import FileTreeView from '../components/FileTreeView'
 
 interface Props {
   overview: ProjectOverview
   existingResult: InterviewResult | null
-  settings: Settings
+  settings: PublicSettings
   initialOptions?: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>
   notice?: string | null
   onStart: (options: GenerateOptions) => void

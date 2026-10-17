@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { JSDOM } from 'jsdom'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import type { LlmProfile, Settings, TestConnectionResult } from '../../shared/types.ts'
+import type { LlmProfile, LlmProfileDraft, PublicSettings, Settings, SettingsSaveRequest, TestConnectionResult } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -21,6 +21,7 @@ import { LLM_PROFILE_LIMITS, MAX_LLM_PROFILES } from '../../shared/result-contra
 import { validateIpcArgs } from '../../electron/services/ipc-validation.ts'
 
 interface Deferred {
+  promise: Promise<void>
   resolve: () => void
   reject: (error: Error) => void
 }
@@ -33,6 +34,27 @@ const initialSettings: Settings = {
     apiKey: '', model: 'model-1', temperature: 0.4
   }],
   defaultProfileId: 'profile-1'
+}
+
+function publicSettingsOf(settings: Settings | PublicSettings): PublicSettings {
+  return {
+    defaultProfileId: settings.defaultProfileId,
+    ...(settings.scanLimits ? { scanLimits: settings.scanLimits } : {}),
+    profiles: settings.profiles.map((item) => {
+      const profile = item as LlmProfile & Partial<PublicSettings['profiles'][number]>
+      const { apiKey = '', ...metadata } = profile
+      const hasApiKey = profile.hasApiKey ?? Boolean(apiKey)
+      return {
+        id: profile.id,
+        name: profile.name,
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+        ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+        hasApiKey,
+        credentialStatus: profile.credentialStatus ?? (hasApiKey ? 'stored' : 'missing')
+      }
+    })
+  }
 }
 
 function installDomGlobals(dom: JSDOM) {
@@ -59,11 +81,17 @@ function installDomGlobals(dom: JSDOM) {
 }
 
 function deferred() {
-  let controls!: Deferred
+  let resolvePromise!: () => void
+  let rejectPromise!: (error: Error) => void
   const promise = new Promise<void>((resolve, reject) => {
-    controls = { resolve, reject }
+    resolvePromise = resolve
+    rejectPromise = reject
   })
-  return { promise, ...controls }
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise
+  }
 }
 
 function setInput(input: HTMLInputElement, value: string) {
@@ -74,14 +102,35 @@ function setInput(input: HTMLInputElement, value: string) {
 }
 
 async function mountSettingsPage(
-  settings: Settings,
-  saveSettings: (settings: Settings) => Promise<void>
+  settings: Settings | PublicSettings,
+  saveSettings: (settings: SettingsSaveRequest) => Promise<void>,
+  getSettingsOverride?: () => Promise<PublicSettings>
 ) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
   const restoreGlobals = installDomGlobals(dom)
+  let backend = publicSettingsOf(settings)
+  const probeRequests: LlmProfileDraft[] = []
   dom.window.api = {
-    saveSettings,
-    listModels: async () => ({ ok: true, models: [], message: '' }),
+    async saveSettings(request: SettingsSaveRequest) {
+      await saveSettings(request)
+      backend = {
+        defaultProfileId: request.defaultProfileId,
+        ...(request.scanLimits ? { scanLimits: request.scanLimits } : {}),
+        profiles: request.profiles.map((profile) => {
+          const previous = backend.profiles.find((item) => item.id === profile.id)
+          const hasApiKey = profile.credentialAction === 'clear' ? false
+            : profile.credentialAction === 'replace' ? Boolean(profile.apiKey)
+              : Boolean(previous?.hasApiKey ?? profile.hasApiKey)
+          return {
+            id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
+            ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+            hasApiKey, credentialStatus: hasApiKey ? 'stored' : 'missing'
+          }
+        })
+      }
+    },
+    getSettings: getSettingsOverride ?? (async () => structuredClone(backend)),
+    listModels: async (profile: LlmProfileDraft) => { probeRequests.push(structuredClone(profile)); return { ok: true, models: [], message: '' } },
     testLlm: async () => ({ ok: true, message: 'ok' })
   } as unknown as typeof dom.window.api
 
@@ -91,12 +140,12 @@ async function mountSettingsPage(
   const SettingsPage = require(bundlePath).default as typeof import('./SettingsPage').default
   const rootElement = dom.window.document.getElementById('root')!
   const root = createRoot(rootElement)
-  let savedSettings: Settings | null = null
+  let savedSettings: PublicSettings | null = null
   let savedCalls = 0
   let backCalls = 0
-  const render = (current: Settings) => React.createElement(SettingsPage, {
-    settings: current,
-    onSaved: (next: Settings) => {
+  const render = (current: Settings | PublicSettings) => React.createElement(SettingsPage, {
+    settings: publicSettingsOf(current),
+    onSaved: (next: PublicSettings) => {
       savedSettings = structuredClone(next)
       savedCalls++
       root.render(render(next))
@@ -110,6 +159,7 @@ async function mountSettingsPage(
     React,
     root,
     rootElement,
+    probeRequests,
     get savedSettings() { return savedSettings },
     get savedCalls() { return savedCalls },
     get backCalls() { return backCalls },
@@ -129,12 +179,28 @@ test('SettingsPage preserves newer edits when an older save completes, then save
   })
   const restoreGlobals = installDomGlobals(dom)
 
-  const saves: Array<{ settings: Settings; control: Deferred; promise: Promise<void> }> = []
+  const saves: Array<{ settings: SettingsSaveRequest; control: Deferred; promise: Promise<void> }> = []
   dom.window.api = {
-    saveSettings(settings: Settings) {
+    saveSettings(settings: SettingsSaveRequest) {
       const pending = deferred()
       saves.push({ settings: structuredClone(settings), control: pending, promise: pending.promise })
       return pending.promise
+    },
+    getSettings: async () => {
+      const snapshot = saves.at(-1)?.settings
+      if (!snapshot) return publicSettingsOf(initialSettings)
+      return {
+        defaultProfileId: snapshot.defaultProfileId,
+        ...(snapshot.scanLimits ? { scanLimits: snapshot.scanLimits } : {}),
+        profiles: snapshot.profiles.map((profile) => {
+          const hasApiKey = profile.credentialAction === 'clear' ? false
+            : profile.credentialAction === 'replace' ? Boolean(profile.apiKey)
+              : Boolean(profile.hasApiKey)
+          return { id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
+            ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+            hasApiKey, credentialStatus: hasApiKey ? 'stored' as const : 'missing' as const }
+        })
+      }
     },
     listModels: async () => ({ ok: true, models: [], message: '' }),
     testLlm: async () => ({ ok: true, message: 'ok' })
@@ -149,11 +215,11 @@ test('SettingsPage preserves newer edits when an older save completes, then save
     const SettingsPage = require(bundlePath).default as typeof import('./SettingsPage').default
     const rootElement = dom.window.document.getElementById('root')!
     root = createRoot(rootElement)
-    let parentSettings = initialSettings
+    let parentSettings: Settings | PublicSettings = initialSettings
     let backCalls = 0
     const render = () => React.createElement(SettingsPage, {
-      settings: parentSettings,
-      onSaved: (next: Settings) => {
+      settings: publicSettingsOf(parentSettings),
+      onSaved: (next: PublicSettings) => {
         parentSettings = next
         root!.render(render())
       },
@@ -240,6 +306,7 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
       saves.push({ control: pending, promise: pending.promise })
       return pending.promise
     },
+    getSettings: async () => publicSettingsOf(initialSettings),
     listModels: async () => ({ ok: true, models: [], message: '' }),
     testLlm: async () => ({ ok: true, message: 'ok' })
   } as unknown as typeof dom.window.api
@@ -254,7 +321,7 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
     root = createRoot(rootElement)
     let savedCalls = 0
     await React.act(async () => root!.render(React.createElement(SettingsPage, {
-      settings: initialSettings, onSaved: () => { savedCalls++ }, onBack: () => {}
+      settings: publicSettingsOf(initialSettings), onSaved: () => { savedCalls++ }, onBack: () => {}
     })))
     const nameInput = rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -293,9 +360,10 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
 test('SettingsPage validates blurred scan limits, converts boundary values, and clears one override', async () => {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
   const restoreGlobals = installDomGlobals(dom)
-  const saves: Settings[] = []
+  const saves: SettingsSaveRequest[] = []
   dom.window.api = {
-    saveSettings: async (settings: Settings) => { saves.push(structuredClone(settings)) },
+    saveSettings: async (settings: SettingsSaveRequest) => { saves.push(structuredClone(settings)) },
+    getSettings: async () => publicSettingsOf(initialSettings),
     listModels: async () => ({ ok: true, models: [], message: '' }),
     testLlm: async () => ({ ok: true, message: 'ok' })
   } as unknown as typeof dom.window.api
@@ -314,7 +382,7 @@ test('SettingsPage validates blurred scan limits, converts boundary values, and 
     }
     let savedCalls = 0
     await React.act(async () => root!.render(React.createElement(SettingsPage, {
-      settings: initial, onSaved: () => { savedCalls++ }, onBack: () => {}
+      settings: publicSettingsOf(initial), onSaved: () => { savedCalls++ }, onBack: () => {}
     })))
     const field = (name: string) => rootElement.querySelector<HTMLInputElement>(`#scan-limit-${name}`)!
     const saveButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.startsWith('保存'))!
@@ -365,10 +433,10 @@ test('SettingsPage saves deletion of the only profile, reads back an empty store
     defaultProfileId: 'profile-1',
     scanLimits: { maxFiles: 120, maxTreeNodes: 240, maxContentFileBytes: 4096 }
   }
-  let backend = structuredClone(initial)
+  let backend: Settings | SettingsSaveRequest = structuredClone(initial)
   const pending = deferred()
-  let submitted: Settings | null = null
-  const saveSettings = async (next: Settings) => {
+  let submitted: SettingsSaveRequest | null = null
+  const saveSettings = async (next: SettingsSaveRequest) => {
     submitted = structuredClone(next)
     await pending.promise
     backend = structuredClone(next)
@@ -422,7 +490,7 @@ test('SettingsPage normalizes the default after deleting the selected default am
     ],
     defaultProfileId: 'first'
   }
-  const writes: Settings[] = []
+  const writes: SettingsSaveRequest[] = []
   const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
   try {
     const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
@@ -432,7 +500,8 @@ test('SettingsPage normalizes the default after deleting the selected default am
     assert.equal(writes.length, 1)
     assert.deepEqual(writes[0].profiles.map((profile) => profile.id), ['second', 'third'])
     assert.equal(writes[0].defaultProfileId, 'second', 'deleting the default should select a surviving profile as default')
-    assert.deepEqual(page.savedSettings, writes[0])
+    assert.deepEqual(page.savedSettings?.profiles.map((profile) => profile.id), ['second', 'third'])
+    assert.ok(page.savedSettings?.profiles.every((profile) => !('apiKey' in profile)))
   } finally {
     await page.unmount()
   }
@@ -451,11 +520,12 @@ function deferredConnection() {
 async function mountConnectionSettingsPage(settings: Settings) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
   const restoreGlobals = installDomGlobals(dom)
-  const requests: Array<{ profile: LlmProfile; pending: ReturnType<typeof deferredConnection> }> = []
+  const requests: Array<{ profile: LlmProfileDraft; pending: ReturnType<typeof deferredConnection> }> = []
   dom.window.api = {
     saveSettings: async () => {},
+    getSettings: async () => publicSettingsOf(settings),
     listModels: async () => ({ ok: true, models: [], message: '' }),
-    testLlm(profile: LlmProfile) {
+    testLlm(profile: LlmProfileDraft) {
       const pending = deferredConnection()
       requests.push({ profile: structuredClone(profile), pending })
       return pending.promise
@@ -469,7 +539,7 @@ async function mountConnectionSettingsPage(settings: Settings) {
   const rootElement = dom.window.document.getElementById('root')!
   const root = createRoot(rootElement)
   await React.act(async () => root.render(React.createElement(SettingsPage, {
-    settings,
+    settings: publicSettingsOf(settings),
     onSaved: () => {},
     onBack: () => {}
   })))
@@ -556,8 +626,17 @@ test('SettingsPage invalidates in-flight tests for edits to each request configu
       await page.React.act(async () => setInput(field, edit.value))
       await page.React.act(async () => page.testButton().click())
       assert.equal(page.requests.length, 2, `${edit.field} edit should allow a request with the new configuration`)
-      assert.equal(page.requests[0].profile[edit.field], settings.profiles[0][edit.field])
+      if (edit.field === 'apiKey') {
+        assert.equal(page.requests[0].profile.apiKey, '')
+        assert.equal(page.requests[0].profile.useSavedCredential, true)
+      } else {
+        assert.equal(page.requests[0].profile[edit.field], settings.profiles[0][edit.field])
+      }
       assert.equal(page.requests[1].profile[edit.field], edit.value, `${edit.field} should be captured in the new request`)
+      if (edit.field === 'baseUrl') {
+        assert.equal(page.requests[1].profile.useSavedCredential, false, 'a saved credential must not be reused at a changed endpoint')
+        assert.equal(page.requests[1].profile.apiKey, '')
+      }
       assert.equal(page.testButton().textContent?.trim(), '测试中…')
 
       await page.React.act(async () => {
@@ -611,8 +690,8 @@ test('SettingsPage keeps an empty-list draft after a failed save, blocks duplica
     profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-issue-68-key' }],
     defaultProfileId: 'profile-1'
   }
-  let backend = structuredClone(initial)
-  const requests: Array<{ snapshot: Settings; control: ReturnType<typeof deferred> }> = []
+  let backend: Settings | SettingsSaveRequest = structuredClone(initial)
+  const requests: Array<{ snapshot: SettingsSaveRequest; control: ReturnType<typeof deferred> }> = []
   const page = await mountSettingsPage(initial, (next) => {
     const control = deferred()
     requests.push({ snapshot: structuredClone(next), control })
@@ -658,7 +737,7 @@ test('SettingsPage discard after profile deletion does not write or change persi
     profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-issue-68-key' }],
     defaultProfileId: 'profile-1'
   }
-  let backend = structuredClone(initial)
+  let backend: Settings | SettingsSaveRequest = structuredClone(initial)
   let writes = 0
   const page = await mountSettingsPage(initial, async (next) => {
     writes++
@@ -680,8 +759,8 @@ test('SettingsPage discard after profile deletion does not write or change persi
   }
 })
 
-function schemaCheckedSave(calls: Settings[]) {
-  return async (next: Settings) => {
+function schemaCheckedSave(calls: SettingsSaveRequest[]) {
+  return async (next: SettingsSaveRequest) => {
     calls.push(structuredClone(next))
     validateIpcArgs(IPC.settingsSave, [next])
   }
@@ -703,7 +782,7 @@ test('SettingsPage adds the real 32nd profile, disables add at the shared limit,
     profiles: Array.from({ length: MAX_LLM_PROFILES - 1 }, (_, index) => profileFixture(index + 1)),
     defaultProfileId: 'limit-profile-1'
   }
-  const writes: Settings[] = []
+  const writes: SettingsSaveRequest[] = []
   const page = await mountSettingsPage(initial, schemaCheckedSave(writes))
   try {
     const addButton = () => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('新增配置'))!
@@ -726,7 +805,7 @@ test('SettingsPage preflights imported over-limit settings and permits a correct
     profiles: Array.from({ length: MAX_LLM_PROFILES + 1 }, (_, index) => profileFixture(index + 1)),
     defaultProfileId: 'limit-profile-1'
   }
-  const writes: Settings[] = []
+  const writes: SettingsSaveRequest[] = []
   const page = await mountSettingsPage(initial, schemaCheckedSave(writes))
   try {
     await page.React.act(async () => page.saveButton().click())
@@ -834,6 +913,200 @@ test('SettingsPage validates a bad profile beyond the selected row and retains o
     await page.React.act(async () => firstTab.click())
     const visibleFirstName = page.rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
     assert.equal(visibleFirstName.value, 'unsaved first-row text')
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage keeps saved fields blank and submits keep, replace, and clear intent without exposing keys in onSaved', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-existing-secret' }],
+    defaultProfileId: 'profile-1'
+  }
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const keyInput = page.rootElement.querySelector<HTMLInputElement>('input[type="password"]')!
+    assert.equal(keyInput.value, '', 'saved API keys must never be populated into the password field')
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes[0].profiles[0].credentialAction, 'keep')
+    assert.equal(writes[0].profiles[0].apiKey, '')
+    assert.ok(page.savedSettings)
+    assert.equal(JSON.stringify(page.savedSettings).includes('synthetic-existing-secret'), false)
+    assert.equal(JSON.stringify(page.savedSettings).includes('apiKey'), false)
+
+    const replacePage = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+    try {
+      const replacement = replacePage.rootElement.querySelector<HTMLInputElement>('input[type="password"]')!
+      await replacePage.React.act(async () => setInput(replacement, 'synthetic-replacement-secret'))
+      await replacePage.React.act(async () => replacePage.saveButton().click())
+      assert.equal(writes[1].profiles[0].credentialAction, 'replace')
+      assert.equal(writes[1].profiles[0].apiKey, 'synthetic-replacement-secret')
+      assert.equal(JSON.stringify(replacePage.savedSettings).includes('synthetic-replacement-secret'), false)
+      assert.equal(replacement.value, '', 'the confirmed replacement key should be cleared from the draft')
+    } finally {
+      await replacePage.unmount()
+    }
+
+    const clearPage = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+    try {
+      const clear = [...clearPage.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '清除已保存的 Key')!
+      await clearPage.React.act(async () => clear.click())
+      assert.match(clearPage.rootElement.textContent ?? '', /保存后清除已保存的 Key/)
+      await clearPage.React.act(async () => clearPage.saveButton().click())
+      assert.equal(writes[2].profiles[0].credentialAction, 'clear')
+      assert.equal(writes[2].profiles[0].apiKey, '')
+      assert.equal(page.savedCalls, 1)
+    } finally {
+      await clearPage.unmount()
+    }
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage trusts locked status from getSettings and preserves a newer key edit during save', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-existing-secret' }],
+    defaultProfileId: 'profile-1'
+  }
+  const pending = deferred()
+  const captured: { submitted: SettingsSaveRequest | null } = { submitted: null }
+  const lockedPublic: PublicSettings = {
+    ...publicSettingsOf(initial),
+    profiles: [{ ...publicSettingsOf(initial).profiles[0], credentialStatus: 'locked', hasApiKey: true }]
+  }
+  const page = await mountSettingsPage(initial, async (next) => { captured.submitted = structuredClone(next); await pending.promise }, async () => structuredClone(lockedPublic))
+  try {
+    const keyInput = page.rootElement.querySelector<HTMLInputElement>('input[type="password"]')!
+    assert.ok([...page.rootElement.querySelectorAll('button')].some((button) => button.textContent?.trim() === '清除已保存的 Key'), 'locked credentials remain explicitly clearable')
+    await page.React.act(async () => setInput(keyInput, 'synthetic-first-replacement'))
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(captured.submitted?.profiles[0].credentialAction, 'replace')
+    await page.React.act(async () => setInput(keyInput, 'synthetic-newer-replacement'))
+    pending.resolve()
+    await page.React.act(async () => pending.promise)
+    assert.equal(keyInput.value, 'synthetic-newer-replacement', 'a later replacement must survive the earlier save response')
+    assert.match(page.rootElement.textContent ?? '', /保存时使用新 Key 替换/)
+    assert.equal(page.savedSettings?.profiles[0].credentialStatus, 'locked', 'the page must use the authoritative credential status')
+    assert.equal(JSON.stringify(page.savedSettings).includes('synthetic-first-replacement'), false)
+    assert.match(page.saveButton().textContent ?? '', /\*$/, 'the newer key edit stays dirty')
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage preserves a clear and deletion made while the save snapshot is pending', async () => {
+  const initial: Settings = {
+    profiles: [
+      { ...initialSettings.profiles[0], id: 'saved', name: 'Saved profile', apiKey: 'synthetic-existing-secret' },
+      { ...initialSettings.profiles[0], id: 'other', name: 'Other profile', apiKey: '' }
+    ],
+    defaultProfileId: 'saved'
+  }
+  const pending = deferred()
+  const captured: { savedRequest: SettingsSaveRequest | null } = { savedRequest: null }
+  const page = await mountSettingsPage(initial, async (next) => { captured.savedRequest = structuredClone(next); await pending.promise })
+  try {
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(captured.savedRequest?.profiles.length, 2)
+    const clear = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '清除已保存的 Key')!
+    await page.React.act(async () => clear.click())
+    const deleteButton = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '删除')!
+    await page.React.act(async () => deleteButton.click())
+    pending.resolve()
+    await page.React.act(async () => pending.promise)
+    assert.equal(page.rootElement.textContent?.includes('Saved profile'), false, 'deletion during save remains applied to the local draft')
+    assert.equal(page.rootElement.textContent?.includes('Other profile'), true, 'the surviving profile remains selected')
+    assert.match(page.saveButton().textContent ?? '', /\*$/, 'post-snapshot delete remains dirty')
+    assert.equal(JSON.stringify(page.savedSettings).includes('apiKey'), false)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage requires an explicit credential decision after changing a saved key endpoint', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-existing-secret' }],
+    defaultProfileId: 'profile-1'
+  }
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const baseUrl = [...page.rootElement.querySelectorAll<HTMLInputElement>('input')].find((input) => input.value === initial.profiles[0].baseUrl)!
+    await page.React.act(async () => setInput(baseUrl, 'https://changed.invalid/v1'))
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 0, 'a keep intent cannot retarget a saved key')
+    assert.match(page.rootElement.textContent ?? '', /接口地址已变更，请输入新 Key 或清除已保存的 Key/)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage treats a canonically equivalent endpoint as the saved credential endpoint', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-existing-secret' }],
+    defaultProfileId: 'profile-1'
+  }
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const baseUrl = [...page.rootElement.querySelectorAll<HTMLInputElement>('input')].find((input) => input.value === initial.profiles[0].baseUrl)!
+    await page.React.act(async () => setInput(baseUrl, 'HTTPS://EXAMPLE.COM:443/v1/'))
+    const detect = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('检测可用模型'))!
+    await page.React.act(async () => detect.click())
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(page.probeRequests[0].useSavedCredential, true)
+    assert.equal(page.probeRequests[0].apiKey, '')
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 1, 'canonical URL spelling changes may keep the saved key')
+    assert.equal(writes[0].profiles[0].credentialAction, 'keep')
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage counts edits made while authoritative getSettings is pending as dirty', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: '' }],
+    defaultProfileId: 'profile-1'
+  }
+  let resolveRefresh!: (value: PublicSettings) => void
+  const refreshPromise = new Promise<PublicSettings>((resolve) => { resolveRefresh = resolve })
+  const page = await mountSettingsPage(initial, async () => {}, async () => refreshPromise)
+  try {
+    const name = page.rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
+    await page.React.act(async () => setInput(name, 'Saved snapshot'))
+    await page.React.act(async () => page.saveButton().click())
+    await page.React.act(async () => setInput(name, 'Edited during refresh'))
+    resolveRefresh(publicSettingsOf({
+      profiles: [{ ...initialSettings.profiles[0], name: 'Saved snapshot', apiKey: '' }],
+      defaultProfileId: 'profile-1'
+    }))
+    await page.React.act(async () => refreshPromise)
+    assert.equal(name.value, 'Edited during refresh')
+    assert.match(page.saveButton().textContent ?? '', /\*$/, 'an edit during public readback remains dirty')
+    assert.equal(page.rootElement.textContent?.includes('✓ 已保存'), false)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage typing and erasing a replacement key on a saved profile returns to keep', async () => {
+  const initial: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], apiKey: 'synthetic-existing-secret' }],
+    defaultProfileId: 'profile-1'
+  }
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const key = page.rootElement.querySelector<HTMLInputElement>('input[type="password"]')!
+    await page.React.act(async () => setInput(key, 'synthetic-temporary-replacement'))
+    await page.React.act(async () => setInput(key, ''))
+    assert.match(page.rootElement.textContent ?? '', /Key 已加密保护/)
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes[0].profiles[0].credentialAction, 'keep', 'erasing a replacement draft should preserve the stored key')
+    assert.equal(writes[0].profiles[0].apiKey, '')
   } finally {
     await page.unmount()
   }

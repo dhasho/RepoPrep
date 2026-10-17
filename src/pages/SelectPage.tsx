@@ -1,13 +1,13 @@
 // 首页：选择项目文件夹 + 最近项目
 import { useEffect, useState } from 'react'
-import type { InterviewResult, RecentProject, Settings } from '@shared/types'
+import type { InterviewResult, RecentProject, PublicSettings } from '@shared/types'
 import { GRANULARITY_META } from '@shared/types'
 import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 
 interface Props {
-  settings: Settings
+  settings: PublicSettings
   openProject: (path: string) => Promise<void>
   viewExisting: (result: InterviewResult, sourceRecentPath: string) => void
   openSettings: () => void

@@ -8,7 +8,7 @@
 // - 同一时刻只允许一个进行中的保存，重复触发返回 'busy'（防重复提交）；
 // - 组件在发生任何本地修改时调用 markLocalEdit()；保存发起后若有新修改，
 //   结果会带上 hasEditsDuringSave —— 这些修改未持久化，调用方不得清除 dirty。
-import type { Settings } from '../../shared/types'
+import type { SettingsSaveRequest } from '../../shared/types'
 
 export type SettingsSaveOutcome = 'saved' | 'busy'
 
@@ -20,7 +20,7 @@ export interface SettingsSaveResult {
 
 /** 保存流程需要的最小 API 面（便于注入假实现做测试） */
 export interface SettingsSaveApi {
-  saveSettings(settings: Settings): Promise<void>
+  saveSettings(settings: SettingsSaveRequest): Promise<void>
 }
 
 export class SettingsSaveFlow {
@@ -44,12 +44,13 @@ export class SettingsSaveFlow {
    * - 写盘失败 → 抛出错误（调用方展示，且不得清除未保存状态）；
    * - 已有保存在进行中 → 返回 outcome 'busy'，不排队第二次写盘。
    */
-  async save(next: Settings): Promise<SettingsSaveResult> {
+  async save(next: SettingsSaveRequest, afterWrite?: () => Promise<void>): Promise<SettingsSaveResult> {
     if (this.inFlight) return { outcome: 'busy', hasEditsDuringSave: false }
     this.inFlight = true
     const seqAtStart = this.editSeq
     try {
       await this.api.saveSettings(next)
+      if (afterWrite) await afterWrite()
       return { outcome: 'saved', hasEditsDuringSave: this.editSeq !== seqAtStart }
     } finally {
       this.inFlight = false

@@ -1,6 +1,6 @@
 // 结果页：大纲导航 + 问题卡片（答案/追问）+ 名词解释弹卡 + 搜索 + 导出
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FollowUp, InterviewResult, QuestionItem, Section, Settings } from '@shared/types'
+import type { FollowUp, InterviewResult, QuestionItem, Section, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
 import { contentReadWarning } from '@shared/content-read'
 import { formatContextTruncationWarning } from '@shared/context-budget'
@@ -11,7 +11,7 @@ import TermPopover from '../components/TermPopover'
 
 interface Props {
   result: InterviewResult
-  settings: Settings
+  settings: PublicSettings
   onRegenerate: () => void
   regenerating?: boolean
   /** 仅用于测试：设置搜索框初始值（生产调用方不传，行为不变） */

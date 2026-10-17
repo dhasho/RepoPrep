@@ -5,6 +5,7 @@
 // 说明：这是纯本地检查，不联网、不弹对话框；断言的是「应用能起来并跑通一次 IPC」，
 // 选中项目 / 生成 / 导出这些需要交互与真实模型服务的路径仍需人工走一遍（见 README）。
 const path = require('node:path')
+const os = require('node:os')
 const { fileURLToPath } = require('node:url')
 
 // 明确的自检：ELECTRON_RUN_AS_NODE 会让 Electron 以纯 Node 模式启动，此时
@@ -53,7 +54,19 @@ app.on('browser-window-created', (_event, win) => {
   })
 })
 
-// 加载真实主进程：它会自行创建窗口、注册 IPC、安装窗口安全策略
+// 父 runner 为该 Electron 子进程创建唯一临时目录，并在子进程完全退出后清理。
+try {
+  const fixtureRoot = path.resolve(process.argv[2] || '')
+  const relative = path.relative(path.resolve(os.tmpdir()), fixtureRoot)
+  if (!path.basename(fixtureRoot).startsWith('repoprep-smoke-') || !relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('unsafe-smoke-fixture')
+  }
+  app.setPath('appData', path.join(fixtureRoot, 'app-data'))
+  app.setPath('sessionData', path.join(fixtureRoot, 'session-data'))
+} catch (error) {
+  console.error(`[smoke] 无法建立隔离的临时 Electron 数据目录：${error && error.message ? error.message : String(error)}`)
+  process.exit(1)
+}
 require(path.join(root, 'out', 'main', 'index.js'))
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))

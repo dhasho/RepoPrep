@@ -11,7 +11,7 @@
 //   被取代的请求无论成功失败都静默丢弃（不显示误导性错误）；
 // - 换 Base URL / API Key 时 invalidate：序号立即失效 + 清空该配置的结果；
 // - 快照引用稳定，可直接供 useSyncExternalStore 使用。
-import type { ListModelsResult, LlmProfile } from '../../shared/types'
+import type { ListModelsResult, LlmProfileDraft } from '../../shared/types'
 
 export interface ModelState {
   loading: boolean
@@ -32,7 +32,7 @@ export function modelStateOf(slots: ModelDetectionSnapshot, profileId: string): 
 
 /** 控制器需要的最小 API 面（便于注入假实现做竞态测试） */
 export interface ModelDetectionApi {
-  listModels(profile: LlmProfile): Promise<ListModelsResult>
+  listModels(profile: LlmProfileDraft): Promise<ListModelsResult>
 }
 
 export class ModelDetectionController {
@@ -86,7 +86,7 @@ export class ModelDetectionController {
   }
 
   /** 检测该配置可用的模型列表。只接受该配置"最后一次"检测的响应 */
-  detect(profile: LlmProfile): void {
+  detect(profile: LlmProfileDraft): void {
     const profileId = profile.id
     if (!profile.baseUrl.trim()) {
       this.emit(profileId, {

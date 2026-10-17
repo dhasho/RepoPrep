@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { GenerateOptions, InterviewResult, ProjectOverview, Settings } from '@shared/types'
+import type { GenerateOptions, InterviewResult, ProjectOverview, PublicSettings } from '@shared/types'
 import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { api } from './lib/ipc'
@@ -67,7 +67,7 @@ export default function App() {
   const [existingResult, setExistingResult] = useState<InterviewResult | null>(null)
   const [result, setResult] = useState<InterviewResult | null>(null)
   const [resultStoragePath, setResultStoragePath] = useState<string | null>(null)
-  const [settings, setSettings] = useState<Settings>({ profiles: [], defaultProfileId: null })
+  const [settings, setSettings] = useState<PublicSettings>({ profiles: [], defaultProfileId: null })
   const [configureInitialOptions, setConfigureInitialOptions] = useState<GenerateOptions | undefined>()
   const [configureNotice, setConfigureNotice] = useState<string | null>(null)
   const [configureRevision, setConfigureRevision] = useState(0)

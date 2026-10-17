@@ -52,7 +52,7 @@ async function loadTypescriptModule(filename, requireModule) {
   return module.exports
 }
 
-async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } = {}) {
+async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, getPrivateProfile: suppliedGetPrivateProfile } = {}) {
   const handlers = new Map()
   const appEvents = new Map()
   const windows = []
@@ -138,7 +138,7 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
     deleteResult() {},
     getRecentProjects: () => [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }],
     getSettings: () => ({ profiles: [{ id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }] }),
-    getPrivateProfile: async (id) => ({ ...savedProfile, id }),
+    getPrivateProfile: suppliedGetPrivateProfile ?? (async (id) => ({ ...savedProfile, id })),
     getStorageDiagnostics: () => [],
     loadResult: () => null,
     removeRecentProject: async () => {},
@@ -375,6 +375,49 @@ test('explain timeout is an error event with a static message, while adjacent us
   await explanation
   events = h.window.sent.filter((event) => event.channel === IPC.explainEvent).map((event) => event.payload)
   assert.deepEqual(events, [{ requestId: canceledId, type: 'error', data: '已取消' }])
+})
+
+test('generation canceled during private credential resolution never scans, generates, or saves after resolution', async () => {
+  const pendingCredential = deferred()
+  let credentialStarted
+  const started = new Promise((resolve) => { credentialStarted = resolve })
+  let scanCalls = 0
+  let generateCalls = 0
+  const h = await createHarness({
+    scan: async () => { scanCalls++; return { status: 'reused', scan: { name: 'demo' } } },
+    getPrivateProfile: async (id) => { credentialStarted(); return pendingCredential.promise.then((profile) => ({ ...profile, id })) }
+  })
+  h.setGenerate(async () => { generateCalls++; return { projectName: 'generated' } })
+  const requestId = randomUUID()
+  const generation = h.invoke(IPC.generateRun, { ...options, runId: requestId })
+  await started
+  await h.invoke(IPC.generateCancel, requestId)
+  pendingCredential.resolve({ id: 'p', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic-only', model: 'mock' })
+  await assert.rejects(generation, (error) => error.message === '已取消生成')
+  assert.equal(scanCalls, 0)
+  assert.equal(generateCalls, 0)
+  assert.equal(h.saves.length, 0)
+  assert.equal(h.recents.length, 0)
+})
+
+test('explain canceled during private credential resolution ends once with static cancellation and never starts streaming', async () => {
+  const pendingCredential = deferred()
+  let credentialStarted
+  const started = new Promise((resolve) => { credentialStarted = resolve })
+  let streamCalls = 0
+  const h = await createHarness({
+    getPrivateProfile: async (id) => { credentialStarted(); return pendingCredential.promise.then((profile) => ({ ...profile, id })) }
+  })
+  h.setStream(async () => { streamCalls++; return 'must not stream' })
+  const requestId = randomUUID()
+  const explanation = h.invoke(IPC.explainStart, explainRequest(requestId))
+  await started
+  await h.invoke(IPC.explainCancel, requestId)
+  pendingCredential.resolve({ id: 'p', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic-only', model: 'mock' })
+  await explanation
+  const events = h.window.sent.filter((event) => event.channel === IPC.explainEvent).map((event) => event.payload)
+  assert.deepEqual(events, [{ requestId, type: 'error', data: '已取消' }])
+  assert.equal(streamCalls, 0)
 })
 
 test('explain network AbortError and upstream secret errors use only the generic event text', async () => {

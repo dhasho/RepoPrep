@@ -1,6 +1,6 @@
 // 设置页：大模型配置管理（OpenAI 兼容接口，支持检测 Key 可用模型列表）
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { LlmProfile, Settings } from '@shared/types'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { LlmProfileDraft, PublicSettings, SettingsSaveRequest } from '@shared/types'
 import type { ScanLimits } from '@shared/types'
 import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '@shared/types'
 import { api } from '../lib/ipc'
@@ -11,8 +11,8 @@ import { parseScanLimitDraft, scanLimitDraftOf, type ScanLimitDraft, type ScanLi
 import { MAX_LLM_PROFILES, profileFieldErrorId, validateProfiles, type ProfileField, type ProfileValidationError } from '../lib/profile-validation'
 
 interface Props {
-  settings: Settings
-  onSaved: (s: Settings) => void
+  settings: PublicSettings
+  onSaved: (s: PublicSettings) => void
   onBack: () => void
 }
 
@@ -26,17 +26,29 @@ const PRESETS: { name: string; baseUrl: string; model: string; hint: string }[] 
   { name: 'Ollama 本地', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', hint: '本地运行，无需 Key' }
 ]
 
-const emptyProfile = (): LlmProfile => ({
+const emptyProfile = (): LlmProfileDraft => ({
   id: `profile-${Date.now()}`,
   name: '新配置',
   baseUrl: 'https://api.deepseek.com/v1',
   apiKey: '',
+  hasApiKey: false,
+  credentialStatus: 'missing',
+  credentialAction: 'replace',
   model: 'deepseek-chat',
   temperature: 0.4
 })
 
+function canonicalEndpoint(baseUrl: string): string | null {
+  try {
+    const parsed = new URL(baseUrl)
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) return null
+    return parsed.href.replace(/\/+$/, '')
+  } catch { return null }
+}
+
 export default function SettingsPage({ settings, onSaved, onBack }: Props) {
-  const [profiles, setProfiles] = useState<LlmProfile[]>(settings.profiles)
+  const savedBaseUrls = useRef(new Map(settings.profiles.map((profile) => [profile.id, profile.baseUrl])))
+  const [profiles, setProfiles] = useState<LlmProfileDraft[]>(() => settings.profiles.map((profile) => ({ ...profile, apiKey: '', credentialAction: 'keep' })))
   const [defaultId, setDefaultId] = useState<string | null>(settings.defaultProfileId)
   const [selectedId, setSelectedId] = useState<string>(
     settings.defaultProfileId ?? settings.profiles[0]?.id ?? ''
@@ -76,10 +88,23 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const selected = profiles.find((p) => p.id === selectedId) ?? null
   const selectedIndex = profiles.findIndex((p) => p.id === selectedId)
   const profileError = (field: ProfileField) => profileErrors.find((error) => error.profileIndex === selectedIndex && error.field === field)
+  const usesSavedCredential = (profile: LlmProfileDraft) => {
+    const savedEndpoint = canonicalEndpoint(savedBaseUrls.current.get(profile.id) ?? '')
+    const currentEndpoint = canonicalEndpoint(profile.baseUrl)
+    return !profile.apiKey && profile.hasApiKey === true &&
+      (profile.credentialAction ?? 'keep') === 'keep' &&
+      savedEndpoint !== null && savedEndpoint === currentEndpoint
+  }
 
-  const patchSelected = (patch: Partial<LlmProfile>) => {
+  const patchSelected = (patch: Partial<LlmProfileDraft>) => {
     connectionTest.invalidate()
-    const nextProfiles = profiles.map((p) => (p.id === selectedId ? { ...p, ...patch } : p))
+    const nextProfiles = profiles.map((p) => (p.id === selectedId ? {
+      ...p,
+      ...patch,
+      ...(patch.apiKey !== undefined && patch.credentialAction === undefined
+        ? { credentialAction: patch.apiKey ? 'replace' as const : (p.hasApiKey ? 'keep' as const : (p.credentialAction === 'clear' ? 'clear' as const : 'replace' as const)) }
+        : {})
+    } : p))
     setProfiles(nextProfiles)
     setProfileErrors(validateProfiles(nextProfiles))
     setSaveError((error) => error?.startsWith('配置 ') ? null : error)
@@ -87,7 +112,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setSaved(false)
     saveFlow.markLocalEdit()
     // 换了接口地址或 Key：取消（失效）进行中的检测并清空旧列表（issue #14）
-    if (patch.baseUrl !== undefined || patch.apiKey !== undefined) {
+    if (patch.baseUrl !== undefined || patch.apiKey !== undefined || patch.credentialAction !== undefined) {
       detection.invalidate(selectedId)
     }
   }
@@ -96,7 +121,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   const detectModels = () => {
     if (!selected) return
     setModelFilter('')
-    detection.detect(selected)
+    detection.detect({ ...selected, useSavedCredential: usesSavedCredential(selected) })
   }
 
   const filteredModels = useMemo(() => {
@@ -114,6 +139,18 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     if (profiles.length > MAX_LLM_PROFILES) {
       setSaved(false)
       setSaveError(`配置数量不得超过 ${MAX_LLM_PROFILES} 项`)
+      return
+    }
+    const endpointChangedWithSavedKey = profiles.findIndex((profile) => {
+      const savedEndpoint = canonicalEndpoint(savedBaseUrls.current.get(profile.id) ?? '')
+      const currentEndpoint = canonicalEndpoint(profile.baseUrl)
+      return profile.hasApiKey && (profile.credentialAction ?? 'keep') === 'keep' &&
+        (savedEndpoint === null || savedEndpoint !== currentEndpoint)
+    })
+    if (endpointChangedWithSavedKey >= 0) {
+      setSelectedId(profiles[endpointChangedWithSavedKey].id)
+      setSaved(false)
+      setSaveError(`配置 ${endpointChangedWithSavedKey + 1}：接口地址已变更，请输入新 Key 或清除已保存的 Key`)
       return
     }
     const invalidProfiles = validateProfiles(profiles)
@@ -134,15 +171,42 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     connectionTest.invalidate()
     setConfirmDiscard(false)
     try {
-      const next: Settings = {
+      const next: SettingsSaveRequest = {
         profiles,
         defaultProfileId: profiles.some((profile) => profile.id === defaultId) ? defaultId : profiles[0]?.id ?? null,
         scanLimits: parsedLimits.value
       }
-      const result = await saveFlow.save(next)
+      const readback: { settings: PublicSettings | null } = { settings: null }
+      const result = await saveFlow.save(next, async () => {
+        readback.settings = await api.getSettings()
+      })
       if (result.outcome === 'saved') {
-        onSaved(next)
         const currentDraftSaved = !result.hasEditsDuringSave
+        const savedSettings = readback.settings
+        if (!savedSettings) throw new Error('设置已保存，但读取状态失败，请重试')
+        savedBaseUrls.current = new Map(savedSettings.profiles.map((profile) => [profile.id, profile.baseUrl]))
+        onSaved(savedSettings)
+        for (const submitted of next.profiles) detection.invalidate(submitted.id)
+        setProfiles((current) => current.map((profile) => {
+          const submitted = next.profiles.find((item) => item.id === profile.id)
+          const savedProfile = savedSettings.profiles.find((item) => item.id === profile.id)
+          if (!submitted || !savedProfile) return profile
+          const sameCredentialIntent = profile.apiKey === submitted.apiKey &&
+            (profile.credentialAction ?? 'keep') === (submitted.credentialAction ?? 'keep')
+          return {
+            ...profile,
+            name: profile.name === submitted.name ? savedProfile.name : profile.name,
+            baseUrl: profile.baseUrl === submitted.baseUrl ? savedProfile.baseUrl : profile.baseUrl,
+            model: profile.model === submitted.model ? savedProfile.model : profile.model,
+            temperature: profile.temperature === submitted.temperature ? savedProfile.temperature : profile.temperature,
+            ...(sameCredentialIntent ? {
+              apiKey: '',
+              credentialAction: 'keep' as const,
+              hasApiKey: savedProfile.hasApiKey,
+              credentialStatus: savedProfile.credentialStatus
+            } : {})
+          }
+        }))
         setSaved(currentDraftSaved)
         if (currentDraftSaved) setDirty(false)
       }
@@ -197,7 +261,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
 
   const runTest = async () => {
     if (!selected) return
-    await connectionTest.run(selected)
+    await connectionTest.run({ ...selected, useSavedCredential: usesSavedCredential(selected) })
   }
 
   return (
@@ -315,14 +379,14 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                 <input
                   className={inputCls}
                   type="password"
-                  value={selected.apiKey}
+                  value={selected.apiKey ?? ''}
                   aria-invalid={Boolean(profileError('apiKey'))}
                   aria-describedby={profileError('apiKey') ? profileFieldErrorId(selectedIndex, 'apiKey') : undefined}
                   onChange={(e) => patchSelected({ apiKey: e.target.value })}
                   onBlur={() => {
                     // 粘贴完 Key 失焦时自动检测一次可用模型
                     if (
-                      selected.apiKey.trim() &&
+                      selected.apiKey?.trim() &&
                       selected.baseUrl.trim() &&
                       modelState.models.length === 0 &&
                       !modelState.loading
@@ -330,9 +394,17 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                       detectModels()
                     }
                   }}
-                  placeholder="sk-…（本地保存于本机，仅用于调用接口；Ollama 等本地服务可留空）"
+                  placeholder={selected.hasApiKey ? '已保存的 Key 不会显示；输入新 Key 可替换' : '输入 API Key；Ollama 等本地服务可留空'}
                 />
                 {profileError('apiKey') && <p id={profileFieldErrorId(selectedIndex, 'apiKey')} className="mt-1 text-xs text-rose-600">{profileError('apiKey')?.message}</p>}
+                <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+                  {(selected.credentialStatus === 'locked' || selected.credentialStatus === 'migration-pending') && <span>{selected.credentialStatus === 'locked' ? '系统凭据存储暂不可用' : '旧 Key 等待安全迁移'}</span>}
+                  {selected.credentialAction === 'clear'
+                    ? <><span className="text-amber-700">保存后清除已保存的 Key</span><button className="hover:underline" onClick={() => patchSelected({ credentialAction: 'keep' })}>保留已保存的 Key</button></>
+                    : selected.credentialAction === 'replace'
+                      ? <><span className="text-amber-700">{selected.hasApiKey ? '保存时使用新 Key 替换' : '保存新 Key'}</span>{selected.hasApiKey && <><button className="hover:underline" onClick={() => patchSelected({ apiKey: '', credentialAction: 'keep' })}>保留已保存的 Key</button><button className="text-rose-600 hover:underline" onClick={() => patchSelected({ apiKey: '', credentialAction: 'clear' })}>清除已保存的 Key</button></>}</>
+                      : <><span>{selected.credentialStatus === 'locked' || selected.credentialStatus === 'migration-pending' ? (selected.hasApiKey ? '已保存 Key' : '未保存 Key（本地服务可留空）') : selected.hasApiKey ? 'Key 已加密保护' : '未保存 Key（本地服务可留空）'}</span>{selected.hasApiKey && <button className="text-rose-600 hover:underline" onClick={() => patchSelected({ credentialAction: 'clear' })}>清除已保存的 Key</button>}</>}
+                </div>
               </Field>
               <Field label="模型名">
                 <div className="relative">
@@ -514,7 +586,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
       </div>
 
       <p className="mt-5 text-xs leading-5 text-slate-400">
-        说明：API Key 仅保存在本机用户数据目录，用于本应用直接调用对应服务商接口，不会上传到任何第三方。
+        说明：API Key 使用操作系统凭据存储加密后保存在本机；本应用仅在请求模型服务时读取，不会上传到其他第三方。
         名词解释等 AI 能力默认复用生成面试题时的模型配置。
       </p>
     </div>
