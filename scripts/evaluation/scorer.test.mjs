@@ -32,7 +32,7 @@ test('malformed arrays and null sections safely report contract failure', () => 
 })
 
 test('human review template binds fingerprints to a run and remains pending until all dimensions are rated', () => {
-  const run = { runId: 'r1', corpusVersion: 'v1', configHash: 'cfg', sourceHashes: {}, fixtureHashes: {}, cases: [], questions: [{ caseId: 'a', variant: 'generation', question: 'How useState works?', answer: 'Shown' }] }
+  const run = { runId: 'r1', corpusVersion: 'v1', configHash: 'cfg', sourceHashes: {}, fixtureHashes: {}, cases: [], questions: [{ caseId: 'a', variant: 'generation', question: 'How useState works?', answer: 'Shown', followUps: [{ question: 'Why?', answer: 'Because.' }] }] }
   run.reportDigest = calculateReportDigest(run)
   const manifest = { ...run }
   const template = makeReviewTemplate(run)
@@ -48,4 +48,6 @@ test('human review template binds fingerprints to a run and remains pending unti
   assert.throws(() => validateReview({ ...template, ratings: [{ ...template.ratings[0], projectRelevance: 6 }] }, manifest), /out of range/)
   assert.throws(() => validateReview({ ...template, ratings: [{ ...template.ratings[0], question: 'changed text' }] }, manifest), /unknown/)
   assert.throws(() => validateReview(template, { ...manifest, cases: [{ id: 'mutated', output: {}, baseline: {} }] }), /digest/)
+  assert.throws(() => validateReview(template, { ...manifest, questions: [{ ...manifest.questions[0], followUps: [] }] }), /digest/)
+  assert.throws(() => validateReview({ ...template, ratings: [{ ...template.ratings[0], followUps: [] }] }, manifest), /unknown/)
 })

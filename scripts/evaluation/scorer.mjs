@@ -20,7 +20,7 @@ export function flattenQuestions(result) {
 
 export function scoreCase(result, fixture) {
   let contractValid = true
-  try { assertInterviewResultContract(result, value => value.startsWith('/fixtures/') || /^[A-Za-z]:[\\/]/.test(value)) } catch { contractValid = false }
+  try { assertInterviewResultContract(result) } catch { contractValid = false }
   const questions = flattenQuestions(result)
   const keys = questions.map(item => normalizeQuestionKey(item.question))
   const unique = new Set(keys)
@@ -46,6 +46,6 @@ export function scoreCase(result, fixture) {
   }
 }
 
-export function fingerprintQuestion(question, { caseId = '', variant = 'generation', answer = '' } = {}) {
-  return createHash('sha256').update(JSON.stringify([caseId, variant, normalizeQuestionKey(question), answer])).digest('hex')
+export function fingerprintQuestion(question, { caseId = '', variant = 'generation', answer = '', followUps = [] } = {}) {
+  return createHash('sha256').update(JSON.stringify([caseId, variant, normalizeQuestionKey(question), answer, followUps])).digest('hex')
 }
