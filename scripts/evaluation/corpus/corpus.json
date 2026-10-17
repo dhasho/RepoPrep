@@ -1,0 +1,14 @@
+{
+  "version": "repoprep-eval-corpus-v1",
+  "cases": [
+    { "id": "react-state", "directory": "react-state", "granularity": "medium", "budget": { "min": 15, "target": 20, "max": 25 }, "knownFacts": [
+      { "id": "react", "keywords": ["React"] }, { "id": "useState", "keywords": ["useState"] }, { "id": "localStorage", "keywords": ["localStorage"] }, { "id": "filter", "keywords": ["filter"] }
+    ], "forbiddenAssertions": [{ "id": "redux", "patterns": ["\\bRedux\\b", "Redux store"] }, { "id": "server-side-rendering", "patterns": ["server-side rendering", "SSR"] }] },
+    { "id": "node-routes", "directory": "node-routes", "granularity": "medium", "budget": { "min": 15, "target": 20, "max": 25 }, "knownFacts": [
+      { "id": "node", "keywords": ["Node.js"] }, { "id": "http", "keywords": ["node:http", "createServer"] }, { "id": "routes", "keywords": ["routes"] }, { "id": "health", "keywords": ["/health"] }
+    ], "forbiddenAssertions": [{ "id": "express", "patterns": ["\\bExpress\\b", "express middleware"] }, { "id": "database", "patterns": ["PostgreSQL", "MongoDB", "database connection"] }] },
+    { "id": "python-cli", "directory": "python-cli", "granularity": "fine", "budget": { "min": 25, "target": 32, "max": 40 }, "knownFacts": [
+      { "id": "argparse", "keywords": ["argparse"] }, { "id": "csv", "keywords": ["csv"] }, { "id": "dry-run", "keywords": ["dry-run", "dry_run"] }, { "id": "pathlib", "keywords": ["pathlib"] }
+    ], "forbiddenAssertions": [{ "id": "asyncio", "patterns": ["\\basyncio\\b", "async event loop"] }, { "id": "sql", "patterns": ["SQLite", "SQL query"] }] }
+  ]
+}
