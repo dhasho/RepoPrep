@@ -33,6 +33,8 @@ npm run dev
 
 所选项目的相关代码与文档会发送给你配置的模型服务，用于生成内容。
 
+结果中的源码依据说明见[源码依据指南](docs/source-evidence.md)。
+
 开发环境与常见问题见[开发指南](docs/development.md)。项目规范、验证命令和版本策略见[项目规范](docs/project-standards.md)、[验证指南](docs/validation.md)和[版本策略](docs/VERSIONING.md)。
 
 离线生成评测见[评测指南](docs/generation-evaluation.md)。

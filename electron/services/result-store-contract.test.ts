@@ -11,6 +11,8 @@ import ts from 'typescript'
 import { fileURLToPath } from 'node:url'
 // @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
 import * as sharedTypes from '../../shared/types.ts'
+// @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
+import { resultToMarkdown } from './markdown-export.ts'
 
 const fixtureRoots: string[] = []
 after(async () => {
@@ -132,6 +134,49 @@ test('invalid save cannot overwrite prior result; invalid history is controlled 
     diagnostic.kind === 'result' && diagnostic.projectPath === projectPath && diagnostic.problem === 'corrupt' && !diagnostic.canRecover
   ))
   assert.equal(await fs.readFile(file, 'utf8'), invalidRaw, 'invalid history remains unmodified for controlled recovery')
+})
+
+test('real result store round-trips independent source evidence and preserves the captured snapshot after source edits and deletion', async () => {
+  const { store, root } = await makeHarness()
+  const projectPath = path.join(root, 'synthetic-project')
+  const sourceFile = path.join(projectPath, 'src', 'module.ts')
+  const excerpt = 'export const value = "[REDACTED]";\nreturn value'
+  const rawSecret = 'synthetic-api-secret'
+  const snapshotHash = createHash('sha256').update('synthetic redacted snapshot', 'utf8').digest('hex')
+  const evidence = () => ({
+    sourceId: 'synthetic-source-1', snapshotHash, path: 'src/module.ts',
+    startLine: 12, endLine: 13, excerpt
+  })
+  const result = {
+    ...legacyAffectedResult(projectPath),
+    sections: [{ id: 's1', title: 'Synthetic source', questions: [
+      { id: 'q1', question: 'Q1', answer: 'A1', followUps: [], sourceEvidence: [evidence()] },
+      { id: 'q2', question: 'Q2', answer: 'A2', followUps: [], sourceEvidence: [evidence()] }
+    ] }],
+    sourceEvidenceSummary: { asked: 2, accepted: 2, rejected: 0, retained: 2 }
+  }
+
+  await fs.mkdir(path.dirname(sourceFile), { recursive: true })
+  await fs.writeFile(sourceFile, `export const token = "${rawSecret}";\nreturn value`, 'utf8')
+  store.saveResult(projectPath, result)
+  const beforeChange = store.loadResult(projectPath)
+  assert.deepEqual(beforeChange.sections[0].questions.map((question: any) => question.sourceEvidence), [
+    [evidence()], [evidence()]
+  ])
+  await fs.writeFile(sourceFile, 'changed after generation\n', 'utf8')
+  await fs.rm(sourceFile)
+
+  const reloaded = store.loadResult(projectPath)
+  assert.ok(reloaded)
+  assert.deepEqual(reloaded.sections[0].questions.map((question: any) => question.sourceEvidence), [
+    [evidence()], [evidence()]
+  ], 'history retains cloned evidence independently from current source files')
+  const markdown = resultToMarkdown(reloaded)
+  assert.equal(markdown.split(snapshotHash).length - 1, 2, 'each question exports its own evidence hash')
+  assert.equal(markdown.split(excerpt).length - 1, 2, 'export uses the captured excerpt after source deletion')
+  assert.ok(!markdown.includes('changed after generation'))
+  assert.ok(!JSON.stringify(reloaded).includes(rawSecret), 'saved history contains only the redacted excerpt')
+  assert.ok(!markdown.includes(rawSecret), 'Markdown never exports the raw source secret')
 })
 
 test('legacy empty names adapt only at lexical filesystem roots without rewriting the stored bytes', async () => {

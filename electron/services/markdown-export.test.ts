@@ -7,8 +7,15 @@
 import test from 'node:test'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import assert from 'node:assert/strict'
+import path from 'node:path'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import type { InterviewResult } from '../../shared/types.ts'
+// @ts-ignore TS5097 -- runtime Node tests import the extension directly.
+import { IPC } from '../../shared/ipc.ts'
+// @ts-ignore TS5097 -- runtime Node tests import the extension directly.
+import { assertInterviewResultContract } from '../../shared/result-contract.ts'
+// @ts-ignore TS5097 -- runtime Node tests import the extension directly.
+import { validateIpcArgs } from './ipc-validation.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { escapeTableCell, resultToMarkdown } from './markdown-export.ts'
 
@@ -139,20 +146,23 @@ test('读取不完整的持久化结果在 Markdown 中显示受控原因、转�
 
 test('源码依据导出保存的脱敏快照、原始行号和hash，并使用无法被片段逃逸的动态围栏', () => {
   const secretSafeExcerpt = 'const token = "[REDACTED]";\n```ts\n~~~~\nreturn token'
-  const md = resultToMarkdown(makeResult({
+  const result = makeResult({
     sections: [{
       id: 's1', title: 'Evidence', questions: [{
         id: 'q1', question: 'Question?', answer: 'Answer.', followUps: [],
         sourceEvidence: [{
           sourceId: 'source-1', snapshotHash: 'b'.repeat(64), path: 'src/a`b|[x].ts',
-          startLine: 4, endLine: 8, excerpt: secretSafeExcerpt
+          startLine: 4, endLine: 7, excerpt: secretSafeExcerpt
         }]
       }]
     }],
     sourceEvidenceSummary: { asked: 1, accepted: 1, rejected: 0, retained: 1 }
-  }))
+  })
+  assert.doesNotThrow(() => assertInterviewResultContract(result, path.isAbsolute))
+  assert.doesNotThrow(() => validateIpcArgs(IPC.exportMarkdown, [result]))
+  const md = resultToMarkdown(result)
   assert.ok(md.includes('`` src/a`b|[x].ts ``'), 'path uses a delimiter longer than embedded backtick runs')
-  assert.ok(md.includes('L4–L8'))
+  assert.ok(md.includes('L4–L7'))
   assert.ok(md.includes('b'.repeat(64)))
   assert.ok(md.includes('\n````\n'), 'fence exceeds the longest embedded backtick run')
   assert.ok(md.includes('~~~~'), 'content containing a longer tilde run remains inside the chosen fence')

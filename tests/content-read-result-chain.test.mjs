@@ -91,9 +91,26 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
       onProgress: (_step, detail) => { if (detail) progressDetails.push(detail) }
     })
 
+    const sourceEvidence = {
+      sourceId: 'synthetic-source',
+      snapshotHash: 'c'.repeat(64),
+      path: 'src/<module>.ts',
+      startLine: 4,
+      endLine: 5,
+      excerpt: 'const token = "[REDACTED]";\nreturn token'
+    }
+    result.sections[0].questions[0].sourceEvidence = [{ ...sourceEvidence }]
+    result.sourceEvidenceSummary = { asked: 1, accepted: 1, rejected: 0, retained: 1 }
+
     assert.ok(result.contentReadSummary)
     assert.doesNotThrow(() => assertInterviewResultContract(result))
     assert.doesNotThrow(() => validateIpcArgs(IPC.exportMarkdown, [result]))
+    const badRange = structuredClone(result)
+    badRange.sections[0].questions[0].sourceEvidence[0].startLine = 0
+    assert.throws(() => validateIpcArgs(IPC.exportMarkdown, [badRange]), /格式无效|无效|参数/)
+    const oversizedEvidence = structuredClone(result)
+    oversizedEvidence.sections[0].questions[0].sourceEvidence[0].excerpt = 'x'.repeat(3001)
+    assert.throws(() => validateIpcArgs(IPC.exportMarkdown, [oversizedEvidence]), /格式无效|无效|参数/)
     assert.ok(providerMessages.some((message) => message.includes('内容读取不完整') && message.includes('README.md')))
     assert.ok(progressDetails.some((detail) => detail.includes('内容读取不完整') && detail.includes('README.md')))
     assert.ok(!providerMessages.join('\n').includes(root))
@@ -106,6 +123,10 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     assert.ok(markdown.includes('README\\.md'))
     assert.ok(!markdown.includes('synthetic secret'))
     assert.ok(!markdown.includes(root))
+    assert.ok(markdown.includes('src/<module>.ts'))
+    assert.ok(markdown.includes('L4–L5'))
+    assert.ok(markdown.includes(sourceEvidence.snapshotHash))
+    assert.ok(markdown.includes(sourceEvidence.excerpt))
 
     const html = await renderResultPage(result)
     assert.ok(html.includes('role="alert"'))
