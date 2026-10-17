@@ -170,6 +170,7 @@ async function makeHarness(): Promise<{
   const contentReadPath = path.resolve(here, '..', '..', 'shared', 'content-read.ts')
   const contractPath = path.resolve(here, '..', '..', 'shared', 'result-contract.ts')
   const storageContractPath = path.resolve(here, '..', '..', 'shared', 'storage-contract.ts')
+  const credentialVaultPath = path.resolve(here, 'credential-vault.ts')
   const faultFs = makeFaultFs()
   const fsRequire = (id: string) => id === 'node:fs' || id === 'fs' ? faultFs.fs : nativeRequire(id)
   const transpile = async (file: string) => ts.transpileModule(await fs.promises.readFile(file, 'utf8'), compilerOptions).outputText
@@ -181,6 +182,12 @@ async function makeHarness(): Promise<{
     return nativeRequire(id)
   })
   const storageContract = evaluateCommonJs(await transpile(storageContractPath), storageContractPath, (id) => nativeRequire(id))
+  const credentialVault = evaluateCommonJs(await transpile(credentialVaultPath), credentialVaultPath, (id) => nativeRequire(id))
+  const testCrypto = {
+    isAvailable: async () => true,
+    encrypt: async (plaintext: string) => Buffer.from(`test-cipher:${plaintext}`),
+    decrypt: async (ciphertext: Buffer) => ciphertext.toString().replace(/^test-cipher:/, '')
+  }
   const store = evaluateCommonJs(await transpile(storePath), storePath, (id) => {
     if (id === 'electron') return { app: { getPath: (name: string) => {
       assert.equal(name, 'userData')
@@ -189,8 +196,11 @@ async function makeHarness(): Promise<{
     if (id === '@shared/result-contract') return contract
     if (id === '@shared/storage-contract') return storageContract
     if (id === './atomic-json') return atomic
+    if (id === './credential-vault') return credentialVault
+    if (id === './native-credential-crypto') return { nativeCredentialCrypto: testCrypto }
     return fsRequire(id)
   })
+  store.setCredentialCryptoForTests(testCrypto)
   return { store, atomic, root, userData, faultFs }
 }
 
@@ -216,6 +226,187 @@ function validSettings(id = 'profile-1'): Record<string, any> {
     defaultProfileId: id
   }
 }
+
+test('credential migration encrypts legacy settings copies and settings:get exposes metadata only', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const primary = JSON.stringify(validSettings('primary-profile'))
+  const backup = JSON.stringify(validSettings('backup-profile'))
+  const corruptSnapshot = JSON.stringify(validSettings('corrupt-profile'))
+  fs.writeFileSync(file, primary)
+  fs.writeFileSync(`${file}.bak`, backup)
+  fs.writeFileSync(`${file}.corrupt`, corruptSnapshot)
+
+  const privateProfile = await store.getPrivateProfile('primary-profile')
+  assert.equal(privateProfile?.apiKey, 'private-key-marker')
+  for (const candidate of [file, `${file}.bak`, `${file}.corrupt`]) {
+    const saved = fs.readFileSync(candidate, 'utf8')
+    assert.doesNotMatch(saved, /private-key-marker/)
+    assert.match(saved, /"credential"/)
+  }
+  const publicValue = await store.getSettings()
+  assert.equal(publicValue.profiles[0].hasApiKey, true)
+  assert.equal(publicValue.profiles[0].credentialStatus, 'stored')
+  assert.equal('apiKey' in publicValue.profiles[0], false)
+  assert.doesNotMatch(JSON.stringify(publicValue), /private-key-marker|test-cipher/)
+})
+
+test('missing primary reads an encrypted legacy backup and malformed corrupt snapshots stay recoverable', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const legacyBackup = Buffer.from(JSON.stringify(validSettings('backup-profile')))
+  const corruptBytes = Buffer.from('broken old settings containing corrupt-copy-marker')
+  fs.writeFileSync(`${file}.bak`, legacyBackup)
+  fs.writeFileSync(`${file}.corrupt`, corruptBytes)
+  assert.equal((await store.getSettings()).profiles[0].credentialStatus, 'migration-pending')
+  assert.equal((await store.getPrivateProfile('backup-profile'))?.apiKey, 'private-key-marker')
+  assert.equal(fs.existsSync(file), false)
+  const backupText = fs.readFileSync(`${file}.bak`, 'utf8')
+  const corruptArchive = fs.readFileSync(`${file}.corrupt`)
+  assert.doesNotMatch(backupText, /private-key-marker/)
+  assert.doesNotMatch(corruptArchive.toString(), /corrupt-copy-marker/)
+  const magicBytes = Buffer.byteLength('RepoPrep encrypted settings archive v1\n')
+  assert.equal(corruptArchive.subarray(0, magicBytes).toString(), 'RepoPrep encrypted settings archive v1\n')
+  const rawArchive = corruptArchive.subarray(magicBytes).toString().replace(/^test-cipher:/, '')
+  assert.equal(Buffer.from(rawArchive, 'base64').toString(), corruptBytes.toString())
+})
+
+test('large malformed settings snapshots remain byte-recoverable after encrypted archival', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const corruptBytes = Buffer.from(`${'x'.repeat(1_900_000)}large-corrupt-marker`)
+  fs.writeFileSync(file, JSON.stringify(validSettings('large-primary')))
+  fs.writeFileSync(`${file}.corrupt`, corruptBytes)
+  assert.equal((await store.getPrivateProfile('large-primary'))?.apiKey, 'private-key-marker')
+  const archived = fs.readFileSync(`${file}.corrupt`)
+  assert.ok(archived.byteLength > 2 * 1024 * 1024)
+  const magicBytes = Buffer.byteLength('RepoPrep encrypted settings archive v1\n')
+  const decoded = Buffer.from(archived.subarray(magicBytes).toString().replace(/^test-cipher:/, ''), 'base64')
+  assert.deepEqual(decoded, corruptBytes)
+})
+
+test('near-limit corrupt primary migrates to an encrypted archive and valid backup recovers safely', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const corruptBytes = Buffer.from(`${'z'.repeat(1_900_000)}recoverable-primary-marker`)
+  fs.writeFileSync(file, corruptBytes)
+  fs.writeFileSync(`${file}.bak`, JSON.stringify(validSettings('backup-profile')))
+  const publicSettings = await store.getSettings()
+  assert.equal(publicSettings.profiles[0].credentialStatus, 'migration-pending')
+  const [diagnostic] = store.getStorageDiagnostics()
+  assert.equal(diagnostic.usingBackup, true)
+  await store.recoverStorage('settings')
+  assert.equal((await store.getPrivateProfile('backup-profile'))?.apiKey, 'private-key-marker')
+  const archive = fs.readFileSync(`${file}.corrupt`)
+  assert.deepEqual(await store.decryptSettingsArchiveBytes(archive), corruptBytes)
+})
+
+test('selected profile resolution does not decrypt unrelated malformed credentials', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const crypto = {
+    isAvailable: async () => true,
+    encrypt: async (plaintext: string) => Buffer.from(`test-cipher:${plaintext}`),
+    decrypt: async (ciphertext: Buffer) => {
+      const text = ciphertext.toString()
+      if (text === 'malformed') throw new Error('bad cipher')
+      return text.replace(/^test-cipher:/, '')
+    }
+  }
+  store.setCredentialCryptoForTests(crypto)
+  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 2, profiles: [
+    { id: 'good', name: 'Good', baseUrl: 'https://good.example/v1', model: 'good', credential: { version: 1, ciphertext: Buffer.from('test-cipher:first-secret').toString('base64') } },
+    { id: 'bad', name: 'Bad', baseUrl: 'https://bad.example/v1', model: 'bad', credential: { version: 1, ciphertext: Buffer.from('malformed').toString('base64') } }
+  ], defaultProfileId: 'good' }))
+  assert.equal((await store.getPrivateProfile('good'))?.apiKey, 'first-secret')
+  await assert.rejects(store.getPrivateProfile('bad'), /credential-decryption-failed/)
+})
+
+test('migration encryption failure preserves every original recoverable copy', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const primary = Buffer.from(JSON.stringify(validSettings('one')))
+  const backup = Buffer.from(JSON.stringify(validSettings('two')))
+  fs.writeFileSync(file, primary)
+  fs.writeFileSync(`${file}.bak`, backup)
+  let calls = 0
+  store.setCredentialCryptoForTests({
+    isAvailable: async () => true,
+    encrypt: async (plaintext: string) => {
+      calls += 1
+      if (calls === 2) throw new Error(`synthetic encryption failure ${plaintext}`)
+      return Buffer.from(`test-cipher:${plaintext}`)
+    },
+    decrypt: async (ciphertext: Buffer) => ciphertext.toString().replace(/^test-cipher:/, '')
+  })
+  await assert.rejects(store.getPrivateProfile('profile-1'), /settings-migration-pending/)
+  assert.deepEqual(fs.readFileSync(file), primary)
+  assert.deepEqual(fs.readFileSync(`${file}.bak`), backup)
+})
+
+test('partial managed-copy replacement stays pending and retries safely after restart-like reread', async () => {
+  const { store, userData, faultFs } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  fs.writeFileSync(file, JSON.stringify(validSettings('primary')))
+  fs.writeFileSync(`${file}.bak`, JSON.stringify(validSettings('backup')))
+  faultFs.arm('rename', 'backup')
+  await assert.rejects(store.getPrivateProfile('primary'), /settings-migration-pending/)
+  assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /private-key-marker/)
+  assert.match(fs.readFileSync(`${file}.bak`, 'utf8'), /private-key-marker/)
+  assert.equal((await store.getSettings()).profiles[0].credentialStatus, 'migration-pending')
+  assert.equal((await store.getPrivateProfile('primary'))?.apiKey, 'private-key-marker')
+  assert.doesNotMatch(fs.readFileSync(`${file}.bak`, 'utf8'), /private-key-marker/)
+  assert.equal((await store.getSettings()).profiles[0].credentialStatus, 'stored')
+})
+
+test('legacy profiles with empty keys migrate without an available OS credential provider', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const legacy = { profiles: [{ ...validSettings().profiles[0], id: 'local', apiKey: '' }], defaultProfileId: 'local' }
+  fs.writeFileSync(file, JSON.stringify(legacy))
+  store.setCredentialCryptoForTests({ isAvailable: async () => false, encrypt: async () => Buffer.from(''), decrypt: async () => '' })
+  assert.equal((await store.getPrivateProfile('local'))?.apiKey, '')
+  assert.equal((await store.getSettings()).profiles[0].credentialStatus, 'missing')
+  assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /apiKey/)
+})
+
+test('unavailable OS storage leaves keyed legacy data intact and permits empty-key local profiles', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const legacy = Buffer.from(JSON.stringify(validSettings()))
+  fs.writeFileSync(file, legacy)
+  store.setCredentialCryptoForTests({ isAvailable: async () => false, encrypt: async () => Buffer.from(''), decrypt: async () => '' })
+  const publicValue = await store.getSettings()
+  assert.equal(publicValue.profiles[0].credentialStatus, 'migration-pending')
+  await assert.rejects(store.getPrivateProfile('profile-1'), /settings-migration-pending/)
+  assert.deepEqual(fs.readFileSync(file), legacy)
+
+  const empty = await makeHarness()
+  empty.store.setCredentialCryptoForTests({ isAvailable: async () => false, encrypt: async () => Buffer.from(''), decrypt: async () => '' })
+  await empty.store.saveSettings({
+    profiles: [{ id: 'local', name: 'Local', baseUrl: 'http://127.0.0.1:11434/v1', model: 'local-model', apiKey: '', credentialAction: 'clear' }],
+    defaultProfileId: 'local'
+  })
+  assert.equal((await empty.store.getSettings()).profiles[0].hasApiKey, false)
+})
+
+test('settings save keeps only the matching endpoint credential and rejects endpoint changes', async () => {
+  const { store } = await makeHarness()
+  const initial = validSettings('profile-keep')
+  await store.saveSettings({
+    profiles: [{ id: 'profile-keep', name: 'Profile', baseUrl: 'https://example.test/v1', model: 'test-model', apiKey: initial.profiles[0].apiKey, credentialAction: 'replace' }],
+    defaultProfileId: 'profile-keep'
+  })
+  await store.saveSettings({
+    profiles: [{ id: 'profile-keep', name: 'Renamed', baseUrl: 'https://EXAMPLE.test:443/v1/', model: 'changed-model', apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: 'profile-keep'
+  })
+  assert.equal((await store.getPrivateProfile('profile-keep'))?.apiKey, 'private-key-marker')
+  await assert.rejects(store.saveSettings({
+    profiles: [{ id: 'profile-keep', name: 'Changed endpoint', baseUrl: 'https://attacker.example/v1', model: 'changed-model', apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: 'profile-keep'
+  }), /替换或清除/)
+})
 
 function resultFile(userData: string, projectPath: string): string {
   const hash = nativeRequire('node:crypto').createHash('sha1').update(projectPath).digest('hex') as string
@@ -252,11 +443,11 @@ test('atomic store failures preserve valid settings, recent history, and result 
     for (const operation of ['create', 'partial-write', 'fsync', 'close', 'rename']) {
       const { store, userData, faultFs } = await makeHarness()
       const scenario = storageScenarios(userData).find((item) => item.kind === kind)!
-      scenario.seed(store)
+      await scenario.seed(store)
       const file = scenario.file
       const before = fs.readFileSync(file)
       faultFs.arm(operation, 'primary')
-      assert.throws(() => scenario.update(store), (error: unknown) => {
+      await assert.rejects(Promise.resolve().then(() => scenario.update(store)), (error: unknown) => {
         assert.ok(error instanceof Error)
         const expected = kind === 'result'
           ? '保存结果失败，请检查磁盘空间或权限后重试。'
@@ -267,7 +458,7 @@ test('atomic store failures preserve valid settings, recent history, and result 
         return true
       })
       assert.deepEqual(fs.readFileSync(file), before, `${scenario.kind}/${operation} must preserve the complete old file`)
-      const loaded = scenario.read(store)
+      const loaded = await scenario.read(store)
       assert.ok(loaded, `${scenario.kind}/${operation} should leave the previous value loadable`)
       assertNoHelperTemps(file)
     }
@@ -278,12 +469,12 @@ test('failure to replace the backup leaves the last complete primary intact for 
   for (const kind of ['settings', 'recent', 'result']) {
     const { store, userData, faultFs } = await makeHarness()
     const scenario = storageScenarios(userData).find((item) => item.kind === kind)!
-    scenario.seed(store)
+    await scenario.seed(store)
     const before = fs.readFileSync(scenario.file)
     faultFs.arm('rename', 'backup')
-    assert.throws(() => scenario.update(store))
+    await assert.rejects(Promise.resolve().then(() => scenario.update(store)))
     assert.deepEqual(fs.readFileSync(scenario.file), before)
-    assert.ok(scenario.read(store), `${kind} should remain loadable after its backup update fails`)
+    assert.ok(await scenario.read(store), `${kind} should remain loadable after its backup update fails`)
     assertNoHelperTemps(scenario.file)
   }
 })
@@ -291,11 +482,11 @@ test('failure to replace the backup leaves the last complete primary intact for 
 test('settings write errors retain only allowlisted errno codes for static IPC mapping', async () => {
   for (const code of ['ENOSPC', 'EDQUOT', 'EACCES', 'EPERM', 'EROFS', 'EIO']) {
     const { store, userData, faultFs } = await makeHarness()
-    store.saveSettings({ profiles: [], defaultProfileId: null })
+    await store.saveSettings({ profiles: [], defaultProfileId: null })
     const file = path.join(userData, 'settings.json')
     const before = fs.readFileSync(file)
     faultFs.arm('rename', 'backup', code)
-    assert.throws(() => store.saveSettings(validSettings('replacement')), (error: unknown) => {
+    await assert.rejects(store.saveSettings(validSettings('replacement')), (error: unknown) => {
       assert.ok(error instanceof Error)
       assert.equal(error.message, '保存本地数据失败，请检查磁盘空间或权限后重试。')
       assert.equal((error as NodeJS.ErrnoException).code, code === 'EIO' ? undefined : code)
@@ -325,7 +516,7 @@ test('valid backup is a read-only fallback and explicit recovery archives corrup
   assert.equal(diagnostic.problem, 'corrupt')
   assert.equal(JSON.stringify(diagnostic).includes(userData), false)
 
-  store.recoverStorage(diagnostic.id)
+  await store.recoverStorage(diagnostic.id)
   assert.deepEqual(fs.readFileSync(file), backup)
   assert.deepEqual(fs.readFileSync(`${file}.corrupt`), corrupt)
   assert.equal(store.getStorageDiagnostics().length, 0)
@@ -340,7 +531,7 @@ test('deleting a result removes every recovery copy so historical data cannot re
   fs.writeFileSync(file, Buffer.from('{corrupt'))
   assert.equal(store.loadResult(projectPath).projectName, 'Old', 'valid backup is read without rewriting damaged primary')
   const [diagnostic] = store.getStorageDiagnostics()
-  store.recoverStorage(diagnostic.id)
+  await store.recoverStorage(diagnostic.id)
   assert.deepEqual([file, `${file}.bak`, `${file}.corrupt`].map((candidate) => fs.existsSync(candidate)), [true, true, true])
 
   store.deleteResult(projectPath)
@@ -457,7 +648,7 @@ test('recovery clears a stale diagnostic without replacing a newer valid primary
 
   const freshBytes = Buffer.from(JSON.stringify(sampleResult(projectPath, 'Fresh'), null, 2))
   fs.writeFileSync(file, freshBytes)
-  store.recoverStorage(diagnostic.id)
+  await store.recoverStorage(diagnostic.id)
 
   assert.deepEqual(fs.readFileSync(file), freshBytes)
   assert.deepEqual(fs.readFileSync(`${file}.bak`), backup)
@@ -479,7 +670,7 @@ test('failed recovery replacement preserves both the damaged primary and complet
   const [diagnostic] = store.getStorageDiagnostics()
 
   faultFs.arm('rename', 'primary')
-  assert.throws(() => store.recoverStorage(diagnostic.id), /恢复失败，请重试/)
+  await assert.rejects(store.recoverStorage(diagnostic.id), /恢复失败，请重试/)
   assert.deepEqual(fs.readFileSync(file), damaged)
   assert.deepEqual(fs.readFileSync(`${file}.bak`), backup)
   assert.deepEqual(fs.readFileSync(`${file}.corrupt`), damaged, 'failed recovery may preserve a corrupt archive without replacing source')
@@ -500,7 +691,7 @@ test('settings and recent backups survive bad primaries, and their bytes change 
   fs.writeFileSync(recentFile, damaged)
   fs.writeFileSync(`${recentFile}.bak`, oldRecent)
 
-  assert.equal(store.getSettings().defaultProfileId, null)
+  assert.equal((await store.getSettings()).defaultProfileId, null)
   assert.equal(store.getRecentProjects()[0].name, 'ProjectA')
   assert.deepEqual(fs.readFileSync(settingsFile), damaged)
   assert.deepEqual(fs.readFileSync(recentFile), damaged)
@@ -508,20 +699,20 @@ test('settings and recent backups survive bad primaries, and their bytes change 
     ['settings', true], ['recent', true]
   ])
 
-  store.recoverStorage('settings')
-  store.recoverStorage('recent')
+  await store.recoverStorage('settings')
+  await store.recoverStorage('recent')
   assert.deepEqual(fs.readFileSync(settingsFile), oldSettings)
   assert.deepEqual(fs.readFileSync(recentFile), oldRecent)
-  assert.deepEqual(fs.readFileSync(`${settingsFile}.corrupt`), damaged)
+  assert.deepEqual(await store.decryptSettingsArchiveBytes(fs.readFileSync(`${settingsFile}.corrupt`)), damaged)
   assert.deepEqual(fs.readFileSync(`${recentFile}.corrupt`), damaged)
 
   // A subsequent valid write refreshes a backup only from a valid complete primary.
   fs.writeFileSync(settingsFile, damaged)
   fs.writeFileSync(`${settingsFile}.bak`, priorSettings)
-  store.saveSettings(validSettings('new'))
-  assert.deepEqual(fs.readFileSync(settingsFile), Buffer.from(JSON.stringify(validSettings('new'), null, 2)))
-  assert.deepEqual(fs.readFileSync(`${settingsFile}.corrupt`), damaged)
-  assert.deepEqual(fs.readFileSync(`${settingsFile}.bak`), priorSettings)
+  await store.saveSettings(validSettings('new'))
+  assert.doesNotMatch(fs.readFileSync(settingsFile, 'utf8'), /private-key-marker/)
+  assert.deepEqual(await store.decryptSettingsArchiveBytes(fs.readFileSync(`${settingsFile}.corrupt`)), damaged)
+  assert.doesNotMatch(fs.readFileSync(`${settingsFile}.bak`, 'utf8'), /private-key-marker/)
   fs.writeFileSync(recentFile, damaged)
   fs.writeFileSync(`${recentFile}.bak`, priorRecent)
   store.addRecentProject({ path: 'C:\\ProjectC', name: 'ProjectC' })
@@ -547,7 +738,7 @@ test('ordinary missing files remain missing, while corrupt and unreadable histor
   assert.throws(() => store.loadResult(projectPath), /历史结果文件已损坏/)
   const badBackupDiagnostic = store.getStorageDiagnostics()[0]
   assert.equal(badBackupDiagnostic.canRecover, false)
-  assert.throws(() => store.recoverStorage(badBackupDiagnostic.id), /未找到可恢复的完整备份/)
+  await assert.rejects(store.recoverStorage(badBackupDiagnostic.id), /未找到可恢复的完整备份/)
   assert.deepEqual(fs.readFileSync(file), corrupt, 'failed recovery leaves the damaged source byte-identical')
   assert.deepEqual(fs.readFileSync(`${file}.bak`), Buffer.from('{not a valid backup'))
 
@@ -566,7 +757,7 @@ test('malformed settings fall back to a valid backup and remain byte-identical u
   fs.writeFileSync(file, invalid)
   fs.writeFileSync(`${file}.bak`, backup)
 
-  assert.equal(store.getSettings().defaultProfileId, 'backup')
+  assert.equal((await store.getSettings()).defaultProfileId, 'backup')
   assert.deepEqual(fs.readFileSync(file), invalid)
   const [diagnostic] = store.getStorageDiagnostics()
   assert.equal(diagnostic.id, 'settings')
@@ -577,12 +768,12 @@ test('malformed settings fall back to a valid backup and remain byte-identical u
 
 test('read descriptor close failures are reported as unreadable without changing source bytes', async () => {
   const { store, userData, faultFs } = await makeHarness()
-  store.saveSettings(validSettings())
+  await store.saveSettings(validSettings())
   const file = path.join(userData, 'settings.json')
   const before = fs.readFileSync(file)
   faultFs.arm('read-close')
 
-  assert.deepEqual(store.getSettings(), { profiles: [], defaultProfileId: null })
+  assert.deepEqual(await store.getSettings(), { profiles: [], defaultProfileId: null })
   assert.deepEqual(fs.readFileSync(file), before)
   assert.equal(store.getStorageDiagnostics()[0].problem, 'unreadable')
   assert.equal(faultFs.openReadDescriptors, 0, 'close should be retried best-effort so the descriptor does not leak')
@@ -613,7 +804,7 @@ test('old valid settings, recent entries, and version 1 results load without mig
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, resultBytes)
 
-  assert.equal(store.getSettings().defaultProfileId, null)
+  assert.equal((await store.getSettings()).defaultProfileId, null)
   assert.equal(store.getRecentProjects()[0].name, 'OldProject')
   assert.equal(store.loadResult(projectPath).projectName, 'Legacy')
   assert.deepEqual(fs.readFileSync(path.join(userData, 'settings.json')), oldSettings)

@@ -58,6 +58,7 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   const windows = []
   const saves = []
   const recents = []
+  const probeCalls = []
   const appDataPath = path.join(path.parse(root).root, 'AppData', 'Roaming')
   let ready
   const readyPromise = new Promise((resolve) => { ready = resolve })
@@ -90,6 +91,8 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   }
   let generateImpl = async () => ({ projectName: 'demo' })
   let streamImpl = async () => undefined
+  let saveSettingsImpl = async () => undefined
+  const savedProfile = { id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }
   const modules = new Map()
   const requireModule = (id) => {
     if (id === 'node:path') return path
@@ -121,8 +124,8 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
   modules.set('./services/llm', {
     chatCompletionStream: (...args) => streamImpl(...args),
     isLlmTimeoutError,
-    listModels: async () => ({}),
-    testConnection: async () => ({})
+    listModels: async (profile) => { probeCalls.push({ kind: 'models', profile }); return { ok: true, models: [], message: 'ok' } },
+    testConnection: async (profile) => { probeCalls.push({ kind: 'test', profile }); return { ok: true, message: 'ok' } }
   })
   modules.set('./services/exporter', { exportMarkdownDialog: async () => ({}) })
   modules.set('./window-security', {
@@ -135,12 +138,13 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
     deleteResult() {},
     getRecentProjects: () => [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }],
     getSettings: () => ({ profiles: [{ id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }] }),
+    getPrivateProfile: async (id) => ({ ...savedProfile, id }),
     getStorageDiagnostics: () => [],
     loadResult: () => null,
     removeRecentProject: async () => {},
     recoverStorage() {},
     saveResult: (...args) => saves.push(args),
-    saveSettings() {}
+    saveSettings: (...args) => saveSettingsImpl(...args)
   })
 
   const ipcAuthority = await loadTypescriptModule('electron/services/ipc-authority.ts', requireModule)
@@ -182,9 +186,11 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH } 
     invoke,
     saves,
     recents,
+    probeCalls,
     TimeoutError: LlmRequestError,
     setGenerate: (implementation) => { generateImpl = implementation },
-    setStream: (implementation) => { streamImpl = implementation }
+    setStream: (implementation) => { streamImpl = implementation },
+    setSaveSettings: (implementation) => { saveSettingsImpl = implementation }
   }
 }
 
@@ -212,6 +218,45 @@ test('trusted renderer reaches the exact generation-timeout business message thr
   const untrusted = { sender: h.sender, senderFrame: { url: h.sender.mainFrame.url } }
   await assert.rejects(h.handlers.get(IPC.generateRun)(untrusted, options), /请求无效或未获授权/)
   assert.equal(calls, 1, 'untrusted sender must be rejected before main handler execution')
+})
+
+test('settings IPC awaits persistence and returns only allowlisted credential guidance', async () => {
+  const h = await createHarness()
+  const expected = '设置尚未完成安全迁移，请检查系统凭据存储后重试。'
+  let complete
+  let settled = false
+  const pending = new Promise((resolve) => { complete = resolve })
+  h.setSaveSettings(async () => { await pending; throw new Error(`${expected} secret=never-show-this`) })
+  const request = h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }).then(
+    () => { settled = true },
+    (error) => { settled = true; throw error }
+  )
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(settled, false, 'settings IPC must wait for asynchronous storage completion')
+  complete()
+  await assert.rejects(request, (error) => error.message === '保存设置失败，请重试；若持续失败请检查磁盘状态。')
+
+  h.setSaveSettings(async () => { throw new Error(expected) })
+  await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === expected)
+  assert.equal(JSON.stringify(h.saves).includes('never-show-this'), false)
+})
+
+test('model and connection probes bind saved credentials to the canonical endpoint and honor clear intent', async () => {
+  const h = await createHarness()
+  const request = {
+    id: 'p', name: 'Probe', baseUrl: 'https://PROVIDER.invalid:443/v1/', model: 'probe-model',
+    apiKey: '', hasApiKey: true, credentialStatus: 'stored', useSavedCredential: true, credentialAction: 'keep'
+  }
+  const result = await h.invoke(IPC.llmTest, request)
+  assert.equal(h.probeCalls[0].profile.apiKey, 'never-log-this')
+  assert.doesNotMatch(JSON.stringify(result), /never-log-this/)
+
+  await assert.rejects(h.invoke(IPC.llmListModels, { ...request, baseUrl: 'https://attacker.invalid/v1' }),
+    (error) => error.message === '已保存的 API Key 仅适用于原接口地址，请先替换 Key。')
+  assert.equal(h.probeCalls.length, 1, 'changed endpoint must be rejected before a model request')
+
+  await h.invoke(IPC.llmTest, { ...request, credentialAction: 'clear' })
+  assert.equal(h.probeCalls[1].profile.apiKey, '', 'clear intent wins over a stale saved-key reference')
 })
 
 test('content boundary rejection reaches the renderer with a static rescan hint and saves nothing', async () => {

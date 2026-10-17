@@ -61,6 +61,7 @@ async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) =
   const displayNamePath = path.resolve(here, 'project-display-name.ts')
   const displayNameCode = ts.transpileModule(await fs.readFile(displayNamePath, 'utf8'), options).outputText
   const displayNameModule = evalModule(displayNameCode, displayNamePath, (id) => nativeRequire(id))
+  const cryptoStub = { isAvailable: async () => true, encrypt: async (value: string) => Buffer.from(value), decrypt: async (value: Buffer) => value.toString() }
   const store = evalModule(storeCode, storePath, (id) => {
     if (id === 'electron') return { app: { getPath: (name: string) => {
       assert.equal(name, 'userData')
@@ -71,6 +72,8 @@ async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) =
     if (id === '@shared/storage-contract') return storageContractModule
     if (id === './atomic-json') return atomicModule
     if (id === './project-display-name') return displayNameModule
+    if (id === './credential-vault') return { encryptCredential: async (value: string) => ({ version: 1, ciphertext: Buffer.from(value).toString('base64') }), decryptCredential: async (value: any) => Buffer.from(value.ciphertext, 'base64').toString() }
+    if (id === './native-credential-crypto') return { nativeCredentialCrypto: cryptoStub }
     return nativeRequire(id)
   })
   return { store, root, userData }
@@ -183,7 +186,7 @@ test('legacy empty root name in a backup stays loadable and recoverable without 
   assert.equal(await fs.readFile(`${file}.bak`, 'utf8'), backupRaw)
   const [diagnostic] = store.getStorageDiagnostics()
   assert.equal(diagnostic.usingBackup, true)
-  store.recoverStorage(diagnostic.id)
+  await store.recoverStorage(diagnostic.id)
   assert.equal(await fs.readFile(file, 'utf8'), backupRaw, 'recovery copies the validated historical bytes unchanged')
   assert.notEqual(store.loadResult(projectPath).projectName, '')
 })

@@ -5,7 +5,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
-import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, Settings } from '@shared/types'
+import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, LlmProfileDraft, SettingsSaveRequest } from '@shared/types'
 import { ProjectScanCache } from './services/scan-cache'
 import { GenerationTaskRegistry } from './services/generation-tasks'
 import { generateInterview, buildExplainMessages } from './services/generator'
@@ -17,6 +17,7 @@ import {
   deleteResult,
   getRecentProjects,
   getSettings,
+  getPrivateProfile,
   getStorageDiagnostics,
   loadResult,
   recoverStorage,
@@ -161,7 +162,8 @@ handle(IPC.selectFolder, async (e): Promise<string | null> => {
 const scanCache = new ProjectScanCache()
 
 handle(IPC.scanProject, async (_e, projectPath: string) => {
-  const { scan } = await scanCache.refresh(projectPath, getSettings().scanLimits)
+  const settings = await getSettings()
+  const { scan } = await scanCache.refresh(projectPath, settings.scanLimits)
   addRecentProject({ path: projectPath, name: scan.name })
   return { ...scan, storagePath: projectPath }
 })
@@ -213,8 +215,10 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
   }
 
   try {
-    const settings = getSettings()
-    const profile = settings.profiles.find((p) => p.id === options.profileId)
+    const settings = await getSettings()
+    ensureCurrentTask()
+    const profile = await getPrivateProfile(options.profileId)
+    ensureCurrentTask()
     if (!profile) throw new Error('未找到指定的大模型配置，请先到设置页完成配置')
 
     sendProgress('校验项目扫描', '检查项目扫描缓存', 2)
@@ -264,15 +268,12 @@ handle(IPC.generateCancel, (_event, runId: string) => {
 const explainAborts = new ExplainAbortRegistry()
 
 handle(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
-  const settings = getSettings()
-  const profile = settings.profiles.find((p) => p.id === req.profileId)
-  if (!profile) {
-    send(IPC.explainEvent, { requestId: req.requestId, type: 'error', data: '未找到大模型配置' })
-    return
-  }
   const abort = explainAborts.begin(req.requestId)
   if (!abort) throw new Error('已有相同名词解释请求在进行中')
   try {
+    const profile = await getPrivateProfile(req.profileId)
+    if (abort.signal.aborted) throw new Error('explain-aborted')
+    if (!profile) throw new Error('profile-missing')
     await chatCompletionStream(
       profile,
       buildExplainMessages({
@@ -282,10 +283,10 @@ handle(IPC.explainStart, async (_e, req: ExplainRequest): Promise<void> => {
         snippet: req.snippet,
         glossaryHint: req.glossaryHint
       }),
-      (delta) => send(IPC.explainEvent, { requestId: req.requestId, type: 'delta', data: delta }),
+      (delta) => { if (!abort.signal.aborted) send(IPC.explainEvent, { requestId: req.requestId, type: 'delta', data: delta }) },
       { signal: abort.signal, timeoutMs: 120_000, maxOutputTokens: 1200 }
     )
-    send(IPC.explainEvent, { requestId: req.requestId, type: 'done', data: '' })
+    if (!abort.signal.aborted) send(IPC.explainEvent, { requestId: req.requestId, type: 'done', data: '' })
   } catch (err) {
     const msg = abort.signal.aborted
       ? '已取消'
@@ -318,9 +319,10 @@ handle(IPC.storageDiagnostics, () => getStorageDiagnostics().filter((diagnostic)
 }))
 
 handle(IPC.storageRecover, (_e, id: string) => {
-  recoverStorage(id)
+  return recoverStorage(id).then(() => {
   // Restored recent records affect the set of allowed history projects.
   if (id === 'recent') authorizedProjects.registerRecent(getRecentProjects().map((project) => project.path))
+  })
 })
 
 /**
@@ -329,23 +331,58 @@ handle(IPC.storageRecover, (_e, id: string) => {
  * 白名单内才能原样到达渲染进程。
  */
 function describeSettingsWriteError(err: unknown): string {
+  if (err instanceof Error && [
+    '修改接口地址前，请先替换或清除已保存的 API Key。',
+    '设置尚未完成安全迁移，请检查系统凭据存储后重试。',
+    '系统凭据存储当前不可用，设置未更改。请稍后重试。'
+  ].includes(err.message)) return err.message
   const code = err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined
   if (code === 'ENOSPC' || code === 'EDQUOT') return '磁盘空间不足，无法保存设置。请清理磁盘空间后重试。'
   if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return '没有写入权限，无法保存设置。请检查应用数据目录权限后重试。'
   return '保存设置失败，请重试；若持续失败请检查磁盘状态。'
 }
 
-handle(IPC.settingsSave, async (_e, settings: Settings): Promise<void> => {
+handle(IPC.settingsSave, async (_e, settings: SettingsSaveRequest): Promise<void> => {
   try {
-    saveSettings(settings)
+    await saveSettings(settings)
   } catch (err) {
     throw new Error(describeSettingsWriteError(err))
   }
 })
 
-handle(IPC.llmTest, (_e, profile: LlmProfile) => testConnection(profile))
+function canonicalEndpoint(baseUrl: string): string | null {
+  try {
+    const url = new URL(baseUrl)
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null
+    return url.href.replace(/\/+$/, '')
+  } catch { return null }
+}
 
-handle(IPC.llmListModels, (_e, profile: LlmProfile) => listModels(profile))
+async function resolveProbeProfile(request: LlmProfileDraft): Promise<LlmProfile> {
+  const explicitKey = request.apiKey ?? ''
+  const profileWithKey = (apiKey: string): LlmProfile => ({
+    id: request.id,
+    name: request.name,
+    baseUrl: request.baseUrl,
+    model: request.model,
+    apiKey,
+    ...(request.temperature !== undefined ? { temperature: request.temperature } : {})
+  })
+  if (explicitKey) return profileWithKey(explicitKey)
+  if (request.credentialAction === 'clear' || request.credentialAction === 'replace') return profileWithKey('')
+  if (request.useSavedCredential) {
+    const saved = await getPrivateProfile(request.id)
+    if (!saved || !saved.apiKey || canonicalEndpoint(saved.baseUrl) !== canonicalEndpoint(request.baseUrl)) {
+      throw new Error('已保存的 API Key 仅适用于原接口地址，请先替换 Key。')
+    }
+    return profileWithKey(saved.apiKey)
+  }
+  return profileWithKey('')
+}
+
+handle(IPC.llmTest, async (_e, profile: LlmProfileDraft) => testConnection(await resolveProbeProfile(profile)))
+
+handle(IPC.llmListModels, async (_e, profile: LlmProfileDraft) => listModels(await resolveProbeProfile(profile)))
 
 handle(IPC.exportMarkdown, (e, result: InterviewResult) =>
   exportMarkdownDialog(result, BrowserWindow.fromWebContents(e.sender) ?? undefined)

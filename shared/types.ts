@@ -20,6 +20,27 @@ export interface Settings {
   scanLimits?: Partial<ScanLimits>
 }
 
+export interface PublicLlmProfile extends Omit<LlmProfile, 'apiKey'> {
+  hasApiKey: boolean
+  credentialStatus: 'missing' | 'stored' | 'locked' | 'migration-pending'
+}
+
+export interface LlmProfileDraft extends Omit<PublicLlmProfile, 'hasApiKey' | 'credentialStatus'> {
+  /** New key supplied for replacement, present only in this renderer draft/request. */
+  apiKey?: string
+  hasApiKey?: boolean
+  credentialStatus?: 'missing' | 'stored' | 'locked' | 'migration-pending'
+  useSavedCredential?: boolean
+  credentialAction?: 'keep' | 'replace' | 'clear'
+}
+
+export interface PublicSettings extends Omit<Settings, 'profiles'> {
+  profiles: PublicLlmProfile[]
+}
+
+/** Persisted secrets remain main-process-only; these request contracts carry user intent. */
+export interface SettingsSaveRequest extends Omit<Settings, 'profiles'> { profiles: LlmProfileDraft[] }
+
 /** 扫描安全上限的合法区间（设置校验与扫描器夹取共用同一份） */
 export const SCAN_LIMIT_BOUNDS = {
   maxFiles: { min: 1, max: 20_000 },

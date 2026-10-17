@@ -1,6 +1,6 @@
 import path from 'node:path'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
-import type { GenerateRequest, Granularity, LlmProfile, RoleFocus, Settings } from '../../shared/types.ts'
+import type { GenerateRequest, Granularity, LlmProfileDraft, RoleFocus, SettingsSaveRequest } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
@@ -56,11 +56,16 @@ function url(value: unknown): asserts value is string {
   try { parsed = new URL(value) } catch { return fail() }
   if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname || parsed.username || parsed.password) fail()
 }
-function profile(value: unknown): asserts value is LlmProfile {
+function profile(value: unknown): asserts value is LlmProfileDraft {
   if (!record(value)) fail()
-  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature'])
+  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
   string(value.id, LLM_PROFILE_LIMITS.id); string(value.name, LLM_PROFILE_LIMITS.name); url(value.baseUrl)
-  string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0); string(value.model, LLM_PROFILE_LIMITS.model)
+  if (value.apiKey !== undefined) string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)
+  string(value.model, LLM_PROFILE_LIMITS.model)
+  if (value.hasApiKey !== undefined && typeof value.hasApiKey !== 'boolean') fail()
+  if (value.useSavedCredential !== undefined && typeof value.useSavedCredential !== 'boolean') fail()
+  if (value.credentialStatus !== undefined) enumValue(value.credentialStatus, ['missing', 'stored', 'locked', 'migration-pending'] as const)
+  if (value.credentialAction !== undefined) enumValue(value.credentialAction, ['keep', 'replace', 'clear'] as const)
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 2)) fail()
 }
 function scanLimits(value: unknown): void {
@@ -73,7 +78,7 @@ function scanLimits(value: unknown): void {
   if (value.maxTreeNodes !== undefined) int(value.maxTreeNodes, SCAN_LIMIT_BOUNDS.maxTreeNodes)
   if (value.maxContentFileBytes !== undefined) int(value.maxContentFileBytes, SCAN_LIMIT_BOUNDS.maxContentFileBytes)
 }
-function settings(value: unknown): asserts value is Settings {
+function settings(value: unknown): asserts value is SettingsSaveRequest {
   if (!record(value) || !Array.isArray(value.profiles) || value.profiles.length > MAX_LLM_PROFILES) fail()
   exactKeys(value, ['profiles', 'defaultProfileId', 'scanLimits'])
   if (value.defaultProfileId !== null) string(value.defaultProfileId, 128)

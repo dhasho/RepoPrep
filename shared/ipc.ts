@@ -8,6 +8,8 @@ import type {
   InterviewResult,
   ListModelsResult,
   LlmProfile,
+  LlmProfileDraft,
+  PublicSettings,
   ProjectOverview,
   RecentProject,
   Settings,
@@ -51,10 +53,10 @@ export interface ProjectLensApi {
   explain(req: ExplainRequest): Promise<void>
   cancelExplain(requestId: string): Promise<void>
   onExplainEvent(cb: (e: ExplainEvent) => void): () => void
-  getSettings(): Promise<Settings>
-  saveSettings(settings: Settings): Promise<void>
-  testLlm(profile: LlmProfile): Promise<TestConnectionResult>
-  listModels(profile: LlmProfile): Promise<ListModelsResult>
+  getSettings(): Promise<PublicSettings>
+  saveSettings(settings: import('./types').SettingsSaveRequest): Promise<void>
+  testLlm(profile: LlmProfileDraft): Promise<TestConnectionResult>
+  listModels(profile: LlmProfileDraft): Promise<ListModelsResult>
   exportMarkdown(result: InterviewResult): Promise<{ ok: boolean; path?: string; message: string }>
   getStorageDiagnostics(): Promise<StorageDiagnostic[]>
   recoverStorage(id: string): Promise<void>

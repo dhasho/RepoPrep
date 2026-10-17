@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { SCAN_LIMIT_BOUNDS, type InterviewResult, type RecentProject, type Settings } from '@shared/types'
+import { SCAN_LIMIT_BOUNDS, type InterviewResult, type LlmProfile, type LlmProfileDraft, type PublicSettings, type RecentProject, type Settings, type SettingsSaveRequest } from '@shared/types'
 import { assertInterviewResultContract, LLM_PROFILE_LIMITS, MAX_LLM_PROFILES, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import {
   archiveCorrupt,
@@ -20,8 +20,12 @@ import {
   type StorageProblem
 } from '@shared/storage-contract'
 import { isFilesystemRoot, projectDisplayName } from './project-display-name'
+import { decryptCredential, encryptCredential, type CredentialCrypto } from './credential-vault'
+import { nativeCredentialCrypto } from './native-credential-crypto'
 
 const SETTINGS_MAX_BYTES = 2 * 1024 * 1024
+const SETTINGS_ARCHIVE_MAX_BYTES = SETTINGS_MAX_BYTES * 2 + 64 * 1024
+const SETTINGS_ARCHIVE_MAGIC = Buffer.from('RepoPrep encrypted settings archive v1\n', 'utf8')
 const RECENT_MAX_BYTES = 2 * 1024 * 1024
 const RESULT_MAX_BYTES = 8 * 1024 * 1024
 const MAX_DIAGNOSTICS = 128
@@ -34,7 +38,26 @@ interface DiagnosticRecord {
   validate: (value: unknown) => value is unknown
 }
 
+interface StoredProfile extends Omit<LlmProfile, 'apiKey'> {
+  apiKey?: string
+  credential?: { version: 1; ciphertext: string }
+}
+
+interface StoredSettings {
+  profiles: StoredProfile[]
+  defaultProfileId?: string | null
+  scanLimits?: Settings['scanLimits']
+  schemaVersion?: 2
+}
+
 const diagnostics = new Map<string, DiagnosticRecord>()
+let settingsTail: Promise<void> = Promise.resolve()
+
+function serializeSettings<T>(operation: () => Promise<T>): Promise<T> {
+  const result = settingsTail.then(operation, operation)
+  settingsTail = result.then(() => undefined, () => undefined)
+  return result
+}
 
 function userDataFile(name: string): string {
   return path.join(app.getPath('userData'), name)
@@ -76,15 +99,19 @@ function validText(value: unknown, max: number, min = 1): value is string {
   return typeof value === 'string' && value.length >= min && value.length <= max && !value.includes('\0')
 }
 
-function isSettings(value: unknown): value is Settings {
+function isSettings(value: unknown): value is StoredSettings {
   if (!isObject(value)) return false
   const keys = Object.keys(value)
-  if (keys.some((key) => !['profiles', 'defaultProfileId', 'scanLimits'].includes(key))) return false
+  if (keys.some((key) => !['profiles', 'defaultProfileId', 'scanLimits', 'schemaVersion'].includes(key))) return false
+  if (value.schemaVersion !== undefined && value.schemaVersion !== 2) return false
   const profiles = value.profiles === undefined ? [] : value.profiles
   if (!Array.isArray(profiles) || profiles.length > MAX_LLM_PROFILES) return false
+  const ids = new Set<string>()
   for (const profile of profiles) {
-    if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature'].includes(key))) return false
+    if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'credential', 'model', 'temperature'].includes(key))) return false
     if (!validText(profile.id, LLM_PROFILE_LIMITS.id)) return false
+    if (ids.has(profile.id)) return false
+    ids.add(profile.id)
     if (!validText(profile.name, LLM_PROFILE_LIMITS.name)) return false
     if (!validText(profile.baseUrl, LLM_PROFILE_LIMITS.baseUrl)) return false
     try {
@@ -93,7 +120,9 @@ function isSettings(value: unknown): value is Settings {
     } catch {
       return false
     }
-    if (!validText(profile.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)) return false
+    if (profile.apiKey !== undefined && !validText(profile.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)) return false
+    if (profile.credential !== undefined && (!isObject(profile.credential) || Object.keys(profile.credential).some((key) => !['version', 'ciphertext'].includes(key)) || profile.credential.version !== 1 || !validText(profile.credential.ciphertext, 64 * 1024))) return false
+    if (profile.apiKey !== undefined && profile.credential !== undefined) return false
     if (!validText(profile.model, LLM_PROFILE_LIMITS.model)) return false
     if (profile.temperature !== undefined && (typeof profile.temperature !== 'number' || !Number.isFinite(profile.temperature) || profile.temperature < 0 || profile.temperature > 2)) return false
   }
@@ -230,27 +259,217 @@ function writePreserving(file: string, data: unknown, maxBytes: number, validate
 
 const DEFAULT_SETTINGS: Settings = { profiles: [], defaultProfileId: null }
 
-export function getSettings(): Settings {
+let credentialCrypto: CredentialCrypto = nativeCredentialCrypto
+export function setCredentialCryptoForTests(crypto: CredentialCrypto | null): void {
+  credentialCrypto = crypto ?? nativeCredentialCrypto
+}
+
+function publicSettings(settings: StoredSettings, status: PublicSettings['profiles'][number]['credentialStatus'] = 'stored'): PublicSettings {
+  return {
+    defaultProfileId: settings.defaultProfileId ?? null,
+    ...(settings.scanLimits !== undefined ? { scanLimits: settings.scanLimits } : {}),
+    profiles: settings.profiles.map((profile) => {
+      const hasApiKey = Boolean(profile.apiKey || profile.credential)
+      return {
+        id: profile.id,
+        name: profile.name,
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+        ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+        hasApiKey,
+        credentialStatus: hasApiKey ? status : 'missing'
+      }
+    })
+  }
+}
+
+function settingsCopies(file: string): string[] {
+  const dir = path.dirname(file)
+  let names: string[]
+  try { names = fs.readdirSync(dir) } catch { return [file] }
+  const base = path.basename(file)
+  return names
+    .filter((name) => name === base || name === `${base}.bak` || name === `${base}.corrupt` || isManagedSettingsTemp(name, base))
+    .map((name) => path.join(dir, name))
+}
+
+function isManagedSettingsTemp(name: string, base: string): boolean {
+  for (const target of [base, `${base}.bak`, `${base}.corrupt`]) {
+    const prefix = `.${target}.projectlens-`
+    if (!name.startsWith(prefix)) continue
+    const match = /^(\d+)-[a-f0-9]{24}\.tmp$/.exec(name.slice(prefix.length))
+    if (!match) return false
+    const pid = Number(match[1])
+    if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid) return false
+    try { process.kill(pid, 0); return false } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+      return code === 'ESRCH'
+    }
+  }
+  return false
+}
+
+function canonicalEndpoint(baseUrl: string): string | null {
+  try {
+    const parsed = new URL(baseUrl)
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) return null
+    return parsed.href.replace(/\/+$/, '')
+  } catch { return null }
+}
+
+function containsLegacyCredential(settings: { profiles: readonly { apiKey?: string }[] }): boolean {
+  return settings.profiles.some((profile) => typeof profile.apiKey === 'string')
+}
+
+function isEncryptedArchive(bytes: Buffer): boolean {
+  return bytes.byteLength > SETTINGS_ARCHIVE_MAGIC.byteLength && bytes.subarray(0, SETTINGS_ARCHIVE_MAGIC.byteLength).equals(SETTINGS_ARCHIVE_MAGIC) && bytes.byteLength <= SETTINGS_ARCHIVE_MAX_BYTES
+}
+
+export async function decryptSettingsArchiveBytes(bytes: Buffer): Promise<Buffer> {
+  if (!isEncryptedArchive(bytes)) throw new Error('settings-archive-invalid')
+  try {
+    if (!await credentialCrypto.isAvailable()) throw new Error('credential-store-unavailable')
+    const encoded = await credentialCrypto.decrypt(bytes.subarray(SETTINGS_ARCHIVE_MAGIC.byteLength))
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) throw new Error('settings-archive-invalid')
+    const decoded = Buffer.from(encoded, 'base64')
+    if (decoded.byteLength > SETTINGS_MAX_BYTES || decoded.toString('base64') !== encoded) throw new Error('settings-archive-invalid')
+    return decoded
+  } catch {
+    throw new Error('settings-archive-unavailable')
+  }
+}
+
+function hasPendingMigration(file: string): boolean {
+  for (const candidate of settingsCopies(file)) {
+    const read = readBounded(candidate, SETTINGS_ARCHIVE_MAX_BYTES)
+    if (read.status === 'missing') continue
+    if (read.status !== 'ok') return true
+    const parsed = parseJson(read.bytes)
+    if (parsed.ok && isSettings(parsed.value)) {
+      if (containsLegacyCredential(parsed.value)) return true
+      continue
+    }
+    if (isEncryptedArchive(read.bytes)) continue
+    return true
+  }
+  return false
+}
+
+async function migrateSettingsCopies(file: string): Promise<void> {
+  const copies = settingsCopies(file)
+  const replacements: Array<{ path: string; bytes: Buffer }> = []
+  try {
+    for (const candidate of copies) {
+      const read = readBounded(candidate, SETTINGS_ARCHIVE_MAX_BYTES)
+      if (read.status === 'missing') continue
+      if (read.status !== 'ok') throw new Error('settings-migration-pending')
+      if (isEncryptedArchive(read.bytes)) continue
+      if (read.bytes.byteLength > SETTINGS_MAX_BYTES) throw new Error('settings-migration-pending')
+      const parsed = parseJson(read.bytes)
+      if (!parsed.ok || !isSettings(parsed.value)) {
+        let ciphertext: Buffer
+        try {
+          if (!await credentialCrypto.isAvailable()) throw new Error('credential-store-unavailable')
+          ciphertext = await credentialCrypto.encrypt(read.bytes.toString('base64'))
+        } catch { throw new Error('settings-migration-pending') }
+        const archive = Buffer.concat([SETTINGS_ARCHIVE_MAGIC, ciphertext])
+        if (archive.byteLength > SETTINGS_ARCHIVE_MAX_BYTES) throw new Error('settings-migration-pending')
+        replacements.push({ path: candidate, bytes: archive })
+        continue
+      }
+      if (!containsLegacyCredential(parsed.value)) continue
+      const profiles = []
+      for (const profile of parsed.value.profiles) {
+        const secret = profile.apiKey ?? ''
+        const { apiKey: _discard, ...metadata } = profile
+        profiles.push({ ...metadata, ...(secret ? { credential: await encryptCredential(secret, credentialCrypto) } : {}) })
+      }
+      const migrated = { ...parsed.value, schemaVersion: 2, profiles }
+      replacements.push({ path: candidate, bytes: Buffer.from(JSON.stringify(migrated, null, 2), 'utf8') })
+    }
+    for (const item of replacements) atomicReplaceBytes(item.path, item.bytes)
+  } catch {
+    throw new Error('settings-migration-pending')
+  }
+}
+
+export async function getSettings(): Promise<PublicSettings> {
   const file = userDataFile('settings.json')
   const result = readWithBackup({
     id: 'settings', kind: 'settings', target: file, maxBytes: SETTINGS_MAX_BYTES, validate: isSettings
   })
-  if (result.status === 'valid') return { ...DEFAULT_SETTINGS, ...result.value }
-  return { ...DEFAULT_SETTINGS }
+  if (result.status === 'valid') {
+    const pending = hasPendingMigration(file)
+    let available = false
+    try { available = await credentialCrypto.isAvailable() } catch { available = false }
+    return publicSettings(result.value, pending ? 'migration-pending' : available ? 'stored' : 'locked')
+  }
+  return publicSettings({ profiles: [], defaultProfileId: null })
 }
 
-export function saveSettings(settings: Settings): void {
-  try {
-    writePreserving(userDataFile('settings.json'), settings, SETTINGS_MAX_BYTES, isSettings)
-    clearDiagnostic('settings')
-  } catch (error) {
-    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
-    const wrapped = new Error(STORAGE_WRITE_FAILED) as NodeJS.ErrnoException
-    if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
-      wrapped.code = code
+async function getPrivateProfileUnlocked(profileId: string): Promise<LlmProfile | null> {
+  const file = userDataFile('settings.json')
+  await migrateSettingsCopies(file)
+  const result = readWithBackup({ id: 'settings', kind: 'settings', target: file, maxBytes: SETTINGS_MAX_BYTES, validate: isSettings })
+  if (result.status !== 'valid') return null
+  const raw = result.value.profiles.find((profile) => profile.id === profileId)
+  if (!raw) return null
+  const stored = raw as LlmProfile & { credential?: unknown }
+  const { credential, ...metadata } = stored
+  const apiKey = typeof stored.apiKey === 'string' ? stored.apiKey : credential ? await decryptCredential(credential, credentialCrypto) : ''
+  return { ...metadata, apiKey }
+}
+
+export function getPrivateProfile(profileId: string): Promise<LlmProfile | null> {
+  return serializeSettings(() => getPrivateProfileUnlocked(profileId))
+}
+
+export function saveSettings(settings: SettingsSaveRequest): Promise<void> {
+  return serializeSettings(async () => {
+    try {
+      const file = userDataFile('settings.json')
+      await migrateSettingsCopies(file)
+      const stored = readWithBackup({ id: 'settings', kind: 'settings', target: file, maxBytes: SETTINGS_MAX_BYTES, validate: isSettings })
+      const previous = stored.status === 'valid' ? stored.value : DEFAULT_SETTINGS
+      const priorById = new Map(previous.profiles.map((profile) => [profile.id, profile]))
+      const profiles: Array<Record<string, unknown>> = []
+      const ids = new Set<string>()
+      for (const requested of settings.profiles) {
+        if (ids.has(requested.id)) throw new Error('Invalid settings')
+        ids.add(requested.id)
+        const prior = priorById.get(requested.id) as (LlmProfile & { credential?: unknown }) | undefined
+        const action = requested.credentialAction ?? (requested.apiKey ? 'replace' : 'keep')
+        const { apiKey = '', credentialAction: _action, useSavedCredential: _reference, hasApiKey: _claim, credentialStatus: _status, ...metadata } = requested
+        let credential: unknown
+        if (action === 'replace') {
+          credential = apiKey ? await encryptCredential(apiKey, credentialCrypto) : undefined
+        } else if (action === 'keep') {
+          if (prior?.credential && canonicalEndpoint(prior.baseUrl) !== canonicalEndpoint(requested.baseUrl)) {
+            throw new Error('credential-endpoint-changed')
+          }
+          if (typeof prior?.apiKey === 'string' && prior.apiKey) {
+            credential = await encryptCredential(prior.apiKey, credentialCrypto)
+          } else {
+            credential = prior?.credential
+          }
+        } else if (action !== 'clear') throw new Error('Invalid settings')
+        profiles.push({ ...metadata, ...(credential ? { credential } : {}) })
+      }
+      const persisted = { ...settings, schemaVersion: 2, profiles }
+      writePreserving(file, persisted, SETTINGS_MAX_BYTES, isSettings)
+      clearDiagnostic('settings')
+    } catch (error) {
+      const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+      if (error instanceof Error && error.message === 'credential-endpoint-changed') throw new Error('修改接口地址前，请先替换或清除已保存的 API Key。')
+      if (error instanceof Error && error.message === 'settings-migration-pending') throw new Error('设置尚未完成安全迁移，请检查系统凭据存储后重试。')
+      if (error instanceof Error && (error.message === 'credential-store-unavailable' || error.message === 'credential-encryption-failed')) throw new Error('系统凭据存储当前不可用，设置未更改。请稍后重试。')
+      const wrapped = new Error(STORAGE_WRITE_FAILED) as NodeJS.ErrnoException
+      if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+        wrapped.code = code
+      }
+      throw wrapped
     }
-    throw wrapped
-  }
+  })
 }
 
 export function saveResult(projectPath: string, result: InterviewResult): void {
@@ -358,38 +577,49 @@ export function getStorageDiagnostics(): StorageDiagnostic[] {
   return [...diagnostics.values()].map(({ diagnostic }) => ({ ...diagnostic }))
 }
 
-export function recoverStorage(id: string): void {
-  if (!isStorageDiagnosticId(id)) throw new Error(STORAGE_MESSAGES.restoreFailed)
-  const record = diagnostics.get(id)
-  if (!record) throw new Error(STORAGE_MESSAGES.restoreFailed)
-  const backup = readValid(`${record.target}.bak`, record.maxBytes, record.validate)
-  if (backup.status !== 'valid') {
-    rememberDiagnostic(
-      id, record.diagnostic.kind, record.diagnostic.problem, false, false,
-      record.target, record.maxBytes, record.validate, record.diagnostic.projectPath
-    )
-    throw new Error(STORAGE_MESSAGES.noBackup)
-  }
-  const current = readValid(record.target, record.maxBytes, record.validate)
-  if (current.status === 'valid') {
-    clearDiagnostic(id)
-    return
-  }
-  if (current.status === 'corrupt') {
-    const raw = readBounded(record.target, record.maxBytes)
-    if (raw.status !== 'ok') throw new Error(STORAGE_MESSAGES.restoreFailed)
+export function recoverStorage(id: string): Promise<void> {
+  return serializeSettings(async () => {
+    if (!isStorageDiagnosticId(id)) throw new Error(STORAGE_MESSAGES.restoreFailed)
+    const record = diagnostics.get(id)
+    if (!record) throw new Error(STORAGE_MESSAGES.restoreFailed)
+    if (record.diagnostic.kind === 'settings') {
+      try { await migrateSettingsCopies(record.target) } catch { throw new Error('设置尚未完成安全迁移，请检查系统凭据存储后重试。') }
+    }
+    const backup = readValid(`${record.target}.bak`, record.maxBytes, record.validate)
+    if (backup.status !== 'valid') {
+      rememberDiagnostic(
+        id, record.diagnostic.kind, record.diagnostic.problem, false, false,
+        record.target, record.maxBytes, record.validate, record.diagnostic.projectPath
+      )
+      throw new Error(STORAGE_MESSAGES.noBackup)
+    }
+    const current = readValid(record.target, record.maxBytes, record.validate)
+    if (current.status === 'valid') {
+      clearDiagnostic(id)
+      return
+    }
+    if (current.status === 'corrupt') {
+      const raw = readBounded(record.target, record.maxBytes)
+      if (raw.status !== 'ok') throw new Error(STORAGE_MESSAGES.restoreFailed)
+      try {
+        archiveCorrupt(record.target, raw.bytes)
+      } catch {
+        throw new Error(STORAGE_MESSAGES.restoreFailed)
+      }
+    } else if (current.status === 'unreadable') {
+      if (record.diagnostic.kind === 'settings') {
+        const archived = readBounded(record.target, SETTINGS_ARCHIVE_MAX_BYTES)
+        if (archived.status !== 'ok' || !isEncryptedArchive(archived.bytes)) throw new Error(STORAGE_MESSAGES.restoreFailed)
+        try { archiveCorrupt(record.target, archived.bytes) } catch { throw new Error(STORAGE_MESSAGES.restoreFailed) }
+      } else {
+        throw new Error(STORAGE_MESSAGES.restoreFailed)
+      }
+    }
     try {
-      archiveCorrupt(record.target, raw.bytes)
+      atomicReplaceBytes(record.target, backup.bytes)
     } catch {
       throw new Error(STORAGE_MESSAGES.restoreFailed)
     }
-  } else if (current.status === 'unreadable') {
-    throw new Error(STORAGE_MESSAGES.restoreFailed)
-  }
-  try {
-    atomicReplaceBytes(record.target, backup.bytes)
-  } catch {
-    throw new Error(STORAGE_MESSAGES.restoreFailed)
-  }
-  clearDiagnostic(id)
+    clearDiagnostic(id)
+  })
 }

@@ -59,7 +59,15 @@ function loadStore(userDataPath: string) {
   const sandbox = {
     module,
     exports: module.exports,
-    require: (id: string) => id === 'electron' ? { app: { getPath: () => userDataPath } } : requireModule(id),
+    require: (id: string) => {
+      if (id === 'electron') return { app: { getPath: () => userDataPath } }
+      if (id === './credential-vault') return {
+        encryptCredential: async (value: string) => ({ version: 1, ciphertext: Buffer.from(value).toString('base64') }),
+        decryptCredential: async (value: { ciphertext: string }) => Buffer.from(value.ciphertext, 'base64').toString()
+      }
+      if (id === './native-credential-crypto') return { nativeCredentialCrypto: { isAvailable: async () => true, encrypt: async (value: string) => Buffer.from(value), decrypt: async (value: Buffer) => value.toString() } }
+      return requireModule(id)
+    },
     __dirname: path.dirname(filename),
     __filename: filename
   }

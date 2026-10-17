@@ -71,7 +71,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
     './services/llm': { chatCompletionStream: async () => {}, isLlmTimeoutError: () => false, listModels: async () => ({}), testConnection: async () => ({}) },
     './services/exporter': { exportMarkdownDialog: async () => ({}) },
     './window-security': { getTrustedDevUrl: () => null, installPermissionDenials() {}, installWindowSecurity() {} },
-    './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getRecentProjects: () => [], getSettings: () => ({ profiles: [{ id: 'p' }], scanLimits: { maxFiles: 12 } }), loadResult: () => null, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },
+    './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getPrivateProfile: async (id) => ({ id, name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic', model: 'mock' }), getRecentProjects: () => [], getSettings: async () => ({ profiles: [], defaultProfileId: null, scanLimits: { maxFiles: 12 } }), loadResult: () => null, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },
     './services/ipc-authority': { AuthorizedProjectRegistry: class { registerRecent() {} registerSelected() {} removeRecent() {} requireAuthorized(value) { return value } } },
     './services/ipc-handler-guards': { ExplainAbortRegistry: class { begin() { return new AbortController() } finish() {} cancel() {} }, registerGuardedIpcHandler: (_ipc, channel, _deps, handler) => handlers.set(channel, handler) }
   }
