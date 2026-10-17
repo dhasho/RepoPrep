@@ -51,6 +51,33 @@ function renderFollowUps(followUps: FollowUp[], depth: number): string {
   return lines.join('\n')
 }
 
+function markdownCodeSpan(value: string): string {
+  const runs = value.match(/`+/g) ?? []
+  const fence = '`'.repeat(Math.max(1, ...runs.map((run) => run.length + 1)))
+  const padded = value.startsWith(' ') || value.endsWith(' ') || value.includes('`') ? ` ${value} ` : value
+  return `${fence}${padded}${fence}`
+}
+
+function renderSourceEvidence(evidence: NonNullable<InterviewResult['sections'][number]['questions'][number]['sourceEvidence']>): string[] {
+  if (!evidence.length) return []
+  const lines = ['**源码依据（生成时保存的脱敏快照）**', '']
+  for (const item of evidence) {
+    lines.push(`- 路径：${markdownCodeSpan(item.path)}；原始行号：L${item.startLine}–L${item.endLine}`)
+    lines.push(`  快照 SHA-256：${item.snapshotHash}`)
+    lines.push('')
+    const backtickRun = Math.max(0, ...(item.excerpt.match(/`+/g) ?? []).map((run) => run.length))
+    const tildeRun = Math.max(0, ...(item.excerpt.match(/~+/g) ?? []).map((run) => run.length))
+    const marker = backtickRun <= tildeRun ? '`' : '~'
+    const fence = marker.repeat(Math.max(3, Math.min(backtickRun, tildeRun) + 1))
+    lines.push(fence)
+    lines.push(item.excerpt)
+    lines.push(fence)
+    lines.push('')
+  }
+  lines.push('行号范围已校验，表示该内容来自生成时快照；这不代表它在语义上支持答案，也不代表答案正确。', '')
+  return lines
+}
+
 export function resultToMarkdown(result: InterviewResult): string {
   const lines: string[] = []
   lines.push(`# ${result.projectName} · 项目面试题`)
@@ -92,6 +119,7 @@ export function resultToMarkdown(result: InterviewResult): string {
       lines.push('')
       lines.push(stripTermMarks(q.answer))
       lines.push('')
+      lines.push(...renderSourceEvidence(q.sourceEvidence ?? []))
       if (q.followUps.length) {
         lines.push(`**追问：**`)
         lines.push('')
