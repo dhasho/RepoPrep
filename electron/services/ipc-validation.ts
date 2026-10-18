@@ -58,10 +58,11 @@ function url(value: unknown): asserts value is string {
 }
 function profile(value: unknown): asserts value is LlmProfileDraft {
   if (!record(value)) fail()
-  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
+  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'temperature', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
   string(value.id, LLM_PROFILE_LIMITS.id); string(value.name, LLM_PROFILE_LIMITS.name); url(value.baseUrl)
   if (value.apiKey !== undefined) string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)
   string(value.model, LLM_PROFILE_LIMITS.model)
+  if (value.protocol !== undefined) enumValue(value.protocol, ['openai', 'anthropic'] as const)
   if (value.hasApiKey !== undefined && typeof value.hasApiKey !== 'boolean') fail()
   if (value.useSavedCredential !== undefined && typeof value.useSavedCredential !== 'boolean') fail()
   if (value.credentialStatus !== undefined) enumValue(value.credentialStatus, ['missing', 'stored', 'locked', 'migration-pending'] as const)

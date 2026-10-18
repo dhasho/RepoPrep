@@ -84,6 +84,18 @@ test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', 
   rejects(IPC.settingsSave, { profiles: Array.from({ length: MAX_LLM_PROFILES + 1 }, (_, i) => ({ ...profile, id: `p${i}` })), defaultProfileId: null })
 })
 
+test('profile protocol accepts both providers, preserves the legacy optional shape, and rejects unknown values', () => {
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [profile], defaultProfileId: profile.id }]))
+  for (const protocol of ['openai', 'anthropic']) {
+    assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [{ ...profile, protocol }], defaultProfileId: profile.id }]))
+    assert.doesNotThrow(() => validateIpcArgs(IPC.llmTest, [{ ...profile, protocol }]))
+  }
+  for (const protocol of ['claude', '', null, 3]) {
+    rejects(IPC.settingsSave, { profiles: [{ ...profile, protocol }], defaultProfileId: profile.id })
+    rejects(IPC.llmListModels, { ...profile, protocol })
+  }
+})
+
 test('settingsSave 接受共享数量上限且继续拒绝超过上限的直接调用', () => {
   const profiles = Array.from({ length: MAX_LLM_PROFILES }, (_, index) => ({ ...profile, id: `limit-${index}` }))
   assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles, defaultProfileId: profiles[0].id }]))

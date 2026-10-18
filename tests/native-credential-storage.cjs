@@ -99,16 +99,34 @@ app.whenReady().then(async () => {
     const store = loadTs('electron/services/store.ts')
     const key = `synthetic-native-key-${Date.now()}`
     await store.saveSettings({
-      profiles: [{ id: 'native-profile', name: 'Native fixture', baseUrl: 'https://native.invalid/v1', apiKey: key, model: 'synthetic-model', credentialAction: 'replace' }],
+      profiles: [
+        { id: 'native-profile', name: 'Legacy fixture', baseUrl: 'https://native.invalid/v1', apiKey: key, model: 'synthetic-model', credentialAction: 'replace' },
+        { id: 'native-claude', name: 'Claude fixture', baseUrl: 'https://native.invalid/v1', apiKey: key, model: 'synthetic-model', protocol: 'anthropic', credentialAction: 'replace' }
+      ],
       defaultProfileId: 'native-profile'
     })
     const settingsPath = path.join(app.getPath('userData'), 'settings.json')
     const persisted = fs.readFileSync(settingsPath, 'utf8')
     if (persisted.includes(key)) throw new Error('plaintext-key-persisted')
     const publicSettings = await store.getSettings()
-    if ('apiKey' in publicSettings.profiles[0] || JSON.stringify(publicSettings).includes(key)) throw new Error('key-leaked-by-public-settings')
+    if (publicSettings.profiles.some((profile) => 'apiKey' in profile || 'credential' in profile) || JSON.stringify(publicSettings).includes(key)) throw new Error('key-leaked-by-public-settings')
+    if ('protocol' in publicSettings.profiles[0] || publicSettings.profiles[1].protocol !== 'anthropic') throw new Error('native-protocol-public-roundtrip-mismatch')
     const decrypted = await store.getPrivateProfile('native-profile')
     if (!decrypted || decrypted.apiKey !== key) throw new Error('native-roundtrip-mismatch')
+    const claude = await store.getPrivateProfile('native-claude')
+    if (!claude || claude.apiKey !== key || claude.protocol !== 'anthropic') throw new Error('native-claude-roundtrip-mismatch')
+    let protocolChangeRejected = false
+    try {
+      await store.saveSettings({
+        profiles: publicSettings.profiles.map((profile) => ({ ...profile, protocol: 'openai', credentialAction: 'keep' })),
+        defaultProfileId: publicSettings.defaultProfileId
+      })
+    } catch (error) {
+      protocolChangeRejected = error instanceof Error && error.message === '修改接口协议前，请先替换或清除已保存的 API Key。'
+    }
+    if (!protocolChangeRejected) throw new Error('native-protocol-credential-binding-not-enforced')
+    const unchanged = await store.getPrivateProfile('native-claude')
+    if (!unchanged || unchanged.protocol !== 'anthropic' || unchanged.apiKey !== key) throw new Error('native-rejected-save-changed-credential')
     console.log(`[native-credentials] platform=${process.platform} backend=${backend} asyncAvailable=true`)
     removeFixtureIfSafe()
     finish(true, 'native safeStorage and the actual settings service round-tripped a synthetic key in isolated userData')

@@ -16,7 +16,9 @@
 | 命令 | 覆盖范围与说明 |
 | --- | --- |
 | `npm run typecheck` | 分别对 Node/Electron 与 Web TypeScript 配置执行 `tsc --noEmit`。 |
-| `npm run test:ipc` | IPC schema、调用方权限、handler 防护与安全结果测试。 |
+| `npm run test:ipc` | IPC schema、调用方权限、handler 防护与安全结果测试，以及 OpenAI/Claude 格式、流式响应和本地合成模型生成链路。 |
+| `npm run test:lib` | 设置保存、服务商预设、扫描滑条、模型探测及导航等纯逻辑测试。 |
+| `npm run test:renderer` | 组件实际挂载与交互，包括设置、滑条、接口规范切换、项目侧栏和结果页。 |
 | `npm run test:scan-cache` | 项目快照和扫描缓存测试。 |
 | `npm run test:question-budget` | 问题预算、集成预算与生成合并测试。 |
 | `npm run test:security` | 先执行 `npm run build`，再运行窗口安全、敏感信息及安全集成测试。 |

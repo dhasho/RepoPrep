@@ -317,6 +317,11 @@ test('settings IPC awaits persistence and returns only allowlisted credential gu
 
   h.setSaveSettings(async () => { throw new Error(expected) })
   await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === expected)
+  const protocolError = '修改接口协议前，请先替换或清除已保存的 API Key。'
+  h.setSaveSettings(async () => { throw new Error(protocolError) })
+  await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === protocolError)
+  h.setSaveSettings(async () => { throw new Error(`${protocolError} secret=never-show-this`) })
+  await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === '保存设置失败，请重试；若持续失败请检查磁盘状态。')
   assert.equal(JSON.stringify(h.saves).includes('never-show-this'), false)
 })
 
@@ -336,6 +341,40 @@ test('model and connection probes bind saved credentials to the canonical endpoi
 
   await h.invoke(IPC.llmTest, { ...request, credentialAction: 'clear' })
   assert.equal(h.probeCalls[1].profile.apiKey, '', 'clear intent wins over a stale saved-key reference')
+})
+
+test('saved credentials cannot cross protocols, while explicit probe keys retain the selected protocol', async () => {
+  const h = await createHarness()
+  const request = {
+    id: 'p', name: 'Probe', baseUrl: 'https://PROVIDER.invalid:443/v1/', model: 'probe-model',
+    apiKey: '', protocol: 'anthropic', hasApiKey: true, credentialStatus: 'stored',
+    useSavedCredential: true, credentialAction: 'keep'
+  }
+  await assert.rejects(h.invoke(IPC.llmTest, request),
+    (error) => error.message === '已保存的 API Key 仅适用于原接口协议，请先替换 Key。')
+  await assert.rejects(h.invoke(IPC.llmListModels, request),
+    (error) => error.message === '已保存的 API Key 仅适用于原接口协议，请先替换 Key。')
+  assert.deepEqual(h.probeCalls, [], 'saved OpenAI credentials must not reach Anthropic probe endpoints')
+
+  const explicit = { ...request, apiKey: 'explicit-anthropic-key', useSavedCredential: false, credentialAction: 'replace' }
+  const result = await h.invoke(IPC.llmTest, explicit)
+  assert.equal(h.probeCalls[0].profile.protocol, 'anthropic')
+  assert.equal(h.probeCalls[0].profile.apiKey, 'explicit-anthropic-key')
+  assert.doesNotMatch(JSON.stringify(result), /explicit-anthropic-key/)
+})
+
+test('generation passes the saved profile protocol to the generator', async () => {
+  const savedProfile = { id: 'p', name: 'Claude', baseUrl: 'https://provider.invalid/v1', apiKey: 'private-marker', model: 'claude-test', protocol: 'anthropic' }
+  const h = await createHarness({ getPrivateProfile: async () => savedProfile })
+  let receivedProfile
+  h.setGenerate(async (request) => {
+    receivedProfile = request.profile
+    return { projectName: 'demo' }
+  })
+
+  await h.invoke(IPC.generateRun, options)
+  assert.equal(receivedProfile.protocol, 'anthropic')
+  assert.equal(JSON.stringify(h.saves).includes('private-marker'), false)
 })
 
 test('content boundary rejection reaches the renderer with a static rescan hint and saves nothing', async () => {

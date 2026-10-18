@@ -229,6 +229,20 @@ test('设置持久化失败：白名单内的静态业务错误原样透传给�
   )
 })
 
+test('credential protocol mismatch errors are allowlisted as static guidance', async () => {
+  const cases: Array<[string, string, unknown[]]> = [
+    [IPC.settingsSave, '修改接口协议前，请先替换或清除已保存的 API Key。', inputs.get(IPC.settingsSave)!],
+    [IPC.llmTest, '已保存的 API Key 仅适用于原接口协议，请先替换 Key。', inputs.get(IPC.llmTest)!]
+  ]
+  for (const [channel, message, args] of cases) {
+    const { deps, event } = context()
+    await assert.rejects(
+      createGuardedIpcHandler(channel, deps, () => { throw new Error(message) })(event, ...args),
+      (error: unknown) => error instanceof Error && error.message === message
+    )
+  }
+})
+
 test('生成结果与历史结果的静态契约错误可安全透传给 renderer', async () => {
   for (const [channel, message, args] of [
     [IPC.generateRun, RESULT_CONTRACT_MESSAGES.generated, inputs.get(IPC.generateRun)!],

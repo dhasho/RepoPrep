@@ -38,7 +38,7 @@
 - 把 renderer 输入、项目文件、配置内容和模型输出都视作不可信。IPC 边界要做发送方、参数 schema 与项目授权校验；不能以 TypeScript 类型替代运行时校验。
 - 新增或修改 IPC 处理器必须继续走统一 guard。返回 renderer 的错误只允许暴露安全的静态业务提示；外部错误、文件系统细节及上游响应不得原样回显。
 - 保持 BrowserWindow 的 `sandbox`、`contextIsolation` 开启，`nodeIntegration` 与 `webviewTag` 关闭；窗口导航、权限请求和加载入口须继续受 `electron/window-security.ts` 的策略约束。
-- API Key 只在主进程私有配置和模型请求中解密。公开设置只返回模型配置元数据、密钥是否存在及凭据状态；保存使用 keep/replace/clear 意图，模型探测和连接测试使用显式新密钥或匹配原接口地址的已保存凭据引用。renderer 不得读取已保存明文或密文；密钥不得进入 IPC 返回、日志、错误消息、生成结果或导出。持久化密钥使用 Electron `safeStorage` 的异步 OS 加密；不可用时拒绝新密钥写入或密钥解密，不得回退为明文；无密钥配置和不触及密钥的元数据保存仍可进行。迁移和威胁范围见 `docs/credential-security.md`。
+- API Key 只在主进程私有配置和模型请求中解密。公开设置只返回模型配置元数据、密钥是否存在及凭据状态；保存使用 keep/replace/clear 意图，模型探测和连接测试使用显式新密钥或匹配原接口地址与有效接口规范的已保存凭据引用。缺省规范按 OpenAI 处理；Claude 使用 Anthropic Messages 规范。renderer 不得读取已保存明文或密文；密钥不得进入 IPC 返回、日志、错误消息、生成结果或导出。持久化密钥使用 Electron `safeStorage` 的异步 OS 加密；不可用时拒绝新密钥写入或密钥解密，不得回退为明文；无密钥配置和不触及密钥的元数据保存仍可进行。迁移和威胁范围见 `docs/credential-security.md`。
 - 扫描项目文件前遵守授权和排除规则；对敏感信息做过滤，限制扫描量、上下文和模型输出。不要把未授权路径或被过滤数据放入缓存、日志、模型请求、结果或导出。
 - 扫描缓存只是可失效的性能优化，不是事实来源；复用前需确认快照仍有效，项目移除或文件变化时正确失效。
 - `electron/services/store.ts` 使用 `electron/services/atomic-json.ts` 在目标同目录创建临时文件、写入并 fsync、关闭后原子重命名；成功替换前保留一个 `.bak`，损坏源另存 `.corrupt`，由受控恢复显式替换。此保证针对单个文件，不构成设置主文件、备份及损坏快照间的跨文件事务。密钥迁移逐文件原子替换；中途失败可能留下已转换和待转换副本，状态必须保持 migration-pending，并在后续读取私有凭据、保存或受控恢复时安全重试。

@@ -126,6 +126,16 @@ function storedHistoryDir(userData: string, projectPath: string): string {
   return path.join(userData, 'projects', `${hash}.history`)
 }
 
+async function pathExists(candidate: string): Promise<boolean> {
+  try {
+    await fs.lstat(candidate)
+    return true
+  } catch (error) {
+    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
 test('real store module loads old wide-glossary/profile result without migrating or rewriting it', async () => {
   const { store, userData } = await makeHarness()
   const projectPath = path.join(userData, 'legacy-project')
@@ -484,6 +494,106 @@ test('analysis identifiers are scoped to their project storage key', async () =>
   const id = store.saveResult(projectA, { ...legacyAffectedResult(projectA), projectSummary: 'project A' })
   assert.equal(store.loadAnalysis(projectB, id), null)
   assert.equal(store.listAnalyses(projectB).items.length, 0)
+})
+
+test('deleting a result removes current, archived, and stray history files while preserving other projects', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'delete-all-analysis-history')
+  const otherProject = path.join(userData, 'keep-analysis-history')
+  const oldId = store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), projectSummary: 'old' })
+  const latestId = store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), createdAt: '2026-08-01T00:00:00.000Z', projectSummary: 'latest' })
+  const otherId = store.saveResult(otherProject, { ...legacyAffectedResult(otherProject), projectSummary: 'keep' })
+  const latestFile = storedResultFile(userData, projectPath)
+  const historyDir = storedHistoryDir(userData, projectPath)
+  await fs.writeFile(`${latestFile}.corrupt`, '{ damaged copy', 'utf8')
+  await fs.writeFile(path.join(historyDir, 'unindexed-corrupt.json'), '{ invalid archive', 'utf8')
+  await fs.writeFile(path.join(historyDir, '.atomic-leftover.tmp'), 'partial write', 'utf8')
+
+  store.deleteResult(projectPath)
+
+  assert.equal(store.loadResult(projectPath), null)
+  assert.deepEqual(store.listAnalyses(projectPath).items, [])
+  for (const id of [oldId, latestId]) assert.equal(store.loadAnalysis(projectPath, id), null)
+  assert.deepEqual(await Promise.all([latestFile, `${latestFile}.bak`, `${latestFile}.corrupt`, historyDir].map(pathExists)), [false, false, false, false])
+  assert.equal(store.listAnalyses(otherProject).items[0].id, otherId)
+  assert.equal(store.loadAnalysis(otherProject, otherId).projectSummary, 'keep')
+  store.deleteResult(projectPath)
+  assert.equal(store.loadResult(projectPath), null, 'repeated deletion remains idempotent')
+
+  store.addRecentProject({ path: otherProject, name: 'keep' })
+  store.removeRecentProject(otherProject)
+  assert.equal(store.loadAnalysis(otherProject, otherId).projectSummary, 'keep', 'removing a recent entry leaves stored results intact')
+})
+
+test('result deletion rejects unsafe history entries and linked storage roots without touching outside sentinels', async (context) => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'delete-linked-history')
+  const historyDir = storedHistoryDir(userData, projectPath)
+  const externalDir = path.join(userData, 'outside-history')
+  const sentinel = path.join(externalDir, 'sentinel.txt')
+  await fs.mkdir(externalDir)
+  await fs.writeFile(sentinel, 'keep', 'utf8')
+  await fs.mkdir(historyDir, { recursive: true })
+  const nestedSentinel = path.join(historyDir, 'unexpected-child', 'sentinel.txt')
+  await fs.mkdir(path.dirname(nestedSentinel))
+  await fs.writeFile(nestedSentinel, 'keep nested', 'utf8')
+  assert.throws(() => store.deleteResult(projectPath), /删除历史结果未完成/)
+  assert.equal(await fs.readFile(nestedSentinel, 'utf8'), 'keep nested', 'unexpected nested trees are never recursively removed')
+  assert.equal(await fs.readFile(sentinel, 'utf8'), 'keep')
+
+  await fs.rm(path.join(historyDir, 'unexpected-child'), { recursive: true })
+  const linkedEntry = path.join(historyDir, 'linked-sentinel')
+  try {
+    await fs.symlink(sentinel, linkedEntry, 'file')
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EINVAL'].includes(code ?? '')) context.diagnostic(`history entry symlink check skipped (${code})`)
+    else throw error
+  }
+  if (await pathExists(linkedEntry)) {
+    assert.throws(() => store.deleteResult(projectPath), /删除历史结果未完成/)
+    assert.equal(await fs.readFile(sentinel, 'utf8'), 'keep', 'linked history entries are never followed')
+    await fs.rm(linkedEntry)
+  }
+
+  await fs.rm(historyDir, { recursive: true })
+  try {
+    await fs.symlink(externalDir, historyDir, 'junction')
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EINVAL'].includes(code ?? '')) {
+      context.diagnostic(`history junction check skipped (${code})`)
+    } else throw error
+  }
+  if (await pathExists(historyDir)) {
+    assert.throws(() => store.deleteResult(projectPath), /删除历史结果未完成/)
+    assert.equal(await fs.readFile(sentinel, 'utf8'), 'keep')
+    await fs.rm(historyDir, { recursive: true, force: true })
+  }
+
+  const projects = path.join(userData, 'projects')
+  const externalProjects = path.join(userData, 'outside-projects')
+  await fs.mkdir(externalProjects)
+  const hash = createHash('sha1').update(projectPath).digest('hex')
+  const externalResult = path.join(externalProjects, `${hash}.json`)
+  await fs.writeFile(externalResult, 'outside result sentinel', 'utf8')
+  await fs.mkdir(path.join(externalProjects, `${hash}.history`))
+  await fs.writeFile(path.join(externalProjects, `${hash}.history`, 'sentinel.txt'), 'outside archive sentinel', 'utf8')
+  const linkedProjects = path.join(userData, 'projects-linked')
+  await fs.rename(projects, linkedProjects)
+  try {
+    await fs.symlink(externalProjects, projects, 'junction')
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EINVAL'].includes(code ?? '')) {
+      context.diagnostic(`projects root junction check skipped (${code})`)
+      return
+    } else throw error
+  }
+  assert.throws(() => store.deleteResult(projectPath), /删除历史结果未完成/)
+  assert.equal(await fs.stat(projects).then((stat) => stat.isDirectory()), true)
+  assert.equal(await fs.readFile(externalResult, 'utf8'), 'outside result sentinel')
+  assert.equal(await fs.readFile(path.join(externalProjects, `${hash}.history`, 'sentinel.txt'), 'utf8'), 'outside archive sentinel')
 })
 
 test('history junctions and entry symlinks are not followed outside the private store', async (context) => {

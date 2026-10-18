@@ -157,7 +157,7 @@ function isSettings(value: unknown): value is StoredSettings {
   if (!Array.isArray(profiles) || profiles.length > MAX_LLM_PROFILES) return false
   const ids = new Set<string>()
   for (const profile of profiles) {
-    if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'credential', 'model', 'temperature'].includes(key))) return false
+    if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'credential', 'model', 'protocol', 'temperature'].includes(key))) return false
     if (!validText(profile.id, LLM_PROFILE_LIMITS.id)) return false
     if (ids.has(profile.id)) return false
     ids.add(profile.id)
@@ -173,6 +173,7 @@ function isSettings(value: unknown): value is StoredSettings {
     if (profile.credential !== undefined && (!isObject(profile.credential) || Object.keys(profile.credential).some((key) => !['version', 'ciphertext'].includes(key)) || profile.credential.version !== 1 || !validText(profile.credential.ciphertext, 64 * 1024))) return false
     if (profile.apiKey !== undefined && profile.credential !== undefined) return false
     if (!validText(profile.model, LLM_PROFILE_LIMITS.model)) return false
+    if (profile.protocol !== undefined && profile.protocol !== 'openai' && profile.protocol !== 'anthropic') return false
     if (profile.temperature !== undefined && (typeof profile.temperature !== 'number' || !Number.isFinite(profile.temperature) || profile.temperature < 0 || profile.temperature > 2)) return false
   }
   if (value.defaultProfileId !== undefined && value.defaultProfileId !== null && !validText(value.defaultProfileId, 128)) return false
@@ -324,6 +325,7 @@ function publicSettings(settings: StoredSettings, status: PublicSettings['profil
         name: profile.name,
         baseUrl: profile.baseUrl,
         model: profile.model,
+        ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
         ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
         hasApiKey,
         credentialStatus: hasApiKey ? status : 'missing'
@@ -488,7 +490,8 @@ export function saveSettings(settings: SettingsSaveRequest): Promise<void> {
         ids.add(requested.id)
         const prior = priorById.get(requested.id) as (LlmProfile & { credential?: unknown }) | undefined
         const action = requested.credentialAction ?? (requested.apiKey ? 'replace' : 'keep')
-        const { apiKey = '', credentialAction: _action, useSavedCredential: _reference, hasApiKey: _claim, credentialStatus: _status, ...metadata } = requested
+        const { apiKey = '', protocol, credentialAction: _action, useSavedCredential: _reference, hasApiKey: _claim, credentialStatus: _status, ...metadata } = requested
+        const profileMetadata = { ...metadata, ...(protocol !== undefined ? { protocol } : {}) }
         let credential: unknown
         if (action === 'replace') {
           credential = apiKey ? await encryptCredential(apiKey, credentialCrypto) : undefined
@@ -496,13 +499,19 @@ export function saveSettings(settings: SettingsSaveRequest): Promise<void> {
           if (prior?.credential && canonicalEndpoint(prior.baseUrl) !== canonicalEndpoint(requested.baseUrl)) {
             throw new Error('credential-endpoint-changed')
           }
+          if (
+            (prior?.credential || prior?.apiKey) &&
+            (prior.protocol ?? 'openai') !== (requested.protocol ?? 'openai')
+          ) {
+            throw new Error('credential-protocol-changed')
+          }
           if (typeof prior?.apiKey === 'string' && prior.apiKey) {
             credential = await encryptCredential(prior.apiKey, credentialCrypto)
           } else {
             credential = prior?.credential
           }
         } else if (action !== 'clear') throw new Error('Invalid settings')
-        profiles.push({ ...metadata, ...(credential ? { credential } : {}) })
+        profiles.push({ ...profileMetadata, ...(credential ? { credential } : {}) })
       }
       const persisted = { ...settings, schemaVersion: 2, profiles }
       writePreserving(file, persisted, SETTINGS_MAX_BYTES, isSettings)
@@ -510,6 +519,7 @@ export function saveSettings(settings: SettingsSaveRequest): Promise<void> {
     } catch (error) {
       const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
       if (error instanceof Error && error.message === 'credential-endpoint-changed') throw new Error('修改接口地址前，请先替换或清除已保存的 API Key。')
+      if (error instanceof Error && error.message === 'credential-protocol-changed') throw new Error('修改接口协议前，请先替换或清除已保存的 API Key。')
       if (error instanceof Error && error.message === 'settings-migration-pending') throw new Error('设置尚未完成安全迁移，请检查系统凭据存储后重试。')
       if (error instanceof Error && (error.message === 'credential-store-unavailable' || error.message === 'credential-encryption-failed')) throw new Error('系统凭据存储当前不可用，设置未更改。请稍后重试。')
       const wrapped = new Error(STORAGE_WRITE_FAILED) as NodeJS.ErrnoException
@@ -708,35 +718,88 @@ export function loadAnalysis(projectPath: string, id: string): InterviewResult |
 }
 
 export function deleteResult(projectPath: string): void {
+  const projects = projectsDir()
   const target = resultFile(projectPath)
-  const files = [`${target}.bak`, `${target}.corrupt`, target]
-  for (const file of files) {
+  const managedTargets = [target, `${target}.bak`, `${target}.corrupt`, analysisHistoryDir(projectPath)]
+  const [primary, backup, corrupt, history] = managedTargets
+  const resultCopies = [backup, corrupt, primary]
+  try {
+    const projectsStat = fs.lstatSync(projects)
+    if (!projectsStat.isDirectory() || projectsStat.isSymbolicLink()) throw new Error('Unsafe project storage')
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code === 'ENOENT') {
+      clearDiagnostic(resultId(projectPath))
+      return
+    }
+    throw new Error(STORAGE_MESSAGES.deleteResult)
+  }
+
+  let historyExists = false
+  try {
+    const historyStat = fs.lstatSync(history)
+    if (!historyStat.isDirectory() || historyStat.isSymbolicLink()) throw new Error('Unsafe history directory')
+    historyExists = true
+    for (const entry of fs.readdirSync(history, { withFileTypes: true })) {
+      if (!entry.isFile() || entry.isSymbolicLink()) throw new Error('Unsafe history entry')
+    }
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code !== 'ENOENT') throw new Error(STORAGE_MESSAGES.deleteResult)
+  }
+
+  for (const file of resultCopies) {
     try {
       fs.rmSync(file, { force: true })
     } catch {
       // Continue so a failure on one copy does not prevent attempts on others.
     }
   }
-  let allAbsent = true
-  for (const file of files) {
+  if (historyExists) {
+    let entries: fs.Dirent[] = []
+    try {
+      entries = fs.readdirSync(history, { withFileTypes: true })
+    } catch {
+      // The final absence check below reports an unreadable or retained directory.
+    }
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.isSymbolicLink()) continue
+      try {
+        fs.rmSync(path.join(history, entry.name), { force: true })
+      } catch {
+        // Continue so one locked archive does not prevent attempts on the rest.
+      }
+    }
+    try {
+      fs.rmdirSync(history)
+    } catch {
+      // The final absence check below reports a directory that could not be removed.
+    }
+  }
+
+  const finalState = new Map<string, 'absent' | 'present' | 'unknown'>()
+  for (const file of managedTargets) {
     try {
       fs.lstatSync(file)
-      allAbsent = false
+      finalState.set(file, 'present')
     } catch (error) {
       const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
-      if (code !== 'ENOENT') allAbsent = false
+      finalState.set(file, code === 'ENOENT' ? 'absent' : 'unknown')
     }
   }
   const id = resultId(projectPath)
-  if (allAbsent) {
+  if ([...finalState.values()].every((state) => state === 'absent')) {
     clearDiagnostic(id)
     return
   }
-  try {
-    loadResult(projectPath)
-  } catch {
-    // The read path refreshes diagnostics; delete failure remains the public outcome.
-  }
+  const currentOrBackup = [primary, backup]
+  if (currentOrBackup.some((file) => finalState.get(file) !== 'absent')) {
+    try {
+      loadResult(projectPath)
+    } catch {
+      // The read path refreshes diagnostics; delete failure remains the public outcome.
+    }
+  } else if (finalState.get(history) === 'absent') clearDiagnostic(id)
   throw new Error(STORAGE_MESSAGES.deleteResult)
 }
 

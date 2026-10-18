@@ -33,7 +33,7 @@ after(async () => {
   }
 })
 
-type DeleteTarget = 'primary' | 'backup' | 'corrupt'
+type DeleteTarget = 'primary' | 'backup' | 'corrupt' | 'history'
 type Fault = { operation: string; target: DeleteTarget; code: string; fired: boolean }
 
 function makeFaultFs(): {
@@ -49,9 +49,12 @@ function makeFaultFs(): {
   const matchesTarget = (file: unknown, target: Fault['target']) => {
     if (typeof file !== 'string') return false
     const basename = path.basename(file)
+    if (target === 'history') return file.split(path.sep).some((part) => part.endsWith('.history'))
     return target === 'backup'
       ? basename.includes('.json.bak.projectlens-')
-      : basename.endsWith('.projectlens-') || /\.json\.projectlens-/.test(basename)
+      : target === 'corrupt'
+        ? basename.endsWith('.json.corrupt')
+        : basename.endsWith('.projectlens-') || /\.json\.projectlens-/.test(basename)
   }
   const maybeFail = (operation: string, file: unknown, role?: Fault['target']) => {
     if (!fault || fault.fired || fault.operation !== operation || (role !== fault.target && !matchesTarget(file, fault.target))) return
@@ -69,6 +72,7 @@ function makeFaultFs(): {
     const name = path.basename(file)
     if (name.endsWith('.json.bak')) return 'backup'
     if (name.endsWith('.json.corrupt')) return 'corrupt'
+    if (file.split(path.sep).some((part) => part.endsWith('.history'))) return 'history'
     if (name.endsWith('.json')) return 'primary'
     return undefined
   }
@@ -87,7 +91,9 @@ function makeFaultFs(): {
       }
       if (property === 'lstatSync' && typeof method === 'function') return (...args: unknown[]) => {
         maybeFail('lstat', args[0], deleteRole(args[0]))
-        return method.apply(target, args)
+        if (deleteAttempts.length > 0 && deleteRole(args[0]) === 'history') maybeFail('lstat-final', args[0], 'history')
+        const result = method.apply(target, args)
+        return result
       }
       if (!intercepted.has(String(property)) || typeof method !== 'function') return method
       return (...args: unknown[]) => {
@@ -408,9 +414,91 @@ test('settings save keeps only the matching endpoint credential and rejects endp
   }), /替换或清除/)
 })
 
+test('legacy profiles default to OpenAI without adding an undefined protocol property', async () => {
+  const { store, userData } = await makeHarness()
+  const file = path.join(userData, 'settings.json')
+  const legacy = {
+    profiles: [{ id: 'legacy-openai', name: 'Legacy', baseUrl: 'https://example.test/v1', model: 'legacy-model' }],
+    defaultProfileId: 'legacy-openai'
+  }
+  const legacyBytes = JSON.stringify(legacy, null, 2)
+  fs.writeFileSync(file, legacyBytes)
+
+  const publicBeforeSave = await store.getSettings()
+  const privateBeforeSave = await store.getPrivateProfile('legacy-openai')
+  assert.equal(Object.hasOwn(publicBeforeSave.profiles[0], 'protocol'), false)
+  assert.equal(Object.hasOwn(privateBeforeSave, 'protocol'), false)
+  assert.equal(await fs.promises.readFile(file, 'utf8'), legacyBytes, 'reading legacy metadata does not rewrite it')
+
+  await store.saveSettings({ profiles: [{ ...legacy.profiles[0], apiKey: '', credentialAction: 'keep' }], defaultProfileId: 'legacy-openai' })
+  const publicAfterSave = await store.getSettings()
+  const privateAfterSave = await store.getPrivateProfile('legacy-openai')
+  assert.equal(Object.hasOwn(publicAfterSave.profiles[0], 'protocol'), false)
+  assert.equal(Object.hasOwn(privateAfterSave, 'protocol'), false)
+  assert.equal(privateAfterSave.apiKey, '')
+
+  await store.saveSettings({
+    profiles: [{ ...legacy.profiles[0], apiKey: 'legacy-openai-key', credentialAction: 'replace' }],
+    defaultProfileId: 'legacy-openai'
+  })
+  await store.saveSettings({
+    profiles: [{ ...legacy.profiles[0], protocol: 'openai', apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: 'legacy-openai'
+  })
+  const explicitOpenAi = await store.getPrivateProfile('legacy-openai')
+  assert.equal(explicitOpenAi?.protocol, 'openai')
+  assert.equal(explicitOpenAi?.apiKey, 'legacy-openai-key', 'missing legacy protocol and explicit OpenAI share credential identity')
+})
+
+test('settings persist Anthropic protocol metadata and bind saved credentials to endpoint plus protocol', async () => {
+  const { store, userData } = await makeHarness()
+  const base = { id: 'protocol-profile', name: 'Protocol', baseUrl: 'https://example.test/v1', model: 'model' }
+  await store.saveSettings({
+    profiles: [{ ...base, protocol: 'openai', apiKey: 'openai-secret', credentialAction: 'replace' }],
+    defaultProfileId: base.id
+  })
+
+  await assert.rejects(store.saveSettings({
+    profiles: [{ ...base, protocol: 'anthropic', apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: base.id
+  }), /修改接口协议前，请先替换或清除已保存的 API Key。/)
+  assert.equal((await store.getPrivateProfile(base.id))?.apiKey, 'openai-secret', 'rejected protocol switches keep the existing credential')
+  assert.equal((await store.getPrivateProfile(base.id))?.protocol, 'openai')
+
+  await store.saveSettings({
+    profiles: [{ ...base, protocol: 'anthropic', apiKey: 'anthropic-secret', credentialAction: 'replace' }],
+    defaultProfileId: base.id
+  })
+  const privateAnthropic = await store.getPrivateProfile(base.id)
+  const publicAnthropic = await store.getSettings()
+  assert.equal(privateAnthropic?.protocol, 'anthropic')
+  assert.equal(privateAnthropic?.apiKey, 'anthropic-secret')
+  assert.equal(publicAnthropic.profiles[0].protocol, 'anthropic')
+  assert.equal(JSON.stringify(publicAnthropic).includes('anthropic-secret'), false)
+  const persisted = JSON.parse(await fs.promises.readFile(path.join(userData, 'settings.json'), 'utf8'))
+  assert.equal(persisted.profiles[0].protocol, 'anthropic')
+  assert.equal(Object.hasOwn(persisted.profiles[0], 'apiKey'), false)
+  assert.equal(JSON.stringify(persisted).includes('anthropic-secret'), false)
+
+  await store.saveSettings({
+    profiles: [{ ...base, protocol: 'openai', apiKey: '', credentialAction: 'clear' }],
+    defaultProfileId: base.id
+  })
+  const clearedPublic = await store.getSettings()
+  const clearedPrivate = await store.getPrivateProfile(base.id)
+  assert.equal(clearedPublic.profiles[0].protocol, 'openai')
+  assert.equal(clearedPublic.profiles[0].hasApiKey, false)
+  assert.equal(clearedPrivate?.apiKey, '')
+})
+
 function resultFile(userData: string, projectPath: string): string {
   const hash = nativeRequire('node:crypto').createHash('sha1').update(projectPath).digest('hex') as string
   return path.join(userData, 'projects', `${hash}.json`)
+}
+
+function historyDir(userData: string, projectPath: string): string {
+  const hash = nativeRequire('node:crypto').createHash('sha1').update(projectPath).digest('hex') as string
+  return path.join(userData, 'projects', `${hash}.history`)
 }
 
 function assertNoHelperTemps(file: string): void {
@@ -558,7 +646,7 @@ test('result deletion attempts every copy, reports partial failure, refreshes di
       assert.equal(error.message.includes(userData), false)
       return true
     })
-    assert.deepEqual(faultFs.deleteAttempts.slice(-3), ['backup', 'corrupt', 'primary'])
+    assert.deepEqual(faultFs.deleteAttempts.slice(0, 3), ['backup', 'corrupt', 'primary'])
     assert.equal(fs.existsSync(`${file}${target === 'backup' ? '.bak' : target === 'corrupt' ? '.corrupt' : ''}`), true)
     assert.equal(fs.existsSync(file), target === 'primary')
     assert.equal(fs.existsSync(`${file}.bak`), target === 'backup')
@@ -599,6 +687,60 @@ test('result deletion fails closed when final lstat cannot confirm absence', asy
   store.saveResult(projectPath, sampleResult(projectPath))
   faultFs.arm('lstat', 'backup', 'EACCES')
   assert.throws(() => store.deleteResult(projectPath), /删除历史结果未完成，部分文件可能仍存在/)
+})
+
+test('history-only delete failure attempts remaining entries, preserves diagnostics, and retries', async () => {
+  const { store, userData, faultFs } = await makeHarness()
+  const projectPath = path.join(userData, 'delete-history-only')
+  const file = resultFile(userData, projectPath)
+  const history = historyDir(userData, projectPath)
+  store.saveResult(projectPath, sampleResult(projectPath, 'Older'))
+  store.saveResult(projectPath, { ...sampleResult(projectPath, 'Newer'), createdAt: '2026-10-12T00:00:00.000Z' })
+  fs.writeFileSync(`${file}.corrupt`, Buffer.from('{ damaged copy'))
+  fs.writeFileSync(path.join(history, 'unindexed.json'), Buffer.from('unindexed'))
+  fs.writeFileSync(path.join(history, '.partial.tmp'), Buffer.from('partial'))
+  fs.writeFileSync(file, Buffer.from('{ damaged primary'))
+  assert.equal(store.loadResult(projectPath).projectName, 'Older')
+  const diagnosticBefore = store.getStorageDiagnostics().find((item: any) => item.id === `result:${nativeRequire('node:crypto').createHash('sha1').update(projectPath).digest('hex')}`)
+  assert.ok(diagnosticBefore)
+  faultFs.arm('delete', 'history', 'EPERM')
+
+  assert.throws(() => store.deleteResult(projectPath), (error: unknown) => {
+    assert.ok(error instanceof Error)
+    assert.equal(error.message, '删除历史结果未完成，部分文件可能仍存在。请检查权限后重试。')
+    assert.equal(error.message.includes(userData), false)
+    assert.equal(error.message.includes('delete-private-marker'), false)
+    return true
+  })
+  assert.deepEqual([file, `${file}.bak`, `${file}.corrupt`].map((candidate) => fs.existsSync(candidate)), [false, false, false], 'the one history fault does not prevent attempts on result copies')
+  assert.equal(fs.readdirSync(history).length, 1, 'other regular history files are attempted after the injected fault')
+  assert.deepEqual(store.getStorageDiagnostics(), [diagnosticBefore], 'history-only failure does not clear a prior result diagnostic')
+
+  store.deleteResult(projectPath)
+  assert.equal(fs.existsSync(history), false)
+  assert.deepEqual(store.getStorageDiagnostics(), [])
+})
+
+test('history final lstat errors fail closed and a retry can confirm absence', async () => {
+  const { store, userData, faultFs } = await makeHarness()
+  const projectPath = path.join(userData, 'delete-history-verify')
+  const file = resultFile(userData, projectPath)
+  store.saveResult(projectPath, sampleResult(projectPath))
+  store.saveResult(projectPath, { ...sampleResult(projectPath), createdAt: '2026-10-13T00:00:00.000Z' })
+  fs.writeFileSync(file, Buffer.from('{ damaged primary'))
+  store.loadResult(projectPath)
+  const diagnosticId = `result:${nativeRequire('node:crypto').createHash('sha1').update(projectPath).digest('hex')}`
+  const diagnosticBefore = store.getStorageDiagnostics().find((item: any) => item.id === diagnosticId)
+  assert.ok(diagnosticBefore)
+  faultFs.arm('lstat-final', 'history', 'EACCES')
+
+  assert.throws(() => store.deleteResult(projectPath), /删除历史结果未完成，部分文件可能仍存在/)
+  assert.equal(fs.existsSync(file), false)
+  assert.equal(fs.existsSync(historyDir(userData, projectPath)), false, 'all data can be gone while an unconfirmed final check still reports failure')
+  assert.deepEqual(store.getStorageDiagnostics(), [diagnosticBefore], 'unknown history absence preserves a prior result diagnostic')
+  store.deleteResult(projectPath)
+  assert.equal(store.loadResult(projectPath), null)
+  assert.deepEqual(store.getStorageDiagnostics(), [])
 })
 
 test('guarded result deletion authorizes before filesystem access and exposes only its static failure', async () => {

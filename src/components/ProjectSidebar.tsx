@@ -25,7 +25,7 @@ function formatDate(value: string): string {
 
 export default function ProjectSidebar({ projects, loading, error, selectedProjectPath, selectedAnalysisId, onNew, onSelectProject, onSelectAnalysis, onToggleProject, onLoadMore, onRemove }: Props) {
   return (
-    <aside className="project-library-sidebar sidebar-enter flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white" aria-label="项目">
+    <aside className="project-library-sidebar sidebar-enter flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white" aria-label="项目">
       <div className="border-b border-slate-200 p-3">
         <button aria-label="新建分析" className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100" onClick={onNew}>
           <span aria-hidden="true" className="text-lg leading-none text-indigo-600">＋</span>
@@ -47,7 +47,7 @@ export default function ProjectSidebar({ projects, loading, error, selectedProje
                 data-project-path={project.path}
                 onClick={() => onSelectProject(project.path)}
               >
-                <span className={`block truncate text-[13px] font-medium ${selectedProjectPath === project.path ? 'text-indigo-700' : 'text-slate-700'}`}>{project.name}</span>
+                <span className={`block truncate text-sm font-medium ${selectedProjectPath === project.path ? 'text-indigo-700' : 'text-slate-700'}`}>{project.name}</span>
               </button>
               <button
                 className="mr-1 rounded p-1.5 text-slate-400 hover:bg-white hover:text-slate-700"

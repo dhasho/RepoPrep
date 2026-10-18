@@ -2,14 +2,16 @@
 
 export type Granularity = 'coarse' | 'medium' | 'fine'
 export type RoleFocus = 'general' | 'frontend' | 'backend' | 'algorithm'
+export type LlmProtocol = 'openai' | 'anthropic'
 
-/** 大模型配置（OpenAI 兼容接口） */
+/** 大模型配置；缺少 protocol 的旧配置按 OpenAI Chat Completions 处理。 */
 export interface LlmProfile {
   id: string
   name: string
   baseUrl: string
   apiKey: string
   model: string
+  protocol?: LlmProtocol
   temperature?: number
 }
 
