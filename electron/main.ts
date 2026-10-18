@@ -20,6 +20,8 @@ import {
   getPrivateProfile,
   getStorageDiagnostics,
   loadResult,
+  listAnalyses,
+  loadAnalysis,
   recoverStorage,
   removeRecentProject,
   saveResult,
@@ -188,6 +190,10 @@ handle(IPC.removeRecent, async (_e, projectPath: string) => {
 
 handle(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
 
+handle(IPC.listAnalyses, (_e, projectPath: string, cursor?: string) => listAnalyses(projectPath, cursor))
+
+handle(IPC.loadAnalysis, (_e, projectPath: string, analysisId: string) => loadAnalysis(projectPath, analysisId))
+
 handle(IPC.deleteResult, (_e, projectPath: string) => {
   deleteResult(projectPath)
 })
@@ -248,9 +254,9 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
       onProgress: sendProgress
     })
     ensureCurrentTask()
-    saveResult(options.projectPath, result)
+    const analysisId = saveResult(options.projectPath, result)
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
-    return { runId, result, storagePath: options.projectPath }
+    return { runId, result, storagePath: options.projectPath, ...(typeof analysisId === 'string' ? { analysisId } : {}) }
   } catch (err) {
     if (!isCurrentTask()) throw new Error('已取消生成')
     if (isLlmTimeoutError(err)) {

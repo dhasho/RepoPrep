@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { SCAN_LIMIT_BOUNDS, type InterviewResult, type LlmProfile, type LlmProfileDraft, type PublicSettings, type RecentProject, type Settings, type SettingsSaveRequest } from '@shared/types'
+import { SCAN_LIMIT_BOUNDS, type AnalysisPage, type AnalysisSummary, type Granularity, type InterviewResult, type LlmProfile, type LlmProfileDraft, type PublicSettings, type RecentProject, type RoleFocus, type Settings, type SettingsSaveRequest } from '@shared/types'
 import { assertInterviewResultContract, LLM_PROFILE_LIMITS, MAX_LLM_PROFILES, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import {
   archiveCorrupt,
@@ -28,6 +28,8 @@ const SETTINGS_ARCHIVE_MAX_BYTES = SETTINGS_MAX_BYTES * 2 + 64 * 1024
 const SETTINGS_ARCHIVE_MAGIC = Buffer.from('RepoPrep encrypted settings archive v1\n', 'utf8')
 const RECENT_MAX_BYTES = 2 * 1024 * 1024
 const RESULT_MAX_BYTES = 8 * 1024 * 1024
+const HISTORY_PAGE_SIZE = 50
+const RECENT_PROJECT_LIMIT = 200
 const MAX_DIAGNOSTICS = 128
 const STORAGE_WRITE_FAILED = '保存本地数据失败，请检查磁盘空间或权限后重试。'
 
@@ -74,6 +76,25 @@ function resultFile(projectPath: string): string {
 
 function resultId(projectPath: string): string {
   return `result:${createHash('sha1').update(projectPath).digest('hex')}`
+}
+
+function analysisHistoryDir(projectPath: string): string {
+  const hash = createHash('sha1').update(projectPath).digest('hex')
+  return path.join(projectsDir(), `${hash}.history`)
+}
+
+function analysisId(result: InterviewResult): string {
+  return createHash('sha256').update(JSON.stringify(result)).digest('hex')
+}
+
+function analysisFilename(summary: AnalysisSummary): string {
+  return `${Date.parse(summary.createdAt)}-${summary.granularity}-${summary.roleFocus}-${summary.id}.json`
+}
+
+function isStoredResultReadError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message === STORAGE_MESSAGES.corruptResult || error.message === STORAGE_MESSAGES.unreadableResult
+  )
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -167,7 +188,7 @@ function isSettings(value: unknown): value is StoredSettings {
 }
 
 function isRecentProjects(value: unknown): value is RecentProject[] {
-  return Array.isArray(value) && value.length <= 20 && value.every((entry) =>
+  return Array.isArray(value) && value.length <= RECENT_PROJECT_LIMIT && value.every((entry) =>
     isObject(entry) &&
     validText(entry.path, 4096) && path.isAbsolute(entry.path) &&
     validText(entry.name, 256) &&
@@ -500,7 +521,85 @@ export function saveSettings(settings: SettingsSaveRequest): Promise<void> {
   })
 }
 
-export function saveResult(projectPath: string, result: InterviewResult): void {
+function ensureHistoryDirectory(projectPath: string): string {
+  const projects = projectsDir()
+  fs.mkdirSync(projects, { recursive: true })
+  const projectsStat = fs.lstatSync(projects)
+  if (!projectsStat.isDirectory() || projectsStat.isSymbolicLink()) throw new Error('Unsafe history directory')
+  const directory = analysisHistoryDir(projectPath)
+  try {
+    fs.mkdirSync(directory)
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code !== 'EEXIST') throw error
+  }
+  const historyStat = fs.lstatSync(directory)
+  if (!historyStat.isDirectory() || historyStat.isSymbolicLink()) throw new Error('Unsafe history directory')
+  return directory
+}
+
+function archivePreviousAnalysis(projectPath: string, bytes: Buffer, value: InterviewResult): void {
+  const summary: AnalysisSummary = {
+    id: analysisId(value),
+    createdAt: value.createdAt,
+    granularity: value.granularity,
+    roleFocus: value.roleFocus
+  }
+  const directory = ensureHistoryDirectory(projectPath)
+  const target = path.join(directory, analysisFilename(summary))
+  try {
+    const existingStat = fs.lstatSync(target)
+    if (!existingStat.isFile() || existingStat.isSymbolicLink()) throw new Error('Unsafe history entry')
+    const existing = readValid(target, RESULT_MAX_BYTES, isInterviewResult)
+    if (existing.status !== 'valid' || analysisId(existing.value) !== summary.id) throw new Error('Invalid immutable history entry')
+    return
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code !== 'ENOENT') throw error
+  }
+  atomicReplaceBytes(target, bytes)
+}
+
+function historySummaries(projectPath: string): AnalysisSummary[] {
+  const projects = projectsDir()
+  try {
+    const projectsStat = fs.lstatSync(projects)
+    if (!projectsStat.isDirectory() || projectsStat.isSymbolicLink()) throw new Error(STORAGE_MESSAGES.unreadableResult)
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code === 'ENOENT') return []
+    throw error
+  }
+  const directory = analysisHistoryDir(projectPath)
+  let directoryStat: fs.Stats
+  try {
+    directoryStat = fs.lstatSync(directory)
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code === 'ENOENT') return []
+    throw error
+  }
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) throw new Error(STORAGE_MESSAGES.unreadableResult)
+  const summaries: AnalysisSummary[] = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || entry.isSymbolicLink()) continue
+    const match = /^(-?\d{1,16})-(coarse|medium|fine)-(general|frontend|backend|algorithm)-([a-f0-9]{64})\.json$/.exec(entry.name)
+    if (!match) continue
+    const timestamp = Number(match[1])
+    if (!Number.isSafeInteger(timestamp)) continue
+    const createdAt = new Date(timestamp)
+    if (!Number.isFinite(createdAt.getTime())) continue
+    summaries.push({
+      id: match[4],
+      createdAt: createdAt.toISOString(),
+      granularity: match[2] as Granularity,
+      roleFocus: match[3] as RoleFocus
+    })
+  }
+  return summaries
+}
+
+export function saveResult(projectPath: string, result: InterviewResult): string {
   try {
     assertInterviewResultContract(result, path.isAbsolute)
   } catch {
@@ -508,8 +607,17 @@ export function saveResult(projectPath: string, result: InterviewResult): void {
   }
   const target = resultFile(projectPath)
   try {
+    const previous = readValid(target, RESULT_MAX_BYTES, isInterviewResult)
+    if (previous.status === 'unreadable') throw new Error('Existing result could not be read')
+    if (previous.status === 'valid') {
+      archivePreviousAnalysis(projectPath, previous.bytes, previous.value)
+    } else {
+      const backup = readValid(`${target}.bak`, RESULT_MAX_BYTES, isInterviewResult)
+      if (backup.status === 'valid') archivePreviousAnalysis(projectPath, backup.bytes, backup.value)
+    }
     writePreserving(target, result, RESULT_MAX_BYTES, isInterviewResult)
     clearDiagnostic(resultId(projectPath))
+    return analysisId(result)
   } catch {
     throw new Error(STORAGE_MESSAGES.saveResult)
   }
@@ -529,6 +637,74 @@ export function loadResult(projectPath: string): InterviewResult | null {
   if (result.status === 'missing') return null
   if (result.status === 'corrupt') throw new Error(STORAGE_MESSAGES.corruptResult)
   throw new Error(STORAGE_MESSAGES.unreadableResult)
+}
+
+export function listAnalyses(projectPath: string, cursor?: string): AnalysisPage {
+  const summaries = new Map<string, AnalysisSummary>()
+  try {
+    const latest = loadResult(projectPath)
+    if (latest) {
+      const summary: AnalysisSummary = {
+        id: analysisId(latest),
+        createdAt: latest.createdAt,
+        granularity: latest.granularity,
+        roleFocus: latest.roleFocus
+      }
+      summaries.set(summary.id, summary)
+    }
+  } catch (error) {
+    // A damaged latest file is diagnosed by loadResult; archived rows remain browseable.
+    if (!isStoredResultReadError(error)) throw error
+  }
+  for (const summary of historySummaries(projectPath)) {
+    if (!summaries.has(summary.id)) summaries.set(summary.id, summary)
+  }
+  const sorted = [...summaries.values()].sort((left, right) =>
+    Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id)
+  )
+  const start = cursor === undefined ? 0 : sorted.findIndex((item) => item.id === cursor) + 1
+  if (cursor !== undefined && start === 0) return { items: [], nextCursor: null }
+  const items = sorted.slice(start, start + HISTORY_PAGE_SIZE)
+  const hasMore = start + items.length < sorted.length
+  return { items, nextCursor: hasMore ? items[items.length - 1]?.id ?? null : null }
+}
+
+export function loadAnalysis(projectPath: string, id: string): InterviewResult | null {
+  if (!/^[a-f0-9]{64}$/.test(id)) return null
+  try {
+    const latest = loadResult(projectPath)
+    if (latest && analysisId(latest) === id) return latest
+  } catch (error) {
+    // Continue to the immutable archive when the current result is damaged.
+    if (!isStoredResultReadError(error)) throw error
+  }
+  const directory = analysisHistoryDir(projectPath)
+  let stat: fs.Stats
+  try {
+    stat = fs.lstatSync(directory)
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code === 'ENOENT') return null
+    throw new Error(STORAGE_MESSAGES.unreadableResult)
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(STORAGE_MESSAGES.unreadableResult)
+  const filename = historySummaries(projectPath).find((summary) => summary.id === id)
+  if (!filename) return null
+  const target = path.join(directory, analysisFilename(filename))
+  try {
+    const entryStat = fs.lstatSync(target)
+    if (!entryStat.isFile() || entryStat.isSymbolicLink()) throw new Error('Unsafe history entry')
+    const record = readValid(target, RESULT_MAX_BYTES, isInterviewResult)
+    if (record.status !== 'valid') throw new Error(STORAGE_MESSAGES.corruptResult)
+    const actualId = analysisId(record.value)
+    if (actualId !== id || Date.parse(record.value.createdAt) !== Date.parse(filename.createdAt) || record.value.granularity !== filename.granularity || record.value.roleFocus !== filename.roleFocus) {
+      throw new Error(STORAGE_MESSAGES.corruptResult)
+    }
+    return record.value
+  } catch (error) {
+    if (error instanceof Error && Object.values(STORAGE_MESSAGES).some((message) => message === error.message)) throw error
+    throw new Error(STORAGE_MESSAGES.unreadableResult)
+  }
 }
 
 export function deleteResult(projectPath: string): void {
@@ -575,13 +751,14 @@ export function getRecentProjects(): RecentProject[] {
 export function addRecentProject(entry: { path: string; name: string; granularity?: string }): RecentProject[] {
   const name = entry.name || (isFilesystemRoot(entry.path) ? projectDisplayName(entry.path) : entry.name)
   const list = getRecentProjects().filter((p) => p.path !== entry.path)
+  if (list.length >= RECENT_PROJECT_LIMIT) throw new Error(STORAGE_WRITE_FAILED)
   list.unshift({
     path: entry.path,
     name,
     lastUsedAt: new Date().toISOString(),
     ...(entry.granularity ? { granularity: entry.granularity as RecentProject['granularity'] } : {})
   })
-  const capped = list.slice(0, 20)
+  const capped = list
   try {
     writePreserving(userDataFile('recent.json'), capped, RECENT_MAX_BYTES, isRecentProjects)
     clearDiagnostic('recent')

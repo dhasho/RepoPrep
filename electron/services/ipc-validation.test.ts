@@ -25,6 +25,7 @@ test('每个 invoke 通道全部登记且各自接受合法参数形状', () => 
   const valid = new Map<string, unknown[]>([
     [IPC.selectFolder, []], [IPC.scanProject, ['C:\\demo']], [IPC.recentProjects, []],
     [IPC.removeRecent, ['C:\\demo']], [IPC.loadResult, ['C:\\demo']], [IPC.deleteResult, ['C:\\demo']],
+    [IPC.listAnalyses, ['C:\\demo']], [IPC.loadAnalysis, ['C:\\demo', 'a'.repeat(64)]],
     [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
     [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
     [IPC.explainCancel, [requestId]], [IPC.settingsGet, []], [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]],
@@ -58,6 +59,18 @@ test('路径、枚举和字符串边界严格校验', () => {
   rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'unknown', roleFocus: 'general', profileId: 'p1' })
   rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'unknown', profileId: 'p1' })
   rejects(IPC.explainStart, { requestId: 'r1', term: 't', profileId: 'p1', projectSummary: '', question: 'q', snippet: 'x'.repeat(24_001) })
+})
+
+test('analysis IPC 校验 optional cursor 和 lowercase SHA-256 id', () => {
+  assert.doesNotThrow(() => validateIpcArgs(IPC.listAnalyses, ['C:\\demo', 'f'.repeat(64)]))
+  for (const id of ['A'.repeat(64), 'f'.repeat(63), `${'f'.repeat(63)}g`, '../'.padEnd(64, 'a')]) {
+    rejects(IPC.listAnalyses, 'C:\\demo', id)
+    rejects(IPC.loadAnalysis, 'C:\\demo', id)
+  }
+  rejects(IPC.listAnalyses, 'C:\\demo', undefined)
+  rejects(IPC.listAnalyses, 'relative', 'f'.repeat(64))
+  rejects(IPC.loadAnalysis, 'C:\\demo')
+  rejects(IPC.loadAnalysis, 'C:\\demo', 'f'.repeat(64), 'extra')
 })
 
 test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', () => {

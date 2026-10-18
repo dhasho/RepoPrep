@@ -134,6 +134,15 @@ const validators: Record<string, Validator> = {
   [IPC.removeRecent]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.loadResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.deleteResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
+  [IPC.listAnalyses]: (a) => {
+    if (!Array.isArray(a) || (a.length !== 1 && a.length !== 2)) fail(messages.args)
+    absolutePath(a[0])
+    if (a.length === 2 && (typeof a[1] !== 'string' || !/^[a-f0-9]{64}$/.test(a[1]))) fail()
+  },
+  [IPC.loadAnalysis]: (a) => {
+    exactArgs(a, 2); absolutePath(a[0])
+    if (typeof a[1] !== 'string' || !/^[a-f0-9]{64}$/.test(a[1])) fail()
+  },
   [IPC.generateRun]: (a) => { exactArgs(a, 1); generateRequest(a[0]) },
   [IPC.explainStart]: (a) => { exactArgs(a, 1); explain(a[0]) },
   [IPC.explainCancel]: (a) => { exactArgs(a, 1); requestId(a[0]) },

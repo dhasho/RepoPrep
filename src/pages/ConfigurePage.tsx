@@ -1,18 +1,15 @@
 // 配置页：项目概览 + 颗粒度/方向选择 + 开始生成
 import { useState } from 'react'
-import type { GenerateOptions, Granularity, InterviewResult, ProjectOverview, RoleFocus, PublicSettings } from '@shared/types'
+import type { GenerateOptions, Granularity, ProjectOverview, RoleFocus, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
 import FileTreeView from '../components/FileTreeView'
 
 interface Props {
   overview: ProjectOverview
-  existingResult: InterviewResult | null
   settings: PublicSettings
   initialOptions?: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>
   notice?: string | null
   onStart: (options: GenerateOptions) => void
-  onViewExisting: (result: InterviewResult, sourceRecentPath: string) => void
-  projectStoragePath: string
   busyTask?: { projectName: string; runId: string; cancelling: boolean } | null
   onResumeTask?: () => void
 }
@@ -24,7 +21,7 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)}GB`
 }
 
-export default function ConfigurePage({ overview, existingResult, settings, initialOptions, notice = null, onStart, onViewExisting, projectStoragePath, busyTask = null, onResumeTask }: Props) {
+export default function ConfigurePage({ overview, settings, initialOptions, notice = null, onStart, busyTask = null, onResumeTask }: Props) {
   const [granularity, setGranularity] = useState<Granularity>(initialOptions?.granularity ?? 'medium')
   const [roleFocus, setRoleFocus] = useState<RoleFocus>(initialOptions?.roleFocus ?? 'general')
   const preferredProfileId = initialOptions?.profileId
@@ -47,17 +44,9 @@ export default function ConfigurePage({ overview, existingResult, settings, init
               {overview.root}
             </p>
           </div>
-          {existingResult && (
-            <button
-              className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
-              onClick={() => onViewExisting(existingResult, projectStoragePath)}
-            >
-              查看上次生成结果（{new Date(existingResult.createdAt).toLocaleString('zh-CN')}）
-            </button>
-          )}
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[380px_1fr]">
+        <div className="config-layout mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
           {/* 左：项目概览 */}
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-white p-4">

@@ -4,6 +4,8 @@ import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { api } from './lib/ipc'
 import { GenerationSession, type GenerationTask } from './lib/generation-session'
+import { useProjectLibrary } from './hooks/useProjectLibrary'
+import ProjectSidebar from './components/ProjectSidebar'
 import SelectPage from './pages/SelectPage'
 import ConfigurePage from './pages/ConfigurePage'
 import GeneratingPage from './pages/GeneratingPage'
@@ -11,7 +13,7 @@ import ResultPage from './pages/ResultPage'
 import SettingsPage from './pages/SettingsPage'
 
 export type View = 'select' | 'configure' | 'generating' | 'result' | 'settings'
-type LeaveTarget = { kind: 'select' | 'settings' } | { kind: 'task'; runId: string }
+type LeaveTarget = { kind: 'select' | 'settings' | 'newProject' } | { kind: 'task'; runId: string } | { kind: 'project'; path: string } | { kind: 'analysis'; path: string; analysisId: string }
 type HistoryRecoveryStatus = 'scanning' | 'removing' | 'error'
 interface HistoryRecoveryState {
   result: InterviewResult
@@ -67,6 +69,8 @@ export default function App() {
   const [existingResult, setExistingResult] = useState<InterviewResult | null>(null)
   const [result, setResult] = useState<InterviewResult | null>(null)
   const [resultStoragePath, setResultStoragePath] = useState<string | null>(null)
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null)
+  const [navigationError, setNavigationError] = useState<string | null>(null)
   const [settings, setSettings] = useState<PublicSettings>({ profiles: [], defaultProfileId: null })
   const [configureInitialOptions, setConfigureInitialOptions] = useState<GenerateOptions | undefined>()
   const [configureNotice, setConfigureNotice] = useState<string | null>(null)
@@ -77,7 +81,8 @@ export default function App() {
   const [storageRecovery, setStorageRecovery] = useState<{ id: string; error: string } | null>(null)
   const [recoveringStorageId, setRecoveringStorageId] = useState<string | null>(null)
   const recoveryLock = useRef(false)
-  const [selectPageRevision, setSelectPageRevision] = useState(0)
+  const folderPickerOpen = useRef(false)
+  const refreshedTaskIds = useRef(new Set<string>())
   const diagnosticsRequest = useRef(0)
   const mounted = useRef(false)
 
@@ -103,6 +108,8 @@ export default function App() {
       if (mounted.current) setSettings(next)
     }).catch(() => undefined).finally(refreshStorageDiagnostics)
   }, [refreshStorageDiagnostics])
+
+  const projectLibrary = useProjectLibrary(refreshStorageDiagnostics)
 
   useEffect(() => {
     mounted.current = true
@@ -131,6 +138,7 @@ export default function App() {
       setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setExistingResult(task.result)
       setResult(task.result)
+      setSelectedAnalysisId(task.analysisId ?? null)
       setResultStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setForegroundRunId(null)
       navigationEpoch.current++
@@ -151,6 +159,15 @@ export default function App() {
     }
   }, [foregroundTask])
 
+  useEffect(() => {
+    for (const task of sessionSnapshot.tasks) {
+      if (task.status === 'succeeded' && !refreshedTaskIds.current.has(task.runId)) {
+        refreshedTaskIds.current.add(task.runId)
+        projectLibrary.refresh().then(() => projectLibrary.refreshAnalyses(task.resultStoragePath ?? task.options.projectPath))
+      }
+    }
+  }, [projectLibrary.refresh, projectLibrary.refreshAnalyses, sessionSnapshot.tasks])
+
   const restoreTask = (task: GenerationTask) => {
     navigationEpoch.current++
     historyRecoveryAttempt.current = null
@@ -161,6 +178,7 @@ export default function App() {
       setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setExistingResult(task.result)
       setResult(task.result)
+      setSelectedAnalysisId(task.analysisId ?? null)
       setResultStoragePath(task.resultStoragePath ?? task.options.projectPath)
       setForegroundRunId(null)
       setView('result')
@@ -190,6 +208,19 @@ export default function App() {
     if (target.kind === 'task') {
       const task = session.getTask(target.runId)
       if (task) restoreTask(task)
+      return
+    }
+    if (target.kind === 'project') {
+      projectLibrary.expand(target.path)
+      void openProject(target.path)
+      return
+    }
+    if (target.kind === 'analysis') {
+      void openAnalysis(target.path, target.analysisId)
+      return
+    }
+    if (target.kind === 'newProject') {
+      void chooseNewProject()
       return
     }
     if (target.kind === 'settings') setPrevView(from === 'generating' ? 'select' : from)
@@ -223,31 +254,80 @@ export default function App() {
   /** Open (scan) a project and enter its configuration page. */
   const openProject = useCallback(async (path: string) => {
     const ticket = ++navigationEpoch.current
+    setNavigationError(null)
     historyRecoveryAttempt.current = null
-    const nextOverview = await api.scanProject(path)
-    if (ticket !== navigationEpoch.current) return
-    let nextResult: InterviewResult | null
-    let notice: string | null = null
     try {
-      nextResult = await api.loadResult(nextOverview.storagePath ?? path)
+      const nextOverview = await api.scanProject(path)
+      if (ticket !== navigationEpoch.current) return
+      let nextResult: InterviewResult | null
+      let notice: string | null = null
+      try {
+        nextResult = await api.loadResult(nextOverview.storagePath ?? path)
+        refreshStorageDiagnostics()
+      } catch (error) {
+        refreshStorageDiagnostics()
+        if (ticket !== navigationEpoch.current) return
+        if (!isInvalidHistoryLoadError(error) && !isCorruptHistoryLoadError(error)) throw error
+        nextResult = null
+        notice = isCorruptHistoryLoadError(error) ? STORAGE_MESSAGES.corruptResult : RESULT_CONTRACT_MESSAGES.history
+      }
+      if (ticket !== navigationEpoch.current) return
+      const storagePath = nextOverview.storagePath ?? path
+      setOverview(nextOverview)
+      setProjectStoragePath(storagePath)
+      setExistingResult(nextResult)
+      setSelectedAnalysisId(null)
+      setConfigureInitialOptions(undefined)
+      setConfigureNotice(notice)
+      setConfigureRevision((revision) => revision + 1)
+      setHistoryRecovery(null)
+      setView('configure')
+      void projectLibrary.refresh()
+    } catch (error) {
+      if (ticket === navigationEpoch.current) setNavigationError(`打开项目失败：${errorMessage(error)}`)
+    }
+  }, [projectLibrary.refresh, refreshStorageDiagnostics])
+
+  const openAnalysis = useCallback(async (path: string, analysisId: string) => {
+    const ticket = ++navigationEpoch.current
+    setNavigationError(null)
+    historyRecoveryAttempt.current = null
+    try {
+      const loaded = await api.loadAnalysis(path, analysisId)
+      if (ticket !== navigationEpoch.current) return
+      if (!loaded) throw new Error('所选分析记录已不存在。')
+      setProjectStoragePath(path)
+      setSelectedAnalysisId(analysisId)
+      setResult(loaded)
+      setResultStoragePath(path)
+      setHistoryRecovery(null)
+      setView('result')
       refreshStorageDiagnostics()
     } catch (error) {
-      refreshStorageDiagnostics()
-      if (ticket !== navigationEpoch.current) return
-      if (!isInvalidHistoryLoadError(error) && !isCorruptHistoryLoadError(error)) throw error
-      nextResult = null
-      notice = isCorruptHistoryLoadError(error) ? STORAGE_MESSAGES.corruptResult : RESULT_CONTRACT_MESSAGES.history
+      if (ticket === navigationEpoch.current) {
+        refreshStorageDiagnostics()
+        setNavigationError(`打开分析记录失败：${errorMessage(error)}`)
+      }
     }
-    if (ticket !== navigationEpoch.current) return
-    setOverview(nextOverview)
-    setProjectStoragePath(nextOverview.storagePath ?? path)
-    setExistingResult(nextResult)
-    setConfigureInitialOptions(undefined)
-    setConfigureNotice(notice)
-    setConfigureRevision((revision) => revision + 1)
-    setHistoryRecovery(null)
-    setView('configure')
   }, [refreshStorageDiagnostics])
+
+  const chooseNewProject = useCallback(async () => {
+    if (folderPickerOpen.current) return
+    folderPickerOpen.current = true
+    setNavigationError(null)
+    try {
+      const selectedPath = await api.selectFolder()
+      if (selectedPath) {
+        await openProject(selectedPath)
+      } else if (viewRef.current === 'generating' && foregroundRunId) {
+        session.resume(foregroundRunId)
+      }
+    } catch (error) {
+      setNavigationError(`打开项目失败：${errorMessage(error)}`)
+    } finally {
+      folderPickerOpen.current = false
+    }
+  }, [foregroundRunId, openProject, session])
 
   const recoverStorage = async (diagnostic: StorageDiagnostic) => {
     if (!diagnostic.canRecover || recoveryLock.current) return
@@ -258,18 +338,21 @@ export default function App() {
     try {
       await api.recoverStorage(diagnostic.id)
       refreshStorageDiagnostics()
-      if (diagnostic.kind === 'settings') refreshSettings()
-      if (mounted.current && ticket === navigationEpoch.current && viewRef.current === 'select' && (diagnostic.kind === 'recent' || diagnostic.kind === 'result')) {
-        setSelectPageRevision((revision) => revision + 1)
+      if (diagnostic.kind === 'recent' || diagnostic.kind === 'result') {
+        void projectLibrary.refresh()
+        if (diagnostic.projectPath) projectLibrary.refreshAnalyses(diagnostic.projectPath)
       }
+      if (diagnostic.kind === 'settings') refreshSettings()
       if (
         diagnostic.kind === 'result' && diagnostic.projectPath && mounted.current &&
         ticket === navigationEpoch.current && viewRef.current === 'result' && resultStoragePath === diagnostic.projectPath
       ) {
         try {
-          const recoveredResult = await api.loadResult(diagnostic.projectPath)
+          const recoveredResult = selectedAnalysisId
+            ? await api.loadAnalysis(diagnostic.projectPath, selectedAnalysisId)
+            : await api.loadResult(diagnostic.projectPath)
           if (mounted.current && ticket === navigationEpoch.current && viewRef.current === 'result' && resultStoragePath === diagnostic.projectPath && recoveredResult) {
-            setResult(recoveredResult)
+            if (recoveredResult) setResult(recoveredResult)
             setResultStoragePath(diagnostic.projectPath)
           }
         } catch {
@@ -358,6 +441,7 @@ export default function App() {
       setConfigureRevision((revision) => revision + 1)
       setHistoryRecovery(null)
       setView('configure')
+      void projectLibrary.refresh()
     } catch (error) {
       if (!isCurrentAttempt()) return
       setHistoryRecovery({ result: history, sourceRecentPath, targetPath, status: 'error', error: errorMessage(error) })
@@ -421,6 +505,7 @@ export default function App() {
       historyRecoveryAttempt.current = null
       setHistoryRecovery(null)
       setView('select')
+      void projectLibrary.refresh()
     } catch (error) {
       if (ticket !== navigationEpoch.current || historyRecoveryAttempt.current !== ticket) return
       historyRecoveryAttempt.current = null
@@ -433,15 +518,6 @@ export default function App() {
     historyRecoveryAttempt.current = null
     setHistoryRecovery(null)
   }
-
-  const viewExisting = useCallback((nextResult: InterviewResult, sourceRecentPath: string) => {
-    navigationEpoch.current++
-    historyRecoveryAttempt.current = null
-    setHistoryRecovery(null)
-    setResult(nextResult)
-    setResultStoragePath(sourceRecentPath)
-    setView('result')
-  }, [])
 
   const busyForConfigure = activeTask && (activeTask.status === 'running' || activeTask.status === 'cancelling')
     ? { projectName: activeTask.overview.name, runId: activeTask.runId, cancelling: activeTask.status === 'cancelling' }
@@ -494,70 +570,85 @@ export default function App() {
             ))}
           </section>
         )}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {view === 'select' && (
-            <SelectPage key={selectPageRevision} settings={settings} openProject={openProject} viewExisting={viewExisting} openSettings={() => requestNavigation({ kind: 'settings' })} onStorageRead={refreshStorageDiagnostics} storageDiagnostics={storageDiagnostics} />
-          )}
-          {view === 'configure' && overview && (
-            <ConfigurePage
-              key={`${overview.root}:${configureRevision}`}
-              overview={overview}
-              projectStoragePath={projectStoragePath ?? overview.root}
-              existingResult={existingResult}
-              settings={settings}
-              initialOptions={configureInitialOptions}
-              notice={configureNotice}
-              onStart={startGenerate}
-              onViewExisting={viewExisting}
-              busyTask={busyForConfigure}
-              onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {view !== 'result' && (
+            <ProjectSidebar
+              key="project-sidebar"
+              projects={projectLibrary.projects}
+              loading={projectLibrary.loading}
+              error={projectLibrary.error}
+              selectedProjectPath={projectStoragePath}
+              selectedAnalysisId={selectedAnalysisId}
+              onNew={() => requestNavigation({ kind: 'newProject' })}
+              onSelectProject={(path) => requestNavigation({ kind: 'project', path })}
+              onSelectAnalysis={(path, analysis) => requestNavigation({ kind: 'analysis', path, analysisId: analysis.id })}
+              onToggleProject={projectLibrary.toggleExpanded}
+              onLoadMore={projectLibrary.loadMore}
+              onRemove={(path) => { void projectLibrary.remove(path).catch(() => setNavigationError('从最近项目移除失败。')) }}
             />
           )}
-          {view === 'generating' && foregroundTask && (
-            <GeneratingPage
-              overview={foregroundTask.overview as ProjectOverview}
-              options={foregroundTask.options as GenerateOptions}
-              progress={foregroundTask.progress}
-              logs={foregroundTask.logs}
-              error={foregroundTask.error}
-              cancelling={foregroundTask.status === 'cancelling'}
-              onCancel={cancelGenerate}
-              onBack={() => {
-                setOverview(foregroundTask.overview as ProjectOverview)
-                setProjectStoragePath(foregroundTask.options.projectPath)
-                setExistingResult(foregroundTask.existingResult as InterviewResult | null)
-                setForegroundRunId(null)
-                setConfigureInitialOptions({
-                  projectPath: foregroundTask.options.projectPath,
-                  granularity: foregroundTask.options.granularity,
-                  roleFocus: foregroundTask.options.roleFocus,
-                  profileId: foregroundTask.options.profileId
-                })
-                setConfigureNotice(null)
-                setConfigureRevision((revision) => revision + 1)
-                navigationEpoch.current++
-                setView('configure')
-              }}
-            />
-          )}
-          {view === 'result' && result && (
-            <ResultPage
-              result={result}
-              settings={settings}
-              onRegenerate={() => beginHistoryRecovery(result, resultStoragePath ?? result.projectPath)}
-              regenerating={Boolean(historyRecovery)}
-            />
-          )}
-          {view === 'settings' && (
-            <SettingsPage
-              settings={settings}
-              onSaved={(next) => { setSettings(next); refreshSettings(); refreshStorageDiagnostics() }}
-              onBack={() => {
-                navigationEpoch.current++
-                setView(prevView === 'settings' ? 'select' : prevView)
-              }}
-            />
-          )}
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+            {navigationError && <p className="mx-4 mt-3 rounded-lg bg-rose-50 px-4 py-2 text-sm text-rose-700" role="alert">{navigationError}</p>}
+            {view === 'select' && <SelectPage />}
+            {view === 'configure' && overview && (
+              <ConfigurePage
+                key={`${overview.root}:${configureRevision}`}
+                overview={overview}
+                settings={settings}
+                initialOptions={configureInitialOptions}
+                notice={configureNotice}
+                onStart={startGenerate}
+                busyTask={busyForConfigure}
+                onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
+              />
+            )}
+            {view === 'generating' && foregroundTask && (
+              <GeneratingPage
+                overview={foregroundTask.overview as ProjectOverview}
+                options={foregroundTask.options as GenerateOptions}
+                progress={foregroundTask.progress}
+                logs={foregroundTask.logs}
+                error={foregroundTask.error}
+                cancelling={foregroundTask.status === 'cancelling'}
+                onCancel={cancelGenerate}
+                onBack={() => {
+                  setOverview(foregroundTask.overview as ProjectOverview)
+                  setProjectStoragePath(foregroundTask.options.projectPath)
+                  setExistingResult(foregroundTask.existingResult as InterviewResult | null)
+                  setForegroundRunId(null)
+                  setConfigureInitialOptions({
+                    projectPath: foregroundTask.options.projectPath,
+                    granularity: foregroundTask.options.granularity,
+                    roleFocus: foregroundTask.options.roleFocus,
+                    profileId: foregroundTask.options.profileId
+                  })
+                  setConfigureNotice(null)
+                  setConfigureRevision((revision) => revision + 1)
+                  navigationEpoch.current++
+                  setView('configure')
+                }}
+              />
+            )}
+            {view === 'result' && result && (
+              <ResultPage
+                result={result}
+                settings={settings}
+                onRegenerate={() => beginHistoryRecovery(result, resultStoragePath ?? result.projectPath)}
+                regenerating={Boolean(historyRecovery)}
+                sidebarClassName="sidebar-enter"
+              />
+            )}
+            {view === 'settings' && (
+              <SettingsPage
+                settings={settings}
+                onSaved={(next) => { setSettings(next); refreshSettings(); refreshStorageDiagnostics() }}
+                onBack={() => {
+                  navigationEpoch.current++
+                  setView(prevView === 'settings' ? 'select' : prevView)
+                }}
+              />
+            )}
+          </div>
         </div>
       </main>
 

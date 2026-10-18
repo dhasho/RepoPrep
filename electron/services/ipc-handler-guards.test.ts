@@ -23,6 +23,7 @@ const result = {
 const inputs = new Map<string, unknown[]>([
   [IPC.selectFolder, []], [IPC.scanProject, ['C:\\demo']], [IPC.recentProjects, []],
   [IPC.removeRecent, ['C:\\demo']], [IPC.loadResult, ['C:\\demo']], [IPC.deleteResult, ['C:\\demo']],
+  [IPC.listAnalyses, ['C:\\demo']], [IPC.loadAnalysis, ['C:\\demo', 'a'.repeat(64)]],
   [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
   [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
   [IPC.explainCancel, [requestId]], [IPC.settingsGet, []],
@@ -85,6 +86,7 @@ test('项目 handler 与导出 handler 收到 registry 中登记的原始路径'
   projects.registerSelected('C:\\Demo')
   for (const [channel, args] of [
     [IPC.scanProject, ['c:\\demo']], [IPC.loadResult, ['c:\\demo']],
+    [IPC.listAnalyses, ['c:\\demo']], [IPC.loadAnalysis, ['c:\\demo', 'a'.repeat(64)]],
     [IPC.deleteResult, ['c:\\demo']],
     [IPC.generateRun, [{ ...inputs.get(IPC.generateRun)![0] as object, projectPath: 'c:\\demo' }]],
     [IPC.exportMarkdown, [{ ...result, projectPath: 'c:\\demo' }]]
@@ -161,6 +163,7 @@ test('拒绝子框架、其他窗口与尚未确定信任入口的请求', async
 test('路径操作与导出拒绝未登记项目，服务层不执行', async () => {
   for (const [channel, args] of [
     [IPC.scanProject, ['C:\\private']], [IPC.loadResult, ['C:\\private']],
+    [IPC.listAnalyses, ['C:\\private']], [IPC.loadAnalysis, ['C:\\private', 'a'.repeat(64)]],
     [IPC.deleteResult, ['C:\\private']], [IPC.generateRun, [{ ...inputs.get(IPC.generateRun)![0] as object, projectPath: 'C:\\private' }]],
     [IPC.exportMarkdown, [{ ...result, projectPath: 'C:\\private' }]]
   ] as Array<[string, unknown[]]>) {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import { IPC } from '../shared/ipc.ts'
@@ -57,7 +57,11 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   const appEvents = new Map()
   const windows = []
   const saves = []
+  const analysisLists = []
+  const analysisLoads = []
+  const deletedResultPaths = []
   const recents = []
+  let storedRecentProjects = [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }]
   const probeCalls = []
   const appDataPath = path.join(path.parse(root).root, 'AppData', 'Roaming')
   let ready
@@ -136,15 +140,26 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   })
   modules.set('./services/store', {
     addRecentProject: (value) => recents.push(value),
-    deleteResult() {},
-    getRecentProjects: () => [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }],
+    deleteResult: (requestedPath) => deletedResultPaths.push(requestedPath),
+    getRecentProjects: () => [...storedRecentProjects],
     getSettings: () => ({ profiles: [{ id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }] }),
     getPrivateProfile: suppliedGetPrivateProfile ?? (async (id) => ({ ...savedProfile, id })),
     getStorageDiagnostics: () => [],
+    listAnalyses: (requestedPath, cursor) => {
+      analysisLists.push({ projectPath: requestedPath, cursor })
+      return { items: [], nextCursor: null }
+    },
+    loadAnalysis: (requestedPath, id) => {
+      analysisLoads.push({ projectPath: requestedPath, id })
+      return null
+    },
     loadResult: () => null,
-    removeRecentProject: async () => {},
+    removeRecentProject: async (requestedPath) => { storedRecentProjects = storedRecentProjects.filter((entry) => entry.path !== requestedPath) },
     recoverStorage() {},
-    saveResult: (...args) => saves.push(args),
+    saveResult: (...args) => {
+      saves.push(args)
+      return createHash('sha256').update(JSON.stringify(args[1])).digest('hex')
+    },
     saveSettings: (...args) => saveSettingsImpl(...args)
   })
 
@@ -186,6 +201,9 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
     sender,
     invoke,
     saves,
+    analysisLists,
+    analysisLoads,
+    deletedResultPaths,
     recents,
     probeCalls,
     TimeoutError: LlmRequestError,
@@ -240,6 +258,45 @@ test('trusted renderer reaches the exact generation-timeout business message thr
   const untrusted = { sender: h.sender, senderFrame: { url: h.sender.mainFrame.url } }
   await assert.rejects(h.handlers.get(IPC.generateRun)(untrusted, options), /请求无效或未获授权/)
   assert.equal(calls, 1, 'untrusted sender must be rejected before main handler execution')
+})
+
+test('analysis history IPC validates IDs and keeps both endpoints behind renderer and project guards', async () => {
+  const h = await createHarness()
+  const id = 'a'.repeat(64)
+  assert.deepEqual(await h.invoke(IPC.listAnalyses, PROJECT_PATH), { items: [], nextCursor: null })
+  assert.equal(await h.invoke(IPC.loadAnalysis, PROJECT_PATH, id), null)
+  assert.deepEqual(h.analysisLists, [{ projectPath: PROJECT_PATH, cursor: undefined }])
+  assert.deepEqual(h.analysisLoads, [{ projectPath: PROJECT_PATH, id }])
+
+  const callsBeforeRejects = [h.analysisLists.length, h.analysisLoads.length]
+  await assert.rejects(h.invoke(IPC.listAnalyses, PROJECT_PATH, 'not-a-cursor'), /请求无效或未获授权/)
+  await assert.rejects(h.invoke(IPC.loadAnalysis, PROJECT_PATH, '../not-an-analysis-id'), /请求无效或未获授权/)
+
+  const untrusted = { sender: h.sender, senderFrame: { url: h.sender.mainFrame.url } }
+  await assert.rejects(h.handlers.get(IPC.listAnalyses)(untrusted, PROJECT_PATH), /请求无效或未获授权/)
+  await assert.rejects(h.handlers.get(IPC.loadAnalysis)(untrusted, PROJECT_PATH, id), /请求无效或未获授权/)
+  assert.deepEqual([h.analysisLists.length, h.analysisLoads.length], callsBeforeRejects, 'invalid callers and IDs must be rejected before the store sees a request')
+})
+
+test('generation returns a stable-shaped analysis ID without exposing the private profile key', async () => {
+  const h = await createHarness()
+  const response = await h.invoke(IPC.generateRun, options)
+  assert.match(response.analysisId, /^[a-f0-9]{64}$/)
+  assert.equal(h.saves.length, 1)
+  assert.equal(h.saves[0][0], PROJECT_PATH)
+  assert.equal(JSON.stringify(response).includes('never-log-this'), false)
+})
+
+test('removing a recent project revokes analysis IPC authority without deleting saved history', async () => {
+  const h = await createHarness()
+  const id = 'b'.repeat(64)
+  await h.invoke(IPC.recentProjects)
+  await h.invoke(IPC.removeRecent, PROJECT_PATH)
+  await assert.rejects(h.invoke(IPC.listAnalyses, PROJECT_PATH), /请求无效或未获授权/)
+  await assert.rejects(h.invoke(IPC.loadAnalysis, PROJECT_PATH, id), /请求无效或未获授权/)
+  assert.deepEqual(h.analysisLists, [])
+  assert.deepEqual(h.analysisLoads, [])
+  assert.deepEqual(h.deletedResultPaths, [], 'recent removal must not delete the project result archive')
 })
 
 test('settings IPC awaits persistence and returns only allowlisted credential guidance', async () => {

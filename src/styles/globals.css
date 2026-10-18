@@ -12,6 +12,19 @@ body {
   @apply bg-slate-100 text-slate-800 antialiased;
 }
 
+.sidebar-enter {
+  animation: sidebar-enter 180ms ease-out both;
+}
+
+@keyframes sidebar-enter {
+  from { opacity: 0.72; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-enter { animation: none; }
+}
+
 .app-titlebar {
   -webkit-app-region: drag;
 }

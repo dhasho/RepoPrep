@@ -9,6 +9,8 @@ const api: ProjectLensApi = {
   removeRecent: (path) => ipcRenderer.invoke(IPC.removeRecent, path),
   loadResult: (projectPath) => ipcRenderer.invoke(IPC.loadResult, projectPath),
   deleteResult: (projectPath) => ipcRenderer.invoke(IPC.deleteResult, projectPath),
+  listAnalyses: (projectPath, cursor) => ipcRenderer.invoke(IPC.listAnalyses, projectPath, ...(cursor === undefined ? [] : [cursor])),
+  loadAnalysis: (projectPath, analysisId) => ipcRenderer.invoke(IPC.loadAnalysis, projectPath, analysisId),
   generate: (request) => ipcRenderer.invoke(IPC.generateRun, request),
   cancelGenerate: (runId) => ipcRenderer.invoke(IPC.generateCancel, runId),
   onGenerateProgress: (cb) => {

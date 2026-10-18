@@ -25,7 +25,7 @@ export interface IpcGuardDependencies {
   getStorageRecoveryProject?: (id: string) => string | null
 }
 
-const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.removeRecent])
+const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.listAnalyses, IPC.loadAnalysis, IPC.removeRecent])
 const invokeChannels = new Set<string>(INVOKE_CHANNELS)
 /**
  * 可以原样回显给渲染进程的业务提示。判据：消息必须由主进程静态构造、不含任何

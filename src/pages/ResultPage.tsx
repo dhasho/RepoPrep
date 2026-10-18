@@ -15,6 +15,7 @@ interface Props {
   settings: PublicSettings
   onRegenerate: () => void
   regenerating?: boolean
+  sidebarClassName?: string
   /** 仅用于测试：设置搜索框初始值（生产调用方不传，行为不变） */
   initialSearch?: string
 }
@@ -65,7 +66,7 @@ export default function ResultPage(props: Props) {
   )
 }
 
-function OwnedResultPage({ result, settings, onRegenerate, regenerating = false, initialSearch = '' }: Props) {
+function OwnedResultPage({ result, settings, onRegenerate, regenerating = false, initialSearch = '', sidebarClassName = '' }: Props) {
   const [search, setSearch] = useState(initialSearch)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeId, setActiveId] = useState('')
@@ -186,7 +187,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   return (
     <div className="flex h-full">
       {/* 左：大纲 */}
-      <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <aside className={`flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white ${sidebarClassName}`}>
         <div className="border-b border-slate-100 p-3">
           <input
             className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:bg-white"

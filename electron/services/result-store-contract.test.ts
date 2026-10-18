@@ -25,11 +25,11 @@ after(async () => {
   }
 })
 
-async function makeHarness(): Promise<{ store: Record<string, (...args: any[]) => any>; root: string; userData: string }> {
+async function makeHarness(existingUserData?: string): Promise<{ store: Record<string, (...args: any[]) => any>; root: string; userData: string }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue70-store-'))
   fixtureRoots.push(root)
-  const userData = path.join(root, 'user-data')
-  await fs.mkdir(userData)
+  const userData = existingUserData ?? path.join(root, 'user-data')
+  await fs.mkdir(userData, { recursive: true })
   const here = path.dirname(fileURLToPath(import.meta.url))
   const contractPath = path.resolve(here, '..', '..', 'shared', 'result-contract.ts')
   const contentReadPath = path.resolve(here, '..', '..', 'shared', 'content-read.ts')
@@ -119,6 +119,11 @@ function legacyGithubMetadata(): Record<string, unknown> {
 function storedResultFile(userData: string, projectPath: string): string {
   const hash = createHash('sha1').update(projectPath).digest('hex')
   return path.join(userData, 'projects', `${hash}.json`)
+}
+
+function storedHistoryDir(userData: string, projectPath: string): string {
+  const hash = createHash('sha1').update(projectPath).digest('hex')
+  return path.join(userData, 'projects', `${hash}.history`)
 }
 
 test('real store module loads old wide-glossary/profile result without migrating or rewriting it', async () => {
@@ -310,4 +315,213 @@ test('legacy empty root name in a backup stays loadable and recoverable without 
   await store.recoverStorage(diagnostic.id)
   assert.equal(await fs.readFile(file, 'utf8'), backupRaw, 'recovery copies the validated historical bytes unchanged')
   assert.notEqual(store.loadResult(projectPath).projectName, '')
+})
+
+test('saved analyses retain distinct granularities and load after replacing the latest result', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'analysis-history-project')
+  const first = { ...legacyAffectedResult(projectPath), createdAt: '2026-02-01T08:30:00+08:00', granularity: 'fine', roleFocus: 'backend' }
+  const second = { ...legacyAffectedResult(projectPath), createdAt: '2026-02-02T00:00:00.000Z', granularity: 'coarse', roleFocus: 'frontend', projectSummary: 'second analysis' }
+  const firstId = store.saveResult(projectPath, first)
+  const secondId = store.saveResult(projectPath, second)
+  assert.match(firstId, /^[a-f0-9]{64}$/)
+  assert.match(secondId, /^[a-f0-9]{64}$/)
+  assert.notEqual(firstId, secondId)
+  assert.equal(store.loadResult(projectPath).projectSummary, 'second analysis', 'legacy latest-result API still returns the latest version')
+
+  const page = store.listAnalyses(projectPath)
+  assert.deepEqual(page.items.map((item: any) => item.id), [secondId, firstId])
+  assert.deepEqual(page.items.map((item: any) => [item.granularity, item.roleFocus]), [['coarse', 'frontend'], ['fine', 'backend']])
+  assert.equal(page.nextCursor, null)
+  assert.equal(store.loadAnalysis(projectPath, firstId).createdAt, first.createdAt)
+
+  const historyDir = storedHistoryDir(userData, projectPath)
+  const reloaded = await fs.readFile(path.join(historyDir, (await fs.readdir(historyDir))[0]), 'utf8')
+  assert.ok(reloaded.includes('2026-02-01T08:30:00+08:00'), 'archive retains the original serialized record')
+})
+
+test('valid legacy result bytes are archived before overwrite and archive failure leaves latest untouched', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'archive-bytes-project')
+  const file = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const legacy = { ...legacyAffectedResult(projectPath), github: legacyGithubMetadata() }
+  const originalBytes = JSON.stringify(legacy, null, 2)
+  await fs.writeFile(file, originalBytes, 'utf8')
+  const normalized = store.loadResult(projectPath)
+  const id = createHash('sha256').update(JSON.stringify(normalized)).digest('hex')
+  const replacement = { ...legacyAffectedResult(projectPath), createdAt: '2026-03-01T00:00:00.000Z', projectSummary: 'new' }
+  store.saveResult(projectPath, replacement)
+  const archive = path.join(storedHistoryDir(userData, projectPath), (await fs.readdir(storedHistoryDir(userData, projectPath)))[0])
+  assert.equal(path.basename(archive).includes(id), true)
+  assert.equal(await fs.readFile(archive, 'utf8'), originalBytes, 'legacy github bytes are preserved exactly')
+  assert.equal(store.loadAnalysis(projectPath, id).projectSummary, '')
+
+  const latestBefore = await fs.readFile(file, 'utf8')
+  await fs.rm(storedHistoryDir(userData, projectPath), { recursive: true })
+  await fs.writeFile(storedHistoryDir(userData, projectPath), 'blocking file')
+  assert.throws(() => store.saveResult(projectPath, { ...replacement, projectSummary: 'must not save' }), /保存结果失败/)
+  assert.equal(await fs.readFile(file, 'utf8'), latestBefore, 'archive failure happens before replacing the current result')
+})
+
+test('analysis pages paginate stable ids and a missing cursor returns an empty page', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'many-analysis-history')
+  const ids: string[] = []
+  for (let index = 0; index < 53; index += 1) {
+    ids.push(store.saveResult(projectPath, {
+      ...legacyAffectedResult(projectPath),
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+      granularity: (['coarse', 'medium', 'fine'] as const)[index % 3],
+      projectSummary: `analysis ${index}`
+    }))
+  }
+  const first = store.listAnalyses(projectPath)
+  assert.equal(first.items.length, 50)
+  assert.ok(first.nextCursor)
+  const second = store.listAnalyses(projectPath, first.nextCursor)
+  assert.equal(second.items.length, 3)
+  assert.equal(second.nextCursor, null)
+  assert.equal(new Set([...first.items, ...second.items].map((item: any) => item.id)).size, 53)
+  assert.equal(store.listAnalyses(projectPath, 'f'.repeat(64)).items.length, 0)
+  assert.equal(store.loadAnalysis(projectPath, ids[0]).projectSummary, 'analysis 0')
+})
+
+test('corrupt archived record does not prevent loading other analysis records', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'one-corrupt-analysis')
+  const first = store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), projectSummary: 'first' })
+  const second = store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), createdAt: '2026-04-01T00:00:00.000Z', projectSummary: 'second' })
+  const rows = store.listAnalyses(projectPath).items
+  const badRow = rows.find((row: any) => row.id === first)
+  const historyDir = storedHistoryDir(userData, projectPath)
+  const badName = (await fs.readdir(historyDir)).find((name) => name.includes(first))!
+  await fs.writeFile(path.join(historyDir, badName), '{ broken', 'utf8')
+  assert.equal(store.listAnalyses(projectPath).items.length, 2, 'bad archive metadata does not hide healthy summaries')
+  assert.throws(() => store.loadAnalysis(projectPath, first), /历史结果文件已损坏/)
+  assert.equal(store.loadAnalysis(projectPath, second).projectSummary, 'second')
+  assert.equal(badRow.id, first)
+})
+
+test('recent project capacity grows to 200 and rejects additions without evicting saved projects', async () => {
+  const { store, userData } = await makeHarness()
+  for (let index = 0; index < 200; index += 1) {
+    store.addRecentProject({ path: path.join(userData, `recent-${index}`), name: `Project ${index}` })
+  }
+  assert.equal(store.getRecentProjects().length, 200)
+  assert.throws(() => store.addRecentProject({ path: path.join(userData, 'recent-overflow'), name: 'Overflow' }), /保存本地数据失败/)
+  const retained = store.getRecentProjects()
+  assert.equal(retained.length, 200)
+  assert.ok(retained.some((project: any) => project.path.endsWith('recent-0')))
+  assert.ok(!retained.some((project: any) => project.path.endsWith('recent-overflow')))
+})
+
+test('corrupt latest with valid backup lists and loads the backup id, then archives exact backup bytes before save', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'corrupt-latest-valid-backup')
+  const latestFile = storedResultFile(userData, projectPath)
+  await fs.mkdir(path.dirname(latestFile), { recursive: true })
+  const backup = { ...legacyAffectedResult(projectPath), createdAt: '2026-05-01T01:02:03.000Z', projectSummary: 'backup value' }
+  const backupBytes = JSON.stringify(backup, null, 2)
+  await fs.writeFile(`${latestFile}.bak`, backupBytes, 'utf8')
+  await fs.writeFile(latestFile, '{ latest is corrupt', 'utf8')
+  const backupId = createHash('sha256').update(JSON.stringify(backup)).digest('hex')
+
+  assert.equal(store.listAnalyses(projectPath).items[0].id, backupId)
+  assert.equal(store.loadAnalysis(projectPath, backupId).projectSummary, 'backup value')
+  const replacement = { ...legacyAffectedResult(projectPath), createdAt: '2026-05-02T00:00:00.000Z', projectSummary: 'replacement' }
+  store.saveResult(projectPath, replacement)
+  const historyDir = storedHistoryDir(userData, projectPath)
+  const archiveName = (await fs.readdir(historyDir)).find((name) => name.includes(backupId))!
+  assert.equal(await fs.readFile(path.join(historyDir, archiveName), 'utf8'), backupBytes)
+  assert.equal(store.loadAnalysis(projectPath, backupId).projectSummary, 'backup value')
+
+  const blockedPath = path.join(userData, 'corrupt-latest-archive-blocked')
+  const blockedFile = storedResultFile(userData, blockedPath)
+  await fs.mkdir(path.dirname(blockedFile), { recursive: true })
+  await fs.writeFile(`${blockedFile}.bak`, backupBytes, 'utf8')
+  const corruptBytes = '{ preserve this corrupt latest'
+  await fs.writeFile(blockedFile, corruptBytes, 'utf8')
+  await fs.writeFile(storedHistoryDir(userData, blockedPath), 'blocking file')
+  assert.throws(() => store.saveResult(blockedPath, { ...replacement, projectPath: blockedPath }), /保存结果失败/)
+  assert.equal(await fs.readFile(blockedFile, 'utf8'), corruptBytes, 'archive failure leaves the latest bytes unchanged')
+  assert.equal(await fs.readFile(`${blockedFile}.bak`, 'utf8'), backupBytes, 'archive failure leaves backup bytes unchanged')
+  assert.equal(store.loadResult(projectPath).projectSummary, 'replacement')
+})
+
+test('corrupt latest and backup do not hide healthy archived analyses', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'bad-latest-and-backup')
+  const first = store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), projectSummary: 'archived one' })
+  const second = store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), createdAt: '2026-06-01T00:00:00.000Z', projectSummary: 'archived two' })
+  store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), createdAt: '2026-06-02T00:00:00.000Z', projectSummary: 'latest' })
+  const latestFile = storedResultFile(userData, projectPath)
+  await fs.writeFile(latestFile, '{ damaged primary', 'utf8')
+  await fs.writeFile(`${latestFile}.bak`, '{ damaged backup', 'utf8')
+
+  const ids = store.listAnalyses(projectPath).items.map((item: any) => item.id)
+  assert.deepEqual(new Set(ids), new Set([first, second]))
+  assert.equal(store.loadAnalysis(projectPath, first).projectSummary, 'archived one')
+  assert.equal(store.loadAnalysis(projectPath, second).projectSummary, 'archived two')
+})
+
+test('history data reloads from the same userData directory with a fresh store instance', async () => {
+  const firstHarness = await makeHarness()
+  const projectPath = path.join(firstHarness.userData, 'restart-history')
+  const first = firstHarness.store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), projectSummary: 'before restart' })
+  firstHarness.store.saveResult(projectPath, { ...legacyAffectedResult(projectPath), createdAt: '2026-07-01T00:00:00.000Z', projectSummary: 'after restart' })
+
+  const restarted = await makeHarness(firstHarness.userData)
+  assert.equal(restarted.store.loadAnalysis(projectPath, first).projectSummary, 'before restart')
+  assert.equal(restarted.store.listAnalyses(projectPath).items.length, 2)
+  assert.equal(restarted.store.loadResult(projectPath).projectSummary, 'after restart')
+})
+
+test('analysis identifiers are scoped to their project storage key', async () => {
+  const { store, userData } = await makeHarness()
+  const projectA = path.join(userData, 'project-a')
+  const projectB = path.join(userData, 'project-b')
+  const id = store.saveResult(projectA, { ...legacyAffectedResult(projectA), projectSummary: 'project A' })
+  assert.equal(store.loadAnalysis(projectB, id), null)
+  assert.equal(store.listAnalyses(projectB).items.length, 0)
+})
+
+test('history junctions and entry symlinks are not followed outside the private store', async (context) => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'history-links')
+  const external = path.join(userData, 'external-history')
+  await fs.mkdir(external)
+  const outside: Record<string, any> = { ...legacyAffectedResult(projectPath), projectSummary: 'external record' }
+  const id = createHash('sha256').update(JSON.stringify(outside)).digest('hex')
+  const outsideName = `${Date.parse(outside.createdAt)}-${outside.granularity}-${outside.roleFocus}-${id}.json`
+  await fs.writeFile(path.join(external, outsideName), JSON.stringify(outside, null, 2), 'utf8')
+  const linkedHistory = storedHistoryDir(userData, projectPath)
+  await fs.mkdir(path.dirname(linkedHistory), { recursive: true })
+  try {
+    await fs.symlink(external, linkedHistory, 'junction')
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EINVAL'].includes(code ?? '')) {
+      context.skip(`platform does not permit creating a junction/symlink fixture (${code})`)
+      return
+    }
+    throw error
+  }
+  assert.throws(() => store.listAnalyses(projectPath), /历史结果暂时无法读取/)
+  assert.throws(() => store.loadAnalysis(projectPath, id), /历史结果暂时无法读取/)
+
+  await fs.rm(linkedHistory, { recursive: true, force: true })
+  await fs.mkdir(linkedHistory)
+  try {
+    await fs.symlink(path.join(external, outsideName), path.join(linkedHistory, outsideName), 'file')
+  } catch (error) {
+    const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined
+    if (['EPERM', 'EACCES', 'ENOTSUP', 'EINVAL'].includes(code ?? '')) {
+      context.diagnostic(`file symlink check skipped (${code}); directory junction rejection was verified`)
+      return
+    }
+    throw error
+  }
+  assert.equal(store.listAnalyses(projectPath).items.length, 0)
+  assert.equal(store.loadAnalysis(projectPath, id), null)
 })
