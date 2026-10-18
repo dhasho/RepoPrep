@@ -6,14 +6,18 @@ import { api } from './lib/ipc'
 import { GenerationSession, type GenerationTask } from './lib/generation-session'
 import { useProjectLibrary } from './hooks/useProjectLibrary'
 import ProjectSidebar from './components/ProjectSidebar'
+import NavigationRail, { type SidebarMode } from './components/NavigationRail'
+import HistoryButtons from './components/HistoryButtons'
+import { createNavigationHistory, currentNavigation, replaceNavigation, stepNavigation, visitNavigation, type NavigationHistory } from './lib/navigation-history'
+import { pageKey, settleGenerationHistory, settleGenerationPage, type AppPageSnapshot, type GenerationFailureSnapshot, type View } from './lib/app-page-history'
 import SelectPage from './pages/SelectPage'
 import ConfigurePage from './pages/ConfigurePage'
 import GeneratingPage from './pages/GeneratingPage'
 import ResultPage from './pages/ResultPage'
 import SettingsPage from './pages/SettingsPage'
 
-export type View = 'select' | 'configure' | 'generating' | 'result' | 'settings'
-type LeaveTarget = { kind: 'select' | 'settings' | 'newProject' } | { kind: 'task'; runId: string } | { kind: 'project'; path: string } | { kind: 'analysis'; path: string; analysisId: string }
+export type { View } from './lib/app-page-history'
+type LeaveTarget = { kind: 'select' | 'settings' | 'newProject' } | { kind: 'task'; runId: string } | { kind: 'project'; path: string } | { kind: 'analysis'; path: string; analysisId: string } | { kind: 'historyStep'; delta: -1 | 1 } | { kind: 'restorePage'; page: AppPageSnapshot }
 type HistoryRecoveryStatus = 'scanning' | 'removing' | 'error'
 interface HistoryRecoveryState {
   result: InterviewResult
@@ -60,16 +64,18 @@ export default function App() {
   const viewRef = useRef(view)
   viewRef.current = view
   const navigationEpoch = useRef(0)
-  const [prevView, setPrevView] = useState<View>('select')
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('projects')
   const [leaveTarget, setLeaveTarget] = useState<LeaveTarget | null>(null)
   const [taskPanelOpen, setTaskPanelOpen] = useState(false)
   const [foregroundRunId, setForegroundRunId] = useState<string | null>(null)
+  const [generationFailure, setGenerationFailure] = useState<GenerationFailureSnapshot | null>(null)
   const [overview, setOverview] = useState<ProjectOverview | null>(null)
   const [projectStoragePath, setProjectStoragePath] = useState<string | null>(null)
   const [existingResult, setExistingResult] = useState<InterviewResult | null>(null)
   const [result, setResult] = useState<InterviewResult | null>(null)
   const [resultStoragePath, setResultStoragePath] = useState<string | null>(null)
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null)
+  const [lastAnalysisPage, setLastAnalysisPage] = useState<AppPageSnapshot | null>(null)
   const [navigationError, setNavigationError] = useState<string | null>(null)
   const [settings, setSettings] = useState<PublicSettings>({ profiles: [], defaultProfileId: null })
   const [configureInitialOptions, setConfigureInitialOptions] = useState<GenerateOptions | undefined>()
@@ -86,6 +92,84 @@ export default function App() {
   const diagnosticsRequest = useRef(0)
   const mounted = useRef(false)
 
+  const initialPage: AppPageSnapshot = {
+    view: 'select', sidebarMode: 'projects', overview: null, projectStoragePath: null,
+    existingResult: null, result: null, resultStoragePath: null, selectedAnalysisId: null,
+    configureInitialOptions: undefined, configureNotice: null, configureRevision: 0, foregroundRunId: null,
+    generationFailure: null
+  }
+  const [pageHistory, setPageHistory] = useState<NavigationHistory<AppPageSnapshot>>(
+    () => createNavigationHistory({ key: 'select', value: initialPage })
+  )
+  const pageHistoryRef = useRef(pageHistory)
+  const currentPageRef = useRef(initialPage)
+  const lastAnalysisPageRef = useRef<AppPageSnapshot | null>(null)
+
+  currentPageRef.current = {
+    view, sidebarMode, overview, projectStoragePath, existingResult, result, resultStoragePath,
+    selectedAnalysisId, configureInitialOptions, configureNotice, configureRevision, foregroundRunId, generationFailure
+  }
+
+  const updateHistory = (next: NavigationHistory<AppPageSnapshot>) => {
+    pageHistoryRef.current = next
+    setPageHistory(next)
+  }
+
+  const replaceHistoryPage = (page: AppPageSnapshot) => {
+    currentPageRef.current = page
+    updateHistory(replaceNavigation(pageHistoryRef.current, { key: pageKey(page), value: page }))
+  }
+
+  const applyPage = (page: AppPageSnapshot, historyMode: 'visit' | 'replace' | 'none' = 'visit') => {
+    // A synchronous IPC failure may settle before startGenerate inserts its page.
+    const task = page.view === 'generating' && page.foregroundRunId ? session.getTask(page.foregroundRunId) : null
+    if (task) page = settleGenerationPage(page, task)
+    if (page.view !== 'generation-error' && page.generationFailure) page = { ...page, generationFailure: null }
+    currentPageRef.current = page
+    viewRef.current = page.view
+    if (historyMode === 'visit') updateHistory(visitNavigation(pageHistoryRef.current, { key: pageKey(page), value: page }))
+    if (historyMode === 'replace') updateHistory(replaceNavigation(pageHistoryRef.current, { key: pageKey(page), value: page }))
+    setView(page.view)
+    setSidebarMode(page.sidebarMode)
+    setOverview(page.overview)
+    setProjectStoragePath(page.projectStoragePath)
+    setExistingResult(page.existingResult)
+    setResult(page.result)
+    setResultStoragePath(page.resultStoragePath)
+    setSelectedAnalysisId(page.selectedAnalysisId)
+    setConfigureInitialOptions(page.configureInitialOptions)
+    setConfigureNotice(page.configureNotice)
+    setConfigureRevision(page.configureRevision)
+    setForegroundRunId(page.foregroundRunId)
+    setGenerationFailure(page.generationFailure)
+    if (page.view === 'result') rememberAnalysisPage(page)
+  }
+
+  const visitPage = (patch: Partial<AppPageSnapshot>) => {
+    const page = { ...currentPageRef.current, ...patch }
+    applyPage(page, 'visit')
+    return page
+  }
+
+  const rememberAnalysisPage = (page: AppPageSnapshot) => {
+    lastAnalysisPageRef.current = page
+    setLastAnalysisPage(page)
+  }
+
+  const changeSidebarMode = (mode: SidebarMode) => {
+    setSidebarMode(mode)
+    const page = { ...currentPageRef.current, sidebarMode: mode }
+    replaceHistoryPage(page)
+    if (page.view === 'result' && mode === 'questions') rememberAnalysisPage(page)
+  }
+
+  const saveConfigureOptions = (options: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>) => {
+    const projectPath = currentPageRef.current.projectStoragePath ?? currentPageRef.current.overview?.root ?? ''
+    const configureInitialOptions = { projectPath, ...options }
+    setConfigureInitialOptions(configureInitialOptions)
+    replaceHistoryPage({ ...currentPageRef.current, configureInitialOptions })
+  }
+
   const session = useMemo(() => new GenerationSession(api), [])
   const sessionSnapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
   const foregroundTask = foregroundRunId
@@ -95,6 +179,16 @@ export default function App() {
     ? sessionSnapshot.tasks.find((task) => task.runId === sessionSnapshot.activeRunId) ?? null
     : null
   const backgroundTasks = sessionSnapshot.tasks.filter((task) => task.mode === 'background')
+  const generationPage = view === 'generating' && foregroundTask ? {
+    overview: foregroundTask.overview as ProjectOverview,
+    options: foregroundTask.options as GenerateOptions,
+    existingResult: foregroundTask.existingResult as InterviewResult | null,
+    progress: foregroundTask.progress, logs: foregroundTask.logs,
+    error: foregroundTask.error, cancelling: foregroundTask.status === 'cancelling'
+  } : view === 'generation-error' && generationFailure && overview && configureInitialOptions ? {
+    overview, options: configureInitialOptions, existingResult,
+    progress: null, logs: [], error: generationFailure.error, cancelling: false
+  } : null
 
   const refreshStorageDiagnostics = useCallback(() => {
     const request = ++diagnosticsRequest.current
@@ -116,47 +210,34 @@ export default function App() {
     session.activate()
     refreshSettings()
     refreshStorageDiagnostics()
+    // Capture all outcomes synchronously, before a later start evicts a recent task.
+    // This updates historical entries only; the foreground effect owns visible navigation.
+    const offHistory = session.subscribe(() => {
+      const current = pageHistoryRef.current
+      const next = settleGenerationHistory(current, session.getSnapshot().tasks)
+      if (next !== current) updateHistory(next)
+    })
     const off = api.onGenerateProgress((progress) => session.receiveProgress(progress))
     return () => {
       mounted.current = false
       diagnosticsRequest.current++
       off()
+      offHistory()
       session.dispose()
     }
   }, [refreshSettings, refreshStorageDiagnostics, session])
 
-  // Only the current foreground task may navigate on settlement. Detached tasks keep
-  // their result in the session history and never replace the visible project/result.
+  // Historical outcomes are captured independently; only this foreground run may navigate.
   useEffect(() => {
     const task = foregroundTask
     if (!task || task.mode !== 'foreground' || viewRef.current !== 'generating') return
-    if (task.status === 'succeeded' && task.result) {
-      historyRecoveryAttempt.current = null
-      setLeaveTarget(null)
-      setHistoryRecovery(null)
-      setOverview(task.overview as ProjectOverview)
-      setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
-      setExistingResult(task.result)
-      setResult(task.result)
-      setSelectedAnalysisId(task.analysisId ?? null)
-      setResultStoragePath(task.resultStoragePath ?? task.options.projectPath)
-      setForegroundRunId(null)
-      navigationEpoch.current++
-      setView('result')
-    } else if (task.status === 'cancelled') {
-      historyRecoveryAttempt.current = null
-      setLeaveTarget(null)
-      setHistoryRecovery(null)
-      setOverview(task.overview as ProjectOverview)
-      setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
-      setExistingResult(task.existingResult as InterviewResult | null)
-      setConfigureInitialOptions({ projectPath: task.options.projectPath, granularity: task.options.granularity, roleFocus: task.options.roleFocus, profileId: task.options.profileId })
-      setConfigureNotice(null)
-      setConfigureRevision((revision) => revision + 1)
-      setForegroundRunId(null)
-      navigationEpoch.current++
-      setView('configure')
-    }
+    const page = settleGenerationPage(currentPageRef.current, task)
+    if (page === currentPageRef.current) return
+    historyRecoveryAttempt.current = null
+    setLeaveTarget(null)
+    setHistoryRecovery(null)
+    navigationEpoch.current++
+    applyPage(page, 'replace')
   }, [foregroundTask])
 
   useEffect(() => {
@@ -169,38 +250,23 @@ export default function App() {
   }, [projectLibrary.refresh, projectLibrary.refreshAnalyses, sessionSnapshot.tasks])
 
   const restoreTask = (task: GenerationTask) => {
-    navigationEpoch.current++
+    setTaskPanelOpen(false)
     historyRecoveryAttempt.current = null
     setHistoryRecovery(null)
-    setTaskPanelOpen(false)
-    if (task.status === 'succeeded' && task.result) {
-      setOverview(task.overview as ProjectOverview)
-      setProjectStoragePath(task.resultStoragePath ?? task.options.projectPath)
-      setExistingResult(task.result)
-      setResult(task.result)
-      setSelectedAnalysisId(task.analysisId ?? null)
-      setResultStoragePath(task.resultStoragePath ?? task.options.projectPath)
-      setForegroundRunId(null)
-      setView('result')
-      return
-    }
-    if (task.status === 'cancelled') {
-      setOverview(task.overview as ProjectOverview)
-      setProjectStoragePath(task.options.projectPath)
-      setExistingResult(task.existingResult as InterviewResult | null)
-      setConfigureInitialOptions({ projectPath: task.options.projectPath, granularity: task.options.granularity, roleFocus: task.options.roleFocus, profileId: task.options.profileId })
-      setConfigureNotice(null)
-      setConfigureRevision((revision) => revision + 1)
-      setForegroundRunId(null)
-      setView('configure')
-      return
-    }
-    session.resume(task.runId)
-    setForegroundRunId(task.runId)
-    setView('generating')
+    navigationEpoch.current++
+    if (task.status === 'running' || task.status === 'cancelling') session.resume(task.runId)
+    applyPage({
+      ...currentPageRef.current,
+      view: 'generating', sidebarMode: 'projects',
+      overview: task.overview as ProjectOverview,
+      projectStoragePath: task.resultStoragePath ?? task.options.projectPath,
+      existingResult: task.existingResult as InterviewResult | null,
+      configureInitialOptions: { ...task.options }, configureNotice: null,
+      foregroundRunId: task.runId, generationFailure: null
+    }, 'visit')
   }
 
-  const commitNavigation = (target: LeaveTarget, from: View) => {
+  const commitNavigation = (target: LeaveTarget) => {
     navigationEpoch.current++
     historyRecoveryAttempt.current = null
     setHistoryRecovery(null)
@@ -210,7 +276,19 @@ export default function App() {
       if (task) restoreTask(task)
       return
     }
+    if (target.kind === 'historyStep') {
+      const stepped = stepNavigation(pageHistoryRef.current, target.delta)
+      if (stepped.index === pageHistoryRef.current.index) return
+      updateHistory(stepped)
+      restorePageSnapshot(currentNavigation(stepped).value, 'replace')
+      return
+    }
+    if (target.kind === 'restorePage') {
+      restorePageSnapshot(target.page, 'visit')
+      return
+    }
     if (target.kind === 'project') {
+      changeSidebarMode('projects')
       projectLibrary.expand(target.path)
       void openProject(target.path)
       return
@@ -220,12 +298,67 @@ export default function App() {
       return
     }
     if (target.kind === 'newProject') {
+      changeSidebarMode('projects')
       void chooseNewProject()
       return
     }
-    if (target.kind === 'settings') setPrevView(from === 'generating' ? 'select' : from)
-    setView(target.kind)
+    if (target.kind === 'settings') {
+      visitPage({ view: 'settings', sidebarMode: 'projects', foregroundRunId: null })
+      return
+    }
+    visitPage({ view: 'select', sidebarMode: 'projects', foregroundRunId: null })
   }
+
+  const restorePageSnapshot = (snapshot: AppPageSnapshot, historyMode: 'visit' | 'replace') => {
+    if (snapshot.view === 'generating' && snapshot.foregroundRunId) {
+      const task = session.getTask(snapshot.foregroundRunId)
+      if (!task) {
+        applyPage({ ...snapshot, view: 'select', foregroundRunId: null }, historyMode)
+        return
+      }
+      const terminalPage = settleGenerationPage(snapshot, task)
+      if (terminalPage !== snapshot) {
+        applyPage(terminalPage, historyMode)
+        return
+      }
+      session.resume(task.runId)
+      snapshot = {
+        ...snapshot, view: 'generating', sidebarMode: 'projects',
+        overview: task.overview as ProjectOverview,
+        projectStoragePath: task.resultStoragePath ?? task.options.projectPath,
+        existingResult: task.existingResult as InterviewResult | null,
+        configureInitialOptions: { ...task.options }, configureNotice: null,
+        foregroundRunId: task.runId, generationFailure: null
+      }
+    }
+    applyPage(snapshot, historyMode)
+  }
+
+  const requestHistoryStep = (delta: -1 | 1) => {
+    const stepped = stepNavigation(pageHistoryRef.current, delta)
+    if (stepped.index === pageHistoryRef.current.index) {
+      if (delta === -1 && viewRef.current === 'settings') {
+        visitPage({ view: 'select', sidebarMode: 'projects', foregroundRunId: null })
+      }
+      return
+    }
+    requestNavigation({ kind: 'historyStep', delta })
+  }
+
+  const setPageSidebarMode = (mode: SidebarMode) => {
+    changeSidebarMode(mode)
+  }
+
+  const openQuestionDirectory = () => {
+    if (viewRef.current === 'result') {
+      setPageSidebarMode('questions')
+      return
+    }
+    const lastPage = lastAnalysisPageRef.current
+    if (lastPage) requestNavigation({ kind: 'restorePage', page: { ...lastPage, sidebarMode: 'questions' } })
+  }
+
+  const openProjectDirectory = () => setPageSidebarMode('projects')
 
   const requestNavigation = (target: LeaveTarget) => {
     const task = foregroundTask
@@ -233,13 +366,13 @@ export default function App() {
       setLeaveTarget(target)
       return
     }
-    commitNavigation(target, viewRef.current)
+    commitNavigation(target)
   }
 
   const leaveInBackground = () => {
     const task = foregroundTask
     if (task) session.detach(task.runId)
-    if (leaveTarget) commitNavigation(leaveTarget, 'generating')
+    if (leaveTarget) commitNavigation(leaveTarget)
   }
 
   const cancelAndLeave = () => {
@@ -248,7 +381,7 @@ export default function App() {
       session.detach(task.runId)
       session.cancel(task.runId)
     }
-    if (leaveTarget) commitNavigation(leaveTarget, 'generating')
+    if (leaveTarget) commitNavigation(leaveTarget)
   }
 
   /** Open (scan) a project and enter its configuration page. */
@@ -273,15 +406,14 @@ export default function App() {
       }
       if (ticket !== navigationEpoch.current) return
       const storagePath = nextOverview.storagePath ?? path
-      setOverview(nextOverview)
-      setProjectStoragePath(storagePath)
-      setExistingResult(nextResult)
-      setSelectedAnalysisId(null)
-      setConfigureInitialOptions(undefined)
-      setConfigureNotice(notice)
-      setConfigureRevision((revision) => revision + 1)
+      applyPage({
+        ...currentPageRef.current,
+        view: 'configure', sidebarMode: 'projects', overview: nextOverview,
+        projectStoragePath: storagePath, existingResult: nextResult, selectedAnalysisId: null,
+        configureInitialOptions: undefined, configureNotice: notice,
+        configureRevision: currentPageRef.current.configureRevision + 1, foregroundRunId: null
+      }, 'visit')
       setHistoryRecovery(null)
-      setView('configure')
       void projectLibrary.refresh()
     } catch (error) {
       if (ticket === navigationEpoch.current) setNavigationError(`打开项目失败：${errorMessage(error)}`)
@@ -296,12 +428,14 @@ export default function App() {
       const loaded = await api.loadAnalysis(path, analysisId)
       if (ticket !== navigationEpoch.current) return
       if (!loaded) throw new Error('所选分析记录已不存在。')
-      setProjectStoragePath(path)
-      setSelectedAnalysisId(analysisId)
-      setResult(loaded)
-      setResultStoragePath(path)
+      const page: AppPageSnapshot = {
+        ...currentPageRef.current,
+        view: 'result', sidebarMode: 'questions', overview: null, projectStoragePath: path,
+        existingResult: loaded,
+        selectedAnalysisId: analysisId, result: loaded, resultStoragePath: path, foregroundRunId: null
+      }
+      applyPage(page, 'visit')
       setHistoryRecovery(null)
-      setView('result')
       refreshStorageDiagnostics()
     } catch (error) {
       if (ticket === navigationEpoch.current) {
@@ -317,15 +451,12 @@ export default function App() {
     setNavigationError(null)
     try {
       const selectedPath = await api.selectFolder()
-      if (selectedPath) {
-        await openProject(selectedPath)
-      } else if (viewRef.current === 'generating' && foregroundRunId) {
-        session.resume(foregroundRunId)
-      }
+      if (selectedPath) await openProject(selectedPath)
     } catch (error) {
       setNavigationError(`打开项目失败：${errorMessage(error)}`)
     } finally {
       folderPickerOpen.current = false
+      if (viewRef.current === 'generating' && foregroundRunId) session.resume(foregroundRunId)
     }
   }, [foregroundRunId, openProject, session])
 
@@ -352,8 +483,8 @@ export default function App() {
             ? await api.loadAnalysis(diagnostic.projectPath, selectedAnalysisId)
             : await api.loadResult(diagnostic.projectPath)
           if (mounted.current && ticket === navigationEpoch.current && viewRef.current === 'result' && resultStoragePath === diagnostic.projectPath && recoveredResult) {
-            if (recoveredResult) setResult(recoveredResult)
-            setResultStoragePath(diagnostic.projectPath)
+            const recoveredPage = { ...currentPageRef.current, result: recoveredResult, resultStoragePath: diagnostic.projectPath }
+            applyPage(recoveredPage, 'replace')
           }
         } catch {
           refreshStorageDiagnostics()
@@ -371,13 +502,13 @@ export default function App() {
   const startGenerate = useCallback((options: GenerateOptions) => {
     if (!overview) return
     const taskExistingResult = existingResult?.projectPath === overview.root ? existingResult : null
-    const runId = session.start({ ...options, projectPath: projectStoragePath ?? options.projectPath }, overview, taskExistingResult)
+    const capturedOptions = { ...options, projectPath: projectStoragePath ?? options.projectPath }
+    const runId = session.start(capturedOptions, overview, taskExistingResult)
     if (!runId) return
     navigationEpoch.current++
     historyRecoveryAttempt.current = null
     setHistoryRecovery(null)
-    setForegroundRunId(runId)
-    setView('generating')
+    visitPage({ view: 'generating', sidebarMode: 'projects', foregroundRunId: runId, configureInitialOptions: capturedOptions, generationFailure: null })
   }, [existingResult, overview, projectStoragePath, session])
 
   const cancelGenerate = useCallback(() => {
@@ -433,14 +564,15 @@ export default function App() {
 
       navigationEpoch.current++
       historyRecoveryAttempt.current = null
-      setOverview(nextOverview)
-      setProjectStoragePath(storedTargetPath)
-      setExistingResult(nextResult)
-      setConfigureInitialOptions(optionsForHistory(history, storedTargetPath))
-      setConfigureNotice(oldRecentNotice)
-      setConfigureRevision((revision) => revision + 1)
+      applyPage({
+        ...currentPageRef.current,
+        view: 'configure', sidebarMode: 'projects', overview: nextOverview,
+        projectStoragePath: storedTargetPath, existingResult: nextResult,
+        configureInitialOptions: optionsForHistory(history, storedTargetPath),
+        configureNotice: oldRecentNotice, configureRevision: currentPageRef.current.configureRevision + 1,
+        foregroundRunId: null
+      }, 'visit')
       setHistoryRecovery(null)
-      setView('configure')
       void projectLibrary.refresh()
     } catch (error) {
       if (!isCurrentAttempt()) return
@@ -504,7 +636,7 @@ export default function App() {
       navigationEpoch.current++
       historyRecoveryAttempt.current = null
       setHistoryRecovery(null)
-      setView('select')
+      visitPage({ view: 'select', sidebarMode: 'projects', foregroundRunId: null })
       void projectLibrary.refresh()
     } catch (error) {
       if (ticket !== navigationEpoch.current || historyRecoveryAttempt.current !== ticket) return
@@ -528,24 +660,30 @@ export default function App() {
     <div className="flex h-full flex-col">
       <header className="app-titlebar relative flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <span className="app-titlebar-title pointer-events-none absolute left-1/2 -translate-x-1/2 select-none text-[15px] font-semibold tracking-wide text-slate-800">RepoPrep</span>
+        <HistoryButtons
+          canGoBack={pageHistory.index > 0}
+          canGoForward={pageHistory.index < pageHistory.entries.length - 1}
+          onBack={() => requestHistoryStep(-1)}
+          onForward={() => requestHistoryStep(1)}
+        />
         <div className="app-titlebar-actions ml-auto flex items-center gap-1">
-          {view !== 'select' && view !== 'settings' && (
-            <button className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" onClick={() => requestNavigation({ kind: 'select' })}>
-              切换项目
-            </button>
-          )}
           {backgroundTasks.length > 0 && (
             <button className="rounded-md px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50" onClick={() => setTaskPanelOpen(true)}>
               后台生成（{backgroundTasks.length}）
             </button>
           )}
-          <button className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100" onClick={() => requestNavigation({ kind: 'settings' })}>
-            ⚙️ 设置
-          </button>
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="flex min-h-0 flex-1">
+        <NavigationRail
+          mode={sidebarMode}
+          canShowQuestions={Boolean(lastAnalysisPage)}
+          onProjects={openProjectDirectory}
+          onQuestions={openQuestionDirectory}
+          onSettings={() => requestNavigation({ kind: 'settings' })}
+        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {visibleStorageDiagnostics.length > 0 && (
           <section className="mx-auto max-h-32 w-full max-w-5xl shrink-0 space-y-2 overflow-y-auto px-4 pt-3" aria-label="存储状态">
             {visibleStorageDiagnostics.map((diagnostic) => (
@@ -571,7 +709,7 @@ export default function App() {
           </section>
         )}
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          {view !== 'result' && (
+          {sidebarMode === 'projects' && (
             <ProjectSidebar
               key="project-sidebar"
               projects={projectLibrary.projects}
@@ -598,34 +736,31 @@ export default function App() {
                 initialOptions={configureInitialOptions}
                 notice={configureNotice}
                 onStart={startGenerate}
+                onOptionsChange={saveConfigureOptions}
                 busyTask={busyForConfigure}
                 onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
               />
             )}
-            {view === 'generating' && foregroundTask && (
+            {generationPage && (
               <GeneratingPage
-                overview={foregroundTask.overview as ProjectOverview}
-                options={foregroundTask.options as GenerateOptions}
-                progress={foregroundTask.progress}
-                logs={foregroundTask.logs}
-                error={foregroundTask.error}
-                cancelling={foregroundTask.status === 'cancelling'}
+                overview={generationPage.overview}
+                options={generationPage.options}
+                progress={generationPage.progress}
+                logs={generationPage.logs}
+                error={generationPage.error}
+                cancelling={generationPage.cancelling}
                 onCancel={cancelGenerate}
                 onBack={() => {
-                  setOverview(foregroundTask.overview as ProjectOverview)
-                  setProjectStoragePath(foregroundTask.options.projectPath)
-                  setExistingResult(foregroundTask.existingResult as InterviewResult | null)
-                  setForegroundRunId(null)
-                  setConfigureInitialOptions({
-                    projectPath: foregroundTask.options.projectPath,
-                    granularity: foregroundTask.options.granularity,
-                    roleFocus: foregroundTask.options.roleFocus,
-                    profileId: foregroundTask.options.profileId
-                  })
-                  setConfigureNotice(null)
-                  setConfigureRevision((revision) => revision + 1)
                   navigationEpoch.current++
-                  setView('configure')
+                  visitPage({
+                    view: 'configure', sidebarMode: 'projects',
+                    overview: generationPage.overview,
+                    projectStoragePath: generationPage.options.projectPath,
+                    existingResult: generationPage.existingResult,
+                    configureInitialOptions: { ...generationPage.options },
+                    configureNotice: null, configureRevision: currentPageRef.current.configureRevision + 1,
+                    foregroundRunId: null
+                  })
                 }}
               />
             )}
@@ -635,20 +770,19 @@ export default function App() {
                 settings={settings}
                 onRegenerate={() => beginHistoryRecovery(result, resultStoragePath ?? result.projectPath)}
                 regenerating={Boolean(historyRecovery)}
-                sidebarClassName="sidebar-enter"
+                sidebarClassName={sidebarMode === 'questions' ? 'sidebar-enter' : ''}
+                showSidebar={sidebarMode === 'questions'}
               />
             )}
             {view === 'settings' && (
               <SettingsPage
                 settings={settings}
                 onSaved={(next) => { setSettings(next); refreshSettings(); refreshStorageDiagnostics() }}
-                onBack={() => {
-                  navigationEpoch.current++
-                  setView(prevView === 'settings' ? 'select' : prevView)
-                }}
+                onBack={() => requestHistoryStep(-1)}
               />
             )}
           </div>
+        </div>
         </div>
       </main>
 

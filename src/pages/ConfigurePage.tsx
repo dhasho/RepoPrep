@@ -10,6 +10,7 @@ interface Props {
   initialOptions?: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>
   notice?: string | null
   onStart: (options: GenerateOptions) => void
+  onOptionsChange?: (options: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>) => void
   busyTask?: { projectName: string; runId: string; cancelling: boolean } | null
   onResumeTask?: () => void
 }
@@ -21,7 +22,7 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)}GB`
 }
 
-export default function ConfigurePage({ overview, settings, initialOptions, notice = null, onStart, busyTask = null, onResumeTask }: Props) {
+export default function ConfigurePage({ overview, settings, initialOptions, notice = null, onStart, onOptionsChange, busyTask = null, onResumeTask }: Props) {
   const [granularity, setGranularity] = useState<Granularity>(initialOptions?.granularity ?? 'medium')
   const [roleFocus, setRoleFocus] = useState<RoleFocus>(initialOptions?.roleFocus ?? 'general')
   const preferredProfileId = initialOptions?.profileId
@@ -142,7 +143,10 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
                           ? 'border-indigo-500 bg-indigo-50/70 ring-1 ring-indigo-400'
                           : 'border-slate-200 bg-white hover:border-slate-300'
                       }`}
-                      onClick={() => setGranularity(g)}
+                      onClick={() => {
+                        setGranularity(g)
+                        onOptionsChange?.({ granularity: g, roleFocus, profileId })
+                      }}
                     >
                       <div className="flex items-center gap-2">
                         <span
@@ -179,7 +183,10 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
                         ? 'bg-indigo-600 font-medium text-white'
                         : 'text-slate-600 hover:bg-slate-50'
                     }`}
-                    onClick={() => setRoleFocus(r)}
+                    onClick={() => {
+                      setRoleFocus(r)
+                      onOptionsChange?.({ granularity, roleFocus: r, profileId })
+                    }}
                   >
                     {ROLE_META[r].label}
                   </button>

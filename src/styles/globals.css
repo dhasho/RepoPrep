@@ -34,6 +34,11 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.app-titlebar-history,
+.app-titlebar-history button {
+  -webkit-app-region: no-drag;
+}
+
 .app-titlebar-actions {
   margin-right: max(138px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)));
 }
