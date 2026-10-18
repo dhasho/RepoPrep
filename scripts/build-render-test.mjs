@@ -38,7 +38,10 @@ const entries = [
   { name: 'generation-session', entry: 'src/lib/generation-session.ts' },
   { name: 'result-page', entry: 'src/pages/ResultPage.tsx' },
   { name: 'term-popover', entry: 'src/components/TermPopover.tsx' },
-  { name: 'settings-page', entry: 'src/pages/SettingsPage.tsx' }
+  { name: 'settings-page', entry: 'src/pages/SettingsPage.tsx' },
+  { name: 'project-sidebar', entry: 'src/components/ProjectSidebar.tsx' },
+  { name: 'select-page', entry: 'src/pages/SelectPage.tsx' },
+  { name: 'project-library', entry: 'src/hooks/useProjectLibrary.ts' }
 ]
 
 for (const { name, entry } of entries) {

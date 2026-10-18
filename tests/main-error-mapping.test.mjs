@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import { IPC } from '../shared/ipc.ts'
@@ -57,7 +57,11 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   const appEvents = new Map()
   const windows = []
   const saves = []
+  const analysisLists = []
+  const analysisLoads = []
+  const deletedResultPaths = []
   const recents = []
+  let storedRecentProjects = [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }]
   const probeCalls = []
   const appDataPath = path.join(path.parse(root).root, 'AppData', 'Roaming')
   let ready
@@ -136,15 +140,26 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   })
   modules.set('./services/store', {
     addRecentProject: (value) => recents.push(value),
-    deleteResult() {},
-    getRecentProjects: () => [{ path: projectPath, name: 'demo', lastUsedAt: 'now' }],
+    deleteResult: (requestedPath) => deletedResultPaths.push(requestedPath),
+    getRecentProjects: () => [...storedRecentProjects],
     getSettings: () => ({ profiles: [{ id: 'p', name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'never-log-this', model: 'mock' }] }),
     getPrivateProfile: suppliedGetPrivateProfile ?? (async (id) => ({ ...savedProfile, id })),
     getStorageDiagnostics: () => [],
+    listAnalyses: (requestedPath, cursor) => {
+      analysisLists.push({ projectPath: requestedPath, cursor })
+      return { items: [], nextCursor: null }
+    },
+    loadAnalysis: (requestedPath, id) => {
+      analysisLoads.push({ projectPath: requestedPath, id })
+      return null
+    },
     loadResult: () => null,
-    removeRecentProject: async () => {},
+    removeRecentProject: async (requestedPath) => { storedRecentProjects = storedRecentProjects.filter((entry) => entry.path !== requestedPath) },
     recoverStorage() {},
-    saveResult: (...args) => saves.push(args),
+    saveResult: (...args) => {
+      saves.push(args)
+      return createHash('sha256').update(JSON.stringify(args[1])).digest('hex')
+    },
     saveSettings: (...args) => saveSettingsImpl(...args)
   })
 
@@ -186,6 +201,9 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
     sender,
     invoke,
     saves,
+    analysisLists,
+    analysisLoads,
+    deletedResultPaths,
     recents,
     probeCalls,
     TimeoutError: LlmRequestError,
@@ -242,6 +260,45 @@ test('trusted renderer reaches the exact generation-timeout business message thr
   assert.equal(calls, 1, 'untrusted sender must be rejected before main handler execution')
 })
 
+test('analysis history IPC validates IDs and keeps both endpoints behind renderer and project guards', async () => {
+  const h = await createHarness()
+  const id = 'a'.repeat(64)
+  assert.deepEqual(await h.invoke(IPC.listAnalyses, PROJECT_PATH), { items: [], nextCursor: null })
+  assert.equal(await h.invoke(IPC.loadAnalysis, PROJECT_PATH, id), null)
+  assert.deepEqual(h.analysisLists, [{ projectPath: PROJECT_PATH, cursor: undefined }])
+  assert.deepEqual(h.analysisLoads, [{ projectPath: PROJECT_PATH, id }])
+
+  const callsBeforeRejects = [h.analysisLists.length, h.analysisLoads.length]
+  await assert.rejects(h.invoke(IPC.listAnalyses, PROJECT_PATH, 'not-a-cursor'), /请求无效或未获授权/)
+  await assert.rejects(h.invoke(IPC.loadAnalysis, PROJECT_PATH, '../not-an-analysis-id'), /请求无效或未获授权/)
+
+  const untrusted = { sender: h.sender, senderFrame: { url: h.sender.mainFrame.url } }
+  await assert.rejects(h.handlers.get(IPC.listAnalyses)(untrusted, PROJECT_PATH), /请求无效或未获授权/)
+  await assert.rejects(h.handlers.get(IPC.loadAnalysis)(untrusted, PROJECT_PATH, id), /请求无效或未获授权/)
+  assert.deepEqual([h.analysisLists.length, h.analysisLoads.length], callsBeforeRejects, 'invalid callers and IDs must be rejected before the store sees a request')
+})
+
+test('generation returns a stable-shaped analysis ID without exposing the private profile key', async () => {
+  const h = await createHarness()
+  const response = await h.invoke(IPC.generateRun, options)
+  assert.match(response.analysisId, /^[a-f0-9]{64}$/)
+  assert.equal(h.saves.length, 1)
+  assert.equal(h.saves[0][0], PROJECT_PATH)
+  assert.equal(JSON.stringify(response).includes('never-log-this'), false)
+})
+
+test('removing a recent project revokes analysis IPC authority without deleting saved history', async () => {
+  const h = await createHarness()
+  const id = 'b'.repeat(64)
+  await h.invoke(IPC.recentProjects)
+  await h.invoke(IPC.removeRecent, PROJECT_PATH)
+  await assert.rejects(h.invoke(IPC.listAnalyses, PROJECT_PATH), /请求无效或未获授权/)
+  await assert.rejects(h.invoke(IPC.loadAnalysis, PROJECT_PATH, id), /请求无效或未获授权/)
+  assert.deepEqual(h.analysisLists, [])
+  assert.deepEqual(h.analysisLoads, [])
+  assert.deepEqual(h.deletedResultPaths, [], 'recent removal must not delete the project result archive')
+})
+
 test('settings IPC awaits persistence and returns only allowlisted credential guidance', async () => {
   const h = await createHarness()
   const expected = '设置尚未完成安全迁移，请检查系统凭据存储后重试。'
@@ -260,6 +317,11 @@ test('settings IPC awaits persistence and returns only allowlisted credential gu
 
   h.setSaveSettings(async () => { throw new Error(expected) })
   await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === expected)
+  const protocolError = '修改接口协议前，请先替换或清除已保存的 API Key。'
+  h.setSaveSettings(async () => { throw new Error(protocolError) })
+  await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === protocolError)
+  h.setSaveSettings(async () => { throw new Error(`${protocolError} secret=never-show-this`) })
+  await assert.rejects(h.invoke(IPC.settingsSave, { profiles: [], defaultProfileId: null }), (error) => error.message === '保存设置失败，请重试；若持续失败请检查磁盘状态。')
   assert.equal(JSON.stringify(h.saves).includes('never-show-this'), false)
 })
 
@@ -279,6 +341,40 @@ test('model and connection probes bind saved credentials to the canonical endpoi
 
   await h.invoke(IPC.llmTest, { ...request, credentialAction: 'clear' })
   assert.equal(h.probeCalls[1].profile.apiKey, '', 'clear intent wins over a stale saved-key reference')
+})
+
+test('saved credentials cannot cross protocols, while explicit probe keys retain the selected protocol', async () => {
+  const h = await createHarness()
+  const request = {
+    id: 'p', name: 'Probe', baseUrl: 'https://PROVIDER.invalid:443/v1/', model: 'probe-model',
+    apiKey: '', protocol: 'anthropic', hasApiKey: true, credentialStatus: 'stored',
+    useSavedCredential: true, credentialAction: 'keep'
+  }
+  await assert.rejects(h.invoke(IPC.llmTest, request),
+    (error) => error.message === '已保存的 API Key 仅适用于原接口协议，请先替换 Key。')
+  await assert.rejects(h.invoke(IPC.llmListModels, request),
+    (error) => error.message === '已保存的 API Key 仅适用于原接口协议，请先替换 Key。')
+  assert.deepEqual(h.probeCalls, [], 'saved OpenAI credentials must not reach Anthropic probe endpoints')
+
+  const explicit = { ...request, apiKey: 'explicit-anthropic-key', useSavedCredential: false, credentialAction: 'replace' }
+  const result = await h.invoke(IPC.llmTest, explicit)
+  assert.equal(h.probeCalls[0].profile.protocol, 'anthropic')
+  assert.equal(h.probeCalls[0].profile.apiKey, 'explicit-anthropic-key')
+  assert.doesNotMatch(JSON.stringify(result), /explicit-anthropic-key/)
+})
+
+test('generation passes the saved profile protocol to the generator', async () => {
+  const savedProfile = { id: 'p', name: 'Claude', baseUrl: 'https://provider.invalid/v1', apiKey: 'private-marker', model: 'claude-test', protocol: 'anthropic' }
+  const h = await createHarness({ getPrivateProfile: async () => savedProfile })
+  let receivedProfile
+  h.setGenerate(async (request) => {
+    receivedProfile = request.profile
+    return { projectName: 'demo' }
+  })
+
+  await h.invoke(IPC.generateRun, options)
+  assert.equal(receivedProfile.protocol, 'anthropic')
+  assert.equal(JSON.stringify(h.saves).includes('private-marker'), false)
 })
 
 test('content boundary rejection reaches the renderer with a static rescan hint and saves nothing', async () => {

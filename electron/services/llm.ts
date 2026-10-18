@@ -1,4 +1,4 @@
-// OpenAI 兼容大模型客户端（主进程中调用，避免渲染进程跨域与密钥暴露）
+// OpenAI / Anthropic 大模型客户端（主进程中调用，避免渲染进程跨域与密钥暴露）
 import type { ListModelsResult, LlmProfile, TestConnectionResult } from '@shared/types'
 // @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
 import { SseDecoder } from './sse-parser.ts'
@@ -19,6 +19,9 @@ const ERROR_MESSAGES: Record<LlmRequestErrorKind, string> = {
   http: '大模型服务返回错误。',
   response: '大模型服务返回内容格式不正确。'
 }
+
+// Generator batches include structured answers and follow-ups; 4096 can truncate a valid 15–25 question JSON batch.
+const DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS = 16_384
 
 /** Safe request failure; messages never include endpoint, provider body, or credentials. */
 export class LlmRequestError extends Error {
@@ -44,7 +47,139 @@ export function normalizeBaseUrl(raw: string): string {
 }
 
 function endpoint(profile: LlmProfile): string {
-  return `${normalizeBaseUrl(profile.baseUrl)}/chat/completions`
+  const base = normalizeBaseUrl(profile.baseUrl)
+  return profile.protocol === 'anthropic' ? `${base}/messages` : `${base}/chat/completions`
+}
+
+function requestHeaders(profile: LlmProfile): Record<string, string> {
+  if (profile.protocol === 'anthropic') {
+    return {
+      'Content-Type': 'application/json',
+      ...(profile.apiKey ? { 'x-api-key': profile.apiKey } : {}),
+      'anthropic-version': '2023-06-01'
+    }
+  }
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${profile.apiKey}`
+  }
+}
+
+function requestBody(profile: LlmProfile, messages: ChatMessage[], stream: boolean, opts: CallOptions): Record<string, unknown> {
+  if (profile.protocol === 'anthropic') {
+    const system = messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n')
+    return {
+      model: profile.model,
+      ...(system ? { system } : {}),
+      messages: messages.filter((message) => message.role !== 'system'),
+      stream,
+      max_tokens: opts.maxOutputTokens ?? DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS
+    }
+  }
+  return {
+    model: profile.model,
+    messages,
+    temperature: profile.temperature ?? 0.4,
+    stream,
+    ...(opts.maxOutputTokens ? { max_tokens: opts.maxOutputTokens } : {})
+  }
+}
+
+function parseAnthropicMessage(value: unknown): string {
+  if (!isRecord(value) || value.type !== 'message' || !Array.isArray(value.content)) {
+    throw new LlmRequestError('response')
+  }
+  if (value.stop_reason === 'max_tokens') throw new LlmRequestError('response')
+
+  let content = ''
+  for (const block of value.content) {
+    if (!isRecord(block) || typeof block.type !== 'string') throw new LlmRequestError('response')
+    if (block.type !== 'text') continue
+    if (typeof block.text !== 'string' || hasUnpairedSurrogate(block.text)) throw new LlmRequestError('response')
+    if (content.length + block.text.length > LLM_RESPONSE_LIMITS.chatContentChars) throw new LlmRequestError('response')
+    content += block.text
+  }
+  return content
+}
+
+interface AnthropicStreamState {
+  completed: boolean
+}
+
+function appendStreamText(
+  value: unknown,
+  state: { content: string },
+  onDelta: ((delta: string) => void) | null
+): void {
+  if (typeof value !== 'string' || hasUnpairedSurrogate(value)) throw new LlmRequestError('response')
+  if (state.content.length + value.length > LLM_RESPONSE_LIMITS.chatContentChars) throw new LlmRequestError('response')
+  if (value.length === 0) return
+  state.content += value
+  onDelta?.(value)
+}
+
+function handleAnthropicStreamEvent(
+  event: { event: string; data: string },
+  state: AnthropicStreamState,
+  content: { content: string },
+  onDelta: ((delta: string) => void) | null
+): boolean | void {
+  if (event.event === 'ping') return
+  if (event.event === 'error') throw new LlmRequestError('response')
+
+  const data = event.data.trim()
+  if (!data && event.event === 'message_stop') {
+    state.completed = true
+    return false
+  }
+  if (!data) return
+
+  const knownTypes = new Set([
+    'message_start', 'content_block_start', 'content_block_delta', 'content_block_stop',
+    'message_delta', 'message_stop', 'error'
+  ])
+  if (event.event !== 'message' && !knownTypes.has(event.event)) return
+
+  let parsed: unknown
+  try { parsed = JSON.parse(event.data) as unknown } catch {
+    throw new LlmRequestError('response')
+  }
+  if (!isRecord(parsed)) throw new LlmRequestError('response')
+  if ('error' in parsed && parsed.error !== null) throw new LlmRequestError('response')
+  const type = typeof parsed.type === 'string' ? parsed.type : event.event
+  if (type === 'ping') return
+  if (type === 'error') throw new LlmRequestError('response')
+  if (!knownTypes.has(type)) return
+  if (state.completed) throw new LlmRequestError('response')
+
+  if (type === 'message_start') {
+    if (!isRecord(parsed.message)) throw new LlmRequestError('response')
+    return
+  }
+  if (type === 'content_block_start') {
+    if (!isRecord(parsed.content_block) || typeof parsed.content_block.type !== 'string') {
+      throw new LlmRequestError('response')
+    }
+    if (parsed.content_block.type === 'text') appendStreamText(parsed.content_block.text, content, onDelta)
+    return
+  }
+  if (type === 'content_block_delta') {
+    if (!isRecord(parsed.delta) || typeof parsed.delta.type !== 'string') throw new LlmRequestError('response')
+    if (parsed.delta.type === 'text_delta') appendStreamText(parsed.delta.text, content, onDelta)
+    return
+  }
+  if (type === 'message_delta') {
+    if (!isRecord(parsed.delta)) throw new LlmRequestError('response')
+    if (parsed.delta.stop_reason === 'max_tokens') throw new LlmRequestError('response')
+    if (parsed.delta.stop_reason !== undefined && parsed.delta.stop_reason !== null && typeof parsed.delta.stop_reason !== 'string') {
+      throw new LlmRequestError('response')
+    }
+    return
+  }
+  if (type === 'message_stop') {
+    state.completed = true
+    return false
+  }
 }
 
 interface CallOptions {
@@ -116,17 +251,8 @@ async function request(
 
     response = await fetch(endpoint(profile), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${profile.apiKey}`
-      },
-      body: JSON.stringify({
-        model: profile.model,
-        messages,
-        temperature: profile.temperature ?? 0.4,
-        stream,
-        ...(opts.maxOutputTokens ? { max_tokens: opts.maxOutputTokens } : {})
-      }),
+      headers: requestHeaders(profile),
+      body: JSON.stringify(requestBody(profile, messages, stream, opts)),
       signal: controller.signal
     })
     throwIfAborted()
@@ -142,15 +268,25 @@ async function request(
         fatalUtf8: true
       })
       throwIfAborted()
-      let json: { choices?: { message?: { content?: string } }[] }
+      let json: unknown
       try {
-        json = JSON.parse(text) as typeof json
+        json = JSON.parse(text) as unknown
       } catch {
         throw new LlmRequestError('response')
       }
-      const content = json.choices?.[0]?.message?.content
-      if (typeof content !== 'string' || content.length > LLM_RESPONSE_LIMITS.chatContentChars || hasUnpairedSurrogate(content)) {
-        throw new LlmRequestError('response')
+      let content: string
+      if (profile.protocol === 'anthropic') {
+        content = parseAnthropicMessage(json)
+      } else {
+        if (!isRecord(json) || !Array.isArray(json.choices)) throw new LlmRequestError('response')
+        const first = json.choices[0]
+        const message = isRecord(first) ? first.message : undefined
+        const rawContent = isRecord(message) ? message.content : undefined
+        if (typeof rawContent !== 'string') throw new LlmRequestError('response')
+        content = rawContent
+        if (typeof content !== 'string' || content.length > LLM_RESPONSE_LIMITS.chatContentChars || hasUnpairedSurrogate(content)) {
+          throw new LlmRequestError('response')
+        }
       }
       throwIfAborted()
       return content
@@ -163,7 +299,30 @@ async function request(
     let sawStop = false
     let callbackFailed = false
     let callbackFailure: unknown
+    const anthropicState: AnthropicStreamState = { completed: false }
+    const contentState = { content: '' }
+    const notifyDelta = (delta: string): void => {
+      try {
+        onDelta?.(delta)
+      } catch (error) {
+        callbackFailed = true
+        callbackFailure = error
+        throw error
+      }
+    }
     const decoder = new SseDecoder((event) => {
+      if (profile.protocol === 'anthropic') {
+        try {
+          const shouldContinue = handleAnthropicStreamEvent(event, anthropicState, contentState, notifyDelta)
+          full = contentState.content
+          if (shouldContinue === false) completed = true
+          return shouldContinue
+        } catch (error) {
+          if (callbackFailed) throw callbackFailure
+          if (error instanceof LlmRequestError) throw error
+          throw new LlmRequestError('response')
+        }
+      }
       if (event.event === 'error') throw new LlmRequestError('response')
       const payload = event.data.trim()
       // Empty data messages and named heartbeat events carry no chat payload.
@@ -255,6 +414,7 @@ async function request(
       }
     }
     throwIfAborted()
+    if (profile.protocol === 'anthropic' && anthropicState.completed) completed = true
     if (sawStop) completed = true // EOF is also a valid terminator after finish_reason: stop.
     if (!completed || full.trim().length === 0) throw new LlmRequestError('response')
     return full
@@ -376,8 +536,12 @@ export async function testConnection(profile: LlmProfile): Promise<TestConnectio
   }
 }
 
-/** 拉取该 Key 可用的模型列表（GET /models，OpenAI 兼容格式） */
+/** 按接口规范拉取可用模型；不提供列表的服务可手动填写模型名。 */
 export async function listModels(profile: LlmProfile): Promise<ListModelsResult> {
+  return profile.protocol === 'anthropic' ? listAnthropicModels(profile) : listOpenAiModels(profile)
+}
+
+async function listOpenAiModels(profile: LlmProfile): Promise<ListModelsResult> {
   const controller = new AbortController()
   let timedOut = false
   let settled = false
@@ -451,6 +615,106 @@ export async function listModels(profile: LlmProfile): Promise<ListModelsResult>
       return { ok: false, models: [], message: '接口返回的模型列表格式或大小超出限制，请手动填写模型名。' }
     }
     return { ok: false, models: [], message: '获取模型列表失败，请检查网络、服务地址和配置后重试。' }
+  } finally {
+    settled = true
+    clearTimeout(timer)
+    if (response?.body && !response.body.locked && !response.bodyUsed) cancelBody(response.body)
+  }
+}
+
+const ANTHROPIC_MODELS_PAGE_SIZE = 100
+const ANTHROPIC_MODELS_MAX_PAGES = Math.ceil(LLM_RESPONSE_LIMITS.modelCount / ANTHROPIC_MODELS_PAGE_SIZE)
+const ANTHROPIC_MODELS_TOTAL_BYTES = 4 * 1024 * 1024
+
+function modelsFailure(message: string): ListModelsResult {
+  return { ok: false, models: [], message }
+}
+
+function finalizeModels(ids: string[]): ListModelsResult {
+  const models = Array.from(new Set(ids)).sort((a, b) => a.localeCompare(b))
+  if (models.length === 0) return modelsFailure('接口没有返回可用的模型名称，请手动填写模型名。')
+  return { ok: true, models, message: `检测到 ${models.length} 个可用模型，点击即可选择` }
+}
+
+async function listAnthropicModels(profile: LlmProfile): Promise<ListModelsResult> {
+  const controller = new AbortController()
+  let timedOut = false
+  let settled = false
+  let response: Response | null = null
+  const timer = setTimeout(() => {
+    if (settled) return
+    timedOut = true
+    controller.abort()
+  }, 20_000)
+  const ids: string[] = []
+  const seenCursors = new Set<string>()
+  let cursor: string | undefined
+  let totalItems = 0
+  let totalBytes = 0
+
+  try {
+    for (let page = 0; page < ANTHROPIC_MODELS_MAX_PAGES; page++) {
+      const url = new URL(`${normalizeBaseUrl(profile.baseUrl)}/models`)
+      url.searchParams.set('limit', String(ANTHROPIC_MODELS_PAGE_SIZE))
+      if (cursor) url.searchParams.set('after_id', cursor)
+      response = await fetch(url, { headers: requestHeaders(profile), signal: controller.signal })
+      if (timedOut) return modelsFailure('获取模型列表超时，请检查服务是否可用后重试。')
+      if (!response.ok) {
+        cancelBody(response.body)
+        return modelsFailure(`接口返回 HTTP ${response.status}。该服务可能不支持模型列表接口，可手动填写模型名。`)
+      }
+
+      const bodyText = await readBodyText(response.body, controller.signal, {
+        maxBytes: LLM_RESPONSE_LIMITS.modelsBodyBytes,
+        fatalUtf8: true
+      })
+      totalBytes += Buffer.byteLength(bodyText, 'utf8')
+      if (timedOut) return modelsFailure('获取模型列表超时，请检查服务是否可用后重试。')
+      if (totalBytes > ANTHROPIC_MODELS_TOTAL_BYTES) {
+        return modelsFailure('接口返回的模型列表格式或大小超出限制，请手动填写模型名。')
+      }
+
+      let parsed: unknown
+      try { parsed = JSON.parse(bodyText) as unknown } catch {
+        return modelsFailure('接口返回的模型列表格式不正确，请手动填写模型名。')
+      }
+      if (!isRecord(parsed) || !Array.isArray(parsed.data)) {
+        return modelsFailure('接口返回的模型列表格式不正确，请手动填写模型名。')
+      }
+      if (parsed.has_more !== undefined && typeof parsed.has_more !== 'boolean') {
+        return modelsFailure('接口返回的模型列表格式不正确，请手动填写模型名。')
+      }
+      totalItems += parsed.data.length
+      if (totalItems > LLM_RESPONSE_LIMITS.modelCount) {
+        return modelsFailure('接口返回的模型列表格式或大小超出限制，请手动填写模型名。')
+      }
+      for (const item of parsed.data) {
+        if (!isRecord(item) || typeof item.id !== 'string') continue
+        if (item.id.length > LLM_RESPONSE_LIMITS.modelIdChars) {
+          return modelsFailure('接口返回的模型列表格式或大小超出限制，请手动填写模型名。')
+        }
+        if (item.id.trim().length > 0 && !item.id.includes('\0') && !hasUnpairedSurrogate(item.id)) ids.push(item.id)
+      }
+
+      if (parsed.has_more !== true) return finalizeModels(ids)
+      const nextCursor = parsed.last_id
+      if (
+        typeof nextCursor !== 'string' || nextCursor.length === 0 ||
+        nextCursor.length > LLM_RESPONSE_LIMITS.modelIdChars || nextCursor.includes('\0') ||
+        hasUnpairedSurrogate(nextCursor) || seenCursors.has(nextCursor) || nextCursor === cursor
+      ) {
+        return modelsFailure('接口返回的模型列表格式不正确，请手动填写模型名。')
+      }
+      seenCursors.add(nextCursor)
+      cursor = nextCursor
+    }
+    return modelsFailure('接口返回的模型列表格式或大小超出限制，请手动填写模型名。')
+  } catch (error) {
+    if (timedOut) return modelsFailure('获取模型列表超时，请检查服务是否可用后重试。')
+    if (error instanceof LlmRequestError && error.kind === 'response') {
+      return modelsFailure('接口返回的模型列表格式或大小超出限制，请手动填写模型名。')
+    }
+    return modelsFailure('获取模型列表失败，请检查网络、服务地址和配置后重试。')
   } finally {
     settled = true
     clearTimeout(timer)

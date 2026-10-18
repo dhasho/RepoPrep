@@ -1,5 +1,6 @@
 // IPC 通道名与桥接 API 契约（preload 暴露、渲染进程调用）
 import type {
+  AnalysisPage,
   ExplainEvent,
   ExplainRequest,
   GenerateRequest,
@@ -24,6 +25,8 @@ export const IPC = {
   removeRecent: 'project:removeRecent',
   loadResult: 'result:load',
   deleteResult: 'result:delete',
+  listAnalyses: 'analysis:list',
+  loadAnalysis: 'analysis:load',
   generateRun: 'generate:run',
   generateCancel: 'generate:cancel',
   generateProgress: 'generate:progress', // 主进程 -> 渲染进程 事件
@@ -47,6 +50,8 @@ export interface ProjectLensApi {
   removeRecent(path: string): Promise<void>
   loadResult(projectPath: string): Promise<InterviewResult | null>
   deleteResult(projectPath: string): Promise<void>
+  listAnalyses(projectPath: string, cursor?: string): Promise<AnalysisPage>
+  loadAnalysis(projectPath: string, analysisId: string): Promise<InterviewResult | null>
   generate(request: GenerateRequest): Promise<GenerateResponse>
   cancelGenerate(runId: string): Promise<void>
   onGenerateProgress(cb: (p: GenerateProgress) => void): () => void

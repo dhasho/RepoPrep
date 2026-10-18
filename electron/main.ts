@@ -20,6 +20,8 @@ import {
   getPrivateProfile,
   getStorageDiagnostics,
   loadResult,
+  listAnalyses,
+  loadAnalysis,
   recoverStorage,
   removeRecentProject,
   saveResult,
@@ -188,6 +190,10 @@ handle(IPC.removeRecent, async (_e, projectPath: string) => {
 
 handle(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
 
+handle(IPC.listAnalyses, (_e, projectPath: string, cursor?: string) => listAnalyses(projectPath, cursor))
+
+handle(IPC.loadAnalysis, (_e, projectPath: string, analysisId: string) => loadAnalysis(projectPath, analysisId))
+
 handle(IPC.deleteResult, (_e, projectPath: string) => {
   deleteResult(projectPath)
 })
@@ -248,9 +254,9 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
       onProgress: sendProgress
     })
     ensureCurrentTask()
-    saveResult(options.projectPath, result)
+    const analysisId = saveResult(options.projectPath, result)
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
-    return { runId, result, storagePath: options.projectPath }
+    return { runId, result, storagePath: options.projectPath, ...(typeof analysisId === 'string' ? { analysisId } : {}) }
   } catch (err) {
     if (!isCurrentTask()) throw new Error('已取消生成')
     if (isLlmTimeoutError(err)) {
@@ -337,6 +343,7 @@ handle(IPC.storageRecover, (_e, id: string) => {
 function describeSettingsWriteError(err: unknown): string {
   if (err instanceof Error && [
     '修改接口地址前，请先替换或清除已保存的 API Key。',
+    '修改接口协议前，请先替换或清除已保存的 API Key。',
     '设置尚未完成安全迁移，请检查系统凭据存储后重试。',
     '系统凭据存储当前不可用，设置未更改。请稍后重试。'
   ].includes(err.message)) return err.message
@@ -370,6 +377,7 @@ async function resolveProbeProfile(request: LlmProfileDraft): Promise<LlmProfile
     baseUrl: request.baseUrl,
     model: request.model,
     apiKey,
+    ...(request.protocol !== undefined ? { protocol: request.protocol } : {}),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {})
   })
   if (explicitKey) return profileWithKey(explicitKey)
@@ -378,6 +386,9 @@ async function resolveProbeProfile(request: LlmProfileDraft): Promise<LlmProfile
     const saved = await getPrivateProfile(request.id)
     if (!saved || !saved.apiKey || canonicalEndpoint(saved.baseUrl) !== canonicalEndpoint(request.baseUrl)) {
       throw new Error('已保存的 API Key 仅适用于原接口地址，请先替换 Key。')
+    }
+    if ((saved.protocol ?? 'openai') !== (request.protocol ?? 'openai')) {
+      throw new Error('已保存的 API Key 仅适用于原接口协议，请先替换 Key。')
     }
     return profileWithKey(saved.apiKey)
   }

@@ -25,7 +25,7 @@ export interface IpcGuardDependencies {
   getStorageRecoveryProject?: (id: string) => string | null
 }
 
-const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.removeRecent])
+const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.listAnalyses, IPC.loadAnalysis, IPC.removeRecent])
 const invokeChannels = new Set<string>(INVOKE_CHANNELS)
 /**
  * 可以原样回显给渲染进程的业务提示。判据：消息必须由主进程静态构造、不含任何
@@ -48,9 +48,11 @@ const SAFE_BUSINESS_ERRORS = new Set([
   '没有写入权限，无法保存设置。请检查应用数据目录权限后重试。',
   '保存设置失败，请重试；若持续失败请检查磁盘状态。',
   '修改接口地址前，请先替换或清除已保存的 API Key。',
+  '修改接口协议前，请先替换或清除已保存的 API Key。',
   '设置尚未完成安全迁移，请检查系统凭据存储后重试。',
   '系统凭据存储当前不可用，设置未更改。请稍后重试。',
-  '已保存的 API Key 仅适用于原接口地址，请先替换 Key。'
+  '已保存的 API Key 仅适用于原接口地址，请先替换 Key。',
+  '已保存的 API Key 仅适用于原接口协议，请先替换 Key。'
 ])
 class DisplayableIpcError extends Error {}
 

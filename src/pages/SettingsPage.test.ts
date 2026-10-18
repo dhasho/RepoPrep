@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { JSDOM } from 'jsdom'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import type { LlmProfile, LlmProfileDraft, PublicSettings, Settings, SettingsSaveRequest, TestConnectionResult } from '../../shared/types.ts'
+import type { ListModelsResult, LlmProfile, LlmProfileDraft, PublicSettings, Settings, SettingsSaveRequest, TestConnectionResult } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { IPC } from '../../shared/ipc.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -49,6 +49,7 @@ function publicSettingsOf(settings: Settings | PublicSettings): PublicSettings {
         name: profile.name,
         baseUrl: profile.baseUrl,
         model: profile.model,
+        ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
         ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
         hasApiKey,
         credentialStatus: profile.credentialStatus ?? (hasApiKey ? 'stored' : 'missing')
@@ -104,12 +105,14 @@ function setInput(input: HTMLInputElement, value: string) {
 async function mountSettingsPage(
   settings: Settings | PublicSettings,
   saveSettings: (settings: SettingsSaveRequest) => Promise<void>,
-  getSettingsOverride?: () => Promise<PublicSettings>
+  getSettingsOverride?: () => Promise<PublicSettings>,
+  listModelsOverride?: (profile: LlmProfileDraft) => Promise<ListModelsResult>
 ) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
   const restoreGlobals = installDomGlobals(dom)
   let backend = publicSettingsOf(settings)
   const probeRequests: LlmProfileDraft[] = []
+  const connectionRequests: LlmProfileDraft[] = []
   dom.window.api = {
     async saveSettings(request: SettingsSaveRequest) {
       await saveSettings(request)
@@ -123,6 +126,7 @@ async function mountSettingsPage(
               : Boolean(previous?.hasApiKey ?? profile.hasApiKey)
           return {
             id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
+            ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
             ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
             hasApiKey, credentialStatus: hasApiKey ? 'stored' : 'missing'
           }
@@ -130,8 +134,14 @@ async function mountSettingsPage(
       }
     },
     getSettings: getSettingsOverride ?? (async () => structuredClone(backend)),
-    listModels: async (profile: LlmProfileDraft) => { probeRequests.push(structuredClone(profile)); return { ok: true, models: [], message: '' } },
-    testLlm: async () => ({ ok: true, message: 'ok' })
+    listModels: async (profile: LlmProfileDraft) => {
+      probeRequests.push(structuredClone(profile))
+      return listModelsOverride ? listModelsOverride(profile) : { ok: true, models: [], message: '' }
+    },
+    testLlm: async (profile: LlmProfileDraft) => {
+      connectionRequests.push(structuredClone(profile))
+      return { ok: true, message: 'ok' }
+    }
   } as unknown as typeof dom.window.api
 
   const React = require('react') as typeof import('react')
@@ -160,6 +170,7 @@ async function mountSettingsPage(
     root,
     rootElement,
     probeRequests,
+    connectionRequests,
     get savedSettings() { return savedSettings },
     get savedCalls() { return savedCalls },
     get backCalls() { return backCalls },
@@ -197,6 +208,7 @@ test('SettingsPage preserves newer edits when an older save completes, then save
             : profile.credentialAction === 'replace' ? Boolean(profile.apiKey)
               : Boolean(profile.hasApiKey)
           return { id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
+            ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
             ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
             hasApiKey, credentialStatus: hasApiKey ? 'stored' as const : 'missing' as const }
         })
@@ -230,22 +242,20 @@ test('SettingsPage preserves newer edits when an older save completes, then save
 
     const nameInput = () => rootElement.querySelector<HTMLInputElement>('input[placeholder="如：DeepSeek 日常用"]')!
     const contentLimit = () => rootElement.querySelector<HTMLInputElement>('#scan-limit-maxContentFileBytes')!
+    const clickContentStop = (label: string) => rootElement.querySelector<HTMLButtonElement>(`button[aria-label="设置单文件内容上限为${label}"]`)!
     const saveButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.startsWith('保存'))!
     const backButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('返回') && !button.textContent?.includes('放弃'))!
 
     await act(async () => setInput(nameInput(), 'A'))
-    for (const digit of ['1', '0', '2', '4']) {
-      const currentValue = contentLimit().value
-      await act(async () => setInput(contentLimit(), currentValue + digit))
-      assert.equal(contentLimit().value, currentValue + digit, '输入草稿应保留每次键入的原文')
-    }
+    await act(async () => clickContentStop('1KB').click())
+    assert.equal(contentLimit().getAttribute('aria-valuetext'), '1KB')
     await act(async () => saveButton().click())
     assert.equal(saves.length, 1)
     assert.equal(saves[0].settings.scanLimits?.maxContentFileBytes, 1024)
     assert.equal(saveButton().disabled, true, '保存进行中按钮应禁用')
     await act(async () => saveButton().click())
     await act(async () => setInput(nameInput(), 'B'))
-    await act(async () => setInput(contentLimit(), '1'))
+    await act(async () => clickContentStop('64KB').click())
     assert.equal(saves.length, 1, '保存进行中再次点击不能重复提交')
 
     await act(async () => {
@@ -255,20 +265,16 @@ test('SettingsPage preserves newer edits when an older save completes, then save
     assert.equal(saves[0].settings.profiles[0].name, 'A')
     assert.equal(parentSettings.profiles[0].name, 'A', '成功写盘的快照应回调给父组件')
     assert.equal(nameInput().value, 'B', '保存窗口中新编辑的草稿应继续显示')
-    assert.equal(contentLimit().value, '1', '父组件收到已保存快照后不应覆盖未完成的输入')
+    assert.equal(contentLimit().getAttribute('aria-valuetext'), '64KB', '父组件的保存回读不能覆盖更新后的 slider 草稿')
     assert.match(saveButton().textContent ?? '', /\*$/, '新草稿仍应标记未保存')
     assert.equal(rootElement.textContent?.includes('✓ 已保存'), false)
     await act(async () => backButton().click())
     assert.equal(rootElement.textContent?.includes('有未保存的修改'), true, '返回应要求确认未保存修改')
 
-    let callsBeforeInvalidSave = saves.length
-    await act(async () => saveButton().click())
-    assert.equal(saves.length, callsBeforeInvalidSave, '未失焦的非法值也必须阻止保存')
-    assert.equal(rootElement.querySelector('#scan-limit-maxContentFileBytes-error')?.textContent?.includes('1024'), true)
-    await act(async () => setInput(contentLimit(), '1024'))
     await act(async () => saveButton().click())
     assert.equal(saves.length, 2)
     assert.equal(saves[1].settings.profiles[0].name, 'B')
+    assert.equal(saves[1].settings.scanLimits?.maxContentFileBytes, 64 * 1024)
     await act(async () => {
       saves[1].control.resolve()
       await saves[1].promise
@@ -357,7 +363,7 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
   }
 })
 
-test('SettingsPage validates blurred scan limits, converts boundary values, and clears one override', async () => {
+test('SettingsPage sliders preserve custom values, save common stops, and restore omitted defaults', async () => {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost' })
   const restoreGlobals = installDomGlobals(dom)
   const saves: SettingsSaveRequest[] = []
@@ -378,45 +384,46 @@ test('SettingsPage validates blurred scan limits, converts boundary values, and 
     root = createRoot(rootElement)
     const initial: Settings = {
       ...initialSettings,
-      scanLimits: { maxFiles: 100, maxTreeNodes: 200, maxContentFileBytes: 2048 }
+      scanLimits: { maxFiles: 12_345, maxTreeNodes: 10_000, maxContentFileBytes: 512 * 1024 }
     }
     let savedCalls = 0
     await React.act(async () => root!.render(React.createElement(SettingsPage, {
       settings: publicSettingsOf(initial), onSaved: () => { savedCalls++ }, onBack: () => {}
     })))
     const field = (name: string) => rootElement.querySelector<HTMLInputElement>(`#scan-limit-${name}`)!
+    const clickStop = (label: string, value: string) => rootElement.querySelector<HTMLButtonElement>(`button[aria-label="设置${label}为${value}"]`)!
+    const reset = (label: string) => rootElement.querySelector<HTMLButtonElement>(`button[aria-label="恢复默认${label}"]`)!
     const saveButton = () => [...rootElement.querySelectorAll('button')].find((button) => button.textContent?.startsWith('保存'))!
 
-    await React.act(async () => {
-      const input = field('maxContentFileBytes')
-      input.focus()
-      setInput(input, '0')
-      input.blur()
-    })
-    assert.equal(field('maxContentFileBytes').value, '0', '失焦验证不得改写原始输入')
-    assert.equal(field('maxContentFileBytes').getAttribute('aria-invalid'), 'true')
-    assert.match(rootElement.querySelector('#scan-limit-maxContentFileBytes-error')?.textContent ?? '', /1024/)
-    await React.act(async () => saveButton().click())
-    assert.equal(saves.length, 0, '非法上限应阻止 IPC 保存')
-    assert.equal(savedCalls, 0, '非法上限应阻止 onSaved')
+    assert.equal(rootElement.querySelectorAll('input.scan-limit-slider').length, 3, 'scan security limits use three range controls')
+    assert.doesNotMatch(rootElement.textContent ?? '', /兼容所有 OpenAI 接口规范|项目较大时|说明：API Key 使用/)
+    assert.equal(field('maxFiles').getAttribute('aria-valuetext'), '1.23万')
+    assert.equal(field('maxTreeNodes').getAttribute('aria-valuetext'), '1万')
+    assert.equal(field('maxContentFileBytes').getAttribute('aria-valuetext'), '512KB')
+    assert.ok(rootElement.querySelector('button[aria-label="设置最多扫描文件数为1.23万"]'), 'an existing custom value remains an available stop')
 
-    await React.act(async () => {
-      setInput(field('maxFiles'), '1')
-      setInput(field('maxTreeNodes'), '10000')
-      setInput(field('maxContentFileBytes'), '524288')
-    })
     await React.act(async () => saveButton().click())
     assert.equal(saves.length, 1)
-    assert.deepEqual(saves[0].scanLimits, { maxFiles: 1, maxTreeNodes: 10000, maxContentFileBytes: 524288 })
+    assert.deepEqual(saves[0].scanLimits, { maxFiles: 12_345, maxTreeNodes: 10_000, maxContentFileBytes: 512 * 1024 }, 'saving other settings must retain exact custom scan limits')
     assert.equal(savedCalls, 1)
 
-    await React.act(async () => setInput(field('maxFiles'), ''))
+    await React.act(async () => {
+      clickStop('最多扫描文件数', '10万').click()
+      clickStop('最多树节点数', '5万').click()
+      clickStop('单文件内容上限', '1MB').click()
+    })
+    assert.ok(rootElement.querySelector('button[aria-label="设置最多扫描文件数为1.23万"]'), 'the initial custom stop remains stable during this slider edit session')
     await React.act(async () => saveButton().click())
     assert.equal(saves.length, 2)
-    assert.equal(Object.hasOwn(saves[1].scanLimits ?? {}, 'maxFiles'), false, '清空覆盖项应省略该字段')
-    assert.equal(saves[1].scanLimits?.maxTreeNodes, 10000, '清空一项应保留其他覆盖项')
-    assert.equal(saves[1].scanLimits?.maxContentFileBytes, 524288)
-    assert.equal(savedCalls, 2)
+    assert.deepEqual(saves[1].scanLimits, { maxFiles: 100_000, maxTreeNodes: 50_000, maxContentFileBytes: 1024 * 1024 })
+
+    await React.act(async () => reset('最多树节点数').click())
+    await React.act(async () => saveButton().click())
+    assert.equal(saves.length, 3)
+    assert.equal(Object.hasOwn(saves[2].scanLimits ?? {}, 'maxTreeNodes'), false, 'restoring default omits that override')
+    assert.equal(saves[2].scanLimits?.maxFiles, 100_000)
+    assert.equal(saves[2].scanLimits?.maxContentFileBytes, 1024 * 1024)
+    assert.equal(savedCalls, 3)
   } finally {
     if (root) {
       const React = require('react') as typeof import('react')
@@ -1087,6 +1094,225 @@ test('SettingsPage counts edits made while authoritative getSettings is pending 
     assert.equal(name.value, 'Edited during refresh')
     assert.match(page.saveButton().textContent ?? '', /\*$/, 'an edit during public readback remains dirty')
     assert.equal(page.rootElement.textContent?.includes('✓ 已保存'), false)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage switches protocol with known provider mappings and round trips protocol for probes and saves', async () => {
+  const initial: Settings = {
+    profiles: [{
+      ...initialSettings.profiles[0],
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-flash',
+      protocol: 'openai'
+    }],
+    defaultProfileId: 'profile-1'
+  }
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const protocolButton = (label: string) => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)!
+    const inputWithValue = (value: string) => [...page.rootElement.querySelectorAll<HTMLInputElement>('input')].find((input) => input.value === value)!
+    const temperatureLabel = () => [...page.rootElement.querySelectorAll('label')].find((label) => label.textContent?.includes('温度 temperature'))
+
+    assert.equal(protocolButton('OpenAI').getAttribute('aria-pressed'), 'true')
+    assert.equal(temperatureLabel() !== undefined, true)
+    await page.React.act(async () => protocolButton('Claude').click())
+    assert.equal(protocolButton('Claude').getAttribute('aria-pressed'), 'true')
+    assert.equal(temperatureLabel(), undefined, 'Anthropic profiles omit temperature')
+    assert.ok(inputWithValue('https://api.deepseek.com/anthropic'))
+    assert.ok(inputWithValue('deepseek-flash'))
+
+    const detect = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('检测可用模型'))!
+    await page.React.act(async () => detect.click())
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(page.probeRequests[0].protocol, 'anthropic')
+    const testConnection = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === '测试连接')!
+    await page.React.act(async () => testConnection.click())
+    assert.equal(page.connectionRequests[0].protocol, 'anthropic')
+    await page.React.act(async () => protocolButton('OpenAI').click())
+    assert.ok(inputWithValue('https://api.deepseek.com/v1'))
+    assert.ok(inputWithValue('deepseek-flash'))
+    assert.equal(temperatureLabel() !== undefined, true)
+
+    await page.React.act(async () => protocolButton('Claude').click())
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 1)
+    assert.equal(writes[0].profiles[0].protocol, 'anthropic')
+    assert.equal(writes[0].profiles[0].temperature, undefined, 'Claude profiles omit the OpenAI temperature setting')
+    assert.equal(page.savedSettings?.profiles[0].protocol, 'anthropic', 'the protocol survives authoritative readback')
+    assert.equal(protocolButton('Claude').getAttribute('aria-pressed'), 'true')
+    assert.equal(page.rootElement.textContent?.includes('✓ 已保存'), true)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage preserves a custom endpoint on protocol switch and never reuses a saved key across protocols', async () => {
+  const initial: Settings = {
+    profiles: [{
+      ...initialSettings.profiles[0],
+      baseUrl: 'https://custom.example/v1',
+      model: 'custom-model',
+      apiKey: 'synthetic-saved-key',
+      protocol: 'openai'
+    }],
+    defaultProfileId: 'profile-1'
+  }
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const protocolButton = (label: string) => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)!
+    const customUrl = [...page.rootElement.querySelectorAll<HTMLInputElement>('input')].find((input) => input.value === 'https://custom.example/v1')!
+    const customModel = [...page.rootElement.querySelectorAll<HTMLInputElement>('input')].find((input) => input.value === 'custom-model')!
+    await page.React.act(async () => protocolButton('Claude').click())
+    assert.equal(customUrl.value, 'https://custom.example/v1')
+    assert.equal(customModel.value, 'custom-model', 'protocol changes do not rewrite custom endpoint/model values')
+
+    const detect = [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.includes('检测可用模型'))!
+    await page.React.act(async () => detect.click())
+    assert.equal(page.probeRequests[0].protocol, 'anthropic')
+    assert.equal(page.probeRequests[0].useSavedCredential, false)
+    assert.equal(page.probeRequests[0].apiKey, '')
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 0, 'saved credentials cannot follow the same URL across protocols')
+    assert.match(page.rootElement.textContent ?? '', /接口协议已变更，请输入新 Key 或清除已保存的 Key/)
+    assert.ok([...page.rootElement.querySelectorAll('button')].some((button) => button.textContent?.trim() === '清除已保存的 Key'))
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage switches a known DeepSeek URL while preserving an existing custom model ID', async () => {
+  const initial: Settings = {
+    profiles: [{
+      ...initialSettings.profiles[0],
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-v4-flash',
+      protocol: 'openai'
+    }],
+    defaultProfileId: 'profile-1'
+  }
+  const page = await mountSettingsPage(initial, async () => {})
+  try {
+    const protocolButton = (label: string) => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)!
+    await page.React.act(async () => protocolButton('Claude').click())
+    const values = [...page.rootElement.querySelectorAll<HTMLInputElement>('input')].map((input) => input.value)
+    assert.ok(values.includes('https://api.deepseek.com/anthropic'), 'recognized provider URL maps to its Claude-compatible endpoint')
+    assert.ok(values.includes('deepseek-v4-flash'), 'a custom model ID on a known provider is preserved')
+    assert.equal(values.includes('deepseek-flash'), false, 'switching protocol does not replace a customized model')
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage invalidates pending connection probes when the protocol changes', async () => {
+  const settings: Settings = {
+    profiles: [{ ...initialSettings.profiles[0], id: 'A', apiKey: 'synthetic-A-secret', protocol: 'openai' }],
+    defaultProfileId: 'A'
+  }
+  const page = await mountConnectionSettingsPage(settings)
+  try {
+    const protocolButton = (label: string) => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)!
+    await page.React.act(async () => page.testButton().click())
+    assert.equal(page.requests[0].profile.protocol, 'openai')
+    await page.React.act(async () => protocolButton('Claude').click())
+    await page.React.act(async () => page.testButton().click())
+    assert.equal(page.requests.length, 2)
+    assert.equal(page.requests[1].profile.protocol, 'anthropic')
+    await page.React.act(async () => {
+      page.requests[0].pending.resolve({ ok: false, message: 'late OpenAI response' })
+      await page.requests[0].pending.promise
+    })
+    assert.equal(page.rootElement.textContent?.includes('late OpenAI response'), false)
+    await page.React.act(async () => {
+      page.requests[1].pending.resolve({ ok: true, message: 'Anthropic connected' })
+      await page.requests[1].pending.promise
+    })
+    assert.equal(page.rootElement.textContent?.includes('Anthropic connected'), true)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage ignores a late model list from the old protocol', async () => {
+  const settings: Settings = {
+    profiles: [{
+      ...initialSettings.profiles[0],
+      id: 'A',
+      apiKey: '',
+      protocol: 'openai',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-flash'
+    }],
+    defaultProfileId: 'A'
+  }
+  const requests: Array<{ profile: LlmProfileDraft; resolve: (result: ListModelsResult) => void }> = []
+  const page = await mountSettingsPage(settings, async () => {}, undefined, (profile) => new Promise((resolve) => {
+    requests.push({ profile: structuredClone(profile), resolve })
+  }))
+  try {
+    const protocolButton = (label: string) => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)!
+    const detect = () => page.rootElement.querySelector<HTMLButtonElement>('button[aria-label="检测可用模型"]')!
+    await page.React.act(async () => detect().click())
+    assert.equal(requests[0].profile.protocol, 'openai')
+
+    await page.React.act(async () => protocolButton('Claude').click())
+    await page.React.act(async () => detect().click())
+    assert.equal(requests.length, 2)
+    assert.equal(requests[1].profile.protocol, 'anthropic')
+
+    await page.React.act(async () => {
+      requests[0].resolve({ ok: true, models: ['stale-openai-model'], message: 'old OpenAI list' })
+      await Promise.resolve()
+    })
+    assert.equal(page.rootElement.textContent?.includes('old OpenAI list'), false)
+    assert.equal(detect().textContent?.trim(), '检测中…', 'late response must not clear the newer protocol probe')
+
+    await page.React.act(async () => {
+      requests[1].resolve({ ok: true, models: ['anthropic-model'], message: 'Claude model list' })
+      await Promise.resolve()
+    })
+    assert.equal(page.rootElement.textContent?.includes('Claude model list'), true)
+    assert.equal(page.rootElement.textContent?.includes('stale-openai-model'), false)
+  } finally {
+    await page.unmount()
+  }
+})
+
+test('SettingsPage preserves a protocol edit made while authoritative save readback is pending', async () => {
+  const initial: Settings = {
+    profiles: [{
+      ...initialSettings.profiles[0],
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-flash',
+      protocol: 'openai'
+    }],
+    defaultProfileId: 'profile-1'
+  }
+  let resolveReadback!: (settings: PublicSettings) => void
+  const readback = new Promise<PublicSettings>((resolve) => { resolveReadback = resolve })
+  const page = await mountSettingsPage(initial, async () => {}, async () => readback)
+  try {
+    const protocolButton = (label: string) => [...page.rootElement.querySelectorAll('button')].find((button) => button.textContent?.trim() === label)!
+    await page.React.act(async () => protocolButton('Claude').click())
+    await page.React.act(async () => page.saveButton().click())
+    await page.React.act(async () => protocolButton('OpenAI').click())
+    resolveReadback(publicSettingsOf({
+      profiles: [{
+        ...initial.profiles[0],
+        protocol: 'anthropic',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        model: 'deepseek-flash'
+      }],
+      defaultProfileId: 'profile-1'
+    }))
+    await page.React.act(async () => readback)
+    assert.equal(protocolButton('OpenAI').getAttribute('aria-pressed'), 'true')
+    assert.ok([...page.rootElement.querySelectorAll<HTMLInputElement>('input')].some((input) => input.value === 'https://api.deepseek.com/v1'))
+    assert.match(page.saveButton().textContent ?? '', /\*$/, 'the newer protocol edit remains unsaved after an older readback')
+    assert.equal(page.savedSettings?.profiles[0].protocol, 'anthropic', 'parent readback may update saved state without replacing the newer local draft')
   } finally {
     await page.unmount()
   }

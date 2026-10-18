@@ -19,6 +19,7 @@ export interface GenerationTask {
   logs: readonly GenerateProgress[]
   result: InterviewResult | null
   resultStoragePath?: string
+  analysisId?: string
   error: string | null
   startedAt: number
 }
@@ -159,6 +160,7 @@ export class GenerationSession {
     this.replaceTask(runId, {
       ...task,
       resultStoragePath: response.storagePath ?? task.options.projectPath,
+      analysisId: response.analysisId,
       status: 'succeeded',
       result: response.result,
       error: null

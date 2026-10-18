@@ -23,6 +23,7 @@ const result = {
 const inputs = new Map<string, unknown[]>([
   [IPC.selectFolder, []], [IPC.scanProject, ['C:\\demo']], [IPC.recentProjects, []],
   [IPC.removeRecent, ['C:\\demo']], [IPC.loadResult, ['C:\\demo']], [IPC.deleteResult, ['C:\\demo']],
+  [IPC.listAnalyses, ['C:\\demo']], [IPC.loadAnalysis, ['C:\\demo', 'a'.repeat(64)]],
   [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
   [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
   [IPC.explainCancel, [requestId]], [IPC.settingsGet, []],
@@ -85,6 +86,7 @@ test('项目 handler 与导出 handler 收到 registry 中登记的原始路径'
   projects.registerSelected('C:\\Demo')
   for (const [channel, args] of [
     [IPC.scanProject, ['c:\\demo']], [IPC.loadResult, ['c:\\demo']],
+    [IPC.listAnalyses, ['c:\\demo']], [IPC.loadAnalysis, ['c:\\demo', 'a'.repeat(64)]],
     [IPC.deleteResult, ['c:\\demo']],
     [IPC.generateRun, [{ ...inputs.get(IPC.generateRun)![0] as object, projectPath: 'c:\\demo' }]],
     [IPC.exportMarkdown, [{ ...result, projectPath: 'c:\\demo' }]]
@@ -161,6 +163,7 @@ test('拒绝子框架、其他窗口与尚未确定信任入口的请求', async
 test('路径操作与导出拒绝未登记项目，服务层不执行', async () => {
   for (const [channel, args] of [
     [IPC.scanProject, ['C:\\private']], [IPC.loadResult, ['C:\\private']],
+    [IPC.listAnalyses, ['C:\\private']], [IPC.loadAnalysis, ['C:\\private', 'a'.repeat(64)]],
     [IPC.deleteResult, ['C:\\private']], [IPC.generateRun, [{ ...inputs.get(IPC.generateRun)![0] as object, projectPath: 'C:\\private' }]],
     [IPC.exportMarkdown, [{ ...result, projectPath: 'C:\\private' }]]
   ] as Array<[string, unknown[]]>) {
@@ -224,6 +227,20 @@ test('设置持久化失败：白名单内的静态业务错误原样透传给�
     })(event, ...(inputs.get(IPC.settingsSave)!)),
     (err: unknown) => err instanceof Error && err.message === '请求处理失败，请稍后重试'
   )
+})
+
+test('credential protocol mismatch errors are allowlisted as static guidance', async () => {
+  const cases: Array<[string, string, unknown[]]> = [
+    [IPC.settingsSave, '修改接口协议前，请先替换或清除已保存的 API Key。', inputs.get(IPC.settingsSave)!],
+    [IPC.llmTest, '已保存的 API Key 仅适用于原接口协议，请先替换 Key。', inputs.get(IPC.llmTest)!]
+  ]
+  for (const [channel, message, args] of cases) {
+    const { deps, event } = context()
+    await assert.rejects(
+      createGuardedIpcHandler(channel, deps, () => { throw new Error(message) })(event, ...args),
+      (error: unknown) => error instanceof Error && error.message === message
+    )
+  }
 })
 
 test('生成结果与历史结果的静态契约错误可安全透传给 renderer', async () => {

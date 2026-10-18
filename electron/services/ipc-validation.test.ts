@@ -25,6 +25,7 @@ test('每个 invoke 通道全部登记且各自接受合法参数形状', () => 
   const valid = new Map<string, unknown[]>([
     [IPC.selectFolder, []], [IPC.scanProject, ['C:\\demo']], [IPC.recentProjects, []],
     [IPC.removeRecent, ['C:\\demo']], [IPC.loadResult, ['C:\\demo']], [IPC.deleteResult, ['C:\\demo']],
+    [IPC.listAnalyses, ['C:\\demo']], [IPC.loadAnalysis, ['C:\\demo', 'a'.repeat(64)]],
     [IPC.generateRun, [{ projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId: requestId }]],
     [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
     [IPC.explainCancel, [requestId]], [IPC.settingsGet, []], [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]],
@@ -60,6 +61,18 @@ test('路径、枚举和字符串边界严格校验', () => {
   rejects(IPC.explainStart, { requestId: 'r1', term: 't', profileId: 'p1', projectSummary: '', question: 'q', snippet: 'x'.repeat(24_001) })
 })
 
+test('analysis IPC 校验 optional cursor 和 lowercase SHA-256 id', () => {
+  assert.doesNotThrow(() => validateIpcArgs(IPC.listAnalyses, ['C:\\demo', 'f'.repeat(64)]))
+  for (const id of ['A'.repeat(64), 'f'.repeat(63), `${'f'.repeat(63)}g`, '../'.padEnd(64, 'a')]) {
+    rejects(IPC.listAnalyses, 'C:\\demo', id)
+    rejects(IPC.loadAnalysis, 'C:\\demo', id)
+  }
+  rejects(IPC.listAnalyses, 'C:\\demo', undefined)
+  rejects(IPC.listAnalyses, 'relative', 'f'.repeat(64))
+  rejects(IPC.loadAnalysis, 'C:\\demo')
+  rejects(IPC.loadAnalysis, 'C:\\demo', 'f'.repeat(64), 'extra')
+})
+
 test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', () => {
   for (const baseUrl of ['file:///tmp/x', 'ftp://example.com', 'https://user:pass@example.com', 'https://[broken']) {
     rejects(IPC.llmTest, { ...profile, baseUrl })
@@ -69,6 +82,18 @@ test('配置拒绝错误协议、嵌入凭据、畸形 URL 和过量 profiles', 
     rejects(IPC.settingsSave, { profiles: [{ ...profile, [field]: `${profile[field]}\0` }], defaultProfileId: profile.id })
   }
   rejects(IPC.settingsSave, { profiles: Array.from({ length: MAX_LLM_PROFILES + 1 }, (_, i) => ({ ...profile, id: `p${i}` })), defaultProfileId: null })
+})
+
+test('profile protocol accepts both providers, preserves the legacy optional shape, and rejects unknown values', () => {
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [profile], defaultProfileId: profile.id }]))
+  for (const protocol of ['openai', 'anthropic']) {
+    assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [{ ...profile, protocol }], defaultProfileId: profile.id }]))
+    assert.doesNotThrow(() => validateIpcArgs(IPC.llmTest, [{ ...profile, protocol }]))
+  }
+  for (const protocol of ['claude', '', null, 3]) {
+    rejects(IPC.settingsSave, { profiles: [{ ...profile, protocol }], defaultProfileId: profile.id })
+    rejects(IPC.llmListModels, { ...profile, protocol })
+  }
 })
 
 test('settingsSave 接受共享数量上限且继续拒绝超过上限的直接调用', () => {

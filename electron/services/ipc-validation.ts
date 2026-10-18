@@ -58,10 +58,11 @@ function url(value: unknown): asserts value is string {
 }
 function profile(value: unknown): asserts value is LlmProfileDraft {
   if (!record(value)) fail()
-  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'temperature', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
+  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'temperature', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
   string(value.id, LLM_PROFILE_LIMITS.id); string(value.name, LLM_PROFILE_LIMITS.name); url(value.baseUrl)
   if (value.apiKey !== undefined) string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)
   string(value.model, LLM_PROFILE_LIMITS.model)
+  if (value.protocol !== undefined) enumValue(value.protocol, ['openai', 'anthropic'] as const)
   if (value.hasApiKey !== undefined && typeof value.hasApiKey !== 'boolean') fail()
   if (value.useSavedCredential !== undefined && typeof value.useSavedCredential !== 'boolean') fail()
   if (value.credentialStatus !== undefined) enumValue(value.credentialStatus, ['missing', 'stored', 'locked', 'migration-pending'] as const)
@@ -134,6 +135,15 @@ const validators: Record<string, Validator> = {
   [IPC.removeRecent]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.loadResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.deleteResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
+  [IPC.listAnalyses]: (a) => {
+    if (!Array.isArray(a) || (a.length !== 1 && a.length !== 2)) fail(messages.args)
+    absolutePath(a[0])
+    if (a.length === 2 && (typeof a[1] !== 'string' || !/^[a-f0-9]{64}$/.test(a[1]))) fail()
+  },
+  [IPC.loadAnalysis]: (a) => {
+    exactArgs(a, 2); absolutePath(a[0])
+    if (typeof a[1] !== 'string' || !/^[a-f0-9]{64}$/.test(a[1])) fail()
+  },
   [IPC.generateRun]: (a) => { exactArgs(a, 1); generateRequest(a[0]) },
   [IPC.explainStart]: (a) => { exactArgs(a, 1); explain(a[0]) },
   [IPC.explainCancel]: (a) => { exactArgs(a, 1); requestId(a[0]) },

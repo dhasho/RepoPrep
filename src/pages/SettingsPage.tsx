@@ -1,30 +1,22 @@
-// 设置页：大模型配置管理（OpenAI 兼容接口，支持检测 Key 可用模型列表）
+// 设置页：按接口规范管理模型配置、凭据和扫描上限。
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { LlmProfileDraft, PublicSettings, SettingsSaveRequest } from '@shared/types'
+import type { LlmProfileDraft, LlmProtocol, PublicSettings, SettingsSaveRequest } from '@shared/types'
 import type { ScanLimits } from '@shared/types'
-import { DEFAULT_SCAN_LIMITS, SCAN_LIMIT_BOUNDS } from '@shared/types'
 import { api } from '../lib/ipc'
 import { SettingsSaveFlow } from '../lib/settings-save'
 import { ModelDetectionController, modelStateOf } from '../lib/model-detection'
 import { ConnectionTestController } from '../lib/connection-test'
 import { parseScanLimitDraft, scanLimitDraftOf, type ScanLimitDraft, type ScanLimitErrors } from '../lib/scan-limit-input'
 import { MAX_LLM_PROFILES, profileFieldErrorId, validateProfiles, type ProfileField, type ProfileValidationError } from '../lib/profile-validation'
+import ScanLimitSlider from '../components/ScanLimitSlider'
+import { scanLimitDraftWithDefault, scanLimitDraftWithValue } from '../lib/scan-limit-slider'
+import { canonicalEndpoint, effectiveProtocol, mappedProviderPreset, PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
 
 interface Props {
   settings: PublicSettings
   onSaved: (s: PublicSettings) => void
   onBack: () => void
 }
-
-/** 常见服务商快捷模板（baseUrl + 默认模型，API Key 需自行填写） */
-const PRESETS: { name: string; baseUrl: string; model: string; hint: string }[] = [
-  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', hint: 'platform.deepseek.com' },
-  { name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash', hint: 'open.bigmodel.cn' },
-  { name: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', hint: '阿里云百炼' },
-  { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-128k', hint: 'platform.moonshot.cn' },
-  { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', hint: '需海外网络' },
-  { name: 'Ollama 本地', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', hint: '本地运行，无需 Key' }
-]
 
 const emptyProfile = (): LlmProfileDraft => ({
   id: `profile-${Date.now()}`,
@@ -34,20 +26,16 @@ const emptyProfile = (): LlmProfileDraft => ({
   hasApiKey: false,
   credentialStatus: 'missing',
   credentialAction: 'replace',
-  model: 'deepseek-chat',
+  model: 'deepseek-flash',
+  protocol: 'openai',
   temperature: 0.4
 })
 
-function canonicalEndpoint(baseUrl: string): string | null {
-  try {
-    const parsed = new URL(baseUrl)
-    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) return null
-    return parsed.href.replace(/\/+$/, '')
-  } catch { return null }
-}
-
 export default function SettingsPage({ settings, onSaved, onBack }: Props) {
-  const savedBaseUrls = useRef(new Map(settings.profiles.map((profile) => [profile.id, profile.baseUrl])))
+  const savedEndpoints = useRef(new Map(settings.profiles.map((profile) => [profile.id, {
+    baseUrl: profile.baseUrl,
+    protocol: effectiveProtocol(profile)
+  }])))
   const [profiles, setProfiles] = useState<LlmProfileDraft[]>(() => settings.profiles.map((profile) => ({ ...profile, apiKey: '', credentialAction: 'keep' })))
   const [defaultId, setDefaultId] = useState<string | null>(settings.defaultProfileId)
   const [selectedId, setSelectedId] = useState<string>(
@@ -86,14 +74,17 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
   }, [connectionTest])
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null
+  const selectedProtocol = selected ? effectiveProtocol(selected) : 'openai'
   const selectedIndex = profiles.findIndex((p) => p.id === selectedId)
   const profileError = (field: ProfileField) => profileErrors.find((error) => error.profileIndex === selectedIndex && error.field === field)
   const usesSavedCredential = (profile: LlmProfileDraft) => {
-    const savedEndpoint = canonicalEndpoint(savedBaseUrls.current.get(profile.id) ?? '')
+    const saved = savedEndpoints.current.get(profile.id)
+    const savedEndpoint = canonicalEndpoint(saved?.baseUrl ?? '')
     const currentEndpoint = canonicalEndpoint(profile.baseUrl)
     return !profile.apiKey && profile.hasApiKey === true &&
       (profile.credentialAction ?? 'keep') === 'keep' &&
-      savedEndpoint !== null && savedEndpoint === currentEndpoint
+      savedEndpoint !== null && savedEndpoint === currentEndpoint &&
+      saved?.protocol === effectiveProtocol(profile)
   }
 
   const patchSelected = (patch: Partial<LlmProfileDraft>) => {
@@ -112,9 +103,23 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     setSaved(false)
     saveFlow.markLocalEdit()
     // 换了接口地址或 Key：取消（失效）进行中的检测并清空旧列表（issue #14）
-    if (patch.baseUrl !== undefined || patch.apiKey !== undefined || patch.credentialAction !== undefined) {
+    if (patch.baseUrl !== undefined || patch.apiKey !== undefined || patch.credentialAction !== undefined || patch.protocol !== undefined) {
       detection.invalidate(selectedId)
     }
+  }
+
+  const changeProtocol = (protocol: LlmProtocol) => {
+    if (!selected || effectiveProtocol(selected) === protocol) return
+    const mappedPreset = mappedProviderPreset(selected, protocol)
+    patchSelected({
+      protocol,
+      ...(mappedPreset ? { baseUrl: mappedPreset.preset.baseUrl, model: mappedPreset.model } : {}),
+      ...(protocol === 'anthropic' ? { temperature: undefined } : {})
+    })
+  }
+
+  const selectProvider = (preset: ProviderPreset, protocol: LlmProtocol) => {
+    patchSelected({ protocol, baseUrl: preset.baseUrl, model: preset.model })
   }
 
   /** 调用主进程 GET /models 检测该 Key 可用的模型（竞态处理见 model-detection.ts） */
@@ -141,16 +146,22 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
       setSaveError(`配置数量不得超过 ${MAX_LLM_PROFILES} 项`)
       return
     }
-    const endpointChangedWithSavedKey = profiles.findIndex((profile) => {
-      const savedEndpoint = canonicalEndpoint(savedBaseUrls.current.get(profile.id) ?? '')
+    const identityChangedWithSavedKey = profiles.findIndex((profile) => {
+      const saved = savedEndpoints.current.get(profile.id)
+      const savedEndpoint = canonicalEndpoint(saved?.baseUrl ?? '')
       const currentEndpoint = canonicalEndpoint(profile.baseUrl)
       return profile.hasApiKey && (profile.credentialAction ?? 'keep') === 'keep' &&
-        (savedEndpoint === null || savedEndpoint !== currentEndpoint)
+        (savedEndpoint === null || savedEndpoint !== currentEndpoint || saved?.protocol !== effectiveProtocol(profile))
     })
-    if (endpointChangedWithSavedKey >= 0) {
-      setSelectedId(profiles[endpointChangedWithSavedKey].id)
+    if (identityChangedWithSavedKey >= 0) {
+      const profile = profiles[identityChangedWithSavedKey]
+      const saved = savedEndpoints.current.get(profile.id)
+      const protocolChanged = saved?.protocol !== effectiveProtocol(profile)
+      setSelectedId(profile.id)
       setSaved(false)
-      setSaveError(`配置 ${endpointChangedWithSavedKey + 1}：接口地址已变更，请输入新 Key 或清除已保存的 Key`)
+      setSaveError(protocolChanged
+        ? `配置 ${identityChangedWithSavedKey + 1}：接口协议已变更，请输入新 Key 或清除已保存的 Key`
+        : `配置 ${identityChangedWithSavedKey + 1}：接口地址已变更，请输入新 Key 或清除已保存的 Key`)
       return
     }
     const invalidProfiles = validateProfiles(profiles)
@@ -174,7 +185,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
       const next: SettingsSaveRequest = {
         profiles,
         defaultProfileId: profiles.some((profile) => profile.id === defaultId) ? defaultId : profiles[0]?.id ?? null,
-        scanLimits: parsedLimits.value
+        ...(Object.keys(parsedLimits.value).length ? { scanLimits: parsedLimits.value } : {})
       }
       const readback: { settings: PublicSettings | null } = { settings: null }
       const result = await saveFlow.save(next, async () => {
@@ -184,7 +195,10 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
         const currentDraftSaved = !result.hasEditsDuringSave
         const savedSettings = readback.settings
         if (!savedSettings) throw new Error('设置已保存，但读取状态失败，请重试')
-        savedBaseUrls.current = new Map(savedSettings.profiles.map((profile) => [profile.id, profile.baseUrl]))
+        savedEndpoints.current = new Map(savedSettings.profiles.map((profile) => [profile.id, {
+          baseUrl: profile.baseUrl,
+          protocol: effectiveProtocol(profile)
+        }]))
         onSaved(savedSettings)
         for (const submitted of next.profiles) detection.invalidate(submitted.id)
         setProfiles((current) => current.map((profile) => {
@@ -198,6 +212,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             name: profile.name === submitted.name ? savedProfile.name : profile.name,
             baseUrl: profile.baseUrl === submitted.baseUrl ? savedProfile.baseUrl : profile.baseUrl,
             model: profile.model === submitted.model ? savedProfile.model : profile.model,
+            protocol: profile.protocol === submitted.protocol ? savedProfile.protocol : profile.protocol,
             temperature: profile.temperature === submitted.temperature ? savedProfile.temperature : profile.temperature,
             ...(sameCredentialIntent ? {
               apiKey: '',
@@ -264,15 +279,26 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     await connectionTest.run({ ...selected, useSavedCredential: usesSavedCredential(selected) })
   }
 
+  const updateScanLimit = (key: keyof ScanLimits, value: number) => {
+    setScanLimitDraft((draft) => scanLimitDraftWithValue(draft, key, value))
+    setScanLimitErrors((errors) => ({ ...errors, [key]: undefined }))
+    setDirty(true)
+    setSaved(false)
+    saveFlow.markLocalEdit()
+  }
+
+  const resetScanLimit = (key: keyof ScanLimits) => {
+    setScanLimitDraft((draft) => scanLimitDraftWithDefault(draft, key))
+    setScanLimitErrors((errors) => ({ ...errors, [key]: undefined }))
+    setDirty(true)
+    setSaved(false)
+    saveFlow.markLocalEdit()
+  }
+
   return (
-    <div className="mx-auto h-full max-w-4xl overflow-y-auto px-6 py-6">
+    <div className="h-full min-w-0 overflow-y-auto px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">大模型配置</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            兼容所有 OpenAI 接口规范的服务商（DeepSeek / 智谱 GLM / 通义千问 / Kimi / OpenAI / Ollama 等）。
-          </p>
-        </div>
+        <h1 className="text-lg font-semibold text-slate-900">大模型配置</h1>
         <button className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" onClick={handleBack}>
           ← 返回
         </button>
@@ -298,7 +324,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-[220px_1fr] gap-5">
+      <div className="grid min-w-0 grid-cols-[160px_minmax(0,1fr)] gap-4">
         {/* 配置列表 */}
         <div>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -337,19 +363,45 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
 
         {/* 编辑区 */}
         {selected ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5">
             {profileError('id') && <p id={profileFieldErrorId(selectedIndex, 'id')} className="mb-3 text-xs text-rose-600">{profileError('id')?.message}</p>}
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
-                  title={`${preset.hint} · ${preset.baseUrl}`}
-                  onClick={() => patchSelected({ baseUrl: preset.baseUrl, model: preset.model })}
-                >
-                  {preset.name}
-                </button>
-              ))}
+            <div className="mb-5 space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-medium text-slate-500">接口协议</span>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label="接口协议">
+                  {([
+                    ['openai', 'OpenAI'],
+                    ['anthropic', 'Claude']
+                  ] as const).map(([protocol, label]) => (
+                    <button
+                      key={protocol}
+                      type="button"
+                      aria-pressed={selectedProtocol === protocol}
+                      className={`rounded-md px-3 py-1.5 text-sm transition ${selectedProtocol === protocol ? 'bg-white font-medium text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                      onClick={() => changeProtocol(protocol)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${selectedProtocol === 'openai' ? 'OpenAI' : 'Claude'}服务商预设`}>
+                {PROVIDER_PRESETS[selectedProtocol].map((preset) => {
+                  const active = canonicalEndpoint(selected.baseUrl) === canonicalEndpoint(preset.baseUrl) && selected.model === preset.model
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      aria-pressed={active}
+                      className={`rounded-full border px-2.5 py-1 text-xs transition ${active ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600'}`}
+                      title={`${preset.hint} · ${preset.baseUrl} · ${preset.model}`}
+                      onClick={() => selectProvider(preset, selectedProtocol)}
+                    >
+                      {preset.name}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -371,7 +423,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                   aria-invalid={Boolean(profileError('baseUrl'))}
                   aria-describedby={profileError('baseUrl') ? profileFieldErrorId(selectedIndex, 'baseUrl') : undefined}
                   onChange={(e) => patchSelected({ baseUrl: e.target.value })}
-                  placeholder="https://api.deepseek.com/v1"
+                  placeholder={selectedProtocol === 'openai' ? 'https://api.deepseek.com/v1' : 'https://api.anthropic.com'}
                 />
                 {profileError('baseUrl') && <p id={profileFieldErrorId(selectedIndex, 'baseUrl')} className="mt-1 text-xs text-rose-600">{profileError('baseUrl')?.message}</p>}
               </Field>
@@ -415,10 +467,11 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                       aria-invalid={Boolean(profileError('model'))}
                       aria-describedby={profileError('model') ? profileFieldErrorId(selectedIndex, 'model') : undefined}
                       onChange={(e) => patchSelected({ model: e.target.value })}
-                      placeholder="deepseek-chat，或点右侧按钮检测"
+                      placeholder={selectedProtocol === 'openai' ? 'deepseek-chat，或点右侧按钮检测' : 'Claude 模型 ID，或点右侧按钮检测'}
                     />
                     <button
                       className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-100 disabled:opacity-60"
+                      aria-label="检测可用模型"
                       onClick={detectModels}
                       disabled={modelState.loading}
                     >
@@ -480,17 +533,19 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                   )}
                 </div>
               </Field>
-              <Field label={`温度 temperature：${selected.temperature ?? 0.4}`}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={selected.temperature ?? 0.4}
-                  onChange={(e) => patchSelected({ temperature: Number(e.target.value) })}
-                  className="w-full accent-indigo-600"
-                />
-              </Field>
+              {selectedProtocol === 'openai' && (
+                <Field label={`温度 temperature：${selected.temperature ?? 0.4}`}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={selected.temperature ?? 0.4}
+                    onChange={(e) => patchSelected({ temperature: Number(e.target.value) })}
+                    className="w-full accent-indigo-600"
+                  />
+                </Field>
+              )}
 
               <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
                 <button
@@ -537,38 +592,25 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
         )}
       </div>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="scan-limit-heading">
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-3" aria-labelledby="scan-limit-heading">
         <h2 id="scan-limit-heading" className="text-sm font-semibold text-slate-800">扫描安全上限</h2>
-        <p className="mt-1 text-xs text-slate-500">项目较大时，扫描会在达到上限后停止并提示扫描不完整。默认最多纳入 50,000 个文件和 100,000 个树节点，单文件内容上限为 1 MiB；留空使用默认值，修改后在下一次扫描或生成时生效。</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-2 space-y-2">
           {([
             ['maxFiles', '最多扫描文件数'],
             ['maxTreeNodes', '最多树节点数'],
-            ['maxContentFileBytes', '单文件内容上限（字节）']
+            ['maxContentFileBytes', '单文件内容上限']
           ] as Array<[keyof ScanLimits, string]>).map(([key, label]) => {
-            const bounds = SCAN_LIMIT_BOUNDS[key]
             const id = `scan-limit-${key}`
-            const errorId = `${id}-error`
-            return <div key={key}>
-              <label htmlFor={id} className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
-              <input id={id} name={key} type="text" inputMode="numeric" className={inputCls}
-                value={scanLimitDraft[key]} aria-invalid={Boolean(scanLimitErrors[key])}
-                aria-describedby={scanLimitErrors[key] ? errorId : undefined}
-                onChange={(e) => {
-                  setScanLimitDraft((draft) => ({ ...draft, [key]: e.target.value }))
-                  setScanLimitErrors((errors) => ({ ...errors, [key]: undefined }))
-                  setDirty(true)
-                  setSaved(false)
-                  saveFlow.markLocalEdit()
-                }}
-                onBlur={() => {
-                  const result = parseScanLimitDraft(scanLimitDraft)
-                  setScanLimitErrors((errors) => ({ ...errors, [key]: result.errors[key] }))
-                }}
-                placeholder={`默认 ${DEFAULT_SCAN_LIMITS[key]}`} />
-              {scanLimitErrors[key] && <p id={errorId} className="mt-1 text-xs text-rose-600">{scanLimitErrors[key]}</p>}
-              <p className="mt-1 text-[11px] text-slate-400">整数，范围 {bounds.min}–{bounds.max}</p>
-            </div>
+            return <ScanLimitSlider
+              key={key}
+              id={id}
+              name={key}
+              label={label}
+              draftValue={scanLimitDraft[key]}
+              error={scanLimitErrors[key]}
+              onChange={(value) => updateScanLimit(key, value)}
+              onReset={() => resetScanLimit(key)}
+            />
           })}
         </div>
       </section>
@@ -585,10 +627,6 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
         {saveError && <p className="text-sm text-rose-600">✗ {saveError}</p>}
       </div>
 
-      <p className="mt-5 text-xs leading-5 text-slate-400">
-        说明：API Key 使用操作系统凭据存储加密后保存在本机；本应用仅在请求模型服务时读取，不会上传到其他第三方。
-        名词解释等 AI 能力默认复用生成面试题时的模型配置。
-      </p>
     </div>
   )
 }

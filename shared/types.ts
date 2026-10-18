@@ -2,14 +2,16 @@
 
 export type Granularity = 'coarse' | 'medium' | 'fine'
 export type RoleFocus = 'general' | 'frontend' | 'backend' | 'algorithm'
+export type LlmProtocol = 'openai' | 'anthropic'
 
-/** 大模型配置（OpenAI 兼容接口） */
+/** 大模型配置；缺少 protocol 的旧配置按 OpenAI Chat Completions 处理。 */
 export interface LlmProfile {
   id: string
   name: string
   baseUrl: string
   apiKey: string
   model: string
+  protocol?: LlmProtocol
   temperature?: number
 }
 
@@ -196,6 +198,19 @@ export interface InterviewResult {
   sourceEvidenceSummary?: SourceEvidenceSummary
 }
 
+/** Compact metadata shown in a project's saved analysis history. */
+export interface AnalysisSummary {
+  id: string
+  createdAt: string
+  granularity: Granularity
+  roleFocus: RoleFocus
+}
+
+export interface AnalysisPage {
+  items: AnalysisSummary[]
+  nextCursor: string | null
+}
+
 export interface ContextTruncationMetadata {
   treeTruncated: boolean
   contentTruncated: boolean
@@ -237,6 +252,8 @@ export interface GenerateResponse {
   result: InterviewResult
   /** Exact path key used by the main process for recent/result persistence. */
   storagePath?: string
+  /** Stable identifier for the saved analysis represented by result. */
+  analysisId?: string
 }
 
 export interface ExplainRequest {
