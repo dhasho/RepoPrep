@@ -52,8 +52,8 @@ export default function NavigationRail({ mode, canShowQuestions, onProjects, onQ
           onClick={onSettings}
         >
           <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M18.8 13.5a7.8 7.8 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L13.8 3h-3.6l-.3 2.4a7.6 7.6 0 0 0-2.6 1.5l-2-.8-1.8 3.1 1.7 1.3a7.8 7.8 0 0 0 0 3l-1.7 1.3 1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h3.6l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1z" />
             <circle cx="12" cy="12" r="3" />
-            <path d="M12 2.8v2.1m0 14.2v2.1M21.2 12h-2.1M4.9 12H2.8m15.7-6.5L17 7m-10 10-1.5 1.5m14.5 0L18.5 17m-10-10L7 5.5" />
           </svg>
         </button>
       </div>
