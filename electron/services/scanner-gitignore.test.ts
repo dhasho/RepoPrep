@@ -159,6 +159,27 @@ test('多层嵌套叠加：每层规则都在其子树内生效', async () => {
   }
 })
 
+test('公平调度交错加载兄弟嵌套规则时，各自只影响对应子树', async () => {
+  const root = await makeProject({
+    '.gitignore': '*.tmp\n',
+    'a-large/.gitignore': '!keep.tmp\n',
+    'a-large/keep.tmp': 'included in a',
+    'a-large/drop.tmp': 'ignored by root',
+    'z-core/.gitignore': 'keep.tmp\n',
+    'z-core/keep.tmp': 'ignored in z',
+    'z-core/entry.ts': 'visible core entry'
+  })
+  try {
+    const seen = await scannedRelPaths(root)
+    assert.ok(seen.has('a-large/keep.tmp'), 'a-large 的否定规则应在本目录及子树生效')
+    assert.ok(!seen.has('a-large/drop.tmp'), '根忽略规则仍过滤其他匹配项')
+    assert.ok(!seen.has('z-core/keep.tmp'), 'z-core 的规则应保持优先级')
+    assert.ok(seen.has('z-core/entry.ts'), '兄弟规则不能误伤核心目录中的其他文件')
+  } finally {
+    await removeProject(root)
+  }
+})
+
 test('目录名含 glob 元字符时规则仍正确定位（不漏本目录、不误伤兄弟）', async () => {
   const root = await makeProject({
     'a[1]/.gitignore': 'skipme.txt\n',

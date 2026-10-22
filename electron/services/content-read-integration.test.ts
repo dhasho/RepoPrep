@@ -99,11 +99,15 @@ test('real scan plus context keeps readable content and records sanitized EACCES
     assert.equal(context.contentReadSummary.successfulReads, 1)
     assert.equal(context.contentReadSummary.failedReads, 3)
     assert.deepEqual(context.contentReadSummary.failuresByReason, { permission: 1, missing: 1, io: 1 })
-    assert.deepEqual(context.contentReadSummary.failures.map(({ path: relPath, reason }) => [relPath, reason]), [
+    const failureSamples = context.contentReadSummary.failures
+      .map(({ path: relPath, reason }) => [relPath, reason])
+      .sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath))
+    const expectedFailureSamples = [
       ['README.md', 'permission'],
       ['package.json', 'missing'],
       ['src/main.ts', 'io']
-    ])
+    ].sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath))
+    assert.deepEqual(failureSamples, expectedFailureSamples)
     assert.ok(context.headerText.includes('尝试读取 4 次'))
     assert.ok(context.headerText.includes('权限不足 1 次'))
     assert.ok(!context.headerText.includes('synthetic-secret'))

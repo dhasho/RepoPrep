@@ -1,5 +1,4 @@
 // 按颗粒度组装送入大模型的项目上下文（字符预算控制 + 细粒度分批）
-import path from 'node:path'
 import {
   contentReadFailureReason,
   contentReadWarning,
@@ -25,11 +24,10 @@ import { isProjectContentReadable, resolveProjectIdentity } from './project-snap
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, safeClipText, treeCharBudget } from '../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { renderBoundedTree } from './scanner.ts'
-
-const CODE_EXTS = new Set([
-  'ts','tsx','js','jsx','mjs','cjs','py','java','go','rs','c','h','cpp','cc','cxx','hpp',
-  'cs','rb','php','swift','kt','kts','scala','dart','lua','vue','svelte','astro','sql','proto','graphql','prisma'
-])
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles } from './file-selection.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+export { isCoarseCandidate } from './file-selection.ts'
 
 // Five capped samples are escaped for display; reserve enough room for their
 // worst-case JSON expansion and the bounded reason/count summary.
@@ -74,49 +72,6 @@ export interface BuiltContext {
   moduleCount: number
 }
 
-/**
- * 常见关键配置文件名。比较统一用小写（构造时归一化）——此前集合里是
- * Dockerfile / Makefile / Cargo.toml 等混合大小写原值，而比较前 basename
- * 已被转小写，导致这些关键配置拿不到配置分（issue #18）。
- */
-const CONFIG_BASENAMES = new Set(
-  [
-    'package.json', 'tsconfig.json', 'jsconfig.json', 'vite.config.ts', 'vite.config.js', 'webpack.config.js', 'next.config.js',
-    'nuxt.config.ts', 'vue.config.js', 'babel.config.js', '.eslintrc', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json', '.eslintrc.yml', '.prettierrc', '.prettierrc.json',
-    'electron.vite.config.ts', 'electron.vite.config.js', 'electron-builder.yml', 'electron-builder.yaml', 'electron-builder.json',
-    'tailwind.config.js', 'tailwind.config.ts', 'tailwind.config.cjs', 'postcss.config.js', 'postcss.config.cjs', 'postcss.config.mjs', 'postcss.config.ts',
-    'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'go.mod', 'Cargo.toml', 'Makefile',
-    'CMakeLists.txt', 'requirements.txt', 'pyproject.toml', 'setup.py', 'composer.json', 'Gemfile', 'mix.exs',
-    'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile'
-  ].map((n) => n.toLowerCase())
-)
-
-/** 配置分基准：根目录配置满分；子目录同名配置递减，避免深层普通同名文件冒充根配置 */
-const CONFIG_SCORE = 900
-const CONFIG_DEPTH_PENALTY = 50
-
-export function scoreFile(relPath: string, size: number): number {
-  const base = path.basename(relPath).toLowerCase()
-  const depth = relPath.split('/').length
-  let score = 0
-  if (/^readme\.(md|txt|rst)$/.test(base)) score = 1000
-  else if (CONFIG_BASENAMES.has(base)) score = CONFIG_SCORE - (depth - 1) * CONFIG_DEPTH_PENALTY
-  else if (/^(main|index|app|server|cli)\.(ts|tsx|js|jsx|py|go|rs|java)$/.test(base) && depth <= 3) score = 800
-  else if (CODE_EXTS.has(path.extname(relPath).slice(1).toLowerCase())) score = 500 - depth * 20
-  else if (/\.(md|json|ya?ml|toml)$/i.test(relPath)) score = 300 - depth * 10
-  else score = 100 - depth * 10
-  // 太小的文件信息量低，太大的可能是生成物/数据文件
-  if (size < 200) score -= 30
-  if (size > 100_000) score -= 100
-  return score
-}
-
-/** 粗粒度只保留文档/配置类文件（导出便于测试大小写与目录策略） */
-export function isCoarseCandidate(relPath: string): boolean {
-  const base = path.basename(relPath).toLowerCase()
-  return /^readme\./.test(base) || CONFIG_BASENAMES.has(base) || /\.(md|json|ya?ml|toml|txt)$/i.test(relPath)
-}
-
 interface PickedFiles {
   files: ContextFile[]
   contentSecurity: ContentSecuritySummary
@@ -145,6 +100,41 @@ function addContentSecurity(target: ContentSecuritySummary, source: ContentSecur
   }
 }
 
+/** Equal-share water filling: short files return unused space to longer files. */
+function allocateBodyBudget(demands: readonly number[], budget: number): number[] {
+  const allocations = demands.map(() => 0)
+  let remaining = Math.max(0, Math.floor(budget))
+  let active = demands.map((_, index) => index).filter((index) => demands[index] > 0)
+  while (active.length && remaining > 0) {
+    const share = Math.floor(remaining / active.length)
+    if (share === 0) {
+      for (let index = 0; index < remaining; index++) allocations[active[index]]++
+      break
+    }
+    const saturated = active.filter((index) => demands[index] - allocations[index] <= share)
+    if (saturated.length) {
+      for (const index of saturated) {
+        const amount = demands[index] - allocations[index]
+        allocations[index] += amount
+        remaining -= amount
+      }
+      const saturatedSet = new Set(saturated)
+      active = active.filter((index) => !saturatedSet.has(index))
+      continue
+    }
+    for (const index of active) allocations[index] += share
+    remaining -= share * active.length
+    for (let index = 0; index < remaining; index++) allocations[active[index]]++
+    break
+  }
+  return allocations
+}
+
+function fileRenderOverhead(relPath: string, truncated: boolean): number {
+  const title = `### 文件：${relPath}${truncated ? '（内容过长已截断）' : ''}`
+  return title.length + 10
+}
+
 async function pickFiles(
   scan: ScanResult,
   granularity: Granularity,
@@ -155,7 +145,7 @@ async function pickFiles(
   warningReserve: number,
   sourceScan = scan
 ): Promise<PickedFiles> {
-  const candidates = scan.files
+  const eligibleFiles = scan.files
     .filter((f) => f.isContentCandidate)
     .filter((f) => {
       if (granularity === 'coarse') {
@@ -164,68 +154,119 @@ async function pickFiles(
       }
       return true
     })
-    .map((f) => ({ f, score: scoreFile(f.relPath, f.size) }))
-    .sort((a, b) => b.score - a.score)
 
-  const out: ContextFile[] = []
-  const contentSecurity = emptyContentSecurity()
-  const emptyBatch: ContextBatch = { label: '', files: [], totalChars: 0, kind: 'global', weight: 1 }
-  let renderedChars = renderBatch(headerText, treeText, emptyBatch).length
-  let contentTruncated = false
-  for (let index = 0; index < candidates.length; index++) {
-    const { f } = candidates[index]
-    const separatorChars = 1
-    const plainTitle = `### 文件：${f.relPath}`
-    const plainOverhead = plainTitle.length + 9 + separatorChars
-    const remaining = budgetChars - warningReserve - renderedChars - plainOverhead
-    if (remaining < 0) {
-      contentTruncated = true
-      continue
-    }
-    const truncatedTitle = `### 文件：${f.relPath}（内容过长已截断）`
-    const truncatedOverhead = truncatedTitle.length + 9 + separatorChars
-    const availableWithNotice = budgetChars - warningReserve - renderedChars - truncatedOverhead
-    const contentMarker = '…（内容已截断）'
+  // Read a bounded sample to infer entry points and local references. The
+  // approved reader remains the only source of bytes; only redacted text is
+  // retained, and this cache lives for this pickFiles call alone.
+  const cache = new Map<string, { content: string; redaction: ReturnType<typeof redactSensitiveContent> } | { failed: true }>()
+  const probeFiles = selectProbeFiles(eligibleFiles, granularity)
+  for (const file of probeFiles) {
     contentReadSummary.attemptedReads++
-    let rawContent: string
     try {
-      rawContent = await readProjectContent(sourceScan, f)
+      const raw = await readProjectContent(sourceScan, file)
+      contentReadSummary.successfulReads++
+      const redaction = redactSensitiveContent(raw)
+      cache.set(file.relPath, { content: redaction.content, redaction })
     } catch (error) {
       if (error instanceof ProjectContentBoundaryError) throw error
       if (!(error instanceof ProjectContentReadError)) throw error
-      recordContentReadFailure(contentReadSummary, f.relPath, contentReadFailureReason(error))
-      continue
+      recordContentReadFailure(contentReadSummary, file.relPath, contentReadFailureReason(error))
+      cache.set(file.relPath, { failed: true })
     }
-    contentReadSummary.successfulReads++
+  }
+  const probeContents = new Map<string, string>()
+  for (const [relPath, value] of cache) {
+    if (!('failed' in value)) probeContents.set(relPath, value.content)
+  }
+  const signals = collectFileSignals(eligibleFiles, probeContents)
+  const candidates = orderFilesForContext(eligibleFiles, granularity, signals)
+  const emptyBatch: ContextBatch = { label: '', files: [], totalChars: 0, kind: 'global', weight: 1 }
+  const baseChars = renderBatch(headerText, treeText, emptyBatch).length
+  const available = Math.max(0, budgetChars - warningReserve - baseChars)
+  const estimatedContent = (file: ScannedFile): number => {
+    const cached = cache.get(file.relPath)
+    if (cached) return 'failed' in cached ? 0 : cached.content.length
+    return Math.min(file.textBytes ?? file.size, MAX_CONTENT_FILE_BYTES)
+  }
+  let estimatedCost = 0
+  let estimatedReadBytes = 0
+  for (let index = 0; index < candidates.length; index++) {
+    const file = candidates[index]
+    estimatedCost += fileRenderOverhead(file.relPath, false) + estimatedContent(file)
+    estimatedReadBytes += file.size
+  }
+  const allEstimatedFit = estimatedCost <= available && estimatedReadBytes <= 16 * 1024 * 1024
 
-    // Redact before applying the budget: placeholders must be the only form
-    // of matched secrets that can enter ContextFile, batches, or renderBatch.
-    const redaction = redactSensitiveContent(rawContent)
-    const content = redaction.content
-    const truncated = content.length > remaining
-    if (truncated && availableWithNotice < contentMarker.length) {
-      contentTruncated = true
-      continue
+  // Constrained projects get a bounded window with room for a useful slice in
+  // every slot. If estimates say all files fit, retain all and verify after
+  // redaction using their actual UTF-16 lengths.
+  let windowSize = candidates.length
+  if (!allEstimatedFit) {
+    windowSize = 0
+    let reserved = 0
+    for (const file of candidates) {
+      const overhead = fileRenderOverhead(file.relPath, true)
+      if (windowSize >= 64 || reserved + overhead + 1024 > available) break
+      reserved += overhead + 1024
+      windowSize++
     }
-    let selectedContent = content
-    if (truncated) {
-      let low = 0
-      let high = Math.min(content.length, availableWithNotice)
-      while (low < high) {
-        const mid = Math.ceil((low + high) / 2)
-        if (safeClipText(content, mid, contentMarker).length <= availableWithNotice) low = mid
-        else high = mid - 1
+  }
+
+  const selected: Array<{ file: ScannedFile; redaction: ReturnType<typeof redactSensitiveContent> }> = []
+  let selectedReadBytes = 0
+  let candidateIndex = 0
+  let readBudgetSkipped = false
+  while (candidateIndex < candidates.length && selected.length < windowSize) {
+    const file = candidates[candidateIndex++]
+    let cached = cache.get(file.relPath)
+    if (!cached) {
+      if (selectedReadBytes + file.size > 16 * 1024 * 1024) {
+        readBudgetSkipped = true
+        continue
       }
-      selectedContent = safeClipText(content, low, contentMarker)
+      selectedReadBytes += file.size
+      contentReadSummary.attemptedReads++
+      try {
+        const raw = await readProjectContent(sourceScan, file)
+        contentReadSummary.successfulReads++
+        const redaction = redactSensitiveContent(raw)
+        cached = { content: redaction.content, redaction }
+        cache.set(file.relPath, cached)
+      } catch (error) {
+        if (error instanceof ProjectContentBoundaryError) throw error
+        if (!(error instanceof ProjectContentReadError)) throw error
+        recordContentReadFailure(contentReadSummary, file.relPath, contentReadFailureReason(error))
+        cache.set(file.relPath, { failed: true })
+        continue
+      }
     }
+    if ('failed' in cached) continue
+    selected.push({ file, redaction: cached.redaction })
+  }
+
+  const fullCost = selected.reduce((sum, item) => {
+    return sum + fileRenderOverhead(item.file.relPath, false) + item.redaction.content.length
+  }, baseChars)
+  const keepWholeSelected = fullCost + warningReserve <= budgetChars
+  const truncatedOverhead = selected.reduce((sum, item) => {
+    return sum + fileRenderOverhead(item.file.relPath, true)
+  }, 0)
+  const bodyBudget = Math.max(0, budgetChars - warningReserve - baseChars - truncatedOverhead)
+  const demands = selected.map(({ redaction }) => redaction.content.length)
+  const allocations = keepWholeSelected ? demands : allocateBodyBudget(demands, bodyBudget)
+  const out: ContextFile[] = []
+  const contentSecurity = emptyContentSecurity()
+  let contentTruncated = candidateIndex < candidates.length || readBudgetSkipped
+  for (let index = 0; index < selected.length; index++) {
+    const { file, redaction } = selected[index]
+    const truncated = !keepWholeSelected && redaction.content.length > allocations[index]
     out.push({
-      relPath: f.relPath,
-      content: selectedContent,
+      relPath: file.relPath,
+      content: truncated ? safeClipText(redaction.content, allocations[index], '…（内容已截断）') : redaction.content,
       truncated,
       redacted: redaction.totalMatches > 0,
       redactionMatches: redaction.totalMatches
     })
-    renderedChars += (truncated ? truncatedOverhead : plainOverhead) + selectedContent.length
     contentTruncated ||= truncated
     if (redaction.totalMatches > 0) {
       contentSecurity.redactedFiles++
@@ -234,10 +275,6 @@ async function pickFiles(
         contentSecurity.matchesByCategory[match.category] =
           (contentSecurity.matchesByCategory[match.category] ?? 0) + match.count
       }
-    }
-    if (truncated) {
-      if (index < candidates.length - 1) contentTruncated = true
-      break
     }
   }
   return { files: out, contentSecurity, contentTruncated }
@@ -388,7 +425,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     .map(([group, groupFiles]) => ({ group, groupFiles, mass: moduleMass(groupFiles) }))
     .sort((a, b) => {
       const scoreOf = (m: { fileCount: number; contentBytes: number }) => m.fileCount + m.contentBytes / 1000
-      return scoreOf(b.mass) - scoreOf(a.mass)
+      return scoreOf(b.mass) - scoreOf(a.mass) || a.group.localeCompare(b.group)
     })
 
   const MAX_MODULE_BATCHES = 10
