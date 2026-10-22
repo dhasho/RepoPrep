@@ -1,6 +1,7 @@
 import type { AnalysisSummary } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
 import type { ProjectLibraryEntry } from '../hooks/useProjectLibrary'
+import { AppIcon } from './AppIcon'
 
 interface Props {
   projects: ProjectLibraryEntry[]
@@ -28,7 +29,7 @@ export default function ProjectSidebar({ projects, loading, error, selectedProje
     <aside className="project-library-sidebar sidebar-enter flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white" aria-label="项目">
       <div className="border-b border-slate-200 p-3">
         <button aria-label="新建分析" className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100" onClick={onNew}>
-          <span aria-hidden="true" className="text-lg leading-none text-indigo-600">＋</span>
+          <AppIcon name="plus" size={16} className="text-indigo-600" />
           <span>新建</span>
         </button>
       </div>
@@ -55,14 +56,14 @@ export default function ProjectSidebar({ projects, loading, error, selectedProje
                 aria-expanded={project.expanded}
                 onClick={() => onToggleProject(project.path)}
               >
-                <span aria-hidden="true">{project.expanded ? '⌄' : '›'}</span>
+                <AppIcon name={project.expanded ? 'chevron-down' : 'chevron-right'} size={16} />
               </button>
               <button
                 className="mr-1 invisible rounded p-1 text-[10px] text-slate-400 hover:bg-white hover:text-rose-600 group-hover:visible group-focus-within:visible"
                 title="从最近项目移除"
                 aria-label={`移除 ${project.name}`}
                 onClick={() => onRemove(project.path)}
-              >×</button>
+              ><AppIcon name="close" size={14} /></button>
             </div>
             {project.expanded && (
               <div className="ml-3 border-l border-slate-200 pl-2">

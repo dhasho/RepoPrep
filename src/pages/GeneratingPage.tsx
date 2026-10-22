@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import type { GenerateOptions, GenerateProgress, ProjectOverview } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
 import { formatLogTime } from '../lib/log-time'
+import { AppIcon } from '../components/AppIcon'
 
 interface Props {
   overview: ProjectOverview | null
@@ -28,7 +29,7 @@ export default function GeneratingPage({ overview, options, progress, logs, erro
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         {error ? (
           <>
-            <div className="mb-3 text-4xl">😵</div>
+            <div className="mb-3 flex justify-center text-rose-600"><AppIcon name="error" size={36} /></div>
             <h1 className="text-lg font-semibold text-slate-900">生成失败</h1>
             <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-rose-50 px-4 py-3 text-[13px] leading-6 text-rose-700">
               {error}
@@ -38,14 +39,14 @@ export default function GeneratingPage({ overview, options, progress, logs, erro
                 className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                 onClick={onBack}
               >
-                ← 返回调整配置并重试
+                <AppIcon name="arrow-left" size={16} className="mr-1" />返回调整配置并重试
               </button>
             </div>
           </>
         ) : (
           <>
             <div className="mb-4 flex items-center gap-3">
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+              <AppIcon name="loader" size={16} className="animate-spin text-indigo-600" />
               <div>
                 <h1 className="text-lg font-semibold text-slate-900">
                   {overview ? `正在为「${overview.name}」生成面试题` : '正在生成面试题'}

@@ -304,7 +304,10 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
       projectPath: 'C:\\same-project',
       profileId: 'profile-A',
       projectSummary: 'SUMMARY_A',
-      sections: [{ id: 's1', title: 'Section A', questions: [{ id: 'qa', question: 'QUESTION_A [[TermA]]', answer: 'ANSWER_A [[TermA]] context', followUps: [] }] }],
+      sections: [{ id: 's1', title: 'Section A', questions: [
+        { id: 'qa', question: 'QUESTION_A [[TermA]]', answer: 'ANSWER_A [[TermA]] context', followUps: [] },
+        { id: 'qb', question: 'QUESTION_B', answer: 'needle answer', followUps: [] }
+      ] }],
       glossary: { TermA: 'GLOSSARY_A' }
     })
 
@@ -345,12 +348,31 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     const search = container.querySelector('input')
     assert.ok(search)
     const setInputValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')?.set
-    setInputValue?.call(search, 'no matching question')
+    setInputValue?.call(search, 'needle')
     await act(async () => {
       Simulate.change(search, { target: search })
     })
-    assert.equal((search as HTMLInputElement).value, 'no matching question', 'A search state changed before replacement')
-    assert.ok(container.textContent?.includes('没有匹配的问题'), 'A filter is active before replacement')
+    assert.equal((search as HTMLInputElement).value, 'needle', 'the input keeps its live query')
+    assert.ok(container.textContent?.includes('QUESTION_B'), 'the answer match is filtered into view')
+    assert.ok(container.textContent?.includes('Q02'), 'filtering keeps the original question number')
+    assert.ok(!container.textContent?.includes('QUESTION_A'), 'non-matching questions are filtered out')
+
+    const searchForm = container.querySelector<HTMLFormElement>('form[role="search"]')
+    const searchButton = container.querySelector<HTMLButtonElement>('button[aria-label="搜索"]')
+    assert.ok(searchForm && searchButton)
+    assert.equal(search.getAttribute('role'), 'searchbox')
+    assert.equal(search.getAttribute('aria-label'), '搜索问题、答案或名词')
+    assert.equal(searchButton.type, 'submit')
+    await act(async () => { searchButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })) })
+    assert.equal((search as HTMLInputElement).value, 'needle', 'button submission retains the query')
+    assert.ok(container.textContent?.includes('Q02'), 'button submission keeps the live filter')
+
+    const enterSubmit = new dom.window.Event('submit', { bubbles: true, cancelable: true })
+    await act(async () => { searchForm.dispatchEvent(enterSubmit) })
+    assert.equal(enterSubmit.defaultPrevented, true, 'form submission is prevented from navigating or reloading')
+    assert.equal((search as HTMLInputElement).value, 'needle', 'Enter submission retains the query')
+    assert.equal(dom.window.document.activeElement, search, 'submission returns focus to the search field')
+    assert.ok(container.textContent?.includes('Q02'), 'Enter submission keeps the live filter')
 
     // Same project path and timestamp, but this is a replaced generation snapshot.
     const resultB = makeResult({

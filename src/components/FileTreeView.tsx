@@ -1,6 +1,7 @@
 // 可折叠的项目文件树
 import { useState } from 'react'
 import type { FileNode } from '@shared/types'
+import { AppIcon } from './AppIcon'
 
 function formatSize(size?: number): string {
   if (size == null) return ''
@@ -20,7 +21,7 @@ function Node({ node, depth }: { node: FileNode; depth: number }) {
           style={{ paddingLeft: depth * 14 + 4 }}
           onClick={() => setOpen((o) => !o)}
         >
-          <span className="w-3 shrink-0 text-center text-[10px] text-slate-400">{open ? '▾' : '▸'}</span>
+          <AppIcon name={open ? 'chevron-down' : 'chevron-right'} size={14} className="text-slate-400" />
           <span className="truncate text-[13px] font-medium text-slate-700">{node.name}/</span>
         </button>
         {open && (node.children ?? []).map((c) => <Node key={c.path} node={c} depth={depth + 1} />)}

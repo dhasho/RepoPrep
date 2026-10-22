@@ -1,3 +1,5 @@
+import { AppIcon } from './AppIcon'
+
 interface Props {
   canGoBack: boolean
   canGoForward: boolean
@@ -16,9 +18,7 @@ export default function HistoryButtons({ canGoBack, canGoForward, onBack, onForw
         disabled={!canGoBack}
         onClick={onBack}
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M20 12H4m6-6-6 6 6 6" />
-        </svg>
+        <AppIcon name="arrow-left" size={16} />
       </button>
       <button
         type="button"
@@ -28,9 +28,7 @@ export default function HistoryButtons({ canGoBack, canGoForward, onBack, onForw
         disabled={!canGoForward}
         onClick={onForward}
       >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 12h16m-6-6 6 6-6 6" />
-        </svg>
+        <AppIcon name="arrow-right" size={16} />
       </button>
     </div>
   )

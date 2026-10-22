@@ -5,6 +5,7 @@ import { EXPLAIN_CONTEXT_LIMITS } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 import { ExplainStreamController } from '../lib/explain-stream'
 import MarkdownView from './MarkdownView'
+import { AppIcon } from './AppIcon'
 
 export interface TermPopoverProps {
   term: string
@@ -145,10 +146,8 @@ export default function TermPopover(props: TermPopoverProps) {
           <span className="text-xs rounded bg-indigo-50 px-1.5 py-0.5 font-medium text-indigo-600">名词</span>
           <span className="truncate text-[15px] font-semibold text-slate-900">{term}</span>
         </div>
-        <button className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" onClick={onClose} title="关闭">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
+        <button className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" onClick={onClose} title="关闭" aria-label="关闭">
+          <AppIcon name="close" size={14} />
         </button>
       </div>
 
@@ -168,7 +167,7 @@ export default function TermPopover(props: TermPopoverProps) {
               className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
               onClick={startExplain}
             >
-              ✨ 让 AI 结合本项目详细解释
+              <AppIcon name="sparkles" size={16} className="mr-1" />让 AI 结合本项目详细解释
             </button>
           </div>
         )}
