@@ -8,7 +8,7 @@ import {
   type ContentReadSummary
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 } from '../../shared/content-read.ts'
-import type { ContextTruncationMetadata, Granularity, ScanTruncation } from '../../shared/types'
+import type { ContextTruncationMetadata, Granularity, RoleFocus, ScanTruncation } from '../../shared/types'
 import type { ScannedFile, ScanResult } from './scanner'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { MAX_CONTENT_FILE_BYTES } from './scanner.ts'
@@ -21,11 +21,15 @@ import { ProjectContentBoundaryError, ProjectContentReadError, readProjectConten
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { isProjectContentReadable, resolveProjectIdentity } from './project-snapshot.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, safeClipText, treeCharBudget } from '../../shared/context-budget.ts'
+import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, treeCharBudget } from '../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles } from './file-selection.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { selectSourceRegions, type SourceRegion } from './snippet-selection.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 export { isCoarseCandidate } from './file-selection.ts'
 
@@ -39,6 +43,14 @@ export interface ContextFile {
   truncated: boolean
   redacted: boolean
   redactionMatches: number
+  /** Private, already-redacted selection source used only for bounded re-rendering. */
+  selectionRegions?: SourceRegion[]
+}
+
+export interface BuildContextOptions {
+  maxChars?: number
+  roleFocus?: RoleFocus
+  signal?: AbortSignal
 }
 
 export interface ContentSecuritySummary {
@@ -70,6 +82,7 @@ export interface BuiltContext {
   contentReadSummary: ContentReadSummary
   /** 模块批的数量（0 表示没有按模块分批）。进度提示用它区分"全局+模块"与"仅全局"。 */
   moduleCount: number
+  selection?: { strategy: 'structure-v1'; eligibleFiles: number; selectedFiles: number; selectedRegions: number; omittedFiles: number; truncatedFiles: number; providedChars: number }
 }
 
 interface PickedFiles {
@@ -143,8 +156,10 @@ async function pickFiles(
   headerText: string,
   treeText: string,
   warningReserve: number,
-  sourceScan = scan
+  sourceScan = scan,
+  options: BuildContextOptions = {}
 ): Promise<PickedFiles> {
+  const assertActive = (): void => { if (options.signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError') }
   const eligibleFiles = scan.files
     .filter((f) => f.isContentCandidate)
     .filter((f) => {
@@ -161,6 +176,7 @@ async function pickFiles(
   const cache = new Map<string, { content: string; redaction: ReturnType<typeof redactSensitiveContent> } | { failed: true }>()
   const probeFiles = selectProbeFiles(eligibleFiles, granularity)
   for (const file of probeFiles) {
+    assertActive()
     contentReadSummary.attemptedReads++
     try {
       const raw = await readProjectContent(sourceScan, file)
@@ -173,12 +189,15 @@ async function pickFiles(
       recordContentReadFailure(contentReadSummary, file.relPath, contentReadFailureReason(error))
       cache.set(file.relPath, { failed: true })
     }
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    assertActive()
   }
   const probeContents = new Map<string, string>()
   for (const [relPath, value] of cache) {
     if (!('failed' in value)) probeContents.set(relPath, value.content)
   }
   const signals = collectFileSignals(eligibleFiles, probeContents)
+  assertActive()
   const candidates = orderFilesForContext(eligibleFiles, granularity, signals)
   const emptyBatch: ContextBatch = { label: '', files: [], totalChars: 0, kind: 'global', weight: 1 }
   const baseChars = renderBatch(headerText, treeText, emptyBatch).length
@@ -217,6 +236,7 @@ async function pickFiles(
   let candidateIndex = 0
   let readBudgetSkipped = false
   while (candidateIndex < candidates.length && selected.length < windowSize) {
+    assertActive()
     const file = candidates[candidateIndex++]
     let cached = cache.get(file.relPath)
     if (!cached) {
@@ -239,6 +259,8 @@ async function pickFiles(
         cache.set(file.relPath, { failed: true })
         continue
       }
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      assertActive()
     }
     if ('failed' in cached) continue
     selected.push({ file, redaction: cached.redaction })
@@ -258,11 +280,23 @@ async function pickFiles(
   const contentSecurity = emptyContentSecurity()
   let contentTruncated = candidateIndex < candidates.length || readBudgetSkipped
   for (let index = 0; index < selected.length; index++) {
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    assertActive()
     const { file, redaction } = selected[index]
     const truncated = !keepWholeSelected && redaction.content.length > allocations[index]
+    const analysis = analyzeSource(file.relPath, redaction.content)
+    const referencedSymbols = new Set(signals.referencedSymbols?.get(file.relPath) ?? [])
+    for (const imported of analysis?.imports ?? []) {
+      for (const name of imported.importedNames) if (name !== '*' && name !== 'default') referencedSymbols.add(name)
+    }
+    const regions = truncated
+      ? selectSourceRegions(redaction.content, analysis, allocations[index], { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext }).regions
+      : [{ start: 0, end: redaction.content.length, text: redaction.content, label: 'whole-file', complete: true, priority: 100 }]
+    const renderedContent = truncated ? formatRegions(regions) : redaction.content
     out.push({
       relPath: file.relPath,
-      content: truncated ? safeClipText(redaction.content, allocations[index], '…（内容已截断）') : redaction.content,
+      content: renderedContent,
+      selectionRegions: truncated ? regions : undefined,
       truncated,
       redacted: redaction.totalMatches > 0,
       redactionMatches: redaction.totalMatches
@@ -289,7 +323,10 @@ function moduleMass(files: readonly ScannedFile[]): { fileCount: number; content
   return { fileCount: files.length, contentBytes }
 }
 
-export async function buildContext(scan: ScanResult, granularity: Granularity): Promise<BuiltContext> {
+export async function buildContext(scan: ScanResult, granularity: Granularity, options: BuildContextOptions = {}): Promise<BuiltContext> {
+  if (options.signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError')
+  const requestedBudget = Number.isFinite(options.maxChars) ? Math.floor(options.maxChars as number) : CONTEXT_CHAR_BUDGETS[granularity]
+  const budgetChars = Math.min(CONTEXT_CHAR_BUDGETS[granularity], Math.max(0, requestedBudget))
   if (!isProjectContentReadable(scan)) throw new ProjectContentBoundaryError()
   let policyRoot: string
   try {
@@ -298,7 +335,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     throw new Error('无法安全解析所选项目路径，已停止分析')
   }
   const protectedRoot = Boolean(scan.tree.modelExcluded || classifySensitivePath('__project_root__', policyRoot))
-  const tree = renderBoundedTree(scan.tree, 4000, treeCharBudget(granularity), policyRoot)
+  const tree = renderBoundedTree(scan.tree, 4000, Math.min(treeCharBudget(granularity), Math.floor(budgetChars * 0.2)), policyRoot)
   const safeFiles = protectedRoot ? [] : scan.files.filter((file) => !classifySensitivePath(file.relPath, policyRoot))
   const safeScan = safeFiles.length === scan.files.length ? scan : { ...scan, files: safeFiles }
   const contextTruncation: ContextTruncationMetadata = {
@@ -331,6 +368,8 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     headerText = headerText.replace('\n\n## 项目文件树', `\n\n${contextWarning}\n\n## 项目文件树`)
   }
   const warningReserve = CONTENT_READ_WARNING_RESERVE + (contextTruncation.treeTruncated ? 0 : contextWarning.length + 4)
+  const fixedChars = renderBatch(headerText, tree.text, { label: '', files: [], totalChars: 0, kind: 'global', weight: 1 }).length
+  if (fixedChars + warningReserve > budgetChars) throw new Error('模型请求固定上下文超出支持范围。')
   const render = (batch: ContextBatch): string => renderBatch(headerText, tree.text, batch)
   const setTotalChars = (batch: ContextBatch): void => { batch.totalChars = render(batch).length }
   const addContextWarning = (): void => {
@@ -349,12 +388,13 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     const picked = await pickFiles(
       safeScan,
       granularity,
-      CONTEXT_CHAR_BUDGETS[granularity],
+      budgetChars,
       contentReadSummary,
       headerText,
       tree.text,
       warningReserve,
-      scan
+      scan,
+      options
     )
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
@@ -375,6 +415,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     const readWarning = contentReadWarning(contentReadSummary)
     if (readWarning) headerText = `${headerText}\n\n${readWarning}`
     setTotalChars(batch)
+    if (options.signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError')
     return {
       headerText,
       treeText: tree.text,
@@ -382,7 +423,8 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
       batches,
       contentSecurity,
       contentReadSummary,
-      moduleCount: 0
+      moduleCount: 0,
+      selection: makeSelectionSummary(safeScan, files, granularity)
     }
   }
 
@@ -391,12 +433,13 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const globalPicked = await pickFiles(
     safeScan,
     'coarse',
-    CONTEXT_CHAR_BUDGETS.fine,
+    budgetChars,
     contentReadSummary,
     headerText,
     tree.text,
     warningReserve,
-    scan
+    scan,
+    options
   )
   addContentSecurity(contentSecurity, globalPicked.contentSecurity)
   const globalFiles = globalPicked.files
@@ -431,6 +474,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const MAX_MODULE_BATCHES = 10
   let moduleBatches = 0
   for (const { group, groupFiles, mass } of sortedGroups) {
+    if (options.signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError')
     if (moduleBatches >= MAX_MODULE_BATCHES) {
       // The batch cap omits remaining modules just like per-file clipping omits content.
       contextTruncation.contentTruncated = true
@@ -441,12 +485,13 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     const picked = await pickFiles(
       subScan,
       'fine',
-      CONTEXT_CHAR_BUDGETS.fine,
+      budgetChars,
       contentReadSummary,
       headerText,
       tree.text,
       warningReserve,
-      scan
+      scan,
+      options
     )
     addContentSecurity(contentSecurity, picked.contentSecurity)
     const files = picked.files
@@ -477,6 +522,7 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
   const readWarning = contentReadWarning(contentReadSummary)
   if (readWarning) headerText = `${headerText}\n\n${readWarning}`
   for (const batch of batches) setTotalChars(batch)
+  if (options.signal?.aborted) throw new DOMException('The operation was aborted', 'AbortError')
 
   return {
     headerText,
@@ -485,7 +531,31 @@ export async function buildContext(scan: ScanResult, granularity: Granularity): 
     batches,
     contentSecurity,
     contentReadSummary,
-    moduleCount: moduleBatches
+    moduleCount: moduleBatches,
+    selection: makeSelectionSummary(safeScan, batches.flatMap((batch) => batch.files), granularity)
+  }
+}
+
+function formatRegions(regions: readonly SourceRegion[]): string {
+  return regions.map((region, index) => `${index ? '…（其他位置省略）…\n' : ''}${region.text}`).join('\n')
+}
+
+function makeSelectionSummary(scan: ScanResult, files: readonly ContextFile[], granularity: Granularity): NonNullable<BuiltContext['selection']> {
+  const eligible = scan.files.filter((file) => file.isContentCandidate && (
+    granularity === 'fine' ? isCoarseCandidate(file.relPath) || CODE_EXTS.has(file.ext)
+      : granularity === 'coarse' ? isCoarseCandidate(file.relPath)
+        : true
+  ))
+  const unique = new Map(files.map((file) => [file.relPath, file]))
+  const values = [...unique.values()]
+  return {
+    strategy: 'structure-v1',
+    eligibleFiles: eligible.length,
+    selectedFiles: values.length,
+    selectedRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.length ?? (file.content.length ? 1 : 0)), 0),
+    omittedFiles: Math.max(0, eligible.length - values.length),
+    truncatedFiles: values.filter((file) => file.truncated).length,
+    providedChars: files.reduce((sum, file) => sum + file.content.length, 0)
   }
 }
 
@@ -527,23 +597,28 @@ export function renderBatchWithinBudget(
     }
 
     const clippedTitle = `### 文件：${file.relPath}（内容过长已截断）`
-    const clipMarker = '…（内容已截断）'
     const contentAllowance = outputBudget - renderedChars - separator - clippedTitle.length - 9
-    if (contentAllowance >= clipMarker.length) {
-      let low = 0
-      let high = Math.min(file.content.length, contentAllowance)
-      while (low < high) {
-        const mid = Math.ceil((low + high) / 2)
-        const candidate = safeClipText(file.content, mid, clipMarker)
-        if (candidate.length <= contentAllowance) low = mid
-        else high = mid - 1
+    if (contentAllowance > 0 && file.selectionRegions?.length) {
+      const kept: SourceRegion[] = []
+      let used = 0
+      for (const region of file.selectionRegions) {
+        const cost = region.text.length + (kept.length ? 20 : 0)
+        if (used + cost > contentAllowance) continue
+        kept.push(region)
+        used += cost
       }
-      const content = safeClipText(file.content, low, clipMarker)
-      parts.push([clippedTitle, '```', content, '```'].join('\n'))
-      renderedChars += separator + clippedTitle.length + 9 + content.length
+      const content = formatRegions(kept)
+      if (kept.length && content.length <= contentAllowance) {
+        parts.push([clippedTitle, '```', content, '```'].join('\n'))
+        renderedChars += separator + clippedTitle.length + 9 + content.length
+      }
+      truncated = true
+      continue
     }
+    // If no known structure is available, omit the file whole. Slicing at an
+    // arbitrary character offset could split a function and claim it is useful.
     truncated = true
-    break
+    continue
   }
   if (parts.length - 1 < batch.files.length) truncated = true
   const rendered = parts.join('\n')
