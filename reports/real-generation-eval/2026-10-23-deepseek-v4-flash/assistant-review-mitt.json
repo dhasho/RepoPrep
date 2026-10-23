@@ -1,0 +1,426 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+  "caseId": "mitt",
+  "reviewer": {
+    "model": "gpt-6-luna",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "d5da8aaf826dd11d68c9eff7ddbdc67b2f6e776944a6ba02e00d8fb3e1f4f15d",
+        "6b106d0964680060f6b2ca543b99f929c3cf70cb3260d8d0fadde2246c5a954a",
+        "0d89d1fd71750dadacac4c5e84892102a62d194fb1710e125d312a1fabbecfeb",
+        "18d66f6c63e4f01373dde9a4e1bdd0c06ab9ea02e9627ab8520ffe5430d3b40e",
+        "30ad5cfd6896c8eeeef7af9e220457f708d4e5793a09999a1ccf676cf146f437",
+        "8699ec6e6b931e26960bd59aaaf132fb040e942b5b19b5127ac5fe16d6b88746",
+        "1d047bc50b530b0d3998a79338ae82e84e2fc12777e71a9de1c7c4e8c79a54ca",
+        "bd1744330b65f6d51ed6b499792b69f3662b62e2547c8f25a86bd95205dd0ec0",
+        "54f1aeddb7080e8bcda0260166a07f641379813ed65991a3d3bc707572864cd0",
+        "d0f81ec4031e9bbe1887c2c52d3ca108796ddcc7f1dafa4be841c45ec365678d",
+        "d356dac2ddf1bf435b9623f0d3dc4125ebf8ff9c468a7256e973a867efdf0faa",
+        "1ead8e3a9bce25ee738a67c7313f6042311ca1631fdb69e31cc5dc3366b443f4",
+        "705b24b5b1c4c2196980888a4df1246e799c0229a5b66da15557af1b2824b019",
+        "107a9cad1b488bfd98e67f1753ff56f1052584bfa85fa60f591c519ef3ba1008",
+        "f9f6cd9b6f9027e6f3eab4fae3c01022431159c478a5ac86949602cfa760fb9c",
+        "81f741a842d22965d5f00dd92905608e6717c1177676d099a30b855a41603c23",
+        "d92e4b19605937d246eae7d4f9e53bd5d4ffa915bdd6ea0a3f0367ca4318edd7",
+        "1bf49921374035067040cc85514133db4d3337e4d7c8633c784873ada05003db",
+        "27863dab74f234be99ece2b47c7b2cff28ecbefa91f27c74943e731e3f3626a2",
+        "9b054789757e33b08778352655e496c4d399cc33e9ba7a48e574af8bd7085c42"
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            5,
+            8,
+            13,
+            15,
+            18
+          ],
+          "reason": "准确说明事件表是 Map、值为 handler 数组，并指出事件键包含 string/symbol。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 21
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            6
+          ],
+          "reason": "准确说明 on 追加而不去重，并结合测试指出相同 handler 可重复注册。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            6,
+            7
+          ],
+          "reason": "准确指出带 handler 时只删第一个匹配项，无 handler 时写入空数组并保留 key。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "reason": "准确覆盖普通监听先于通配监听、两阶段各自 slice；generation 第10题追问还准确指出普通 handler 新增的 wildcard 可在同次 emit 的后续阶段被调用。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            14,
+            15,
+            16
+          ],
+          "reason": "准确说明条件类型仅允许 payload 类型包含 undefined 的事件省略载荷，并指出这是编译期约束。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 35,
+              "endLine": 39
+            },
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 1,
+              "endLine": 70
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            3,
+            18
+          ],
+          "reason": "准确说明可传入已有 Map 并共享可变状态；测试用预置 handler 验证注入能力。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 1,
+          "claim": "回答将函数工厂相对 class 的选择归因为避免 this、减少原型/构造函数开销并达成 200b 目标。",
+          "kind": "unsupported",
+          "reason": "源码和 README 能支持“方法不依赖 this”、采用工厂实现及小体积定位，但没有说明这些是相对 class 的实际设计动机；答案把合理推测说成了确定因果。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 41,
+              "endLine": 54
+            },
+            {
+              "path": "README.md",
+              "startLine": 11,
+              "endLine": 16
+            }
+          ]
+        },
+        {
+          "questionNumber": 18,
+          "claim": "第一个追问回答称 docs 可以和 bundle 并行执行。",
+          "kind": "incorrect",
+          "reason": "build 命令在 -p bundle 后使用 -s docs，将 docs 放在串行阶段；因此该脚本先运行 bundle，再串行运行 docs。",
+          "sourceRefs": [
+            {
+              "path": "package.json",
+              "startLine": 24,
+              "endLine": 27
+            }
+          ]
+        },
+        {
+          "questionNumber": 19,
+          "claim": "回答断言压缩体积增大时 action 会在 PR 中评论或失败。",
+          "kind": "unsupported",
+          "reason": "仓库工作流只声明 PR 触发、所用 action 和文件匹配 pattern；此固定源码不能确定该外部 action 对增长采用评论还是失败。",
+          "sourceRefs": [
+            {
+              "path": ".github/workflows/compressed-size.yml",
+              "startLine": 1,
+              "endLine": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "variant": "baseline",
+      "questionFingerprints": [
+        "1c6e35e8d532d17fc9b35d3d4d7953e3bfca358515e264383aff6fe7a935ba01",
+        "8eddf2f2d4ffcca572c1945f7693b2ca0fc16d8cf2746dc337bb3c126c9d6b19",
+        "756ac00fe0818a7e86b34521c5c1e7844a83408c7d7a76f671937d9dbbf19f38",
+        "4857303ca598459707d3de165f242bec8e5224a2546561e776a5c8f9291ba997",
+        "2666e25b2b1d483c985385b5dd30f2f3487a5e1c52c0b1a6437f629c8a23b526",
+        "17d04c37ad99e6499a6178e21a351e504558535822ec5acc295955a24aa2035a",
+        "9aa64a930291b870767768ba932679908bdd68feacad5819d90d4e1bc8552e7a",
+        "f93a305803210dd55bda92e24896f7dc9a1bfa8ad33bc4811eec77e339f179f7",
+        "3c29e57cd9db39726eba833a53e2481085188a472c5fce4535e62c82275af0d9",
+        "33db405cbbe718d2c16029a318ae9ba5c218bd956174d2149f078e511f66a187",
+        "d519dac99c3beec0410318ab85d03ec896c00cdd12c83c75ae31237a9b055f12",
+        "4831d88a939b754bd55afb83f77175ff40f8a56e333424afc9d6b010adc35186",
+        "91a7350b3ee8d8e769de087fe756dbd28088d3f054cf6e7ecb7cc10dac40397f",
+        "98fd0d88e4b5a0c289d318de6f85816d55a0f04204e6ea93b28d99c311afbdb8",
+        "6c65bc025d2137159e124c2e0ba949009b8582348b7dee46f9c7c7ba641ef370",
+        "98d203a2386d7faa629e64d0a063327ca265b03f190aac3616ec59a2b279c549",
+        "cd7afa3a3ccbac1e48c82e0290154fa172186bf863cefa025d76ca4e8d0e21f7",
+        "8328ef5f4155560773bfc638e2e917a50993062efb0ac93b106d0eeca8fe6fee",
+        "38a58a97b78faf671192095f3c2086a3e25bbdcb9970e5e0dda7a00bcc987737",
+        "fd08de38dddc059bd9a843e0c9f6a0ba7b43c6837965b5c29f1b711f1f6aa184"
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            3,
+            4,
+            5,
+            10,
+            15,
+            18
+          ],
+          "reason": "准确指出 Map 作为事件表并支持 string/symbol 键，也正确提到 constructor 等普通对象键风险。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 21
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 63,
+              "endLine": 96
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "准确描述重复注册会保留多个数组项并分别触发。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            7,
+            8,
+            19
+          ],
+          "reason": "准确覆盖首次匹配删除与省略 handler 后清空列表但不删除键。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "reason": "准确说明普通与通配分阶段分发、快照遍历和同步异常中断；未把 wildcard 阶段错误概括为与普通数组同一快照。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            14,
+            15,
+            16
+          ],
+          "reason": "准确解释 undefined 条件重载及可选载荷的类型行为；但 baseline 第16题最后追问对重载数量的表述不准确，见 finding。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 35,
+              "endLine": 39
+            },
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 1,
+              "endLine": 70
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            2,
+            3
+          ],
+          "reason": "准确说明工厂可注入并公开同一 Map，也指出多个 emitter 可以共享该 Map。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 2,
+          "claim": "回答称每个工厂实例的状态天然隔离。",
+          "kind": "imprecise",
+          "reason": "默认调用会新建 Map，但工厂允许传入现有 Map；两个调用共享同一 Map 时状态并不隔离。答案没有限定“默认不传共享 Map”这一条件。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            }
+          ]
+        },
+        {
+          "questionNumber": 4,
+          "claim": "回答把 compressed-size action 的运行理解为在 PR 对比 gzip 大小并用作体积门禁。",
+          "kind": "unsupported",
+          "reason": "固定仓库配置可证该 action 仅在 pull_request 触发并匹配指定 dist 文件，但不能从调用配置确认外部 action 如何比较、报告或阻断增长。",
+          "sourceRefs": [
+            {
+              "path": ".github/workflows/compressed-size.yml",
+              "startLine": 1,
+              "endLine": 12
+            }
+          ]
+        },
+        {
+          "questionNumber": 16,
+          "claim": "最后一个追问回答称条件类型规则集中在一个签名里，避免写两个 emit 重载。",
+          "kind": "incorrect",
+          "reason": "Emitter 接口实际声明两个 emit 重载：一个接收 payload，一个用条件类型允许省略 payload；条件重载没有消除这对签名。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 35,
+              "endLine": 39
+            }
+          ]
+        },
+        {
+          "questionNumber": 20,
+          "claim": "回答断言压缩体积增大时 action 会在 PR 中评论或失败。",
+          "kind": "unsupported",
+          "reason": "仓库工作流只声明 PR 触发、所用 action 和文件匹配 pattern；此固定源码不能确定该外部 action 对增长采用评论还是失败。",
+          "sourceRefs": [
+            {
+              "path": ".github/workflows/compressed-size.yml",
+              "startLine": 1,
+              "endLine": 12
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted, non-blind; not human ratings; fact coverage does not equal all-answer accuracy"
+  ]
+}
