@@ -1,0 +1,410 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+  "caseId": "p-limit",
+  "reviewer": {
+    "model": "gpt-6-luna",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "8b3dcf39f00376ad29e317dbca45d402161ea1499a7a817629bf03732baefa04",
+        "3a069147502cc0ed42549e778f5bd17b6ecb9a8ea7b7d1572a3b2baada40b56d",
+        "8665b2198d71c323b7471bcbb8b666583f2f6b929179b4d61ba9677b9bf53e92",
+        "75666633e8ed959bc190f97d59b30332e84a48b9835dc3261b8effcca90327f5",
+        "329bfee0b9a3f6c69ebc0e50088ef43ba1998afaf947b5580f868c2a3da1540d",
+        "23f9017e340726e0c4716742bf33bd6c5609ffd0a43d0ada3280f0407cecb8a6",
+        "8217ffa3ff95d22ec9efa26f353a2d58dc81ad51ce5df01c8c018c7cad55e69e",
+        "dd25b567f37170e5096e7fe9dfc900a4acb0ca20f665fa70886ea46dc55c489d",
+        "5b06449a3ee7417175198e079cdb8301a6b66e5e602f576626746481eeba3659",
+        "50f055cc3900a6352926df5bd320dce874ec2abb516b97d9a1dfdbb914d87716",
+        "723426aa2a0899e16e8f3932270aa703d55721b2ecc02191de421c9f54c4d2e2",
+        "f59df2442804c03a4d85c3239b23dcd5c084b36eb6de0974f2ed4652ab8a5baf",
+        "090191127212cd98427fe7645d5df24fc650c87547c063d3765cd964c1203b57",
+        "98a0273023b63e57582afc95c67c66c4fb5c1050ba96819612e58f9fd38c7917",
+        "f2a94aa78452aeb98c5c619f54b9e4770a0ba0001189d23b6fa0bde32bedd139",
+        "0ab284f2f7acb9c576064d5982fb933ba6d72aaa053d14c215d9e7a3fadd51ef",
+        "f157f211418ffc59229e496df7ed4b242010bfedc9df598e6a0db970acf53b60",
+        "8716397ef042fe568a8d78b81c2bbfb4b02a5385adbfd46a32c3c33e21c11392",
+        "9caaa17feb06909ad9fd7a2593653d54272eb60ca4f1c114f9199a135bc9362a",
+        "2302e5821bda0f5aa2b1d8c1d3af0ea620303fc3891be9099208a2d21c0aa9c0"
+      ],
+      "factReviews": [
+        {
+          "factId": "plimit-validation",
+          "coverage": "covered",
+          "questionNumbers": [
+            4
+          ],
+          "reason": "第 4 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 3,
+              "endLine": 15
+            },
+            {
+              "path": "index.js",
+              "startLine": 144,
+              "endLine": 148
+            }
+          ]
+        },
+        {
+          "factId": "plimit-active-queue",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            7
+          ],
+          "reason": "第 1、7 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 16,
+              "endLine": 30
+            }
+          ]
+        },
+        {
+          "factId": "plimit-promise-rejection",
+          "coverage": "covered",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "第 6 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            }
+          ]
+        },
+        {
+          "factId": "plimit-clear",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            11,
+            12
+          ],
+          "reason": "第 10、11、12 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "test.js",
+              "startLine": 184,
+              "endLine": 215
+            }
+          ]
+        },
+        {
+          "factId": "plimit-concurrency-setter",
+          "coverage": "covered",
+          "questionNumbers": [
+            7,
+            8
+          ],
+          "reason": "第 7、8 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "plimit-map-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            13,
+            14,
+            15,
+            16,
+            17
+          ],
+          "reason": "第 13、14、15、16、17 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 126
+            },
+            {
+              "path": "test.js",
+              "startLine": 256,
+              "endLine": 269
+            }
+          ]
+        },
+        {
+          "factId": "plimit-wrapper",
+          "coverage": "covered",
+          "questionNumbers": [
+            3
+          ],
+          "reason": "第 3 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 133,
+              "endLine": 142
+            },
+            {
+              "path": "test.js",
+              "startLine": 217,
+              "endLine": 227
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 7,
+          "claim": "“如果反过来，极端情况下多个 resumeNext 可能都看到未更新的 activeCount。”",
+          "kind": "imprecise",
+          "reason": "该并发风险不能由当前实现推出：queueItem.run 只 resolve 内部 Promise，run 由后续 then 微任务调用；dequeue/run 的同步栈中没有用户任务可重入调用 resumeNext。源码能确认先占槽这一顺序，但不支持“反过来会超发”的具体推断。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 19,
+              "endLine": 24
+            },
+            {
+              "path": "index.js",
+              "startLine": 50,
+              "endLine": 63
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "variant": "baseline",
+      "questionFingerprints": [
+        "7640ba184ef99920b8280d3c02df365c353527f6170a25e762af0112123802c2",
+        "944e61521a29478cdf8cff884b9e54dc6575880775970139844284ffbe1bca6e",
+        "8d97b298635a166cfa29cc52cea5b92edb3b7b8da2651636f6ad07fa872c90fe",
+        "5b87cbea64db804b5d57385457992e44e1942218f9b1fa268cda6314838a06a2",
+        "f061d7ca708fcb1ad3269849396e23cc5efd7ea2d136f137b667b62c0f81d91d",
+        "76d8b63486e95bc2772c639f4dab108a2ef85cc1d517d24888877d551b13c221",
+        "8e22fdbb028f2bf5ea05bf55665735ac47fc8097030b07d1a177a964d5bf789b",
+        "4ecccccd69e1039f53c592ee4a10ba45ec94c5f8f00e023e5276064c39414e9b",
+        "a35f66b65426af369c87a20557b7295a51e008a6e14857240f62627cd71a0454",
+        "0e897613c4493936f7d200e0ecf80bf544b2a8d2e35f006a3d03c3b2ac0e2bdf",
+        "b16ccb1f4e8277cd37c2a1f34f6787adeb8b81e72056975bfdf4a62bb15ab8c2",
+        "f05c7d08699f9bdea8d6c60f535541c2e9c3651f346fd3829b9e101e2a4dbb94",
+        "15c7692191ebc7a48db1a0f7f50aae64d07a718dd07d11e82d6a02763250c04c",
+        "865f242318cc5ed4afd32ad96978ff3b1290e62cf16f812be331cfaca3fd95d7",
+        "3183b9fd1e7739e4e0a0ddeaca7521fa341ac57461a5d9e666c5faa38298bf2a",
+        "6c29ebc146d42674f200fb6be77c49eed571044fcc7a26c222cbe8b980ede42a",
+        "6c02595ce5fd682c21703769da1d5fb0288e49c25195b97867732fe05b72b04c",
+        "d412f0a09d334ad48ff65e7657b7cade9e4a54ba74f5fd4a357004f58c89cd52",
+        "52cd976d3fa3d6f3256c761b16bcd6e2f353d3ce043eb4c762356fd51f6ebbbc",
+        "0872fe81a754e0eee4d6a1b796b11c5de388bd090e1b01e0fc9940f4fcce39d2"
+      ],
+      "factReviews": [
+        {
+          "factId": "plimit-validation",
+          "coverage": "covered",
+          "questionNumbers": [
+            7,
+            17
+          ],
+          "reason": "第 7、17 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 3,
+              "endLine": 15
+            },
+            {
+              "path": "index.js",
+              "startLine": 144,
+              "endLine": 148
+            }
+          ]
+        },
+        {
+          "factId": "plimit-active-queue",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            5,
+            6
+          ],
+          "reason": "第 2、5、6 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 16,
+              "endLine": 30
+            }
+          ]
+        },
+        {
+          "factId": "plimit-promise-rejection",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            11,
+            12
+          ],
+          "reason": "第 2、11、12 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            }
+          ]
+        },
+        {
+          "factId": "plimit-clear",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            10,
+            12,
+            16
+          ],
+          "reason": "第 5、10、12、16 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "test.js",
+              "startLine": 184,
+              "endLine": 215
+            }
+          ]
+        },
+        {
+          "factId": "plimit-concurrency-setter",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "第 7 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "plimit-map-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            14,
+            15,
+            16,
+            17
+          ],
+          "reason": "第 14、15、16、17 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 126
+            },
+            {
+              "path": "test.js",
+              "startLine": 256,
+              "endLine": 269
+            }
+          ]
+        },
+        {
+          "factId": "plimit-wrapper",
+          "coverage": "covered",
+          "questionNumbers": [
+            15,
+            16
+          ],
+          "reason": "第 15、16 题围绕该事实提问并给出与当前源码相符的核心回答；未因关键词出现而判定覆盖。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 133,
+              "endLine": 142
+            },
+            {
+              "path": "test.js",
+              "startLine": 217,
+              "endLine": 227
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 2,
+          "claim": "“在 finally 中递减 activeCount 并取出下一个任务继续跑。”",
+          "kind": "incorrect",
+          "reason": "当前 run 并未用 finally：它先 await result，在 catch 中吞掉内部观察用的 rejection，然后在 try/catch 之后调用 next。两者成功/失败都释放槽位的行为相近，但答案将不存在的 finally 描述成当前实现。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            }
+          ]
+        },
+        {
+          "questionNumber": 5,
+          "claim": "“activeCount 表示已经调用 fn 但尚未 settle 的 Promise 数。”",
+          "kind": "imprecise",
+          "reason": "activeCount 在 resumeNext 中先递增，之后 queueItem.run 才通过 Promise.then 调用 run/fn，所以它短暂包含已占槽但 fn 尚未调用的任务。test.js 的异步测试先断言 activeCount，再修改 value，最终任务读到修改后的值，直接体现了该时序。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 19,
+              "endLine": 24
+            },
+            {
+              "path": "index.js",
+              "startLine": 50,
+              "endLine": 63
+            },
+            {
+              "path": "test.js",
+              "startLine": 138,
+              "endLine": 152
+            }
+          ]
+        },
+        {
+          "questionNumber": 8,
+          "claim": "“同一异步调用链在 await 后失去同步上下文。”",
+          "kind": "incorrect",
+          "reason": "项目测试显式在 store.run 建立 AsyncLocalStorage 上下文，在受限任务中 await Promise.resolve() 后读取并断言同一个 id，证明此处的异步上下文不会因 await 丢失。",
+          "sourceRefs": [
+            {
+              "path": "test.js",
+              "startLine": 45,
+              "endLine": 57
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted non-blind review, not human ratings; coverage is not all-answer accuracy"
+  ]
+}
