@@ -42,6 +42,7 @@ const SAFE_BUSINESS_ERRORS = new Set([
   '未找到指定的大模型配置，请先到设置页完成配置',
   RESULT_CONTRACT_MESSAGES.generated,
   RESULT_CONTRACT_MESSAGES.history,
+  RESULT_CONTRACT_MESSAGES.generationBudget,
   ...Object.values(STORAGE_MESSAGES),
   // 设置持久化失败（issue #15）：主进程按 errno 静态映射，不含路径等敏感细节
   '磁盘空间不足，无法保存设置。请清理磁盘空间后重试。',

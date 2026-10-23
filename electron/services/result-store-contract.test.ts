@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 // @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
 import * as sharedTypes from '../../shared/types.ts'
 // @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
-import { resultToMarkdown } from './markdown-export.ts'
+import { renderGenerationDiagnostics, resultToMarkdown } from './markdown-export.ts'
 
 const fixtureRoots: string[] = []
 after(async () => {
@@ -268,6 +268,42 @@ test('real result store preserves legacy source fields so historical answers rem
   assert.ok(!markdown.includes('changed after generation'))
   assert.ok(!JSON.stringify(reloaded).includes(rawSecret), 'saved history contains only the redacted excerpt')
   assert.ok(!markdown.includes(rawSecret), 'Markdown never exports the raw source secret')
+})
+
+test('real result storage retains successful generation scope for latest, list, history, and Markdown', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'generation-scope')
+  const generationDiagnostics = {
+    version: 1,
+    status: 'succeeded',
+    contextStrategy: 'structure-v1',
+    tokenEstimateMethod: 'mixed-text-v1',
+    estimatedInputTokens: 1200,
+    inputTokenBudget: 16_000,
+    reservedOutputTokens: 16_384,
+    actualUsage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+    usageComplete: false,
+    requestCount: 2,
+    repairRequestCount: 1,
+    compensationRequestCount: 0,
+    contextBuildMs: 15,
+    modelMs: 800,
+    totalMs: 820,
+    selectedFiles: 4,
+    selectedRegions: 7,
+    omittedFiles: 2
+  }
+  const result = { ...legacyAffectedResult(projectPath), generationDiagnostics }
+  const id = store.saveResult(projectPath, result)
+  assert.deepEqual(store.loadResult(projectPath).generationDiagnostics, generationDiagnostics)
+  assert.ok(store.listAnalyses(projectPath).items.some((item: { id: string }) => item.id === id))
+  assert.deepEqual(store.loadAnalysis(projectPath, id).generationDiagnostics, generationDiagnostics)
+  const markdown = resultToMarkdown(store.loadAnalysis(projectPath, id))
+  assert.ok(markdown.includes('分析范围与用量'))
+  assert.ok(markdown.includes('服务商部分回执'))
+  assert.ok(!markdown.includes(projectPath))
+  assert.deepEqual(renderGenerationDiagnostics(store.loadResult(projectPath)), renderGenerationDiagnostics(store.loadAnalysis(projectPath, id)))
+  assert.ok(!JSON.stringify(generationDiagnostics).includes('profileId'))
 })
 
 test('legacy empty names adapt only at lexical filesystem roots without rewriting the stored bytes', async () => {

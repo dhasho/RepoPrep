@@ -255,3 +255,11 @@ test('生成结果与历史结果的静态契约错误可安全透传给 rendere
     )
   }
 })
+
+test('固定提示 token 预算错误只透传安全的设置调整建议', async () => {
+  const { deps, event } = context()
+  await assert.rejects(
+    createGuardedIpcHandler(IPC.generateRun, deps, () => { throw new Error(RESULT_CONTRACT_MESSAGES.generationBudget) })(event, ...inputs.get(IPC.generateRun)!),
+    (error: unknown) => error instanceof Error && error.message === '上下文窗口或输出上限过低，无法容纳固定提示。请提高上下文窗口或降低最大输出 token 后重试。'
+  )
+})

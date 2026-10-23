@@ -312,6 +312,10 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
               </div>
             )}
 
+            {result.generationDiagnostics && (
+              <GenerationScopeSummary diagnostics={result.generationDiagnostics} />
+            )}
+
             {result.projectSummary && (
               <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
                 <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-indigo-900">
@@ -392,6 +396,24 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
         />
       )}
     </div>
+  )
+}
+
+function GenerationScopeSummary({ diagnostics }: { diagnostics: NonNullable<InterviewResult['generationDiagnostics']> }) {
+  if (diagnostics.status !== 'succeeded') return null
+  const n = (value: number) => value.toLocaleString('zh-CN')
+  const serviceUsage = diagnostics.actualUsage === null
+    ? '服务商用量：未知（没有有效用量回执）'
+    : `${diagnostics.usageComplete ? '服务商回执' : '服务商部分回执'}：输入 ${n(diagnostics.actualUsage.inputTokens)}、输出 ${n(diagnostics.actualUsage.outputTokens)}、合计 ${n(diagnostics.actualUsage.totalTokens)} token`
+  return (
+    <section aria-label="分析范围与用量" className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+      <h2 className="mb-2 font-semibold text-slate-900">分析范围与用量</h2>
+      <p>实际提供 {n(diagnostics.selectedFiles)} 个文件、{n(diagnostics.selectedRegions)} 个片段；省略 {n(diagnostics.omittedFiles)} 个候选文件。</p>
+      <p className="mt-1">模型请求 {n(diagnostics.requestCount)} 次（格式修复 {n(diagnostics.repairRequestCount)}，补充 {n(diagnostics.compensationRequestCount)}）。</p>
+      <p className="mt-1">系统估算输入 {n(diagnostics.estimatedInputTokens)} token（每次请求预算 {n(diagnostics.inputTokenBudget)}）；估算值与服务商计量可能不同。</p>
+      <p className="mt-1">{serviceUsage}</p>
+      <p className="mt-1 text-xs text-slate-500">上下文 {n(diagnostics.contextBuildMs)} ms · 模型 {n(diagnostics.modelMs)} ms · 总计 {n(diagnostics.totalMs)} ms</p>
+    </section>
   )
 }
 

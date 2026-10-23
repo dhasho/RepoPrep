@@ -1,4 +1,4 @@
-import type { InterviewResult } from './types'
+import type { GenerationDiagnostics, InterviewResult } from './types'
 // @ts-ignore TS5097 -- extension is required by CJS-based Node test harnesses.
 import { CONTENT_READ_LIMITS, isSafeContentReadPath, SOURCE_EVIDENCE_LIMITS } from './content-read.ts'
 
@@ -40,7 +40,12 @@ export const RESULT_LIMITS = {
   objectKeys: 256,
   totalChars: 1_000_000,
   totalBytes: 4 * 1024 * 1024,
-  sourceEvidenceTotalChars: SOURCE_EVIDENCE_LIMITS.totalExcerptChars
+  sourceEvidenceTotalChars: SOURCE_EVIDENCE_LIMITS.totalExcerptChars,
+  generationTokens: 250_000_000,
+  generationRequests: 1000,
+  generationFiles: 250_000,
+  generationRegions: 2_000_000,
+  generationMs: 86_400_000
 } as const
 
 export const EXPLAIN_CONTEXT_LIMITS = {
@@ -54,7 +59,8 @@ export const EXPLAIN_CONTEXT_LIMITS = {
 
 export const RESULT_CONTRACT_MESSAGES = {
   generated: '生成结果格式无效或超出支持范围，请重新生成。',
-  history: '历史结果格式无效或超出支持范围，请重新生成。'
+  history: '历史结果格式无效或超出支持范围，请重新生成。',
+  generationBudget: '上下文窗口或输出上限过低，无法容纳固定提示。请提高上下文窗口或降低最大输出 token 后重试。'
 } as const
 
 export class ResultContractError extends Error {
@@ -69,6 +75,38 @@ export class ResultContractError extends Error {
 
 function invalid(): never { throw new ResultContractError('invalid') }
 function oversized(): never { throw new ResultContractError('oversized') }
+
+function assertGenerationDiagnostics(value: unknown): asserts value is GenerationDiagnostics {
+  if (!record(value)) invalid()
+  exactKeys(value, [
+    'version', 'status', 'failedStage', 'contextStrategy', 'tokenEstimateMethod', 'estimatedInputTokens',
+    'inputTokenBudget', 'reservedOutputTokens', 'actualUsage', 'usageComplete', 'requestCount',
+    'repairRequestCount', 'compensationRequestCount', 'contextBuildMs', 'modelMs', 'totalMs',
+    'selectedFiles', 'selectedRegions', 'omittedFiles'
+  ])
+  if (value.version !== 1 || value.status !== 'succeeded' || value.contextStrategy !== 'structure-v1' || value.tokenEstimateMethod !== 'mixed-text-v1') invalid()
+  if (value.failedStage !== undefined) invalid()
+  const integer = (candidate: unknown, maximum: number): candidate is number =>
+    typeof candidate === 'number' && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= maximum
+  if (!integer(value.estimatedInputTokens, RESULT_LIMITS.generationTokens)) invalid()
+  if (!integer(value.inputTokenBudget, 2_097_152)) invalid()
+  if (!integer(value.reservedOutputTokens, 393_216)) invalid()
+  if (!integer(value.requestCount, RESULT_LIMITS.generationRequests)) invalid()
+  if (!integer(value.repairRequestCount, RESULT_LIMITS.generationRequests) || value.repairRequestCount > value.requestCount) invalid()
+  if (!integer(value.compensationRequestCount, RESULT_LIMITS.generationRequests) || value.compensationRequestCount + value.repairRequestCount > value.requestCount) invalid()
+  if (!integer(value.contextBuildMs, RESULT_LIMITS.generationMs) || !integer(value.modelMs, RESULT_LIMITS.generationMs) || !integer(value.totalMs, RESULT_LIMITS.generationMs)) invalid()
+  if (!integer(value.selectedFiles, RESULT_LIMITS.generationFiles) || !integer(value.omittedFiles, RESULT_LIMITS.generationFiles)) invalid()
+  if (!integer(value.selectedRegions, RESULT_LIMITS.generationRegions)) invalid()
+  if (typeof value.usageComplete !== 'boolean') invalid()
+  if (value.actualUsage !== null) {
+    if (!record(value.actualUsage)) invalid()
+    exactKeys(value.actualUsage, ['inputTokens', 'outputTokens', 'totalTokens'])
+    const usage = value.actualUsage
+    if (!integer(usage.inputTokens, RESULT_LIMITS.generationTokens) || !integer(usage.outputTokens, RESULT_LIMITS.generationTokens) || !integer(usage.totalTokens, RESULT_LIMITS.generationTokens)) invalid()
+    if (usage.inputTokens + usage.outputTokens !== usage.totalTokens || value.requestCount === 0) invalid()
+  } else if (value.usageComplete) invalid()
+  if (value.usageComplete && value.requestCount === 0) invalid()
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -254,7 +292,7 @@ export function assertInterviewResultContract(
 ): asserts value is InterviewResult {
   boundedTree(value)
   if (!record(value)) invalid()
-  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contextTruncation', 'contentReadSummary', 'sourceEvidenceSummary'])
+  exactKeys(value, ['version', 'createdAt', 'projectName', 'projectPath', 'granularity', 'roleFocus', 'profileId', 'modelUsed', 'projectSummary', 'sections', 'glossary', 'security', 'contextTruncation', 'contentReadSummary', 'sourceEvidenceSummary', 'generationDiagnostics'])
   if (value.version !== 1 || !text(value.createdAt, RESULT_LIMITS.createdAt) || !Number.isFinite(Date.parse(value.createdAt)) || !text(value.projectName, RESULT_LIMITS.projectName)) invalid()
   assertProjectIdentityContract(value.projectName, value.projectPath, isAbsolutePath)
   enumValue(value.granularity, GRANULARITIES)
@@ -287,6 +325,7 @@ export function assertInterviewResultContract(
     }
   }
   if (value.contentReadSummary !== undefined) assertContentReadSummary(value.contentReadSummary)
+  if (value.generationDiagnostics !== undefined) assertGenerationDiagnostics(value.generationDiagnostics)
   if (value.sourceEvidenceSummary !== undefined) {
     if (!record(value.sourceEvidenceSummary)) invalid()
     exactKeys(value.sourceEvidenceSummary, ['asked', 'accepted', 'rejected', 'retained'])

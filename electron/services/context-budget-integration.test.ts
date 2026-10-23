@@ -218,7 +218,7 @@ test('a context window smaller than fixed generation instructions fails before d
     await assert.rejects(generateInterview({
       scan, granularity: 'coarse', roleFocus: 'general', profile: { ...profile, contextWindowTokens: 4096 },
       signal: new AbortController().signal, onProgress: () => undefined, onDiagnostics: (value) => diagnostics.push(value)
-    }), /超出支持范围/)
+    }), /上下文窗口或输出上限过低/)
   } finally { globalThis.fetch = original }
   assert.equal(fetches, 0)
   const diagnostic = diagnostics[0] as { status: string; failedStage?: string; requestCount: number; estimatedInputTokens: number }

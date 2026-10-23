@@ -136,6 +136,7 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     const scan = await scanProject(root)
     const progressDetails = []
     const providerMessages = []
+    let providerRequestCount = 0
     fs.open = async (filePath, ...args) => {
       if (String(filePath) === readme) {
         throw Object.assign(new Error(`private-root ${root} synthetic secret`), { code: 'EACCES' })
@@ -143,6 +144,7 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
       return originalOpen(filePath, ...args)
     }
     globalThis.fetch = async (_input, init) => {
+      providerRequestCount += 1
       const requestBody = JSON.parse(String(init?.body))
       providerMessages.push(...(requestBody.messages ?? []).map((message) => message.content ?? ''))
       const prompt = requestBody.messages?.find((message) => message.role === 'user')?.content ?? ''
@@ -175,6 +177,12 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     })
 
     assert.ok(result.contentReadSummary)
+    assert.equal(result.generationDiagnostics.status, 'succeeded')
+    assert.equal(result.generationDiagnostics.requestCount, providerRequestCount)
+    assert.equal(result.generationDiagnostics.actualUsage, null, 'missing provider usage remains unknown')
+    assert.equal(result.generationDiagnostics.usageComplete, false)
+    assert.doesNotMatch(JSON.stringify(result.generationDiagnostics), new RegExp(root))
+    assert.doesNotMatch(JSON.stringify(result.generationDiagnostics), /synthetic-key|synthetic-api-secret|profileId/i)
     assert.doesNotThrow(() => assertInterviewResultContract(result))
     assert.doesNotThrow(() => validateIpcArgs(IPC.exportMarkdown, [result]))
     assert.ok(providerMessages.some((message) => message.includes('内容读取不完整') && message.includes('README.md')))
@@ -194,6 +202,9 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     const markdown = resultToMarkdown(result)
     assert.ok(markdown.includes('尝试读取'))
     assert.ok(markdown.includes('README\\.md'))
+    assert.ok(markdown.includes('分析范围与用量'))
+    assert.ok(markdown.includes('系统估算输入'))
+    assert.ok(markdown.includes('服务商用量未知'))
     assert.ok(!markdown.includes('synthetic-api-secret'))
     assert.ok(!markdown.includes(root))
     assert.ok(!markdown.includes('源码依据'))
@@ -202,7 +213,11 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     const userData = path.join(root, 'isolated-user-data')
     await fs.mkdir(userData)
     const store = await loadIsolatedResultStore(userData)
-    store.saveResult(root, result)
+    const analysisId = store.saveResult(root, result)
+    const listedAnalysis = store.listAnalyses(root).items.find((item) => item.id === analysisId)
+    assert.ok(listedAnalysis, 'the result remains reachable through the analysis list')
+    const loadedAnalysis = store.loadAnalysis(root, analysisId)
+    assert.deepEqual(loadedAnalysis.generationDiagnostics, result.generationDiagnostics)
     const storedPath = path.join(userData, 'projects', `${createHash('sha1').update(root).digest('hex')}.json`)
     const storedBytes = await fs.readFile(storedPath, 'utf8')
     assert.ok(!storedBytes.includes('synthetic-api-secret'), 'saved JSON contains no raw secret')
@@ -210,6 +225,7 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     await fs.writeFile(sourceFile, 'changed after generating the interview\n', 'utf8')
     await fs.rm(sourceFile)
     const loaded = store.loadResult(root)
+    assert.deepEqual(loaded.generationDiagnostics, result.generationDiagnostics)
     const reloadedMarkdown = resultToMarkdown(loaded)
     assert.ok(!reloadedMarkdown.includes('源码依据'))
     assert.ok(!reloadedMarkdown.includes('sourceId'))
@@ -218,6 +234,8 @@ test('real generation warning flows through contract, IPC, Markdown and built Re
     const html = await renderResultPage(loaded)
     assert.ok(html.includes('role="alert"'))
     assert.ok(html.includes('README.md'))
+    assert.ok(html.includes('分析范围与用量'))
+    assert.ok(html.includes('服务商用量：未知'))
     assert.ok(!html.includes('源码依据'))
     assert.ok(!html.includes('sourceId'))
     assert.ok(!html.includes('synthetic-api-secret'))

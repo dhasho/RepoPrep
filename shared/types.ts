@@ -219,6 +219,8 @@ export interface InterviewResult {
   contextTruncation?: ContextTruncationMetadata
   /** Present only when one or more candidate files could not be read. */
   contentReadSummary?: import('./content-read').ContentReadSummary
+  /** Numeric scope and usage summary from the successful generation run. */
+  generationDiagnostics?: GenerationDiagnostics
   /** Legacy version-1 history field retained so old results continue to validate. */
   sourceEvidenceSummary?: SourceEvidenceSummary
 }

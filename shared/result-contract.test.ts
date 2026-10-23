@@ -287,6 +287,44 @@ test('context truncation metadata is optional, bounded to booleans, and only rec
   }
 })
 
+test('generation diagnostics persist only bounded numeric scope and usage metadata while legacy results stay valid', () => {
+  const validDiagnostics = {
+    version: 1,
+    status: 'succeeded',
+    contextStrategy: 'structure-v1',
+    tokenEstimateMethod: 'mixed-text-v1',
+    estimatedInputTokens: 1200,
+    inputTokenBudget: 16_000,
+    reservedOutputTokens: 16_384,
+    actualUsage: { inputTokens: 1190, outputTokens: 320, totalTokens: 1510 },
+    usageComplete: true,
+    requestCount: 1,
+    repairRequestCount: 0,
+    compensationRequestCount: 0,
+    contextBuildMs: 17,
+    modelMs: 891,
+    totalMs: 920,
+    selectedFiles: 8,
+    selectedRegions: 12,
+    omittedFiles: 2
+  }
+  assertValid(makeResult({ generationDiagnostics: validDiagnostics }))
+  assertValid(makeResult({ generationDiagnostics: { ...validDiagnostics, actualUsage: null, usageComplete: false } }))
+  assertValid(makeResult({ generationDiagnostics: { ...validDiagnostics, actualUsage: { inputTokens: 800, outputTokens: 200, totalTokens: 1000 }, usageComplete: false } }))
+
+  for (const bad of [
+    { ...validDiagnostics, status: 'failed', failedStage: 'model' },
+    { ...validDiagnostics, apiKey: 'secret' },
+    { ...validDiagnostics, projectPath: 'C:\\private' },
+    { ...validDiagnostics, actualUsage: { ...validDiagnostics.actualUsage, raw: 'upstream body' } },
+    { ...validDiagnostics, actualUsage: { inputTokens: 1190, outputTokens: 320, totalTokens: 1 } },
+    { ...validDiagnostics, selectedRegions: Number.NaN },
+    { ...validDiagnostics, totalMs: 86_400_001 },
+    { ...validDiagnostics, repairRequestCount: 2 },
+    { ...validDiagnostics, actualUsage: null, usageComplete: true }
+  ]) assertKind(makeResult({ generationDiagnostics: bad }), 'invalid')
+})
+
 test('bounded source evidence is optional for history and enforces required summary and narrow ranges', () => {
   const legacy = makeResult()
   assertValid(legacy)

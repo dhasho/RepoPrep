@@ -207,6 +207,42 @@ test('真实 ResultPage 显示读取失败原因、相对路径和样本省略�
   assert.ok(!html.includes('C:\\synthetic'), 'project absolute path is not exposed in the warning')
 })
 
+test('真实 ResultPage distinguishes provider-usage receipts and hides scope for legacy results', async () => {
+  const diagnostics = {
+    version: 1 as const,
+    status: 'succeeded' as const,
+    contextStrategy: 'structure-v1' as const,
+    tokenEstimateMethod: 'mixed-text-v1' as const,
+    estimatedInputTokens: 1200,
+    inputTokenBudget: 16_000,
+    reservedOutputTokens: 16_384,
+    actualUsage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+    usageComplete: false,
+    requestCount: 2,
+    repairRequestCount: 1,
+    compensationRequestCount: 0,
+    contextBuildMs: 15,
+    modelMs: 800,
+    totalMs: 820,
+    selectedFiles: 4,
+    selectedRegions: 7,
+    omittedFiles: 2
+  }
+  const partial = await render(makeResult({ generationDiagnostics: diagnostics }))
+  assert.ok(partial.includes('分析范围与用量'))
+  assert.ok(partial.includes('实际提供 4 个文件、7 个片段；省略 2 个候选文件'))
+  assert.ok(partial.includes('服务商部分回执：输入 1,000、输出 200、合计 1,200 token'))
+  assert.ok(partial.includes('系统估算输入 1,200 token'))
+  assert.ok(!partial.includes('mixed-text-v1'))
+  assert.ok(!partial.includes('C:\\synthetic'))
+
+  const complete = await render(makeResult({ generationDiagnostics: { ...diagnostics, usageComplete: true } }))
+  assert.ok(complete.includes('服务商回执：输入 1,000'))
+  const legacy = await render(makeResult())
+  assert.ok(!legacy.includes('分析范围与用量'))
+  assert.ok(!legacy.includes('服务商用量'))
+})
+
 test('旧结果仍显示答案，但不再显示源码依据或空状态占位', async () => {
   const legacy = await render(makeResult({
     sections: [{ id: 's1', title: 'Section', questions: [{
