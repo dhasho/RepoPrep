@@ -3,13 +3,13 @@ import test from 'node:test'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { CODE_EXTS, isContentPolicyExcluded, isLockfilePath, LANGUAGE_BY_EXT } from './project-file-policy.ts'
 
-test('language statistics and fine selection share the source, style, and markup classifications', () => {
-  for (const ext of CODE_EXTS) {
-    assert.ok(LANGUAGE_BY_EXT[ext], `${ext} must have a scanner language classification`)
-  }
+test('language statistics and fine selection classify representative source, style, markup, data, and docs', () => {
   for (const ext of ['hh', 'm', 'mm', 'r', 'sh', 'bash', 'zsh', 'fish', 'ps1', 'css', 'html', 'xml']) {
+    assert.ok(LANGUAGE_BY_EXT[ext], `${ext} should appear in language statistics`)
     assert.ok(CODE_EXTS.has(ext), `${ext} must be eligible for fine context`)
   }
+  assert.equal(LANGUAGE_BY_EXT.mm, 'Objective-C++')
+  assert.equal(LANGUAGE_BY_EXT.m, 'Objective-C')
   for (const ext of ['json', 'jsonc', 'md', 'mdx', 'yaml', 'yml', 'toml']) {
     assert.ok(LANGUAGE_BY_EXT[ext], `${ext} should remain visible in language statistics`)
     assert.ok(!CODE_EXTS.has(ext), `${ext} is data/configuration/documentation, not source code`)

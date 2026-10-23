@@ -1,27 +1,64 @@
 /** Pure file classification shared by scanning and context selection. */
-export const LANGUAGE_BY_EXT: Readonly<Record<string, string>> = {
-  ts: 'TypeScript', tsx: 'TypeScript', mts: 'TypeScript', cts: 'TypeScript',
-  js: 'JavaScript', jsx: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
-  py: 'Python', java: 'Java', go: 'Go', rs: 'Rust',
-  c: 'C', h: 'C', cpp: 'C++', cc: 'C++', cxx: 'C++', hpp: 'C++', hh: 'C++',
-  cs: 'C#', rb: 'Ruby', php: 'PHP', swift: 'Swift', kt: 'Kotlin', kts: 'Kotlin',
-  scala: 'Scala', dart: 'Dart', lua: 'Lua', r: 'R', m: 'Objective-C', mm: 'Objective-C',
-  vue: 'Vue', svelte: 'Svelte', astro: 'Astro',
-  css: 'CSS', scss: 'Sass', sass: 'Sass', less: 'Less',
-  html: 'HTML', htm: 'HTML', xml: 'XML', json: 'JSON', jsonc: 'JSON', yaml: 'YAML', yml: 'YAML', toml: 'TOML',
-  md: 'Markdown', mdx: 'Markdown', sql: 'SQL', sh: 'Shell', bash: 'Shell', zsh: 'Shell', fish: 'Shell',
-  ps1: 'PowerShell', psm1: 'PowerShell', bat: 'Batch', cmd: 'Batch', gradle: 'Gradle', proto: 'Protobuf',
-  graphql: 'GraphQL', prisma: 'Prisma'
+type FileKind = 'source' | 'style' | 'markup' | 'data' | 'document'
+interface FileTypeGroup {
+  language: string
+  kind: FileKind
+  extensions: readonly string[]
 }
 
-/** Source, style, and markup files that may contribute to fine context. */
-export const CODE_EXTS: ReadonlySet<string> = new Set([
-  'ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs', 'py', 'java', 'go', 'rs',
-  'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'cs', 'rb', 'php', 'swift', 'kt', 'kts',
-  'scala', 'dart', 'lua', 'r', 'm', 'mm', 'sh', 'bash', 'zsh', 'fish', 'ps1', 'psm1', 'bat', 'cmd',
-  'vue', 'svelte', 'astro', 'css', 'scss', 'sass', 'less', 'html', 'htm', 'xml',
-  'sql', 'proto', 'graphql', 'prisma', 'gradle'
-])
+const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = [
+  { language: 'TypeScript', kind: 'source', extensions: ['ts', 'tsx', 'mts', 'cts'] },
+  { language: 'JavaScript', kind: 'source', extensions: ['js', 'jsx', 'mjs', 'cjs'] },
+  { language: 'Python', kind: 'source', extensions: ['py'] },
+  { language: 'Java', kind: 'source', extensions: ['java'] },
+  { language: 'Go', kind: 'source', extensions: ['go'] },
+  { language: 'Rust', kind: 'source', extensions: ['rs'] },
+  { language: 'C', kind: 'source', extensions: ['c', 'h'] },
+  { language: 'C++', kind: 'source', extensions: ['cpp', 'cc', 'cxx', 'hpp', 'hh'] },
+  { language: 'C#', kind: 'source', extensions: ['cs'] },
+  { language: 'Ruby', kind: 'source', extensions: ['rb'] },
+  { language: 'PHP', kind: 'source', extensions: ['php'] },
+  { language: 'Swift', kind: 'source', extensions: ['swift'] },
+  { language: 'Kotlin', kind: 'source', extensions: ['kt', 'kts'] },
+  { language: 'Scala', kind: 'source', extensions: ['scala'] },
+  { language: 'Dart', kind: 'source', extensions: ['dart'] },
+  { language: 'Lua', kind: 'source', extensions: ['lua'] },
+  { language: 'R', kind: 'source', extensions: ['r'] },
+  { language: 'Objective-C', kind: 'source', extensions: ['m'] },
+  { language: 'Objective-C++', kind: 'source', extensions: ['mm'] },
+  { language: 'Shell', kind: 'source', extensions: ['sh', 'bash', 'zsh', 'fish'] },
+  { language: 'PowerShell', kind: 'source', extensions: ['ps1', 'psm1'] },
+  { language: 'Batch', kind: 'source', extensions: ['bat', 'cmd'] },
+  { language: 'SQL', kind: 'source', extensions: ['sql'] },
+  { language: 'Gradle', kind: 'source', extensions: ['gradle'] },
+  { language: 'Protobuf', kind: 'source', extensions: ['proto'] },
+  { language: 'GraphQL', kind: 'source', extensions: ['graphql'] },
+  { language: 'Prisma', kind: 'source', extensions: ['prisma'] },
+  { language: 'CSS', kind: 'style', extensions: ['css'] },
+  { language: 'Sass', kind: 'style', extensions: ['scss', 'sass'] },
+  { language: 'Less', kind: 'style', extensions: ['less'] },
+  { language: 'Vue', kind: 'markup', extensions: ['vue'] },
+  { language: 'Svelte', kind: 'markup', extensions: ['svelte'] },
+  { language: 'Astro', kind: 'markup', extensions: ['astro'] },
+  { language: 'HTML', kind: 'markup', extensions: ['html', 'htm'] },
+  { language: 'XML', kind: 'markup', extensions: ['xml'] },
+  { language: 'JSON', kind: 'data', extensions: ['json', 'jsonc'] },
+  { language: 'YAML', kind: 'data', extensions: ['yaml', 'yml'] },
+  { language: 'TOML', kind: 'data', extensions: ['toml'] },
+  { language: 'Markdown', kind: 'document', extensions: ['md', 'mdx'] }
+]
+
+const languageByExt: Record<string, string> = {}
+const codeExts = new Set<string>()
+for (const group of FILE_TYPE_GROUPS) {
+  for (const ext of group.extensions) {
+    languageByExt[ext] = group.language
+    if (group.kind === 'source' || group.kind === 'style' || group.kind === 'markup') codeExts.add(ext)
+  }
+}
+
+export const LANGUAGE_BY_EXT: Readonly<Record<string, string>> = languageByExt
+export const CODE_EXTS: ReadonlySet<string> = codeExts
 
 const LOCKFILE_NAMES = new Set([
   'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'pnpm-lock.yml', 'yarn.lock',
