@@ -162,28 +162,10 @@
       ],
       "findings": [
         {
-          "questionNumber": 1,
-          "claim": "回答将函数工厂相对 class 的选择归因为避免 this、减少原型/构造函数开销并达成 200b 目标。",
-          "kind": "unsupported",
-          "reason": "源码和 README 能支持“方法不依赖 this”、采用工厂实现及小体积定位，但没有说明这些是相对 class 的实际设计动机；答案把合理推测说成了确定因果。",
-          "sourceRefs": [
-            {
-              "path": "src/index.ts",
-              "startLine": 41,
-              "endLine": 54
-            },
-            {
-              "path": "README.md",
-              "startLine": 11,
-              "endLine": 16
-            }
-          ]
-        },
-        {
           "questionNumber": 18,
           "claim": "第一个追问回答称 docs 可以和 bundle 并行执行。",
-          "kind": "incorrect",
-          "reason": "build 命令在 -p bundle 后使用 -s docs，将 docs 放在串行阶段；因此该脚本先运行 bundle，再串行运行 docs。",
+          "kind": "imprecise",
+          "reason": "该追问是在分析 docs 与 bundle 能否并行的可行性，理由本身合理；但回答没有区分可行的并行优化与当前脚本行为。固定 package.json 使用 `-p bundle -s docs`，当前 docs 阶段实际串行运行。",
           "sourceRefs": [
             {
               "path": "package.json",
@@ -191,20 +173,10 @@
               "endLine": 27
             }
           ]
-        },
-        {
-          "questionNumber": 19,
-          "claim": "回答断言压缩体积增大时 action 会在 PR 中评论或失败。",
-          "kind": "unsupported",
-          "reason": "仓库工作流只声明 PR 触发、所用 action 和文件匹配 pattern；此固定源码不能确定该外部 action 对增长采用评论还是失败。",
-          "sourceRefs": [
-            {
-              "path": ".github/workflows/compressed-size.yml",
-              "startLine": 1,
-              "endLine": 12
-            }
-          ]
         }
+      ],
+      "notes": [
+        "未核验 compressed-size-action 的外部实现或文档；PR评论、增长比较及阻断行为未评估，也未计入错误 finding。"
       ]
     },
     {
@@ -369,25 +341,12 @@
           "questionNumber": 2,
           "claim": "回答称每个工厂实例的状态天然隔离。",
           "kind": "imprecise",
-          "reason": "默认调用会新建 Map，但工厂允许传入现有 Map；两个调用共享同一 Map 时状态并不隔离。答案没有限定“默认不传共享 Map”这一条件。",
+          "reason": "默认不传共享 Map 时，工厂会创建新 Map，实例隔离结论成立；但 mitt 也允许注入已有 Map，因此这句话若不加“默认”条件会过于绝对。Q3 随后已说明共享 Map 的情形。",
           "sourceRefs": [
             {
               "path": "src/index.ts",
               "startLine": 46,
               "endLine": 58
-            }
-          ]
-        },
-        {
-          "questionNumber": 4,
-          "claim": "回答把 compressed-size action 的运行理解为在 PR 对比 gzip 大小并用作体积门禁。",
-          "kind": "unsupported",
-          "reason": "固定仓库配置可证该 action 仅在 pull_request 触发并匹配指定 dist 文件，但不能从调用配置确认外部 action 如何比较、报告或阻断增长。",
-          "sourceRefs": [
-            {
-              "path": ".github/workflows/compressed-size.yml",
-              "startLine": 1,
-              "endLine": 12
             }
           ]
         },
@@ -403,20 +362,10 @@
               "endLine": 39
             }
           ]
-        },
-        {
-          "questionNumber": 20,
-          "claim": "回答断言压缩体积增大时 action 会在 PR 中评论或失败。",
-          "kind": "unsupported",
-          "reason": "仓库工作流只声明 PR 触发、所用 action 和文件匹配 pattern；此固定源码不能确定该外部 action 对增长采用评论还是失败。",
-          "sourceRefs": [
-            {
-              "path": ".github/workflows/compressed-size.yml",
-              "startLine": 1,
-              "endLine": 12
-            }
-          ]
         }
+      ],
+      "notes": [
+        "未核验 compressed-size-action 的外部实现或文档；PR评论、增长比较及阻断行为未评估，也未计入错误 finding。"
       ]
     }
   ],
