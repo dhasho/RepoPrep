@@ -1,0 +1,524 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+  "caseId": "schedule",
+  "reviewer": {
+    "model": "gpt-6-luna",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "4a94dd11ae353a760c315acbc1a048613bed5570a4f299d28559571341d8c8ff",
+        "7d6b754c8a803ef5cc9c2863e5d52ba3ecd317bf3eba7640b2ff72647dd47db5",
+        "2acb3354eed7641bf33cb5f4b773eedc61e7fb474b1c593fca6e4e14023a282f",
+        "f0b4d51be5aa34f9d3f2e79f839f3bdac05ed38527cc0a52d8c8b0c980ed6b04",
+        "6b060139fdd1b6e572ef159fa8532d091a5ab8deaf6059316450e442d90c9311",
+        "82a6dea684ed767ba1f5dad1b8a93e0ecd2dbe336175151cdece50dd503b8f66",
+        "a653efd90ecf9b9dbae2c37f03fc4c0cac98b5927cbfa1d774462d27cda38d6c",
+        "aecd85d3515b89aae98474a3bfdaee5937fc56c59dfbd93c52288339895cd8b0",
+        "7ba988f1c4404d23aff06368c2a894d872f0998f5c19ca87a945573fbea74ee5",
+        "cdae2f138df3f140bf218f94d22fb4e44a96c31e31c217d8b63fbb60b0e95815",
+        "fbfc470a7e36997f16c402778725f1c4e33b9cbf81ef3392c7154e6b20d5fd60",
+        "a36bdf40a35a1001e57e4e9c804faea25877e3157812ba3ab65993f7264f1968",
+        "7af891f7c96a805ee56bea645a35daee8d0f4fe850c4771d2c2cdb4a29d58f74",
+        "af37e0852491d9aa8abc396f856a302c745ac40a81db31f4735e8b8df296b562",
+        "719eb51889ebef6da12c2b9b602f71499638143efc538d1015b82002694ebc3a",
+        "8023c4fdd4680a4c0b25c2d751fcd22567c1668f4db1bb3cd6dcd34ccfe05fdf",
+        "f676f5d6bb79ca4fb6628e83dfdd7cf046e85a4a780f81c588459c65e9a00549",
+        "20af14171752af4d5c271350ca323dbd42f838248fc3d9ec5f0c9021b56f82d8",
+        "8f76640538db7fcf6e4e526e87577448b5ca767f8a4bd8e5f8ee4b2c33e57628",
+        "ad05506fd4d6e50ad1c46333dc90dbab27d25b5a3aa6548d6a948641581cfb70"
+      ],
+      "factReviews": [
+        {
+          "factId": "schedule-run-pending",
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ],
+          "reason": "第9题说明run_pending只运行到期任务、按next_run排序，并明确漏掉多个周期时只补一次。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1392,
+              "endLine": 1397
+            }
+          ]
+        },
+        {
+          "factId": "schedule-run-all",
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ],
+          "reason": "第9题明确run_all不筛到期状态，遍历调用开始时的jobs浅拷贝，并在每次执行后可sleep。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "schedule-tag-management",
+          "coverage": "covered",
+          "questionNumbers": [
+            11
+          ],
+          "reason": "第11题说明无tag时返回列表浅拷贝、有tag时按成员过滤，clear按tag删除匹配任务或清空全部。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1572,
+              "endLine": 1589
+            }
+          ]
+        },
+        {
+          "factId": "schedule-cancel-return",
+          "coverage": "covered",
+          "questionNumbers": [
+            9,
+            10
+          ],
+          "reason": "第9、10题说明任务返回CancelJob类或实例都会由Scheduler移除，并区分截止时刻到期前后的执行顺序。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 172,
+              "endLine": 175
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 674,
+              "endLine": 698
+            }
+          ]
+        },
+        {
+          "factId": "schedule-at",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            6,
+            7
+          ],
+          "reason": "第5题按日/小时/分钟解释不同时间字符串，第7题说明传tz时才导入pytz。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 528
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 268,
+              "endLine": 284
+            }
+          ]
+        },
+        {
+          "factId": "schedule-until",
+          "coverage": "covered",
+          "questionNumbers": [
+            8,
+            10
+          ],
+          "reason": "第8题列出datetime、timedelta、time和字符串输入并说明cancel_after；第10题补充当前到期与下一次越过截止时间时的取消顺序。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 642
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 674,
+              "endLine": 698
+            }
+          ]
+        },
+        {
+          "factId": "schedule-jitter-next",
+          "coverage": "covered",
+          "questionNumbers": [
+            4
+          ],
+          "reason": "第4题说明latest启用randint在interval到latest间取随机周期，并在循环中跳过不晚于now的时间点。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 561,
+              "endLine": 574
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 704,
+              "endLine": 748
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 8,
+          "claim": "until()把所有datetime.datetime或datetime.time输入都归一为naive的cancel_after。",
+          "kind": "imprecise",
+          "reason": "代码对datetime.datetime直接赋值，对datetime.time用combine；输入若带tzinfo不会被去掉，随后与naive datetime.now()比较会抛TypeError。回答应限定为naive时间输入。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 605,
+              "endLine": 612
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 638,
+              "endLine": 640
+            }
+          ]
+        },
+        {
+          "questionNumber": 14,
+          "claim": "latest小于interval时抛ScheduleValueError；测试捕获ScheduleError是因为前者继承后者。",
+          "kind": "incorrect",
+          "reason": "层级方向是ScheduleValueError继承ScheduleError，但该分支直接抛基类ScheduleError。测试的assertRaises(ScheduleError)捕获的就是这个基类异常，主回答的异常类型和追问对测试通过原因的解释均不准确。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 53,
+              "endLine": 65
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 709,
+              "endLine": 712
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 216,
+              "endLine": 220
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "variant": "baseline",
+      "questionFingerprints": [
+        "1edf519dbd43ccc8d593e1fcbf98ccc89d2673ab5843a66487fbfa14594ae5e7",
+        "72ba4b214ed1214cc1894897eade6204b4740acfc0a5737b059e26f410077bba",
+        "b80626e064147de8b8833e8c11b05d0800e687afc992cdf7bd89f217af1db565",
+        "0f90b0dddd41aeb8aec6ba4ee342ee40d8e79b48b5904abe4e6fc29e0ac2ed3f",
+        "a9522789875f5bf3634a03ed5bfe23e3a6caae89f11ddb6cc2bef5e4c7140e36",
+        "f50571c3bc5d7e99b1939358f188bf2441a5a4a76c310024bcc8282c84cb8b06",
+        "d8356da10699867bf0e64da0dcb636b549c94adacf3468ec79b70013286ac985",
+        "5d3e39826e9a1016af96ea9b8becf0325a72a7d64a5aea5ba49ea2052f13b691",
+        "9993e1f3cb81af8cf7a97368f7d1ac5f35762179374f25e50f6570511cfbcb6c",
+        "1fd2e33d4d31c729887e3c3d050615a5e5c36d1b1c5e7d5b1ed24da23d962cb1",
+        "49c6bbdef287adc3374d928ccece9d60c158d4b17747302ba17775623f77f3c6",
+        "0f893c586268ea8f29d5dda7a331c3dda23e477fc4ea93f6117f2be2eb30b738",
+        "526df9736097b22418e265ef387b0275694dce734f02b16f24987c40a4db035b",
+        "b7675f5593a519462498bfd4565c881abfcf17b6cd898b44382f83d62537ceb2",
+        "79c1e257e566951e5c346b9ec4d38f73bb74c19c01e2d82966aa919a3865365c",
+        "c1d9a2337d0d91f03ce29842f941635d17e47b873c6d99d046c44dabee432fb7",
+        "b43d396148f5878b98e2980dd28bd4dc9e87a5fbbbca4896f2373d568f2b10a8",
+        "e7fd9304c6550c93ffabe845e80779ad12dbded0fb737f4ed7a34da5b23acab0",
+        "8889edd2a883431738e795dcb647851720a16adf9ef70da1b85a0a12b1633bdf",
+        "cab2ea4776b364499d013cfd232a24837c76320a22e982d32f7bdb5248a2c489"
+      ],
+      "factReviews": [
+        {
+          "factId": "schedule-run-pending",
+          "coverage": "partial",
+          "questionNumbers": [
+            5,
+            11
+          ],
+          "reason": "第5题提到按should_run判断到期任务，第11题提到next_run已过去时会立即执行；但没有说明错过多个周期只执行一次的既定语义。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1392,
+              "endLine": 1397
+            }
+          ]
+        },
+        {
+          "factId": "schedule-run-all",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题中没有说明run_all会无视到期状态执行调用开始时的任务快照，也未说明可设执行间隔。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "schedule-tag-management",
+          "coverage": "partial",
+          "questionNumbers": [
+            3,
+            4
+          ],
+          "reason": "第3题提到Job有tags，第4题提到多调度器与集合清理，但没有说明get_jobs按tag筛选、无tag时返回浅拷贝或clear按tag删除任务。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            }
+          ]
+        },
+        {
+          "factId": "schedule-cancel-return",
+          "coverage": "contradicted",
+          "questionNumbers": [
+            6,
+            14
+          ],
+          "reason": "相关回答把CancelJob描述为被抛出和捕获的异常；源码使用任务返回的类或实例作为哨兵值，并由Scheduler._run_job检查后移除。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 71,
+              "endLine": 75
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 172,
+              "endLine": 175
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 674,
+              "endLine": 698
+            }
+          ]
+        },
+        {
+          "factId": "schedule-at",
+          "coverage": "partial",
+          "questionNumbers": [
+            8,
+            10
+          ],
+          "reason": "第8题提到常见格式和时区绑定，第10题提到时区名称，但没有准确列出各unit的格式限制及传tz时动态导入pytz。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 528
+            }
+          ]
+        },
+        {
+          "factId": "schedule-until",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题没有涉及until输入类型、cancel_after或截止时间到期条件。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 642
+            }
+          ]
+        },
+        {
+          "factId": "schedule-jitter-next",
+          "coverage": "partial",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "第7题提到interval到latest的随机范围，但对计算基准表示不确定，也没有说明下一时刻不晚于now时会继续递增跳过。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 561,
+              "endLine": 574
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 704,
+              "endLine": 748
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 2,
+          "claim": "`.seconds`会设置单位与间隔；`.do()`返回的Job可调用`job.cancel()`。",
+          "kind": "incorrect",
+          "reason": "interval由Scheduler.every(interval)传入Job构造器，seconds属性只设置unit。源码提供Scheduler.cancel_job(job)和模块级cancel_job(job)，Job没有cancel()方法。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 162,
+              "endLine": 170
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 332,
+              "endLine": 335
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 160
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 878,
+              "endLine": 882
+            }
+          ]
+        },
+        {
+          "questionNumber": 3,
+          "claim": "Job保存一个独立的取消标记。",
+          "kind": "imprecise",
+          "reason": "Job字段中有cancel_after截止时间，但没有独立的已取消标记；主动取消是从Scheduler.jobs移除该Job。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 227,
+              "endLine": 255
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 160
+            }
+          ]
+        },
+        {
+          "questionNumber": 5,
+          "claim": "`run_pending()`通常返回本轮执行的Job数量。",
+          "kind": "incorrect",
+          "reason": "Scheduler.run_pending明确标注返回None，函数只筛选、排序到期任务并执行，没有返回运行数量。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            }
+          ]
+        },
+        {
+          "questionNumber": 6,
+          "claim": "`CancelJob`会被`Job.run`捕获并用于任务自取消。",
+          "kind": "incorrect",
+          "reason": "CancelJob不是异常。Job.run将任务函数返回值原样作为ret处理；Scheduler._run_job再判断返回值是否为CancelJob类或实例并移除任务。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 71,
+              "endLine": 75
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 172,
+              "endLine": 175
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 674,
+              "endLine": 698
+            }
+          ]
+        },
+        {
+          "questionNumber": 11,
+          "claim": "`next_run`必须保存为aware datetime或UTC，不能保存为naive本地时间。",
+          "kind": "incorrect",
+          "reason": "当前实现明确将有指定时区计算得到的next_run转换回系统本地时区并去掉tzinfo，以兼容既有API；should_run再与本地naive datetime.now()比较。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 667,
+              "endLine": 672
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 740,
+              "endLine": 748
+            }
+          ]
+        },
+        {
+          "questionNumber": 14,
+          "claim": "`CancelJob`是控制流异常，`Job.run`会捕获它；外部也可调用`job.cancel()`。",
+          "kind": "incorrect",
+          "reason": "CancelJob是普通哨兵类，任务返回它后由Scheduler._run_job处理；Job没有cancel()方法，外部取消应调用Scheduler.cancel_job(job)或模块级cancel_job(job)。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 71,
+              "endLine": 75
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 160
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 172,
+              "endLine": 175
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 878,
+              "endLine": 882
+            }
+          ]
+        },
+        {
+          "questionNumber": 19,
+          "claim": "`setup.cfg`/`pyproject.toml`配置项目的flake8或pytest。",
+          "kind": "imprecise",
+          "reason": "这个固定版本的setup.cfg仅包含mypy的files=schedule；pyproject.toml声明构建后端、项目元数据和可选timezone依赖，没有flake8或pytest配置。",
+          "sourceRefs": [
+            {
+              "path": "setup.cfg",
+              "startLine": 1,
+              "endLine": 2
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 1,
+              "endLine": 20
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted non-blind, not human ratings; fact coverage is not all-answer accuracy"
+  ]
+}
