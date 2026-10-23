@@ -10,7 +10,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
-import { renderScanWarnings } from './context-builder.ts'
+import { buildContext, renderScanWarnings } from './context-builder.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { ProjectScanCache } from './scan-cache.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
@@ -211,6 +211,40 @@ test('边界：树节点上限（目录与文件都计入）', async () => {
 
     const exact = await scanProject(root, { maxTreeNodes: 6 })
     assert.equal(exact.truncation, undefined, '恰好等于树节点总数不应截断')
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('锁文件保留在树和快照中但不批准正文，正文变化仍使缓存失效', async () => {
+  const lockNames = [
+    'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'pnpm-lock.yml', 'yarn.lock',
+    'bun.lock', 'bun.lockb', 'Cargo.lock', 'poetry.lock', 'Pipfile.lock', 'uv.lock', 'composer.lock',
+    'Gemfile.lock', 'go.sum', 'packages.lock.json', 'gradle.lockfile'
+  ]
+  const files = Object.fromEntries(lockNames.map((name) => [`locks/${name}`, `synthetic-lock-secret-${name}`]))
+  const root = await makeProject({ ...files, 'src/main.ts': 'export const main = true' })
+  try {
+    const cache = new ProjectScanCache()
+    const first = await cache.getFresh(root)
+    assert.equal(first.status, 'scanned')
+    const byPath = new Map(first.scan.files.map((file) => [file.relPath, file]))
+    for (const name of lockNames) {
+      const relPath = `locks/${name}`
+      assert.ok(byPath.has(relPath), `${relPath} remains visible in the scan tree`)
+      assert.equal(byPath.get(relPath)!.isContentCandidate, false, `${relPath} must not be approved for body reads`)
+    }
+    const context = await buildContext(first.scan, 'fine')
+    const contextText = JSON.stringify(context)
+    for (const name of lockNames) assert.ok(context.treeText.includes(name), `${name} remains visible in the context tree`)
+    assert.doesNotMatch(contextText, /synthetic-lock-secret|changed-lock-body/)
+
+    const changedLock = path.join(root, 'locks', 'Cargo.lock')
+    await fs.writeFile(changedLock, 'changed-lock-body')
+    const refreshed = await cache.getFresh(root)
+    assert.equal(refreshed.status, 'scanned')
+    assert.equal(refreshed.reason, 'changed', 'snapshot metadata still observes changes to excluded bodies')
+    assert.equal(refreshed.scan.files.find((file) => file.relPath === 'locks/Cargo.lock')!.isContentCandidate, false)
   } finally {
     await removeProject(root)
   }

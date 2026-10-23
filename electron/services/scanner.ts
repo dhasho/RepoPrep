@@ -15,6 +15,8 @@ import { identityFromBigIntStats, recordProjectSnapshot, resolveProjectIdentity,
 import { classifySensitivePath } from './sensitive.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { projectDisplayName } from './project-display-name.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { isContentPolicyExcluded, LANGUAGE_BY_EXT } from './project-file-policy.ts'
 
 /** 始终忽略的目录/文件（无论有没有 .gitignore） */
 const ALWAYS_IGNORE = [
@@ -63,39 +65,12 @@ const ALWAYS_IGNORE = [
   'Thumbs.db'
 ]
 
-/** 不作为"源码内容"送入大模型的文件类型（树中仍保留） */
-const CONTENT_SKIP_PATTERNS = [
-  /\.min\.(js|css)$/,
-  /(-lock\.js|\.lock)$/, // package-lock.json / yarn.lock / Cargo.lock 等
-  /\.map$/,
-  /\.(png|jpe?g|gif|webp|ico|bmp|avif|svg)$/i,
-  /\.(zip|tar|gz|rar|7z|tgz)$/i,
-  /\.(exe|dll|so|dylib|bin|dat|class|jar|war|pyd|pyc|node|wasm)$/i,
-  /\.(woff2?|ttf|otf|eot)$/i,
-  /\.(mp3|mp4|avi|mov|mkv|wav|flac)$/i,
-  /\.(pdf|docx?|xlsx?|pptx?)$/i
-]
-
 const BINARY_EXT = new Set([
   'png','jpg','jpeg','gif','webp','ico','bmp','avif','zip','tar','gz','rar','7z','tgz',
   'exe','dll','so','dylib','bin','dat','class','jar','war','pyd','pyc','node','wasm',
   'woff','woff2','ttf','otf','eot','mp3','mp4','avi','mov','mkv','wav','flac','pdf',
   'doc','docx','xls','xlsx','ppt','pptx','db','sqlite','sqlite3','mdb','bak'
 ])
-
-const EXT_LANG: Record<string, string> = {
-  ts: 'TypeScript', tsx: 'TypeScript', mts: 'TypeScript', cts: 'TypeScript',
-  js: 'JavaScript', jsx: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
-  py: 'Python', java: 'Java', go: 'Go', rs: 'Rust',
-  c: 'C', h: 'C', cpp: 'C++', cc: 'C++', cxx: 'C++', hpp: 'C++', hh: 'C++',
-  cs: 'C#', rb: 'Ruby', php: 'PHP', swift: 'Swift', kt: 'Kotlin', kts: 'Kotlin',
-  scala: 'Scala', dart: 'Dart', lua: 'Lua', r: 'R', m: 'Objective-C', mm: 'Objective-C',
-  vue: 'Vue', svelte: 'Svelte', astro: 'Astro',
-  css: 'CSS', scss: 'Sass', sass: 'Sass', less: 'Less',
-  html: 'HTML', htm: 'HTML', xml: 'XML', json: 'JSON', jsonc: 'JSON', yaml: 'YAML', yml: 'YAML', toml: 'TOML',
-  md: 'Markdown', mdx: 'Markdown', sql: 'SQL', sh: 'Shell', bash: 'Shell', ps1: 'PowerShell',
-  bat: 'Batch', gradle: 'Gradle', proto: 'Protobuf', graphql: 'GraphQL', prisma: 'Prisma'
-}
 
 /** 关键文件（用于识别项目类型与入口） */
 const KEY_FILE_RULES: { match: (base: string, relDir: string) => boolean; reason: string }[] = [
@@ -595,20 +570,21 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
         }
         if (!isBinary) {
           const overSize = size > eff.maxContentFileBytes
-          if (overSize && !sensitive && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel))) oversizedFiles++
+          const contentExcluded = isContentPolicyExcluded(rel)
+          if (overSize && !sensitive && !contentExcluded) oversizedFiles++
           const sf: ScannedFile = {
             relPath: rel,
             absPath: path.join(work.absDir, entry.name),
             size,
             ext,
             textBytes: size,
-            isContentCandidate: !sensitive && !overSize && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel)),
+            isContentCandidate: !sensitive && !overSize && !contentExcluded,
             ...(sensitive ? { sensitive } : {})
           }
           files.push(sf)
           snapshotFile.contentApproved = sf.isContentCandidate
           totalBytes += size
-          const lang = EXT_LANG[ext]
+          const lang = LANGUAGE_BY_EXT[ext]
           if (lang) langCount.set(lang, (langCount.get(lang) ?? 0) + 1)
           const matched = KEY_FILE_RULES.find((r) => r.match(entry.name, work.relDir))
           if (matched && keyFiles.length < 30) keyFiles.push({ path: rel, reason: matched.reason })
