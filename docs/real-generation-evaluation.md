@@ -9,7 +9,7 @@
 - 确认目标 profile 已在当前 RepoPrep/ProjectLens 安装中保存，且其凭据状态可由当前 Windows 用户解密。默认使用设置中当前选择的 profile；可使用 `--profile-id` 覆盖。默认设置目录为 `%APPDATA%\ProjectLens`，可用 `--settings-dir` 指定已有目录。
 - 确认公开评测仓库已检出在 `E:\Vibe Coding\RepoPrep-Eval-Cases`。可以通过 `--repos-root` 指定位置。
 - 选择一个新的输出目录。此流程会访问真实模型服务，可能产生费用或受账户额度限制；本入口把 generation 与 README/tree baseline 的总请求数限制在 16 次，runner 总时限为 20 分钟。真实请求只在运行评测命令时发出。
-- 评测只读取并复制 schemaVersion 2 设置快照中的加密字段到短生命周期的隔离 Electron `userData`。旧版 schema、包含 legacy 明文 `apiKey` 的配置、缺失设置或不可用的 OS 加密都会 fail-closed。设置目录、原始 `settings.json`、备份和损坏副本不会迁移或修改。隔离副本和打包 runtime 在子进程退出后按绝对路径、目录边界和链接状态检查后清理。
+- 评测只读取 schemaVersion 2 设置快照和 `userData/Local State` 中的加密字段，将它们复制到短生命周期的隔离 Electron `userData`/`sessionData`。Local State 仅保留 `os_crypt.encrypted_key` 和可选的布尔型 `audit_enabled`；其中密钥仍由 Windows DPAPI 保护，遇到 app-bound 状态会拒绝运行。不会复制浏览器历史、偏好或其他浏览器状态。旧版 schema、包含 legacy 明文 `apiKey` 的配置、缺失文件或不可用的 OS 加密都会 fail-closed。原始设置、Local State、备份和损坏副本不会迁移或修改。隔离副本和打包 runtime 在子进程退出后按绝对路径、目录边界和链接状态检查后清理。
 
 ## 命令
 

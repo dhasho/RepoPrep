@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS_DIR = process.platform === 'win32'
   ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'ProjectLens')
   : ''
 const MAX_SETTINGS_BYTES = 2 * 1024 * 1024
+const MAX_LOCAL_STATE_BYTES = 4 * 1024 * 1024
 
 function parseArgs(argv) {
   const options = {
@@ -18,11 +19,13 @@ function parseArgs(argv) {
     repoRoot: CHECKOUT_ROOT,
     outputDir: '',
     settingsDir: DEFAULT_SETTINGS_DIR,
+    settingsDirSpecified: false,
     profileId: '',
     caseIds: [],
     maxRequests: 16,
     verify: false,
     preflight: false,
+    credentialPreflight: false,
     help: false
   }
   const valueOptions = new Map([
@@ -39,6 +42,7 @@ function parseArgs(argv) {
     if (argument === '--help' || argument === '-h') { options.help = true; continue }
     if (argument === '--verify') { options.verify = true; continue }
     if (argument === '--preflight') { options.preflight = true; continue }
+    if (argument === '--credential-preflight') { options.credentialPreflight = true; continue }
     const key = valueOptions.get(argument)
     if (!key) throw new Error('unknown-argument')
     const value = argv[++index]
@@ -48,12 +52,17 @@ function parseArgs(argv) {
       if (!/^\d+$/.test(value)) throw new Error('invalid-request-limit')
       options.maxRequests = Number(value)
       if (!Number.isSafeInteger(options.maxRequests) || options.maxRequests < 1 || options.maxRequests > 16) throw new Error('invalid-request-limit')
-    } else options[key] = value
+    } else {
+      options[key] = value
+      if (key === 'settingsDir') options.settingsDirSpecified = true
+    }
   }
-  if (options.verify && options.preflight) throw new Error('incompatible-mode-flags')
-  if (!options.help && !options.verify && !options.preflight && !options.outputDir) throw new Error('missing-output')
+  const modes = Number(options.verify) + Number(options.preflight) + Number(options.credentialPreflight)
+  if (modes > 1) throw new Error('incompatible-mode-flags')
+  if (options.credentialPreflight && !options.settingsDirSpecified) throw new Error('credential-fixture-path-required')
+  if (!options.help && !options.verify && !options.preflight && !options.credentialPreflight && !options.outputDir) throw new Error('missing-output')
   if (!options.help && !options.verify && !options.preflight && !options.settingsDir) throw new Error('settings-directory-unavailable')
-  if (!options.help && !options.verify && !options.preflight && options.outputDir) {
+  if (!options.help && !options.verify && !options.preflight && !options.credentialPreflight && options.outputDir) {
     const outputPath = path.resolve(options.outputDir)
     const settingsPath = path.resolve(options.settingsDir)
     if (isWithin(settingsPath, outputPath) || isWithin(outputPath, settingsPath)) throw new Error('output-settings-overlap')
@@ -123,12 +132,38 @@ function readEncryptedSettings(settingsDir, profileId) {
   return { bytes, profileId: validated.profileId }
 }
 
+function readOsCryptSnapshot(settingsDir) {
+  const directory = assertExistingPlainDirectory(settingsDir, 'settings-directory-unavailable')
+  const filename = path.join(directory, 'Local State')
+  let stat
+  try { stat = fs.lstatSync(filename) } catch { throw new Error('os-crypt-state-unavailable') }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_LOCAL_STATE_BYTES) throw new Error('os-crypt-state-unavailable')
+  let state
+  try { state = JSON.parse(fs.readFileSync(filename, 'utf8')) } catch { throw new Error('os-crypt-state-invalid') }
+  if (!state || typeof state !== 'object' || Array.isArray(state) || !state.os_crypt || typeof state.os_crypt !== 'object' || Array.isArray(state.os_crypt)) {
+    throw new Error('os-crypt-state-invalid')
+  }
+  const osCrypt = state.os_crypt
+  if (Object.hasOwn(osCrypt, 'app_bound_encrypted_key')) throw new Error('os-crypt-app-bound-unsupported')
+  const encoded = osCrypt.encrypted_key
+  if (typeof encoded !== 'string' || encoded.length === 0 || encoded.length > 64 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+    throw new Error('os-crypt-state-invalid')
+  }
+  const decoded = Buffer.from(encoded, 'base64')
+  if (decoded.toString('base64') !== encoded || decoded.byteLength <= 5 || decoded.subarray(0, 5).toString('ascii') !== 'DPAPI') throw new Error('os-crypt-state-invalid')
+  if (osCrypt.audit_enabled !== undefined && typeof osCrypt.audit_enabled !== 'boolean') throw new Error('os-crypt-state-invalid')
+  const snapshot = { os_crypt: { encrypted_key: encoded, ...(osCrypt.audit_enabled !== undefined ? { audit_enabled: osCrypt.audit_enabled } : {}) } }
+  return Buffer.from(JSON.stringify(snapshot), 'utf8')
+}
+
 function stageEncryptedSettings(settingsDir, runtimeRoot, userDataDir, profileId) {
   const runtime = assertExistingPlainDirectory(runtimeRoot, 'unsafe-runtime-path')
   const userData = path.resolve(userDataDir)
   if (!isWithin(runtime, userData) || userData === runtime) throw new Error('unsafe-runtime-path')
   const { bytes, profileId: selectedProfileId } = readEncryptedSettings(settingsDir, profileId)
+  const localState = readOsCryptSnapshot(settingsDir)
   assertExistingPlainDirectory(userData)
+  fs.writeFileSync(path.join(userData, 'Local State'), localState, { flag: 'wx', mode: 0o600 })
   const target = path.join(userData, 'settings.json')
   fs.writeFileSync(target, bytes, { flag: 'wx', mode: 0o600 })
   return selectedProfileId
@@ -175,6 +210,12 @@ function registerSharedAliasHooks(repoRoot) {
 function buildChildArgs(options, runtimeRoot, repoRoot) {
   const common = ['--runtime-root', runtimeRoot, '--repo-root', repoRoot]
   if (options.preflight) return [...common, '--preflight']
+  if (options.credentialPreflight) return [
+    ...common,
+    '--credential-preflight',
+    '--settings-dir', path.resolve(options.settingsDir),
+    ...(options.profileId ? ['--profile-id', options.profileId] : [])
+  ]
   return [
     ...common,
     '--settings-dir', path.resolve(options.settingsDir),
@@ -194,6 +235,7 @@ module.exports = {
   isWithin,
   parseArgs,
   readEncryptedSettings,
+  readOsCryptSnapshot,
   registerSharedAliasHooks,
   safeChildEnvironment,
   sharedAliasImportUrl,
@@ -273,6 +315,11 @@ async function main() {
       const verdict = JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'preflight-verdict.json'), 'utf8'))
       if (verdict?.status !== 'ok') throw new Error('preflight-verdict-missing')
       process.stdout.write('VERDICT SAVED-PROFILE-PREFLIGHT-OK\n')
+    }
+    if (options.credentialPreflight && exitCode === 0) {
+      const verdict = JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'credential-preflight-verdict.json'), 'utf8'))
+      if (verdict?.decrypted !== true) throw new Error('credential-preflight-verdict-missing')
+      process.stdout.write('VERDICT SAVED-CREDENTIAL-STAGE-OK\n')
     }
     process.exitCode = exitCode
   } finally {

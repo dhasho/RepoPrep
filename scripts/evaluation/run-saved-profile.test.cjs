@@ -40,6 +40,7 @@ test('--verify and --help do not require output or settings paths', () => {
   assert.equal(preflight.preflight, true)
   assert.equal(preflight.outputDir, '')
   assert.throws(() => launcher.parseArgs(['--verify', '--preflight']), /incompatible-mode-flags/)
+  assert.throws(() => launcher.parseArgs(['--credential-preflight']), /credential-fixture-path-required/)
 })
 
 test('Node can execute the shared alias --import hook as a URL', () => {
@@ -106,6 +107,20 @@ test('fails closed on legacy schemas, plaintext keys, missing profiles, and miss
   assert.throws(() => launcher.validateSettingsSnapshot(noCredential, 'saved-profile'), /settings-encrypted-credential-missing/)
 })
 
+test('Local State staging keeps only the non-app-bound encrypted OSCrypt key fields', (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repoprep-local-state-test-'))
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const encryptedKey = Buffer.concat([Buffer.from('DPAPI'), Buffer.from('synthetic-protected-master-key')]).toString('base64')
+  fs.writeFileSync(path.join(root, 'Local State'), JSON.stringify({
+    os_crypt: { encrypted_key: encryptedKey, audit_enabled: true, unrelated: 'discard-me' },
+    browser: { history: ['must-not-copy'] }
+  }))
+  const snapshot = JSON.parse(launcher.readOsCryptSnapshot(root).toString('utf8'))
+  assert.deepEqual(snapshot, { os_crypt: { encrypted_key: encryptedKey, audit_enabled: true } })
+  fs.writeFileSync(path.join(root, 'Local State'), JSON.stringify({ os_crypt: { app_bound_encrypted_key: encryptedKey, encrypted_key: encryptedKey } }))
+  assert.throws(() => launcher.readOsCryptSnapshot(root), /os-crypt-app-bound-unsupported/)
+})
+
 test('settings directory and settings file must exist as plain paths', (context) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repoprep-saved-profile-test-'))
   context.after(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -128,9 +143,78 @@ test('stages only the unchanged encrypted snapshot inside an isolated userData d
   fs.mkdirSync(isolatedUserData)
   const source = settingsFixture()
   fs.writeFileSync(path.join(settingsDir, 'settings.json'), source)
+  const protectedKey = Buffer.concat([Buffer.from('DPAPI'), Buffer.from('test-protected-key')]).toString('base64')
+  const sourceLocalState = Buffer.from(JSON.stringify({
+    os_crypt: { encrypted_key: protectedKey, audit_enabled: false, unrelated: 'drop' },
+    browser: { history: ['do-not-copy'] }
+  }))
+  fs.writeFileSync(path.join(settingsDir, 'Local State'), sourceLocalState)
   fs.writeFileSync(path.join(settingsDir, 'settings.json.bak'), Buffer.from('backup sentinel'))
   assert.equal(launcher.stageEncryptedSettings(settingsDir, runtimeRoot, isolatedUserData, 'saved-profile'), 'saved-profile')
   assert.deepEqual(fs.readFileSync(path.join(isolatedUserData, 'settings.json')), source)
   assert.deepEqual(fs.readFileSync(path.join(settingsDir, 'settings.json')), source)
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(isolatedUserData, 'Local State'), 'utf8')), { os_crypt: { encrypted_key: protectedKey, audit_enabled: false } })
+  assert.equal(fs.existsSync(path.join(isolatedUserData, 'Local State')), true)
   assert.equal(fs.readFileSync(path.join(settingsDir, 'settings.json.bak'), 'utf8'), 'backup sentinel')
+  assert.deepEqual(fs.readFileSync(path.join(settingsDir, 'Local State')), sourceLocalState)
+})
+
+test('native OS encryption decrypts through the isolated snapshot in a second Electron process', (context) => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'repoprep-native-credential-stage-'))
+  assert.ok(launcher.isWithin(os.tmpdir(), fixtureRoot))
+  context.after(() => {
+    const inspect = (entry) => {
+      const stat = fs.lstatSync(entry)
+      assert.equal(stat.isSymbolicLink(), false, 'fixture cleanup refuses linked entries')
+      if (stat.isDirectory()) for (const name of fs.readdirSync(entry)) inspect(path.join(entry, name))
+    }
+    inspect(fixtureRoot)
+    fs.rmSync(fixtureRoot, { recursive: true, force: false })
+  })
+
+  const writer = spawnSync(require('electron'), [
+    path.join(__dirname, '..', '..', 'tests', 'native-credential-stage-writer.cjs'),
+    fixtureRoot
+  ], {
+    cwd: path.resolve(__dirname, '../..'),
+    encoding: 'utf8',
+    timeout: 60_000,
+    windowsHide: true,
+    env: launcher.safeChildEnvironment()
+  })
+  assert.equal(writer.error, undefined)
+  assert.equal(writer.status, 0, writer.stderr)
+
+  const sourceUserData = path.join(fixtureRoot, 'source-user-data')
+  const relativeFiles = []
+  const listFiles = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const filename = path.join(directory, entry.name)
+      if (entry.isDirectory()) listFiles(filename)
+      else if (entry.isFile()) relativeFiles.push(path.relative(fixtureRoot, filename))
+    }
+  }
+  listFiles(fixtureRoot)
+  assert.ok(relativeFiles.includes(path.join('source-user-data', 'Local State')), 'encrypted Local State missing from fixture userData')
+  const settingsBytes = fs.readFileSync(path.join(sourceUserData, 'settings.json'))
+  assert.equal(settingsBytes.includes(Buffer.from('"apiKey"')), false, 'source settings contain ciphertext only')
+  const localStateSnapshot = JSON.parse(launcher.readOsCryptSnapshot(sourceUserData).toString('utf8'))
+  assert.ok(localStateSnapshot.os_crypt.encrypted_key)
+  assert.equal(Object.hasOwn(localStateSnapshot.os_crypt, 'app_bound_encrypted_key'), false)
+
+  const reader = spawnSync(process.execPath, [
+    path.join(__dirname, 'run-saved-profile.cjs'),
+    '--credential-preflight',
+    '--settings-dir', sourceUserData,
+    '--profile-id', 'synthetic-stage-profile'
+  ], {
+    cwd: path.resolve(__dirname, '../..'),
+    encoding: 'utf8',
+    timeout: 90_000,
+    windowsHide: true,
+    env: launcher.safeChildEnvironment()
+  })
+  assert.equal(reader.error, undefined)
+  assert.equal(reader.status, 0, reader.stderr)
+  assert.match(reader.stdout, /VERDICT SAVED-CREDENTIAL-STAGE-OK/)
 })
