@@ -21,11 +21,11 @@
       "evidenceFiles": [
         {
           "path": "src/index.ts",
-          "sha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7"
+          "sha256": "1536a2dd71d64785d811076beee6d970583ca555dd34ce839face641a200054b"
         },
         {
           "path": "test/index_test.ts",
-          "sha256": "44d8c2e2b7c10c85054f50dff5877fdbf4d2e2a0bef7dbbb856ee089a14b61f6"
+          "sha256": "cc25b9f1d50cf07d0ae99141e592bfe0d1ca7e8a48332bf1870b31ba8e62c43b"
         }
       ],
       "knownFacts": [
@@ -468,15 +468,15 @@
       "evidenceFiles": [
         {
           "path": "schedule/__init__.py",
-          "sha256": "a08bca2887aea78bad3deda335883bb7791b194d07f7ef251d73e5719cf9f0ca"
+          "sha256": "b0c93f8ee84cbb8dbb98bcb8284864f4ea04012fdbc216de13f8ad2141d09efa"
         },
         {
           "path": "test_schedule.py",
-          "sha256": "3bd4a89843241c67104649d44386127fe1e3862b470289f27f71d55fd4b08cad"
+          "sha256": "71fa3781959b0dee649acc01e618559792c52c6375b82880945764819d5d5523"
         },
         {
           "path": "setup.py",
-          "sha256": "15ab79d36d3c321859d89abd61fcf9b1f539569c45ffd3d2bc5f9172ead700d0"
+          "sha256": "489d711917bac84051c6712d3941c00f199f43fc1b226e98f2cdccd6b1835336"
         }
       ],
       "knownFacts": [
@@ -721,19 +721,19 @@
       "evidenceFiles": [
         {
           "path": "src/requests/sessions.py",
-          "sha256": "03cef27dd6ce31c5bd1b724a80156a24e9ccb2e7041f1d6c3500fa60c3871d21"
+          "sha256": "3d2089736ced93b2b405624a943f866d22652b17df06a85eb010f86272fc3e7d"
         },
         {
           "path": "src/requests/models.py",
-          "sha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c"
+          "sha256": "a3351c3c12a86bf5ed211533875350bc4791e9327a685f8c19ba54343e471e26"
         },
         {
           "path": "pyproject.toml",
-          "sha256": "37e9930f62ed461c813456b322949ca9687fab0aa6c7e5c076ac3e006192a0e5"
+          "sha256": "345f26b9f691435e39d0eb6f7f4150a390f43175b22f8d61ac95e7f2827f0a77"
         },
         {
           "path": "tests/test_requests.py",
-          "sha256": "bc9a6811d6c0f4247fb4ca844e3eeb84c13088321b684692b0ef3eeac0b38bc5"
+          "sha256": "5eacf6341d236e225ce6a37a592f3b410f20e69ec17641f0e2c99b03a79b904d"
         }
       ],
       "knownFacts": [
@@ -998,5 +998,6 @@
       "forbiddenAssertions": [],
       "limitations": "holdout 只表示本语料的评测切分；一次 holdout 结果不能证明对其他仓库或语言的通用泛化。"
     }
-  ]
+  ],
+  "evidenceHashMode": "utf8-lf"
 }

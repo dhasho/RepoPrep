@@ -66,7 +66,7 @@ git clone --no-checkout https://github.com/psf/requests.git requests
 git -C requests checkout --detach 611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60
 ```
 
-Reading these files requires no installation of upstream development dependencies. The JSON hashes cover each complete listed evidence file, so a changed checkout can be detected before reviewing line citations.
+Reading these files requires no installation of upstream development dependencies. `evidenceHashMode: "utf8-lf"` means each complete evidence file is decoded as UTF-8, only CRLF pairs are normalized to LF, and SHA-256 is calculated over the resulting UTF-8 bytes. This makes the recorded evidence hashes independent of Windows versus LF checkout line endings; the pinned clone commands do not depend on a Git-wide `core.autocrlf` setting. Any `promptHash` created for an evaluation must still hash the actual prompt input bytes/text as submitted, without applying this evidence-file normalization.
 
 ## Attribution and limits
 
