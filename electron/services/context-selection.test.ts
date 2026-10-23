@@ -121,7 +121,7 @@ test('real scan keeps full fitting documentation, covers deep manifest/reference
     })
   } finally { restoreFetch() }
   const prompt = requests.flatMap((request) => request.messages.map((message) => message.content)).join('\n')
-  for (const marker of ['MANIFEST_DEEP_ENTRY', 'DEEP_REFERENCED_CORE', 'AUTH_MODULE_REPRESENTATIVE', 'BILLING_MODULE_REPRESENTATIVE']) {
+  for (const marker of ['README_KEEP_START', 'README_KEEP_END', 'MANIFEST_DEEP_ENTRY', 'DEEP_REFERENCED_CORE', 'AUTH_MODULE_REPRESENTATIVE', 'BILLING_MODULE_REPRESENTATIVE']) {
     assert.ok(prompt.includes(marker), `generated requests should include ${marker}`)
   }
   assert.doesNotMatch(prompt, /sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ/)

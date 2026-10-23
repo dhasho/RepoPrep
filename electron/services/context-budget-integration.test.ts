@@ -310,6 +310,8 @@ test('approved real scan bounds actual model messages for coarse, medium, and fi
     assert.ok(requests.length > 0)
     assertRequestsStayBounded(requests, granularity)
     assertRequestsStayTokenBounded(requests, granularity)
+    assert.ok(requests.some((request) => request.messages.some((message) => message.content.includes('README-IMPORTANT-START'))),
+      `${granularity} should retain the beginning of the important project document`)
     for (const batch of built.batches) {
       assert.ok(batch.totalChars <= CONTEXT_CHAR_BUDGETS[granularity], `${granularity} batch ${batch.label} exceeds its context allowance`)
     }
