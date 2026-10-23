@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, mkdir, opendir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -8,14 +8,34 @@ import { hashEvidenceBytes, installFetchObserver, runRealEvaluation, verifyRealC
 import { calculateReportDigest, makeReviewTemplate, validateReview } from './review.mjs'
 
 const exec = promisify(execFile)
-const temporary = []
+
+async function assertNoSymlinkTree(directory) {
+  const dir = await opendir(directory)
+  for await (const entry of dir) {
+    const entryPath = path.join(directory, entry.name)
+    const stat = await lstat(entryPath)
+    if (stat.isSymbolicLink()) throw new Error('refusing to clean fixture containing a symbolic link')
+    if (stat.isDirectory()) await assertNoSymlinkTree(entryPath)
+  }
+}
+
+async function removeFixture(base) {
+  const tempRoot = path.resolve(process.cwd(), '.tmp')
+  const target = path.resolve(base)
+  const relative = path.relative(tempRoot, target)
+  if (!relative.startsWith('real-runner-') || relative.includes(path.sep) || path.isAbsolute(relative)) throw new Error('refusing to clean a path outside the real-runner temporary fixture boundary')
+  if (await realpath(tempRoot) !== tempRoot || await realpath(target) !== target) throw new Error('refusing to clean a temporary fixture through a reparse point')
+  const rootStat = await lstat(target)
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw new Error('refusing to clean a non-directory temporary fixture')
+  await assertNoSymlinkTree(target)
+  await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+}
 
 async function fixture(t) {
   const tempRoot = path.join(process.cwd(), '.tmp')
   await mkdir(tempRoot, { recursive: true })
   const base = await mkdtemp(path.join(tempRoot, 'real-runner-'))
-  temporary.push(base)
-  t.after(async () => rm(base, { recursive: true, force: true }))
+  t.after(async () => removeFixture(base))
   const reposRoot = path.join(base, 'repos')
   const directory = path.join(reposRoot, 'case')
   await mkdir(directory, { recursive: true })
