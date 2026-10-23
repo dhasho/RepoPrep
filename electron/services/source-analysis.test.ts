@@ -23,7 +23,9 @@ test('AST imports ignore examples in comments and strings and expose complete de
   assert.ok(result.symbols.some((item) => item.name === 'work' && item.kind === 'function' && item.exported))
   assert.ok(result.symbols.some((item) => item.name === 'count' && item.kind === 'variable'))
   assert.equal(result.symbols.some((item) => item.name === 'inner' || item.name === 'local'), false)
-  assert.equal(new Set(result.symbols.filter((item) => item.name === 'work' || item.name === 'count').map((item) => `${item.start}:${item.end}`)).size, 2)
+  const variableSymbols = result.symbols.filter((item) => item.name === 'work' || item.name === 'count')
+  assert.equal(new Set(variableSymbols.map((item) => `${item.start}:${item.end}`)).size, 1)
+  assert.ok(variableSymbols.every((item) => text.slice(item.start, item.end) === "export const work = () => import('./real.js'), count = 1"))
   const importText = "import { one, two as second } from './dep'\nexport { one as publicOne } from './dep'\n"
   const imported = analyzeSource('src/imports.ts', importText)
   assert.ok(imported)

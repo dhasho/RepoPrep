@@ -115,9 +115,9 @@ export function analyzeSource(relPath: string, content: string): SourceAnalysis 
         if (!ts.isIdentifier(decl.name)) continue
         const init = decl.initializer
         if (init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) {
-          symbols.push({ name: decl.name.text, kind: 'function', start: decl.getStart(source), end: decl.end, signatureEnd: sigEnd(init), exported: isExported(node) })
+          symbols.push({ name: decl.name.text, kind: 'function', start: node.getStart(source), end: node.end, signatureEnd: sigEnd(init), exported: isExported(node) })
         } else {
-          symbols.push({ name: decl.name.text, kind: 'variable', start: decl.getStart(source), end: decl.end, exported: isExported(node) })
+          symbols.push({ name: decl.name.text, kind: 'variable', start: node.getStart(source), end: node.end, exported: isExported(node) })
         }
       }
     } else if (isTopLevel && ts.isImportDeclaration(node)) {
