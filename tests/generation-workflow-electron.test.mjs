@@ -185,7 +185,7 @@ async function run() {
   let spawnError = null
   let timedOut = false
   const publicAssetPaths = await fs.readdir(path.join(root, 'out', 'renderer', 'assets'))
-  const sourcePaths = ['electron/main.ts', 'electron/preload.ts', 'src/App.tsx', 'src/pages/ResultPage.tsx', 'electron/services/exporter.ts', 'electron/services/generator.ts', 'electron/services/context-builder.ts', 'electron/services/llm.ts', 'shared/types.ts', 'shared/result-contract.ts']
+  const sourcePaths = ['electron/main.ts', 'electron/preload.ts', 'src/App.tsx', 'src/pages/ResultPage.tsx', 'electron/services/exporter.ts', 'electron/services/generator.ts', 'electron/services/context-builder.ts', 'electron/services/llm.ts', 'shared/types.ts', 'shared/result-contract.ts', 'tests/generation-workflow-electron.test.mjs', 'tests/fixtures/generation-workflow-electron/child.cjs']
   const builtPaths = [
     'out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html',
     ...publicAssetPaths.filter((file) => /\.(js|css)$/.test(file)).map((file) => path.join('out/renderer/assets', file))
@@ -201,6 +201,8 @@ async function run() {
   env.REPOPREP_WORKFLOW_EXPORT = exportPath
   env.REPOPREP_WORKFLOW_MODEL_URL = `${syntheticServer.baseUrl}/v1`
   env.REPOPREP_WORKFLOW_CONTROL_URL = syntheticServer.baseUrl
+  await fs.mkdir(evidenceDirectory, { recursive: true })
+  env.REPOPREP_WORKFLOW_SCREENSHOT = path.join(evidenceDirectory, 'scope-latest.png')
   const child = spawn(electronPath, [childScript], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   child.stdout.on('data', (chunk) => { const text = chunk.toString(); output += text; process.stdout.write(text) })
   child.stderr.on('data', (chunk) => { const text = chunk.toString(); output += text; process.stderr.write(text) })

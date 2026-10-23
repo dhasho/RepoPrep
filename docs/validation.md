@@ -25,6 +25,8 @@
 | `npm run test:security` | 先执行 `npm run build`，再运行窗口安全、敏感信息及安全集成测试。 |
 | `npm run test:native-credentials` | 先执行 `npm run build`，再在真实 Electron `safeStorage` 和设置服务中用合成 key、隔离临时数据目录做加密保存、无明文检查、public 回读与私有解密往返。证明本机当前平台的原生存储链路，不证明真实模型调用或跨用户/设备可移植。 |
 | `npm run test:smoke` | 先执行 `npm run build`，再运行 Electron 本地构建产物冒烟。父 runner 创建独立临时目录并给子进程设置隔离 `appData`/`sessionData`；等待 Electron 退出后有限重试清理。只有 Electron 输出 `VERDICT SMOKE-OK`、退出码为 0 且父 runner 确认临时目录已删除，才算通过。 |
+| `npm run test:electron:workflow` | 先 build，再用真实主进程、preload、renderer 和守卫 IPC 验证扫描、配置、取消后无保存、重试、历史回读、后台完成时的项目隔离及 Markdown 写盘。仅文件选择对话框被替换，模型服务是本地合成 HTTP；包含范围与用量 UI/导出检查，不代表真实模型质量或可信原生鼠标输入。 |
+| `node tests/run-smoke.cjs --asar <absolute-app.asar-path>` | 在 `dist` 已构建后，检查当前工作区 `dist/win-unpacked/resources/app.asar` 的运行时依赖，并在隔离 Electron 中加载归档内主进程、preload、renderer 与 TypeScript 解析器。要求同样的 verdict、退出与清理条件；不安装应用，不等同于安装态验收。 |
 | `npm run test:eval` | 离线评分器和人工复核 CLI 单元/命令行测试；不运行生成器或真实模型。 |
 | `npm run test:eval:real` | 真实语料校验、生产生成器对照链路、请求限额、失败报告及已保存模型启动器的定向测试；含合成 HTTP 响应和双 Electron 进程的合成凭据往返，不读取真实用户凭据或调用真实模型。 |
 | `npm run eval:real -- verify --repos-root <directory>` | 核验公开仓库的固定提交、工作树、来源及源码事实哈希/行号；不读取模型凭据或访问模型服务。 |
@@ -53,7 +55,7 @@
 
 ## 检查结果的解释边界
 
-- `test:smoke` 检查本地 Electron 构建产物的窗口加载、React 渲染和一次 IPC 往返。它不是安装态验证，也不是完整用户流程；不证明真实项目扫描、模型生成、导出或取消流程可用。
+- `test:smoke` 检查本地 Electron 构建产物的窗口加载、React 渲染和一次 IPC 往返。完整的有限流程检查由 `test:electron:workflow` 单独覆盖；它使用合成项目与 HTTP 响应，不能代替公开项目的真实模型评测。这两个入口都不证明安装态验收。
 - smoke 使用隔离的临时 `appData` 与 `sessionData`。父 runner 等待 Electron 子进程关闭后，在经 prefix 和绝对路径范围核验的目录内做有限清理重试；清理失败会令 runner 非零退出。将 smoke 记为通过时，必须确认日志含 `VERDICT SMOKE-OK`，Electron 退出码为 `0`，并看到父 runner 确认 fixture 已删除。只有退出码为 `0`、没有 verdict，或出现 `SMOKE-FAIL` 都不能记作通过。
 - `test:native-credentials` 用合成密钥和临时目录验证本机 Electron `safeStorage` 与实际设置服务的加密往返、明文隔离和公开回读。它不调用模型、不使用用户密钥，也不证明 Windows DPAPI 数据可迁移到其他账户或设备。
 - `test:eval`、`eval:offline` 与 `eval:review` 只覆盖合成 fixture、loopback 响应、评分器和人工评分导入规则；不能当作真实模型质量、事实正确性或服务商兼容性验证。

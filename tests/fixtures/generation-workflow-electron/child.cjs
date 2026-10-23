@@ -161,6 +161,7 @@ async function runWorkflow() {
   BrowserWindow.prototype.show = function hideWorkflowWindow() { this.hide() }
   app.on('browser-window-created', (_event, win) => {
     activeWindow = win
+    win.webContents.setBackgroundThrottling(false)
     win.webContents.on('render-process-gone', (_event, details) => rendererErrors.push(`render-process-gone:${details.reason}`))
     win.webContents.on('did-fail-load', (_event, code, description) => rendererErrors.push(`did-fail-load:${code}:${description}`))
     win.webContents.on('preload-error', (_event, preloadPath, error) => rendererErrors.push(`preload-error:${preloadPath}:${error.message}`))
@@ -259,6 +260,9 @@ async function runWorkflow() {
   assert.ok(resultText.includes('系统估算输入'))
   assert.match(resultText, /服务商回执：输入\s+37、输出\s+19/)
   evidence.scopeUi = 'present'
+  await activeWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50))))')
+  const scopeImage = await activeWindow.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
+  await fs.writeFile(process.env.REPOPREP_WORKFLOW_SCREENSHOT, scopeImage.toPNG())
 
   // Export the actual rendered result through IPC and the patched native save picker.
   await clickButton('导出 Markdown', 'export Markdown from result UI')
