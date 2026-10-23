@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
+const { DEFAULT_VARIANTS, appendVariant } = require('./variant-arguments.cjs')
 
 const CHECKOUT_ROOT = path.resolve(__dirname, '..', '..')
 const MAIN_CHECKOUT_ROOT = path.basename(path.dirname(CHECKOUT_ROOT)) === '.worktrees'
@@ -22,6 +23,7 @@ function parseArgs(argv) {
     settingsDirSpecified: false,
     profileId: '',
     caseIds: [],
+    variants: [],
     maxRequests: 16,
     verify: false,
     preflight: false,
@@ -35,6 +37,7 @@ function parseArgs(argv) {
     ['--settings-dir', 'settingsDir'],
     ['--profile-id', 'profileId'],
     ['--case', 'caseId'],
+    ['--variant', 'variant'],
     ['--max-requests', 'maxRequests']
   ])
   for (let index = 0; index < argv.length; index++) {
@@ -48,7 +51,9 @@ function parseArgs(argv) {
     const value = argv[++index]
     if (!value || value.startsWith('--')) throw new Error('missing-argument-value')
     if (key === 'caseId') options.caseIds.push(value)
-    else if (key === 'maxRequests') {
+    else if (key === 'variant') {
+      options.variants = appendVariant(options.variants, value)
+    } else if (key === 'maxRequests') {
       if (!/^\d+$/.test(value)) throw new Error('invalid-request-limit')
       options.maxRequests = Number(value)
       if (!Number.isSafeInteger(options.maxRequests) || options.maxRequests < 1 || options.maxRequests > 16) throw new Error('invalid-request-limit')
@@ -59,6 +64,8 @@ function parseArgs(argv) {
   }
   const modes = Number(options.verify) + Number(options.preflight) + Number(options.credentialPreflight)
   if (modes > 1) throw new Error('incompatible-mode-flags')
+  if (modes && options.variants.length) throw new Error('incompatible-mode-flags')
+  if (!options.variants.length) options.variants = [...DEFAULT_VARIANTS]
   if (options.credentialPreflight && !options.settingsDirSpecified) throw new Error('credential-fixture-path-required')
   if (!options.help && !options.verify && !options.preflight && !options.credentialPreflight && !options.outputDir) throw new Error('missing-output')
   if (!options.help && !options.verify && !options.preflight && !options.settingsDir) throw new Error('settings-directory-unavailable')
@@ -93,6 +100,7 @@ function helpText() {
     '  --settings-dir <directory> Defaults to this user’s ProjectLens settings directory',
     '  --profile-id <id>          Defaults to the profile selected in settings',
     '  --case <id>                Repeat to select cases',
+    '  --variant <generation|baseline> Repeat to select variants; defaults to both',
     '  --max-requests <1..16>     Request cap, defaults to 16',
     '  --verify                   Verify pinned public corpus only; no settings or key access',
     '  --preflight                Start Electron, isolate paths, and load the runner without settings or network',
@@ -223,6 +231,7 @@ function buildChildArgs(options, runtimeRoot, repoRoot) {
     '--repos-root', path.resolve(options.reposRoot),
     '--output', path.resolve(options.outputDir),
     '--max-requests', String(options.maxRequests),
+    ...options.variants.flatMap(variant => ['--variant', variant]),
     ...options.caseIds.flatMap((id) => ['--case', id])
   ]
 }

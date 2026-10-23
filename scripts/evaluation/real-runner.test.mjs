@@ -4,7 +4,7 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { test } from 'node:test'
-import { hashEvidenceBytes, installFetchObserver, runRealEvaluation, verifyRealCorpus } from './real-runner.mjs'
+import { hashEvidenceBytes, installFetchObserver, parseRunnerArgs, runRealEvaluation, sanitizeGenerationDiagnostics, verifyRealCorpus } from './real-runner.mjs'
 import { calculateReportDigest, makeReviewTemplate, validateReview } from './review.mjs'
 
 const exec = promisify(execFile)
@@ -83,7 +83,7 @@ function syntheticCompletion() {
   return JSON.stringify({ projectSummary: 'The project contains a small implementation.', sections: [{ title: 'Implementation', summary: 'Visible behavior.', questions }], glossary: {} })
 }
 
-function controlledModel(t, { failOnCall } = {}) {
+function controlledModel(t, { failOnCall, omitUsage = false } = {}) {
   const originalFetch = globalThis.fetch
   const prompts = []
   let callCount = 0
@@ -92,13 +92,59 @@ function controlledModel(t, { failOnCall } = {}) {
     const request = JSON.parse(init.body)
     prompts.push(request.messages.map(message => message.content).join('\n'))
     if (callCount === failOnCall) throw new Error('UPSTREAM_RAW_SECRET_SENTINEL API_KEY_RAW_SECRET_SENTINEL')
-    return new Response(JSON.stringify({ choices: [{ message: { content: syntheticCompletion() } }], usage: { prompt_tokens: 30, completion_tokens: 40, total_tokens: 70 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    const body = { choices: [{ message: { content: syntheticCompletion() } }] }
+    if (!omitUsage) body.usage = { prompt_tokens: 30, completion_tokens: 40, total_tokens: 70 }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   t.after(() => { globalThis.fetch = originalFetch })
   return { prompts, get callCount() { return callCount } }
 }
 
 const testProfile = { id: 'secret-profile-id', name: 'Secret private profile', baseUrl: 'https://model.example.test/v1', apiKey: 'API_KEY_RAW_SECRET_SENTINEL', model: 'synthetic-model', protocol: 'openai' }
+
+test('runner variants default to both and reject invalid or duplicate selections during argument parsing', () => {
+  assert.deepEqual(parseRunnerArgs([]).variants, ['generation', 'baseline'])
+  assert.deepEqual(parseRunnerArgs(['--variant', 'generation']).variants, ['generation'])
+  assert.deepEqual(parseRunnerArgs(['--variant', 'baseline', '--variant', 'generation']).variants, ['baseline', 'generation'])
+  assert.throws(() => parseRunnerArgs(['--variant', 'unknown']), /invalid evaluation variant/u)
+  assert.throws(() => parseRunnerArgs(['--variant', 'generation', '--variant', 'generation']), /invalid evaluation variant/u)
+})
+
+test('sanitizes generation receipts to bounded numeric fields and static stages only', () => {
+  const receipt = sanitizeGenerationDiagnostics({
+    version: 1,
+    status: 'failed',
+    failedStage: 'model',
+    contextStrategy: 'structure-v1',
+    tokenEstimateMethod: 'mixed-text-v1',
+    estimatedInputTokens: 20,
+    inputTokenBudget: 100,
+    reservedOutputTokens: 20,
+    actualUsage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+    usageComplete: true,
+    requestCount: 2,
+    repairRequestCount: 1,
+    compensationRequestCount: 0,
+    contextBuildMs: 3.2,
+    modelMs: 4,
+    totalMs: 8,
+    selectedFiles: 2,
+    selectedRegions: 3,
+    omittedFiles: 1,
+    apiKey: 'SENTINEL_SECRET',
+    profileId: 'PRIVATE_PROFILE_ID',
+    error: 'RAW_UPSTREAM_ERROR'
+  })
+  assert.equal(receipt.failedStage, 'model')
+  assert.deepEqual(receipt.actualUsage, { inputTokens: 2, outputTokens: 3, totalTokens: 5 })
+  assert.equal(receipt.repairRequestCount, 1)
+  assert.equal(receipt.compensationRequestCount, 0)
+  assert.equal(receipt.contextBuildMs, 3.2)
+  assert.equal(Object.hasOwn(receipt, 'apiKey'), false)
+  assert.equal(JSON.stringify(receipt).includes('PRIVATE_PROFILE_ID'), false)
+  assert.equal(JSON.stringify(receipt).includes('RAW_UPSTREAM_ERROR'), false)
+  assert.equal(sanitizeGenerationDiagnostics({ status: 'succeeded', estimatedInputTokens: Number.POSITIVE_INFINITY }).estimatedInputTokens, null)
+})
 
 test('verifies clean repository commit and fixed evidence hashes', async t => {
   const values = await fixture(t)
@@ -219,6 +265,17 @@ test('reports unavailable provider usage as null', async t => {
   observer.restore()
 })
 
+test('does not report out-of-range provider token counters as actual usage', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  globalThis.fetch = async () => new Response(JSON.stringify({ usage: { prompt_tokens: Number.MAX_SAFE_INTEGER, completion_tokens: 2 }, choices: [] }), { status: 200 })
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
+  t.after(observer.restore)
+  await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  assert.equal(observer.metrics.requests[0].usage, null)
+  assert.equal(observer.metrics.usageAvailable, false)
+})
+
 test('returns promptly when bounded usage reads an oversized streaming body', async t => {
   const originalFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = originalFetch })
@@ -251,6 +308,9 @@ test('runs production generation and README baseline while keeping gold outside 
   assert.doesNotMatch(model.prompts[1], /SOURCE_SENTINEL_REAL_RUNNER/u)
   assert.ok(model.prompts.every(prompt => !prompt.includes('GOLD_ONLY_SENTINEL_REAL_RUNNER')))
   assert.equal(run.cases[0].generation.scored.quota.actual, 20)
+  assert.equal(run.cases[0].generation.diagnostics.status, 'succeeded')
+  assert.equal(run.cases[0].generation.diagnostics.usageComplete, true)
+  assert.deepEqual(run.cases[0].generation.diagnostics.actualUsage, { inputTokens: 30, outputTokens: 40, totalTokens: 70 })
   assert.equal(run.cases[0].baseline.scored.quota.actual, 20)
   assert.equal(run.cases[0].output.projectPath, '/public-corpus/case')
   assert.equal(run.cases[0].output.profileId, 'real-eval')
@@ -265,6 +325,42 @@ test('runs production generation and README baseline while keeping gold outside 
   assert.doesNotMatch(JSON.stringify(report), /API_KEY_RAW_SECRET_SENTINEL|Secret private profile|UPSTREAM_RAW_SECRET_SENTINEL/u)
 })
 
+test('generation-only candidate records real synthetic usage absence and binds canonical output', async t => {
+  const values = await productionFixture(t)
+  const model = controlledModel(t, { omitUsage: true })
+  const outputDir = path.join(values.base, 'generation-only-report')
+  const run = await runRealEvaluation({
+    ...values,
+    outputDir,
+    profile: { ...testProfile, contextWindowTokens: 40_000, maxOutputTokens: 4096 },
+    caseIds: ['case'],
+    variants: ['generation'],
+    maxRequests: 4
+  })
+  assert.equal(run.status, 'complete')
+  assert.equal(model.callCount, 1)
+  assert.equal(run.config.variants.join(','), 'generation')
+  assert.equal(run.config.contextWindowTokens, 40_000)
+  assert.equal(run.config.profileMaxOutputTokens, 4096)
+  assert.equal(run.config.maxOutputTokens, 4096)
+  assert.equal(run.cases[0].baseline, undefined)
+  assert.equal(run.cases[0].generation.status, 'complete')
+  assert.equal(run.cases[0].generation.diagnostics.status, 'succeeded')
+  assert.equal(run.cases[0].generation.diagnostics.usageComplete, false)
+  assert.equal(run.cases[0].generation.diagnostics.actualUsage, null)
+  assert.ok(Number.isFinite(run.cases[0].generation.diagnostics.estimatedInputTokens))
+  assert.equal(run.cases[0].generation.diagnostics.inputTokenBudget, run.config.applicationInputTokenBudget)
+  assert.equal(run.cases[0].generation.diagnostics.reservedOutputTokens, run.config.reservedOutputTokens)
+  assert.equal(run.cases[0].generation.tokens, null)
+  assert.equal(run.network.usage, null)
+  assert.equal(run.cases[0].output.projectSummary, 'The project contains a small implementation.')
+  assert.equal(run.cases[0].output.evaluationDiagnostics, run.cases[0].generation.diagnostics)
+  assert.equal(run.reportDigest, calculateReportDigest(run))
+  const changed = structuredClone(run)
+  changed.cases[0].output.evaluationDiagnostics.estimatedInputTokens++
+  assert.notEqual(calculateReportDigest(changed), run.reportDigest)
+})
+
 test('retains generation report as partial when baseline model call fails', async t => {
   const values = await productionFixture(t)
   const model = controlledModel(t, { failOnCall: 2 })
@@ -273,7 +369,10 @@ test('retains generation report as partial when baseline model call fails', asyn
   assert.equal(model.callCount, 2)
   assert.equal(run.status, 'partial')
   assert.equal(run.cases[0].generation.scored.quota.actual, 20)
-  assert.equal(run.cases[0].baseline, undefined)
+  assert.equal(run.cases[0].baseline.status, 'failed')
+  assert.equal(run.cases[0].baseline.failureStage, 'model')
+  assert.equal(run.cases[0].baseline.diagnostics.status, 'failed')
+  assert.equal(run.cases[0].baseline.diagnostics.failedStage, 'model')
   assert.equal(run.failure.type, 'ModelRequestError')
   assert.equal(run.failure.reason, 'evaluation_failed')
   const report = JSON.parse(await readFile(path.join(outputDir, 'report.json'), 'utf8'))

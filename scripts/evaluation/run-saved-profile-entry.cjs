@@ -4,6 +4,7 @@ const path = require('node:path')
 const { createHash } = require('node:crypto')
 const { app } = require('electron')
 const { registerSharedAliasHooks, stageEncryptedSettings } = require('./run-saved-profile.cjs')
+const { DEFAULT_VARIANTS, appendVariant } = require('./variant-arguments.cjs')
 const store = require('../../electron/services/store')
 const credentialCrypto = require('../../electron/services/native-credential-crypto')
 const SAFE_ERROR_CODES = new Set([
@@ -20,6 +21,7 @@ const SAFE_ERROR_CODES = new Set([
 function parseEntryArgs(argv) {
   const values = new Map()
   const cases = []
+  const variants = []
   let preflight = false
   let credentialPreflight = false
   for (let index = 0; index < argv.length; index++) {
@@ -29,10 +31,14 @@ function parseEntryArgs(argv) {
     const value = argv[++index]
     if (!value || value.startsWith('--')) throw new Error('invalid-entry-arguments')
     if (key === '--case') cases.push(value)
-    else if (['--runtime-root', '--repo-root', '--settings-dir', '--profile-id', '--repos-root', '--output', '--max-requests'].includes(key)) values.set(key, value)
+    else if (key === '--variant') {
+      appendVariant(variants, value, 'invalid-entry-arguments')
+      variants.push(value)
+    } else if (['--runtime-root', '--repo-root', '--settings-dir', '--profile-id', '--repos-root', '--output', '--max-requests'].includes(key)) values.set(key, value)
     else throw new Error('invalid-entry-arguments')
   }
   if (preflight && credentialPreflight) throw new Error('invalid-entry-arguments')
+  if ((preflight || credentialPreflight) && variants.length) throw new Error('invalid-entry-arguments')
   const required = preflight
     ? ['--runtime-root', '--repo-root']
     : credentialPreflight
@@ -52,6 +58,7 @@ function parseEntryArgs(argv) {
     outputDir: values.has('--output') ? path.resolve(values.get('--output')) : '',
     maxRequests,
     caseIds: cases,
+    variants: variants.length ? variants : [...DEFAULT_VARIANTS],
     preflight,
     credentialPreflight
   }
@@ -144,7 +151,7 @@ async function run(options) {
       outputDir: options.outputDir,
       profile,
       caseIds: options.caseIds.length ? options.caseIds : undefined,
-      variants: ['generation', 'baseline'],
+      variants: options.variants,
       maxRequests: options.maxRequests,
       maxDurationMs: 20 * 60 * 1000
     })

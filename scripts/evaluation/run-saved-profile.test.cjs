@@ -5,6 +5,7 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const test = require('node:test')
 const launcher = require('./run-saved-profile.cjs')
+const variantArguments = require('./variant-arguments.cjs')
 
 function settingsFixture(overrides = {}) {
   return Buffer.from(JSON.stringify({
@@ -26,11 +27,24 @@ test('importing the launcher does not start Electron or a runner', () => {
 test('parses bounded metadata arguments and repeated cases', () => {
   const parsed = launcher.parseArgs(['--output', 'reports/run', '--case', 'one', '--case', 'two', '--max-requests', '16'])
   assert.deepEqual(parsed.caseIds, ['one', 'two'])
+  assert.deepEqual(parsed.variants, ['generation', 'baseline'])
   assert.equal(parsed.maxRequests, 16)
   assert.equal(parsed.profileId, '')
   assert.throws(() => launcher.parseArgs(['--output', 'x', '--max-requests', '17']), /invalid-request-limit/)
+  assert.deepEqual(launcher.parseArgs(['--output', 'x', '--variant', 'generation']).variants, ['generation'])
+  assert.deepEqual(launcher.parseArgs(['--output', 'x', '--variant', 'baseline', '--variant', 'generation']).variants, ['baseline', 'generation'])
+  assert.throws(() => launcher.parseArgs(['--output', 'x', '--variant', 'invalid', '--settings-dir', 'missing']), /invalid-variant/)
+  assert.throws(() => launcher.parseArgs(['--output', 'x', '--variant', 'generation', '--variant', 'generation']), /invalid-variant/)
   assert.throws(() => launcher.parseArgs(['--output']), /missing-argument-value/)
   assert.throws(() => launcher.parseArgs(['--settings-dir', 'C:\\Users\\test\\ProjectLens', '--output', 'C:\\Users\\test\\ProjectLens\\reports']), /output-settings-overlap/)
+})
+
+test('Electron entry variant contract defaults to both and rejects invalid duplicates', () => {
+  assert.deepEqual(variantArguments.resolveVariants([]), ['generation', 'baseline'])
+  const selected = variantArguments.appendVariant([], 'generation', 'invalid-entry-arguments')
+  assert.deepEqual(variantArguments.appendVariant(selected, 'baseline', 'invalid-entry-arguments'), ['generation', 'baseline'])
+  assert.throws(() => variantArguments.appendVariant(selected, 'generation', 'invalid-entry-arguments'), /invalid-entry-arguments/)
+  assert.throws(() => variantArguments.appendVariant([], 'bad', 'invalid-entry-arguments'), /invalid-entry-arguments/)
 })
 
 test('--verify and --help do not require output or settings paths', () => {
@@ -77,6 +91,9 @@ test('native Electron preflight creates isolated paths and imports the real Type
 test('child arguments contain metadata only and never accept credential values', () => {
   const parsed = launcher.parseArgs(['--output', 'reports/run', '--profile-id', 'saved-profile'])
   const args = launcher.buildChildArgs(parsed, 'C:\\tmp\\runtime', 'C:\\repo')
+  assert.deepEqual(args.slice(args.indexOf('--variant')), ['--variant', 'generation', '--variant', 'baseline'])
+  const generationOnly = launcher.buildChildArgs(launcher.parseArgs(['--output', 'reports/run', '--variant', 'generation']), 'C:\\tmp\\runtime', 'C:\\repo')
+  assert.deepEqual(generationOnly.slice(generationOnly.indexOf('--variant')), ['--variant', 'generation'])
   assert.equal(args.includes('apiKey'), false)
   assert.equal(args.some((value) => value.includes('synthetic-secret')), false)
   assert.equal(args.includes('saved-profile'), true)

@@ -22,11 +22,23 @@
 ```powershell
 npm run eval:real -- verify --repos-root 'E:\Vibe Coding\RepoPrep-Eval-Cases'
 npm run eval:real:saved -- --repos-root 'E:\Vibe Coding\RepoPrep-Eval-Cases' --output '.\reports\real-generation-eval\run-next'
+npm run eval:real:saved -- --repos-root 'E:\Vibe Coding\RepoPrep-Eval-Cases' --output '.\reports\real-generation-eval\candidate-generation-only' --variant generation
 npm run eval:real:saved -- --preflight
 ```
 
-可用参数：`--case <id>`（重复以选择 case）、`--profile-id <id>`、`--settings-dir <directory>`、`--max-requests <1..16>`。`--preflight` 会启动真实 Electron、建立隔离目录并导入生产 TypeScript runner，不读取设置或凭据、不发出网络请求。使用 `--help` 查看命令。wrapper 子进程以隐藏窗口方式启动，不打开 BrowserWindow，不获取项目单实例锁。运行期间不要退出终端；超过硬时限会终止 Electron 子进程。
+可用参数：`--case <id>`（重复以选择 case）、`--variant generation|baseline`（重复选择 variant；缺省运行两组）、`--profile-id <id>`、`--settings-dir <directory>`、`--max-requests <1..16>`。不支持的或重复的 variant 会在读取设置和凭据前拒绝。生成组使用完整生产扫描；README 对照组仍只把 README 正文作为候选，同时保留项目树和扫描元数据。`--preflight` 会启动真实 Electron、建立隔离目录并导入生产 TypeScript runner，不读取设置或凭据、不发出网络请求。使用 `--help` 查看命令。wrapper 子进程以隐藏窗口方式启动，不打开 BrowserWindow，不获取项目单实例锁。运行期间不要退出终端；超过硬时限会终止 Electron 子进程。
 
-输出报告应记录实际 model、协议、评测版本和请求数，但不应包含 API key、设置快照或认证头。模型生成的问题/答案须逐项核对源码；`pending` 人工评价不等于通过。关键词覆盖只能表示字符串命中，不能用于宣称事实正确率。即使 HTTP 请求成功或结果通过结构契约，也不能单独证明模型回答准确。
+输出报告记录 profile 的 context window、实际输出 token cap、应用输入 token 预算与预留策略。每组还记录独立的输入 token 估算、provider usage receipt、请求/格式修复计数与 context/model 阶段时间。provider 未返回完整 usage 时真实 token 用量为 `null`；输入估算不会冒充真实用量。报告不包含 API key、设置快照或认证头。
+
+可用比较器对旧报告中的 generation 组和新候选报告进行同语料比较：
+
+```powershell
+node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/evaluation/compare-real-runs.mjs '.\reports\real-generation-eval\2026-10-23-deepseek-v4-flash\report.json' '.\reports\real-generation-eval\candidate-generation-only\report.json'
+node --test scripts/evaluation/compare-real-runs.test.mjs
+```
+
+比较器要求两份完整报告的 corpus version、generation 变体、case revision、fixture hashes、模型/协议、颗粒度和题量预算匹配。它校验 canonical output、generation question 列表与 report question 指纹的对应关系；也记录两份输入报告的整体 SHA-256、source hashes 与 token/context 策略的变化。旧版 review digest 只绑定 canonical output 和 questions，没有绑定 generation metadata，因此比较器会明确报告这项限制。比较结果是整版观察；它不把关键词命中当作准确率，不把代理辅助复核称为人工复核，也不推测费用。
+
+模型生成的问题/答案须逐项核对源码；`pending` 人工评价不等于通过。关键词覆盖只能表示字符串命中，不能用于宣称事实正确率。即使 HTTP 请求成功或结果通过结构契约，也不能单独证明模型回答准确。
 
 `test:eval:real` 同时包含合成 HTTP 回归和两个真实 Electron 进程间的合成凭据往返。后者验证当前平台的 OS 加密快照链路，不读取真实用户凭据，也不代表真实 API 验收；正式模型调用必须以实际报告为证。

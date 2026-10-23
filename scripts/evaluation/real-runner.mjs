@@ -7,15 +7,45 @@ import { promisify } from 'node:util'
 import { scanProject } from '../../electron/services/scanner.ts'
 import { generateInterview } from '../../electron/services/generator.ts'
 import { GRANULARITY_QUESTION_BUDGET } from '../../shared/types.ts'
+import { DEFAULT_OUTPUT_RESERVE, DEEPSEEK_THINKING_RESERVE, INPUT_TOKEN_TARGETS, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 import { scoreCase, flattenQuestions, fingerprintQuestion } from './scorer.mjs'
 import { makeReviewTemplate, calculateReportDigest } from './review.mjs'
+import variantArguments from './variant-arguments.cjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
 const execFileAsync = promisify(execFile)
 const hash = value => createHash('sha256').update(value).digest('hex')
-const DEFAULT_VARIANTS = ['generation', 'baseline']
+const { DEFAULT_VARIANTS, appendVariant, resolveVariants } = variantArguments
+const ALLOWED_VARIANTS = new Set(DEFAULT_VARIANTS)
 const MAX_USAGE_BYTES = 1024 * 1024
+const MAX_USAGE_TOKENS = 10_000_000
+const MAX_DIAGNOSTIC_VALUE = 1_000_000_000
+
+export function parseRunnerArgs(args) {
+  const options = { caseIds: [], variants: [], variantSpecified: false, help: false }
+  const repeatable = new Set(['--case'])
+  const accepted = new Set(['--repos-root', '--output', '--manifest', '--case', '--max-requests', '--variant'])
+  for (let index = 0; index < args.length; index++) {
+    const key = args[index]
+    if (key === '--help') { options.help = true; continue }
+    if (!accepted.has(key)) throw new Error('unknown evaluation argument')
+    const value = args[++index]
+    if (!value || value.startsWith('--')) throw new Error('missing evaluation argument value')
+    if (key === '--variant') {
+      options.variantSpecified = true
+      appendVariant(options.variants, value, 'invalid evaluation variant')
+      options.variants.push(value)
+    } else if (repeatable.has(key)) {
+      options.caseIds.push(value)
+    } else {
+      if (Object.hasOwn(options, key)) throw new Error('duplicate evaluation argument')
+      options[key] = value
+    }
+  }
+  options.variants = resolveVariants(options.variants, 'invalid evaluation variant')
+  return options
+}
 
 export function hashEvidenceBytes(bytes, mode) {
   if (mode === undefined || mode === 'raw') return hash(bytes)
@@ -29,6 +59,90 @@ function safeErrorType(error) {
   if (error?.name === 'TypeError') return 'NetworkError'
   if (error?.name === 'Error' || error?.name === 'LlmRequestError') return 'ModelRequestError'
   return 'UnknownError'
+}
+
+const DIAGNOSTIC_STAGES = new Set(['context', 'model', 'merge', 'validation'])
+const TOKEN_LIMIT = 2_097_152
+
+function safeTokenSetting(value) {
+  return Number.isSafeInteger(value) && value > 0 && value <= TOKEN_LIMIT ? value : undefined
+}
+
+function safeDiagnosticNumber(value, integer = true) {
+  if (!Number.isFinite(value) || value < 0 || value > MAX_DIAGNOSTIC_VALUE) return null
+  return integer ? Math.floor(value) : Math.round(value * 10) / 10
+}
+
+export function sanitizeGenerationDiagnostics(value) {
+  if (!value || typeof value !== 'object') return null
+  const status = ['succeeded', 'failed', 'cancelled'].includes(value.status) ? value.status : null
+  if (!status) return null
+  const usage = value.usageComplete === true && value.actualUsage &&
+    ['inputTokens', 'outputTokens', 'totalTokens'].every(key => Number.isSafeInteger(value.actualUsage[key]) && value.actualUsage[key] >= 0 && value.actualUsage[key] <= MAX_DIAGNOSTIC_VALUE)
+    ? {
+      inputTokens: value.actualUsage.inputTokens,
+      outputTokens: value.actualUsage.outputTokens,
+      totalTokens: value.actualUsage.totalTokens
+    }
+    : null
+  return {
+    version: 1,
+    status,
+    ...(DIAGNOSTIC_STAGES.has(value.failedStage) ? { failedStage: value.failedStage } : {}),
+    contextStrategy: value.contextStrategy === 'structure-v1' ? value.contextStrategy : 'unknown',
+    tokenEstimateMethod: value.tokenEstimateMethod === 'mixed-text-v1' ? value.tokenEstimateMethod : 'unknown',
+    estimatedInputTokens: safeDiagnosticNumber(value.estimatedInputTokens),
+    inputTokenBudget: safeDiagnosticNumber(value.inputTokenBudget),
+    reservedOutputTokens: safeDiagnosticNumber(value.reservedOutputTokens),
+    actualUsage: usage,
+    usageComplete: usage !== null,
+    requestCount: safeDiagnosticNumber(value.requestCount) ?? 0,
+    repairRequestCount: safeDiagnosticNumber(value.repairRequestCount) ?? 0,
+    compensationRequestCount: safeDiagnosticNumber(value.compensationRequestCount) ?? 0,
+    contextBuildMs: safeDiagnosticNumber(value.contextBuildMs, false),
+    modelMs: safeDiagnosticNumber(value.modelMs, false),
+    totalMs: safeDiagnosticNumber(value.totalMs, false),
+    selectedFiles: safeDiagnosticNumber(value.selectedFiles),
+    selectedRegions: safeDiagnosticNumber(value.selectedRegions),
+    omittedFiles: safeDiagnosticNumber(value.omittedFiles)
+  }
+}
+
+function requestUsage(requests) {
+  if (!requests.length || !requests.every(request => request.usage)) return null
+  return requests.reduce((total, request) => ({
+    inputTokens: total.inputTokens + request.usage.inputTokens,
+    outputTokens: total.outputTokens + request.usage.outputTokens,
+    totalTokens: total.totalTokens + request.usage.totalTokens
+  }), { inputTokens: 0, outputTokens: 0, totalTokens: 0 })
+}
+
+function evaluatorTokenPolicy(profile, protocol) {
+  const budget = resolveGenerationBudget(profile, 'medium')
+  const contextWindowTokens = budget.contextWindowTokens
+  const profileOutputTokens = safeTokenSetting(profile.maxOutputTokens)
+  const reservedOutputTokens = budget.reservedOutputTokens
+  const inputTokenTarget = INPUT_TOKEN_TARGETS.medium
+  return {
+    contextWindowTokens,
+    profileOutputTokens: profileOutputTokens ?? null,
+    maxOutputTokens: profileOutputTokens ?? (protocol === 'anthropic' ? reservedOutputTokens : null),
+    maxOutputTokensPolicy: profileOutputTokens ? 'profile-explicit' : protocol === 'anthropic' ? 'llm-anthropic-default' : 'provider-default',
+    inputTokenTarget,
+    inputTokenBudget: budget.inputTokens,
+    reservedOutputTokens,
+    reservedOutputPolicy: profileOutputTokens
+      ? 'profile-maxOutputTokens'
+      : protocol === 'anthropic'
+        ? 'anthropic-default-16384'
+        : reservedOutputTokens === DEEPSEEK_THINKING_RESERVE
+          ? 'deepseek-reasoning-reserve-65536'
+          : reservedOutputTokens === DEFAULT_OUTPUT_RESERVE
+            ? 'application-default-reserve-16384'
+          : 'application-output-reserve',
+    tokenEstimateMethod: TOKEN_ESTIMATE_METHOD,
+    contextStrategy: 'structure-v1'
+  }
 }
 
 function repositoryId(remote) {
@@ -145,7 +259,11 @@ async function boundedUsage(response, deadline) {
     const usage = JSON.parse(text).usage
     const input = usage?.prompt_tokens ?? usage?.input_tokens
     const output = usage?.completion_tokens ?? usage?.output_tokens
-    return Number.isFinite(input) && Number.isFinite(output) ? { inputTokens: input, outputTokens: output, totalTokens: Number.isFinite(usage.total_tokens) ? usage.total_tokens : input + output } : null
+    const total = usage?.total_tokens ?? input + output
+    const validCount = value => Number.isSafeInteger(value) && value >= 0 && value <= MAX_USAGE_TOKENS
+    return validCount(input) && validCount(output) && validCount(total) && total <= input + output + MAX_USAGE_TOKENS
+      ? { inputTokens: input, outputTokens: output, totalTokens: total }
+      : null
   } catch { return null }
 }
 
@@ -190,7 +308,17 @@ export function installFetchObserver(profile, limit, deadline) {
 }
 
 function sanitizeProfile(profile) {
-  return { id: 'real-eval', name: 'Real corpus evaluation', baseUrl: profile.baseUrl, apiKey: profile.apiKey, model: profile.model, temperature: profile.temperature, protocol: profile.protocol }
+  return {
+    id: 'real-eval',
+    name: 'Real corpus evaluation',
+    baseUrl: profile.baseUrl,
+    apiKey: profile.apiKey,
+    model: profile.model,
+    temperature: profile.temperature,
+    protocol: profile.protocol,
+    ...(safeTokenSetting(profile.contextWindowTokens) ? { contextWindowTokens: safeTokenSetting(profile.contextWindowTokens) } : {}),
+    ...(safeTokenSetting(profile.maxOutputTokens) ? { maxOutputTokens: safeTokenSetting(profile.maxOutputTokens) } : {})
+  }
 }
 
 function sanitizeResult(result, apiKey) {
@@ -205,12 +333,33 @@ function sanitizeResult(result, apiKey) {
 }
 
 function reportMarkdown(run) {
-  return ['# Real model public repository evaluation', '', `- Mode: ${run.mode}`, `- Run: ${run.runId}`, `- Corpus: ${run.corpusVersion}`, `- Model: ${run.model}`, `- Status: ${run.status}`, `- Human review: pending`, '', '| Case | Variant | Questions | Requests | Input chars | Tokens | Alerts |', '|---|---|---:|---:|---:|---:|---|', ...run.cases.flatMap(item => ['generation', 'baseline'].filter(v => item[v]).map(v => `| ${item.id} | ${v} | ${item[v].scored.quota.actual} | ${item[v].requests.length} | ${item[v].inputChars} | ${item[v].tokens?.totalTokens ?? 'null'} | ${item[v].scored.alerts.join(', ') || 'none'} |`)), '', 'Keyword coverage records configured keyword matches; it does not measure factual accuracy. Human review remains pending.'].join('\n') + '\n'
+  const variants = ['generation', 'baseline']
+  const rows = run.cases.flatMap(item => variants.filter(variant => item[variant]).map(variant => {
+    const result = item[variant]
+    const questionCount = result.scored?.quota?.actual ?? result.questions?.length ?? 'unknown'
+    const tokenTotal = result.tokens?.totalTokens ?? result.diagnostics?.actualUsage?.totalTokens ?? 'unknown'
+    const alerts = result.scored?.alerts?.join(', ') || 'none'
+    return `| ${item.id} | ${variant} | ${result.status ?? 'complete'} | ${questionCount} | ${result.requestCount ?? result.requests?.length ?? 0} | ${result.elapsedMs ?? 'unknown'} | ${result.diagnostics?.contextBuildMs ?? 'unknown'} | ${result.diagnostics?.modelMs ?? 'unknown'} | ${tokenTotal} | ${result.diagnostics?.estimatedInputTokens ?? 'unknown'} | ${result.diagnostics?.failedStage ?? result.failureStage ?? 'none'} | ${alerts} |`
+  }))
+  return [
+    '# Real model public repository evaluation', '',
+    `- Mode: ${run.mode}`, `- Run: ${run.runId}`, `- Corpus: ${run.corpusVersion}`,
+    `- Model: ${run.model}`, `- Status: ${run.status}`, '- Human review: pending',
+    `- Context window setting: ${run.config.contextWindowTokens ?? 'unknown'}`,
+    `- Configured output cap: ${run.config.maxOutputTokens ?? 'provider controlled'}`,
+    `- Application input budget: ${run.config.applicationInputTokenBudget ?? 'unknown'} estimated tokens`,
+    `- Reserved output: ${run.config.reservedOutputTokens ?? 'unknown'} tokens (${run.config.reservedOutputPolicy ?? 'unknown policy'})`,
+    '', '| Case | Variant | Status | Questions | Requests | Elapsed ms | Context ms | Model ms | Actual tokens | Estimated input tokens | Failure stage | Alerts |',
+    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|',
+    ...rows,
+    '', 'Actual token usage is unknown when provider usage receipts are incomplete. Estimated input tokens are application estimates and are not provider usage.',
+    'Keyword coverage records configured keyword matches; it does not measure factual accuracy. Human review remains pending.'
+  ].join('\n') + '\n'
 }
 
 export async function runRealEvaluation({ reposRoot, outputDir, profile, manifestPath, caseIds, variants = DEFAULT_VARIANTS, maxRequests = 16, maxDurationMs = 20 * 60 * 1000 } = {}) {
   if (!reposRoot || !outputDir || !profile?.apiKey || !profile?.baseUrl || !profile?.model) throw new Error('reposRoot, outputDir, and a complete profile are required')
-  if (!Array.isArray(variants) || variants.length === 0 || new Set(variants).size !== variants.length || variants.some(value => !DEFAULT_VARIANTS.includes(value)) || !Number.isInteger(maxRequests) || maxRequests < 1 || !Number.isFinite(maxDurationMs) || maxDurationMs < 1) throw new Error('invalid evaluation limits or variants')
+  if (!Array.isArray(variants) || variants.length === 0 || new Set(variants).size !== variants.length || variants.some(value => !ALLOWED_VARIANTS.has(value)) || !Number.isInteger(maxRequests) || maxRequests < 1 || !Number.isFinite(maxDurationMs) || maxDurationMs < 1) throw new Error('invalid evaluation limits or variants')
   const absoluteOutput = path.resolve(outputDir)
   try { if ((await readdir(absoluteOutput)).length) throw new Error('output directory must be empty') } catch (error) { if (error?.code !== 'ENOENT') throw error }
   const verification = await verifyRealCorpus({ reposRoot, manifestPath })
@@ -220,17 +369,45 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
   const safeProfile = sanitizeProfile(profile)
   new URL(safeProfile.baseUrl)
   const protocol = profile.protocol ?? 'openai'
-  const config = { mode: 'real-model-public-repositories', variants, granularity: 'medium', budget: GRANULARITY_QUESTION_BUDGET.medium, temperature: profile.temperature ?? 0.4, maxOutputTokens: protocol === 'anthropic' ? 16384 : null, maxOutputTokensPolicy: protocol === 'anthropic' ? 'llm-anthropic-default' : 'provider-default', maxRequests, maxDurationMs, baseline: 'production scan and generation with README candidate only; repository tree and scan metadata remain available' }
-  const configHash = hash(JSON.stringify({ ...config, baseUrlOrigin: new URL(profile.baseUrl).origin, model: profile.model, protocol }))
+  const tokenPolicy = evaluatorTokenPolicy(safeProfile, protocol)
+  const config = {
+    mode: 'real-model-public-repositories',
+    variants,
+    granularity: 'medium',
+    budget: GRANULARITY_QUESTION_BUDGET.medium,
+    temperature: profile.temperature ?? 0.4,
+    contextWindowTokens: tokenPolicy.contextWindowTokens,
+    profileMaxOutputTokens: tokenPolicy.profileOutputTokens,
+    maxOutputTokens: tokenPolicy.maxOutputTokens,
+    maxOutputTokensPolicy: tokenPolicy.maxOutputTokensPolicy,
+    applicationInputTokenTarget: tokenPolicy.inputTokenTarget,
+    applicationInputTokenBudget: tokenPolicy.inputTokenBudget,
+    reservedOutputTokens: tokenPolicy.reservedOutputTokens,
+    reservedOutputPolicy: tokenPolicy.reservedOutputPolicy,
+    tokenEstimateMethod: tokenPolicy.tokenEstimateMethod,
+    contextStrategy: tokenPolicy.contextStrategy,
+    inputTokenBudgetPolicy: 'min(application target, max(0, configured context window - output reserve)); unknown window uses application target',
+    maxRequests,
+    maxDurationMs,
+    baseline: 'production scan and generation with README candidate only; repository tree and scan metadata remain available'
+  }
+  const configHashInputs = {
+    baseUrlOriginSha256: hash(new URL(profile.baseUrl).origin),
+    model: profile.model,
+    protocol
+  }
+  const configHash = hash(JSON.stringify({ config, ...configHashInputs }))
   const sourceHashes = await hashSources(manifestPath)
   const runId = randomUUID()
-  const run = { schemaVersion: 'repoprep-eval-report-v2', runId, corpusVersion: manifest.version, mode: config.mode, model: profile.model, protocol, runtime: { node: process.version }, config, configHash, sourceHashes, fixtureHashes: Object.fromEntries(selected.flatMap(item => item.evidenceFiles.map(file => [`${item.id}/${file.path}`, file.sha256]))), reportDigest: '', generatedAt: new Date().toISOString(), cases: [], questions: [], status: 'running', humanReview: { status: 'pending', reviewedCount: 0, coverage: 0, templatePath: 'review-template.json' }, limitations: ['Keyword coverage is not factual correctness.', 'Real token usage is null when the provider omits bounded usage metadata.', 'Human review has not been completed; pending is not a passing result.'] }
+  const run = { schemaVersion: 'repoprep-eval-report-v2', runId, corpusVersion: manifest.version, mode: config.mode, model: profile.model, protocol, runtime: { node: process.version }, config, configHash, configHashInputs, sourceHashes, fixtureHashes: Object.fromEntries(selected.flatMap(item => item.evidenceFiles.map(file => [`${item.id}/${file.path}`, file.sha256]))), reportDigest: '', generatedAt: new Date().toISOString(), cases: [], questions: [], status: 'running', humanReview: { status: 'pending', reviewedCount: 0, coverage: 0, templatePath: 'review-template.json' }, limitations: ['Keyword coverage is not factual correctness.', 'Real token usage is null when the provider omits bounded usage metadata.', 'Human review has not been completed; pending is not a passing result.'] }
   const deadline = Date.now() + maxDurationMs
   const observer = installFetchObserver(safeProfile, maxRequests, deadline)
   let failure = null
   async function persist() {
     run.reportDigest = calculateReportDigest(run)
-    run.questions = run.cases.flatMap(item => ['generation', 'baseline'].filter(variant => item[variant]).flatMap(variant => item[variant].questions.map(question => ({ caseId: item.id, variant, question: question.question, answer: question.answer, followUps: question.followUps }))))
+    run.questions = run.cases.flatMap(item => ['generation', 'baseline']
+      .filter(variant => Array.isArray(item[variant]?.questions))
+      .flatMap(variant => item[variant].questions.map(question => ({ caseId: item.id, variant, question: question.question, answer: question.answer, followUps: question.followUps }))))
     run.reportDigest = calculateReportDigest(run)
     await import('node:fs/promises').then(fs => fs.mkdir(absoluteOutput, { recursive: true }))
     await writeFile(path.join(absoluteOutput, 'report.json'), `${JSON.stringify(run, null, 2)}\n`)
@@ -244,21 +421,64 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
       run.cases.push(item)
       for (const variant of variants) {
         if (Date.now() >= deadline) throw new Error('duration limit reached')
-        const scan = await scanProject(directory)
-        if (variant === 'baseline') for (const file of scan.files) file.isContentCandidate = file.relPath === definition.readme
         const start = observer.metrics.requests.length
         const started = Date.now()
-        const result = await generateInterview({ scan, granularity: 'medium', roleFocus: definition.roleFocus ?? 'general', profile: safeProfile, signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())), onProgress: () => {} })
-        if (Date.now() >= deadline) throw new Error('duration limit reached')
-        const requests = observer.metrics.requests.slice(start)
-        const questions = flattenQuestions(result)
-        const scored = scoreCase(result, { ...definition, budget: GRANULARITY_QUESTION_BUDGET.medium })
-        item[variant] = { elapsedMs: Date.now() - started, requestCount: requests.length, requests, inputChars: requests.reduce((sum, request) => sum + request.inputChars, 0), tokens: requests.every(request => request.usage) ? requests.reduce((totals, request) => ({ inputTokens: totals.inputTokens + request.usage.inputTokens, outputTokens: totals.outputTokens + request.usage.outputTokens, totalTokens: totals.totalTokens + request.usage.totalTokens }), { inputTokens: 0, outputTokens: 0, totalTokens: 0 }) : null, output: { ...sanitizeResult(result, profile.apiKey), projectPath: item.projectPath, profileId: 'real-eval', modelUsed: profile.model }, questions: sanitizeResult(questions, profile.apiKey), scored: sanitizeResult(scored, profile.apiKey) }
-        if (variant === 'generation') {
-          item.output = item.generation.output
-          delete item.generation.output
+        let diagnostics = null
+        let stage = 'scan'
+        try {
+          const scan = await scanProject(directory)
+          if (variant === 'baseline') for (const file of scan.files) file.isContentCandidate = file.relPath === definition.readme
+          stage = 'generation'
+          const result = await generateInterview({
+            scan,
+            granularity: 'medium',
+            roleFocus: definition.roleFocus ?? 'general',
+            profile: safeProfile,
+            signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+            onProgress: () => {},
+            onDiagnostics: value => { diagnostics = sanitizeGenerationDiagnostics(value) }
+          })
+          if (Date.now() >= deadline) throw new Error('duration limit reached')
+          stage = 'scoring'
+          const requests = observer.metrics.requests.slice(start)
+          const questions = flattenQuestions(result)
+          const scored = scoreCase(result, { ...definition, budget: GRANULARITY_QUESTION_BUDGET.medium })
+          const output = {
+            ...sanitizeResult(result, profile.apiKey),
+            projectPath: item.projectPath,
+            profileId: 'real-eval',
+            modelUsed: profile.model,
+            evaluationDiagnostics: diagnostics
+          }
+          item[variant] = {
+            status: 'complete',
+            elapsedMs: Date.now() - started,
+            requestCount: requests.length,
+            requests,
+            inputChars: requests.reduce((sum, request) => sum + request.inputChars, 0),
+            tokens: requestUsage(requests),
+            diagnostics,
+            output,
+            questions: sanitizeResult(questions, profile.apiKey),
+            scored: sanitizeResult(scored, profile.apiKey)
+          }
+          if (variant === 'generation') item.output = item.generation.output
+          await persist()
+        } catch (error) {
+          const requests = observer.metrics.requests.slice(start)
+          item[variant] = {
+            status: 'failed',
+            failureStage: diagnostics?.failedStage ?? stage,
+            elapsedMs: Date.now() - started,
+            requestCount: requests.length,
+            requests,
+            inputChars: requests.reduce((sum, request) => sum + request.inputChars, 0),
+            tokens: requestUsage(requests),
+            diagnostics
+          }
+          await persist()
+          throw error
         }
-        await persist()
       }
     }
   } catch (error) {
@@ -276,21 +496,27 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
 async function main() {
   const args = process.argv.slice(2)
   const command = args.shift()
-  if (command === '--help') { console.log('real-runner.mjs verify --repos-root <dir> [--manifest <file>] | run --repos-root <dir> --output <dir> [--case <id>] [--max-requests <n>]'); return }
-  const options = {}
-  while (args.length) {
-    const key = args.shift()
-    if (key === '--help') { console.log('real-runner.mjs verify --repos-root <dir> [--manifest <file>] | run --repos-root <dir> --output <dir> [--case <id>] [--max-requests <n>]'); return }
-    const value = args.shift()
-    if (!value) throw new Error(`missing value for ${key}`)
-    if (key === '--case') options[key] = [...(options[key] ?? []), value]
-    else options[key] = value
+  const usage = 'real-runner.mjs verify --repos-root <dir> [--manifest <file>] | run --repos-root <dir> --output <dir> [--case <id>] [--variant <generation|baseline>] [--max-requests <n>]'
+  if (command === '--help') { console.log(usage); return }
+  const options = parseRunnerArgs(args)
+  if (options.help) { console.log(usage); return }
+  if (command === 'verify') {
+    if (options.variantSpecified) throw new Error('--variant is only supported by run')
+    console.log(JSON.stringify(await verifyRealCorpus({ reposRoot: options['--repos-root'], manifestPath: options['--manifest'] }), null, 2))
   }
-  if (command === 'verify') console.log(JSON.stringify(await verifyRealCorpus({ reposRoot: options['--repos-root'], manifestPath: options['--manifest'] }), null, 2))
   else if (command === 'run') {
+    const caseIds = options.caseIds.flatMap(value => value.split(','))
     const profile = { id: 'real-eval', baseUrl: process.env.REPOPREP_EVAL_BASE_URL, apiKey: process.env.REPOPREP_EVAL_API_KEY, model: process.env.REPOPREP_EVAL_MODEL, protocol: process.env.REPOPREP_EVAL_PROTOCOL }
     if (!profile.apiKey) throw new Error('REPOPREP_EVAL_API_KEY is required for real model evaluation')
-    const result = await runRealEvaluation({ reposRoot: options['--repos-root'], outputDir: options['--output'], profile, manifestPath: options['--manifest'], caseIds: options['--case'] ? options['--case'].flatMap(value => value.split(',')) : undefined, maxRequests: options['--max-requests'] ? Number(options['--max-requests']) : undefined })
+    const result = await runRealEvaluation({
+      reposRoot: options['--repos-root'],
+      outputDir: options['--output'],
+      profile,
+      manifestPath: options['--manifest'],
+      caseIds: caseIds.length ? caseIds : undefined,
+      variants: options.variants,
+      maxRequests: options['--max-requests'] ? Number(options['--max-requests']) : undefined
+    })
     console.log(JSON.stringify({ runId: result.runId, status: result.status, report: path.join(path.resolve(options['--output']), 'report.json') }))
     if (result.status !== 'complete') process.exitCode = 1
   } else throw new Error('use verify, run, or --help')
