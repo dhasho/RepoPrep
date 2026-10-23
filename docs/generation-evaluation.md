@@ -2,6 +2,8 @@
 
 运行 `npm run test:eval` 检查指标与人工复核导入器，再运行 `npm run eval:offline` 生成完整离线评测报告。CLI 默认只绑定 `127.0.0.1`，不访问外部网络，不读取设置、appData 或用户密钥，也不调用真实或收费模型。runner 临时创建 synthetic profile，密钥仅为内存占位值。
 
+真实模型评测与离线校准是独立流程。若明确授权真实 API 请求，可按[本机已保存模型评测指南](real-generation-evaluation.md)先验证固定公开语料，再使用当前 Windows 用户保存的加密 profile 运行；运行前请阅读请求上限、隔离和清理说明。
+
 ## 评测范围
 
 当前报告描述的是离线流水线和评分器校准。它通过生产 `scanProject`、`generateInterview`、context builder、题量规划、合并/补偿、result contract 和 LLM HTTP client 跑三份版本化小型 fixture。React 状态与 Node HTTP 路由使用 medium，Python CLI 使用 fine。Python fine 模式的本地响应服务在初轮每批只返回一题，确认生产生成器会走补偿请求；Node HTTP 路由 case 的首个原始回复故意为非法 JSON，runner 验证 repair 请求能够恢复生成，同时确认模型提示和新结果不包含来源引用字段或行号开销。
