@@ -43,4 +43,4 @@ npm run dev
 
 开发环境与常见问题见[开发指南](docs/development.md)。项目规范、验证命令和版本策略见[项目规范](docs/project-standards.md)、[验证指南](docs/validation.md)和[版本策略](docs/VERSIONING.md)。
 
-生成评测见[评测指南](docs/generation-evaluation.md)。[真实评测](docs/real-generation-evaluation.md)使用固定版本的公开仓库和源码事实清单；[离线基准报告](reports/offline-generation-eval/report.md)仅验证合成响应下的流水线。
+生成评测见[评测指南](docs/generation-evaluation.md)，已提供[公开项目真实基线报告](reports/real-generation-eval/2026-10-23-deepseek-v4-flash/report.md)。离线合成评测的用途与限制见指南。

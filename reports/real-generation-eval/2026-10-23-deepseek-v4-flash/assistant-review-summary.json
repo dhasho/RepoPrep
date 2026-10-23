@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+  "reportDigest": "sha256:6415a52ad245db25cbd453206a9464088a4c5fe3efd6f8cb988ce303bacdd385",
+  "method": "source-grounded assistant review with primary-agent audit",
+  "reviewerModel": "gpt-6-luna",
+  "blind": false,
+  "humanReviewStatus": "pending",
+  "corpusCases": 4,
+  "factsPerVariant": 28,
+  "questions": 160,
+  "requests": 9,
+  "usage": {
+    "inputTokens": 165768,
+    "outputTokens": 225915,
+    "totalTokens": 391683
+  },
+  "aggregate": {
+    "generation": {
+      "covered": 23,
+      "partial": 2,
+      "missing": 2,
+      "contradicted": 1,
+      "incorrect": 4,
+      "imprecise": 3
+    },
+    "baseline": {
+      "covered": 17,
+      "partial": 6,
+      "missing": 3,
+      "contradicted": 2,
+      "incorrect": 10,
+      "imprecise": 7
+    }
+  },
+  "reviewFiles": [
+    {
+      "filename": "assistant-review-mitt.json",
+      "sha256": "3a1ba7fd54be941aa9c7975a07bfa712e2c1cf62397ea05c2469c3d226e8f051"
+    },
+    {
+      "filename": "assistant-review-p-limit.json",
+      "sha256": "bd2879c0b562e2b201c53c014bf001c09a76d39d369572c18c3caf1ebbbad1af"
+    },
+    {
+      "filename": "assistant-review-schedule.json",
+      "sha256": "ae4c654bf24584677bf605107b2b9f5c5523c6e2791e21cc8da4403ede244c1f"
+    },
+    {
+      "filename": "assistant-review-requests.json",
+      "sha256": "ad9503be0ba07161f1535131e64d66ab61a3d2991782e363ede487229248c177"
+    }
+  ],
+  "limitations": [
+    "A single model run per variant on four public libraries.",
+    "Assistant review is not independent human blind evaluation.",
+    "Fact coverage and recorded findings are not an exhaustive factual accuracy rate.",
+    "Popular repositories may already be present in model training data."
+  ]
+}
