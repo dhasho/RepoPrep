@@ -34,6 +34,52 @@ async function fixture(t) {
   return { base, reposRoot, directory, manifestPath }
 }
 
+async function productionFixture(t) {
+  const values = await fixture(t)
+  const source = 'export const visibleBehavior = "SOURCE_SENTINEL_REAL_RUNNER"\n'
+  await mkdir(path.join(values.directory, 'src'), { recursive: true })
+  await writeFile(path.join(values.directory, 'src', 'app.ts'), source)
+  await exec('git', ['add', '.'], { cwd: values.directory })
+  await exec('git', ['commit', '-qm', 'add source'], { cwd: values.directory })
+  const commit = (await exec('git', ['rev-parse', 'HEAD'], { cwd: values.directory })).stdout.trim()
+  const { createHash } = await import('node:crypto')
+  const manifestPath = values.manifestPath
+  const sourceHash = createHash('sha256').update(source).digest('hex')
+  const readmeBytes = await readFile(path.join(values.directory, 'README.md'))
+  const readmeHash = createHash('sha256').update(readmeBytes).digest('hex')
+  const manifest = {
+    schemaVersion: 'repoprep-real-corpus-v1', version: 'repoprep-real-corpus-v1', cases: [{
+      id: 'case', repository: 'example/case', url: 'https://github.com/example/case', commit, directory: 'case', license: 'MIT', language: 'TypeScript', split: 'development', granularity: 'medium', roleFocus: 'general', readme: 'README.md', runtimeDependencies: { count: 0, notes: '' },
+      evidenceFiles: [{ path: 'README.md', sha256: readmeHash }, { path: 'src/app.ts', sha256: sourceHash }],
+      knownFacts: [{ id: 'visible', claim: 'A gold-only claim that must never be sent to the model: GOLD_ONLY_SENTINEL_REAL_RUNNER', keywords: ['GOLD_ONLY_SENTINEL_REAL_RUNNER'], evidence: [{ path: 'src/app.ts', startLine: 1, endLine: 1 }], interview: { question: 'What is shown?', referenceAnswer: 'The source shows a value.', followUps: [] }, pitfalls: [] }], forbiddenAssertions: []
+    }]
+  }
+  await writeFile(manifestPath, JSON.stringify(manifest))
+  return { ...values, manifestPath }
+}
+
+function syntheticCompletion() {
+  const questions = Array.from({ length: 20 }, (_unused, index) => ({ question: `How does implementation choice ${index + 1} affect behavior?`, answer: `The supplied context supports implementation choice ${index + 1}.`, followUps: [] }))
+  return JSON.stringify({ projectSummary: 'The project contains a small implementation.', sections: [{ title: 'Implementation', summary: 'Visible behavior.', questions }], glossary: {} })
+}
+
+function controlledModel(t, { failOnCall } = {}) {
+  const originalFetch = globalThis.fetch
+  const prompts = []
+  let callCount = 0
+  globalThis.fetch = async (_url, init) => {
+    callCount++
+    const request = JSON.parse(init.body)
+    prompts.push(request.messages.map(message => message.content).join('\n'))
+    if (callCount === failOnCall) throw new Error('UPSTREAM_RAW_SECRET_SENTINEL API_KEY_RAW_SECRET_SENTINEL')
+    return new Response(JSON.stringify({ choices: [{ message: { content: syntheticCompletion() } }], usage: { prompt_tokens: 30, completion_tokens: 40, total_tokens: 70 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+  return { prompts, get callCount() { return callCount } }
+}
+
+const testProfile = { id: 'secret-profile-id', name: 'Secret private profile', baseUrl: 'https://model.example.test/v1', apiKey: 'API_KEY_RAW_SECRET_SENTINEL', model: 'synthetic-model', protocol: 'openai' }
+
 test('verifies clean repository commit and fixed evidence hashes', async t => {
   const values = await fixture(t)
   const result = await verifyRealCorpus(values)
@@ -135,4 +181,61 @@ test('human review digest binds the generation output field', () => {
   assert.equal(validateReview(template, report).status, 'reviewed')
   report.cases[0].output.projectSummary = 'tampered'
   assert.throws(() => validateReview(template, report), /digest/u)
+})
+
+test('runs production generation and README baseline while keeping gold outside both prompts', async t => {
+  const values = await productionFixture(t)
+  const model = controlledModel(t)
+  const run = await runRealEvaluation({ ...values, outputDir: path.join(values.base, 'success-report'), profile: testProfile, caseIds: ['case'], maxRequests: 4 })
+  assert.equal(run.status, 'complete')
+  assert.equal(model.callCount, 2)
+  assert.match(model.prompts[0], /SOURCE_SENTINEL_REAL_RUNNER/u)
+  assert.doesNotMatch(model.prompts[1], /SOURCE_SENTINEL_REAL_RUNNER/u)
+  assert.ok(model.prompts.every(prompt => !prompt.includes('GOLD_ONLY_SENTINEL_REAL_RUNNER')))
+  assert.equal(run.cases[0].generation.scored.quota.actual, 20)
+  assert.equal(run.cases[0].baseline.scored.quota.actual, 20)
+  assert.equal(run.cases[0].output.projectPath, '/public-corpus/case')
+  assert.equal(run.cases[0].output.profileId, 'real-eval')
+  assert.equal(run.config.temperature, 0.4)
+  assert.equal(run.config.maxOutputTokensPolicy, 'provider-default')
+  assert.match(run.sourceHashes['package.json'], /^[a-f0-9]{64}$/u)
+  assert.equal(run.humanReview.status, 'pending')
+  const reportPath = path.join(values.base, 'success-report', 'report.json')
+  const report = JSON.parse(await readFile(reportPath, 'utf8'))
+  const review = makeReviewTemplate(report)
+  assert.equal(validateReview(review, report).status, 'pending')
+  assert.doesNotMatch(JSON.stringify(report), /API_KEY_RAW_SECRET_SENTINEL|Secret private profile|UPSTREAM_RAW_SECRET_SENTINEL/u)
+})
+
+test('retains generation report as partial when baseline model call fails', async t => {
+  const values = await productionFixture(t)
+  const model = controlledModel(t, { failOnCall: 2 })
+  const outputDir = path.join(values.base, 'partial-report')
+  const run = await runRealEvaluation({ ...values, outputDir, profile: testProfile, caseIds: ['case'], maxRequests: 4 })
+  assert.equal(model.callCount, 2)
+  assert.equal(run.status, 'partial')
+  assert.equal(run.cases[0].generation.scored.quota.actual, 20)
+  assert.equal(run.cases[0].baseline, undefined)
+  assert.equal(run.failure.type, 'ModelRequestError')
+  assert.equal(run.failure.reason, 'evaluation_failed')
+  const report = JSON.parse(await readFile(path.join(outputDir, 'report.json'), 'utf8'))
+  assert.equal(report.status, 'partial')
+  assert.equal(report.cases[0].output.projectSummary, 'The project contains a small implementation.')
+  assert.equal(report.humanReview.status, 'pending')
+  assert.ok(await readFile(path.join(outputDir, 'report.md'), 'utf8'))
+  assert.ok(await readFile(path.join(outputDir, 'review-template.json'), 'utf8'))
+  assert.doesNotMatch(JSON.stringify(report), /API_KEY_RAW_SECRET_SENTINEL|UPSTREAM_RAW_SECRET_SENTINEL/u)
+})
+
+test('CLI accepts top-level help and missing credentials fail nonzero without echoing secrets', async t => {
+  const help = await exec('node', ['--experimental-strip-types', '--import', './tests/register-shared-alias.mjs', 'scripts/evaluation/real-runner.mjs', '--help'], { cwd: process.cwd() })
+  assert.match(help.stdout, /verify .* run/u)
+  const env = { ...process.env }
+  delete env.REPOPREP_EVAL_API_KEY
+  await assert.rejects(exec('node', ['--experimental-strip-types', '--import', './tests/register-shared-alias.mjs', 'scripts/evaluation/real-runner.mjs', 'run', '--repos-root', 'unused', '--output', 'unused'], { cwd: process.cwd(), env }), error => {
+    assert.notEqual(error.code, 0)
+    assert.match(error.stderr, /REPOPREP_EVAL_API_KEY is required/u)
+    assert.doesNotMatch(error.stderr, /API_KEY_RAW_SECRET_SENTINEL|UPSTREAM_RAW_SECRET_SENTINEL/u)
+    return true
+  })
 })

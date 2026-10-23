@@ -20,7 +20,7 @@ const MAX_USAGE_BYTES = 1024 * 1024
 function safeErrorType(error) {
   if (error?.name === 'AbortError' || error?.name === 'TimeoutError') return 'RequestTimeout'
   if (error?.name === 'TypeError') return 'NetworkError'
-  if (error?.name === 'Error') return 'ModelRequestError'
+  if (error?.name === 'Error' || error?.name === 'LlmRequestError') return 'ModelRequestError'
   return 'UnknownError'
 }
 
@@ -102,10 +102,11 @@ async function hashSources(manifestPath) {
       const abs = path.join(directory, entry.name)
       const rel = path.posix.join(relative, entry.name)
       if (entry.isDirectory()) await walk(abs, rel)
-      else if (entry.isFile() && /\.(?:ts|mjs)$/u.test(entry.name) && rel !== 'scripts/evaluation/real-corpus/corpus.json') sourceHashes[rel] = hash(await readFile(abs))
+      else if (entry.isFile() && /\.(?:ts|mjs|cjs)$/u.test(entry.name) && rel !== 'scripts/evaluation/real-corpus/corpus.json') sourceHashes[rel] = hash(await readFile(abs))
     }
   }
   for (const root of roots) await walk(path.join(repo, root), root)
+  for (const name of ['package.json', 'package-lock.json']) sourceHashes[name] = hash(await readFile(path.join(repo, name)))
   sourceHashes['realCorpusManifest'] = hash(await readFile(manifestPath ?? path.join(here, 'real-corpus/corpus.json')))
   return Object.fromEntries(Object.entries(sourceHashes).sort(([a], [b]) => a.localeCompare(b)))
 }
@@ -164,9 +165,9 @@ export function installFetchObserver(profile, limit, deadline) {
       let response
       try { response = await nativeFetch(input, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeoutController.signal]) : timeoutController.signal }) }
       finally { clearTimeout(timeout) }
-      request.elapsedMs = Date.now() - started
       request.status = response.status
       const usage = await boundedUsage(response, deadline)
+      request.elapsedMs = Date.now() - started
       request.usage = usage
       if (usage) for (const key of Object.keys(metrics.usage)) metrics.usage[key] += usage[key]
       else metrics.usageAvailable = false
@@ -210,11 +211,12 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
   if (!selected.length || (caseIds && selected.length !== new Set(caseIds).size)) throw new Error('requested corpus cases were not found')
   const safeProfile = sanitizeProfile(profile)
   new URL(safeProfile.baseUrl)
-  const config = { mode: 'real-model-public-repositories', variants, granularity: 'medium', budget: GRANULARITY_QUESTION_BUDGET.medium, maxRequests, maxDurationMs, baseline: 'production scan and generation with README candidate only; repository tree and scan metadata remain available' }
-  const configHash = hash(JSON.stringify({ ...config, baseUrlOrigin: new URL(profile.baseUrl).origin, model: profile.model, protocol: profile.protocol ?? 'openai' }))
+  const protocol = profile.protocol ?? 'openai'
+  const config = { mode: 'real-model-public-repositories', variants, granularity: 'medium', budget: GRANULARITY_QUESTION_BUDGET.medium, temperature: profile.temperature ?? 0.4, maxOutputTokens: protocol === 'anthropic' ? 16384 : null, maxOutputTokensPolicy: protocol === 'anthropic' ? 'llm-anthropic-default' : 'provider-default', maxRequests, maxDurationMs, baseline: 'production scan and generation with README candidate only; repository tree and scan metadata remain available' }
+  const configHash = hash(JSON.stringify({ ...config, baseUrlOrigin: new URL(profile.baseUrl).origin, model: profile.model, protocol }))
   const sourceHashes = await hashSources(manifestPath)
   const runId = randomUUID()
-  const run = { schemaVersion: 'repoprep-eval-report-v2', runId, corpusVersion: manifest.version, mode: config.mode, model: profile.model, protocol: profile.protocol ?? 'openai', runtime: { node: process.version }, config, configHash, sourceHashes, fixtureHashes: Object.fromEntries(selected.flatMap(item => item.evidenceFiles.map(file => [`${item.id}/${file.path}`, file.sha256]))), reportDigest: '', generatedAt: new Date().toISOString(), cases: [], questions: [], status: 'running', humanReview: { status: 'pending', reviewedCount: 0, coverage: 0, templatePath: 'review-template.json' }, limitations: ['Keyword coverage is not factual correctness.', 'Real token usage is null when the provider omits bounded usage metadata.', 'Human review has not been completed; pending is not a passing result.'] }
+  const run = { schemaVersion: 'repoprep-eval-report-v2', runId, corpusVersion: manifest.version, mode: config.mode, model: profile.model, protocol, runtime: { node: process.version }, config, configHash, sourceHashes, fixtureHashes: Object.fromEntries(selected.flatMap(item => item.evidenceFiles.map(file => [`${item.id}/${file.path}`, file.sha256]))), reportDigest: '', generatedAt: new Date().toISOString(), cases: [], questions: [], status: 'running', humanReview: { status: 'pending', reviewedCount: 0, coverage: 0, templatePath: 'review-template.json' }, limitations: ['Keyword coverage is not factual correctness.', 'Real token usage is null when the provider omits bounded usage metadata.', 'Human review has not been completed; pending is not a passing result.'] }
   const deadline = Date.now() + maxDurationMs
   const observer = installFetchObserver(safeProfile, maxRequests, deadline)
   let failure = null
@@ -266,19 +268,21 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
 async function main() {
   const args = process.argv.slice(2)
   const command = args.shift()
+  if (command === '--help') { console.log('real-runner.mjs verify --repos-root <dir> [--manifest <file>] | run --repos-root <dir> --output <dir> [--case <id>] [--max-requests <n>]'); return }
   const options = {}
   while (args.length) {
     const key = args.shift()
     if (key === '--help') { console.log('real-runner.mjs verify --repos-root <dir> [--manifest <file>] | run --repos-root <dir> --output <dir> [--case <id>] [--max-requests <n>]'); return }
     const value = args.shift()
     if (!value) throw new Error(`missing value for ${key}`)
-    options[key] = value
+    if (key === '--case') options[key] = [...(options[key] ?? []), value]
+    else options[key] = value
   }
   if (command === 'verify') console.log(JSON.stringify(await verifyRealCorpus({ reposRoot: options['--repos-root'], manifestPath: options['--manifest'] }), null, 2))
   else if (command === 'run') {
     const profile = { id: 'real-eval', baseUrl: process.env.REPOPREP_EVAL_BASE_URL, apiKey: process.env.REPOPREP_EVAL_API_KEY, model: process.env.REPOPREP_EVAL_MODEL, protocol: process.env.REPOPREP_EVAL_PROTOCOL }
     if (!profile.apiKey) throw new Error('REPOPREP_EVAL_API_KEY is required for real model evaluation')
-    const result = await runRealEvaluation({ reposRoot: options['--repos-root'], outputDir: options['--output'], profile, manifestPath: options['--manifest'], caseIds: options['--case'] ? options['--case'].split(',') : undefined, maxRequests: options['--max-requests'] ? Number(options['--max-requests']) : undefined })
+    const result = await runRealEvaluation({ reposRoot: options['--repos-root'], outputDir: options['--output'], profile, manifestPath: options['--manifest'], caseIds: options['--case'] ? options['--case'].flatMap(value => value.split(',')) : undefined, maxRequests: options['--max-requests'] ? Number(options['--max-requests']) : undefined })
     console.log(JSON.stringify({ runId: result.runId, status: result.status, report: path.join(path.resolve(options['--output']), 'report.json') }))
     if (result.status !== 'complete') process.exitCode = 1
   } else throw new Error('use verify, run, or --help')
