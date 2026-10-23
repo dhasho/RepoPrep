@@ -1,0 +1,552 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+  "caseId": "requests",
+  "reviewer": {
+    "model": "gpt-6-luna",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "d6d2d098fac31bc1e24692a409f55fc694d3185846244d896443f123e01bdff5",
+        "8f651fef1c54498480575721c7340f0b5e0bf1cf5f8ceb2d072f3b3513b49d2c",
+        "811c3f205491743d012ab52debb5628cecd64ff97d4105a85fd190bbd4e85ab2",
+        "1d0ec4d082052a41ec0b2d67f92b736dc57279b36a7f23c6d807c45f58ae173c",
+        "d09c30f6b90e71fc041c769fc497231f41cefaed06d137303451a0200c962f31",
+        "70df51beac18b36deb39c951d625be50ea14678913f16a51998a3bd7332603d7",
+        "b88719478826176651688df6d723161a507a2c60cc0580a73ddc62d73340d2fd",
+        "035538d959e9564d9eb583e1b0ec0d122d85971a12e6be0b9b781383753a5469",
+        "e6f2da0dbe68bd0d2439e11f0fed56db6d503dc6de43cb0f4e5a4783f91bbdc9",
+        "917be11dc992eb0bac795f9cb58ab119fb46841b9bd2f7e46755d9f3e09b1507",
+        "0cc87a39bbf586ce6d2de1e47e7d69e62499d1ae785e497c72792140735dfb9b",
+        "61019bcfec7b683efe0b020a443a65dd2324595bba3c0b5498a97cfa5345857d",
+        "eb9b87b118b9e6f2fd10c7cd812f3c198e9e19c9b37063e1c6c9e225851599fb",
+        "55227963707b094be858ac679a0b7415ebbf973b5ca6e16080de69c07bfece08",
+        "eaab1c4366863eba7461630cb9e596b5df3b8419d8e7513e3be502d89133a096",
+        "e50ade3a7b5ded1dc820f5b834cf2d0d98ee6e39511ac612d7e16c11195c5a3e",
+        "1edbaec767818deec05198d3887a607cd4d44d5608053f6dce26789a5a9ea290",
+        "2cfa555346e3435d4af09029df6da09860ba376a48f39ba9ef5740de7d8908f1",
+        "d3755509679799e191c9336e9ef57994588cfed2e3521078f51f85705662941c",
+        "8bb27b26c4670ecead0a1aeaa668a80500ded1b9416fd5cd5af452f551e8dd81"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            4,
+            5
+          ],
+          "reason": "Q5准确列出 prepare_method、URL、headers、cookies、body、auth、hooks 的执行顺序，并解释 auth 放在 hooks 前。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "partial",
+          "questionNumbers": [
+            2,
+            4,
+            6
+          ],
+          "reason": "回答覆盖 Session 复用状态及 request/session 设置合并，但没有明确解释 request cookies 与 Session cookies 如何合并。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            4,
+            7,
+            14
+          ],
+          "reason": "回答覆盖 adapter 发送、hooks、cookies、重定向/histories 和 stream body 处理的主要路径。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "partial",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "追问讨论环境代理与显式 proxies 的优先级，但没有覆盖 trust_env 开关及 REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "准确指出 history 达到 max_redirects 时抛 TooManyRedirects。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题及追问未解释 Response.ok/布尔值与状态码小于 400 的关系；未覆盖不代表答案错误。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 930,
+              "endLine": 940
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "contradicted",
+          "questionNumbers": [
+            14
+          ],
+          "reason": "Q14主回答声称读取 content 后迭代必定抛 StreamConsumedError，实际缓存为 bytes 后 iter_content 会从缓存切片重放；只有已消费但尚无缓存内容的哨兵状态才抛该异常。追问还错误声称无 encoding 会回退 UTF-8，源码会原样 yield bytes。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            },
+            {
+              "path": "src/requests/utils.py",
+              "startLine": 594,
+              "endLine": 610
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 1468,
+              "endLine": 1485
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "未涉及该固定提交的四个直接运行时依赖与可选 chardet；未覆盖不代表答案错误。",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 1,
+          "claim": "第一个追问把 PreparedRequest 描述为“不可变语义对象”。",
+          "kind": "incorrect",
+          "reason": "PreparedRequest 的源码文档明确称其为 fully mutable；它是已准备、可发送的请求对象，但不是不可变对象。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 378,
+              "endLine": 397
+            }
+          ]
+        },
+        {
+          "questionNumber": 14,
+          "claim": "主回答声称访问 .content 后再迭代会抛 StreamConsumedError。",
+          "kind": "incorrect",
+          "reason": "访问 .content 会把数据缓存为 bytes；此后 iter_content 检查到已消费缓存时使用 iter_slices 重放。StreamConsumedError 只在已消费且 _content 仍是 bool 哨兵时抛出。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 958,
+              "endLine": 977
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1038,
+              "endLine": 1051
+            }
+          ]
+        },
+        {
+          "questionNumber": 14,
+          "claim": "第一个追问称 decode_unicode=True 且没有响应编码时通常回退 UTF-8。",
+          "kind": "incorrect",
+          "reason": "stream_decode_response_unicode 在 encoding 为 None 时直接 yield 原 iterator 的 bytes 并返回；不会进行 UTF-8 解码。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/utils.py",
+              "startLine": 594,
+              "endLine": 610
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 929,
+              "endLine": 932
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "对 urllib3、OpenSSL 等外部库行为未独立核验的推断不作为错误 finding。"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "questionFingerprints": [
+        "b4ec31fcbca7819c66186ec856996a04f393649da7c95d4351d58ce5df7ee64a",
+        "2babbaf583ebcc32397bf86981b3c19d7b1f6e8c5db5fb6d07334827e4a16715",
+        "62a9a6c704e07b23fc95fcc8f146d16a5e834d22ab18ef28fc82f19c6047fc80",
+        "241c8d3b0dcffbad1e4ccb72c37978413ab72f551582e4b3f5a55274920af78f",
+        "c4c1083038494f7edf8eb3082d91f2a1ab359c8ea3752f1a336ae512bd54666f",
+        "0fe34b43487c0a8db8b23a01b375e89a2761fa6b5c238d0c57e7ea0758929b30",
+        "ab228db03b57d829ef1f517596791e2925d78e6945fc8d7a25064141ae354b7f",
+        "153808afdf4b713d08dcacfd063d9a0b96036ecc1c8352d1b3626df69a5508f4",
+        "fea5f0ff61c5a56ccbbec55752bbf83b03f765ab56a81bff125357fbebe03fb8",
+        "76d4c472f215c5e0b82e183574e7160016b973e198eb813190b5bac042623f05",
+        "e33642e3fe86ce0a88ea6dac70d1efbc55df38b30f4c6ba8b82d190ab8dd6e92",
+        "9594f41a4263e9accb389f0e0766c9085e26ac36beca9b1e4bae5957533b496d",
+        "5401a16a81dcf9a3d183f38fe09961ac26946f0a43c7f0f76fc414b5e0293d8b",
+        "bbe08d7f60b91f8ce573069549c99bcfcdd15ff1ba40bead731d8525aad71368",
+        "0ed54a12707848e1057ba838574b8f810d21edd79466b3bdd968aa8cf1f438b0",
+        "bfec57fb9db8ec49506862b5b3293173aefbc8ead89c6b94c4a51c93bdd50cfc",
+        "75410ed6fbd37f92b7ab1f1fe89c14cd87cb1321008bb03a3de3c63794f9ca49",
+        "753fc125ab5a784ab7cc72f607ba3229e720d882c629411fc42983ddf1abd2ca",
+        "cf953d1cd9b31cb38925eb98db30bbda25fe2e6b44a3602ad547f8f6c04185fa",
+        "4218f79e8075d4aca2a06b331af1d85367e663e25aa870cd8e149682d9f4a910"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "contradicted",
+          "questionNumbers": [
+            5
+          ],
+          "reason": "Q5 将 prepare_auth 列在 prepare_body 之前；源码顺序是 prepare_body 后 prepare_auth，再 prepare_hooks。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 452
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "covered",
+          "questionNumbers": [
+            3,
+            5,
+            15
+          ],
+          "reason": "准确覆盖 Session 级/request 级设置合并，以及请求前会话 Cookie 与请求 Cookie 的合并和响应回写。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            3,
+            5,
+            6,
+            10
+          ],
+          "reason": "准确说明 Session 选 Adapter 发送、触发 hooks、提取 Cookie、跟随重定向、填充 history/elapsed，Adapter 负责传输。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "covered",
+          "questionNumbers": [
+            12,
+            13
+          ],
+          "reason": "涵盖环境 CA bundle 的参与条件、trust_env 对代理环境配置的控制及代理选择。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 488,
+              "endLine": 492
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "准确指出超过 max_redirects 会抛 TooManyRedirects。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "partial",
+          "questionNumbers": [
+            18
+          ],
+          "reason": "提到 raise_for_status 对 4xx/5xx 抛 HTTPError，但没有解释 Response.ok/布尔值的状态码小于 400 语义。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1144,
+              "endLine": 1171
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "partial",
+          "questionNumbers": [
+            2,
+            14
+          ],
+          "reason": "正确区分 raw 与缓存 content，也说明 iter_content 分块消费；未说明缓存为 bytes 后再次迭代会切片重放这一边界。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1038,
+              "endLine": 1051
+            },
+            {
+              "path": "src/requests/utils.py",
+              "startLine": 594,
+              "endLine": 610
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 1468,
+              "endLine": 1485
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "未列出该固定提交的四个直接运行时依赖或 chardet 可选组；提到 pyproject 定义依赖不等于覆盖此事实。",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 1,
+          "claim": "主回答称 api.py 函数入口会“构造或复用 Session”。",
+          "kind": "imprecise",
+          "reason": "该固定版本的 api.request 每次都在 with 块中新建并关闭 Session；复用 Session 是调用方显式使用 Session 的方式，不是顶层 api 函数的行为。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/api.py",
+              "startLine": 67,
+              "endLine": 71
+            }
+          ]
+        },
+        {
+          "questionNumber": 5,
+          "claim": "主回答将 prepare_auth 排在 prepare_body 之前。",
+          "kind": "incorrect",
+          "reason": "PreparedRequest.prepare 的实际顺序是 prepare_body、prepare_auth、prepare_hooks；auth 需要在主体与其他字段准备后处理。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 439,
+              "endLine": 451
+            }
+          ]
+        },
+        {
+          "questionNumber": 7,
+          "claim": "主回答称 resolve_redirects 读取 Response.next 来获得 Location 目标。",
+          "kind": "incorrect",
+          "reason": "resolve_redirects 直接调用 get_redirect_target(resp)；Response.next 返回 _next，并在不自动跟随重定向时由 Session.send 单独填充。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 205
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 891,
+              "endLine": 895
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 817,
+              "endLine": 822
+            }
+          ]
+        },
+        {
+          "questionNumber": 7,
+          "claim": "主回答把 301、302、303 都概括为非 HEAD 方法通常改成 GET。",
+          "kind": "imprecise",
+          "reason": "此实现对 303 和 302 的非 HEAD 方法改成 GET；301 仅在原方法为 POST 时改成 GET，不能概括为所有非 HEAD 方法。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 370,
+              "endLine": 392
+            }
+          ]
+        },
+        {
+          "questionNumber": 8,
+          "claim": "主回答称 default_hooks 返回 EventHook 对象，且存在 EventHook 类。",
+          "kind": "incorrect",
+          "reason": "源码没有 EventHook 类；default_hooks 返回以 response 为键、值为空列表的字典，dispatch_hook 接受 callable 或 iterable 并顺序执行。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/hooks.py",
+              "startLine": 22,
+              "endLine": 48
+            }
+          ]
+        },
+        {
+          "questionNumber": 9,
+          "claim": "主回答及首个追问都称 data 与 json 同时传入会抛 ValueError。",
+          "kind": "incorrect",
+          "reason": "prepare_body 仅在 data 为假值且 json 非 None 时编码 JSON；data 非空时使用 data，不会因两者同时传入而抛 ValueError。现有测试也明确验证 json 不覆盖 data。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 576,
+              "endLine": 600
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 2167,
+              "endLine": 2175
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "未核验 urllib3/SSL 等外部库的线程安全或传输实现推断，不计入错误 finding。"
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted, non-blind; not human ratings; fact coverage does not equal all-answer accuracy"
+  ]
+}
