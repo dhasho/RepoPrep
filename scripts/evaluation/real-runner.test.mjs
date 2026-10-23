@@ -4,7 +4,7 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { test } from 'node:test'
-import { installFetchObserver, runRealEvaluation, verifyRealCorpus } from './real-runner.mjs'
+import { hashEvidenceBytes, installFetchObserver, runRealEvaluation, verifyRealCorpus } from './real-runner.mjs'
 import { calculateReportDigest, makeReviewTemplate, validateReview } from './review.mjs'
 
 const exec = promisify(execFile)
@@ -108,6 +108,44 @@ test('rejects a tampered fixed evidence digest', async t => {
   manifest.cases[0].evidenceFiles[0].sha256 = '0'.repeat(64)
   await writeFile(values.manifestPath, JSON.stringify(manifest))
   await assert.rejects(verifyRealCorpus(values), /evidence hash mismatch/u)
+})
+
+test('utf8-lf evidence hashes verify the same clean commit with CRLF checkout bytes', async t => {
+  const values = await fixture(t)
+  const lf = await readFile(path.join(values.directory, 'README.md'))
+  const crlfDirectory = path.join(values.reposRoot, 'case-crlf')
+  await exec('git', ['worktree', 'add', '--quiet', '--detach', crlfDirectory, 'HEAD'], { cwd: values.directory })
+  try {
+    await exec('git', ['config', 'core.autocrlf', 'true'], { cwd: crlfDirectory })
+    await exec('git', ['checkout', 'HEAD', '--', 'README.md'], { cwd: crlfDirectory })
+    const crlf = await readFile(path.join(crlfDirectory, 'README.md'))
+    assert.match(crlf.toString('utf8'), /\r\n/u)
+    assert.equal((await exec('git', ['status', '--porcelain'], { cwd: crlfDirectory })).stdout.trim(), '')
+    assert.notEqual(hashEvidenceBytes(crlf, 'raw'), hashEvidenceBytes(lf, 'raw'))
+    assert.equal(hashEvidenceBytes(crlf, 'utf8-lf'), hashEvidenceBytes(lf, 'utf8-lf'))
+    const manifest = JSON.parse(await readFile(values.manifestPath, 'utf8'))
+    manifest.evidenceHashMode = 'utf8-lf'
+    manifest.cases[0].evidenceFiles[0].sha256 = hashEvidenceBytes(lf, 'utf8-lf')
+    assert.equal((await exec('git', ['rev-parse', 'HEAD'], { cwd: crlfDirectory })).stdout.trim(), manifest.cases[0].commit)
+    await writeFile(values.manifestPath, JSON.stringify(manifest))
+    const lfVerification = await verifyRealCorpus(values)
+    assert.equal(lfVerification.cases[0].commit, manifest.cases[0].commit)
+    manifest.cases[0].directory = 'case-crlf'
+    await writeFile(values.manifestPath, JSON.stringify(manifest))
+    const result = await verifyRealCorpus(values)
+    assert.equal(result.cases[0].commit, manifest.cases[0].commit)
+  } finally {
+    try { await exec('git', ['worktree', 'remove', crlfDirectory], { cwd: values.directory }) }
+    finally { await exec('git', ['worktree', 'prune'], { cwd: values.directory }) }
+  }
+})
+
+test('rejects unknown evidence hash modes', async t => {
+  const values = await fixture(t)
+  const manifest = JSON.parse(await readFile(values.manifestPath, 'utf8'))
+  manifest.evidenceHashMode = 'utf16-lf'
+  await writeFile(values.manifestPath, JSON.stringify(manifest))
+  await assert.rejects(verifyRealCorpus(values), /unsupported evidence hash mode/u)
 })
 
 test('rejects a remote from another host with the same repository suffix', async t => {

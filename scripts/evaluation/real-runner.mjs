@@ -17,6 +17,13 @@ const hash = value => createHash('sha256').update(value).digest('hex')
 const DEFAULT_VARIANTS = ['generation', 'baseline']
 const MAX_USAGE_BYTES = 1024 * 1024
 
+export function hashEvidenceBytes(bytes, mode) {
+  if (mode === undefined || mode === 'raw') return hash(bytes)
+  if (mode !== 'utf8-lf') throw new Error('unsupported evidence hash mode')
+  const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  return hash(decoded.replace(/\r\n/gu, '\n'))
+}
+
 function safeErrorType(error) {
   if (error?.name === 'AbortError' || error?.name === 'TimeoutError') return 'RequestTimeout'
   if (error?.name === 'TypeError') return 'NetworkError'
@@ -58,6 +65,7 @@ export async function verifyRealCorpus({ reposRoot, manifestPath } = {}) {
   const root = await realpath(path.resolve(reposRoot))
   const manifest = await manifestAt(manifestPath)
   if (manifest.schemaVersion !== 'repoprep-real-corpus-v1' || !Array.isArray(manifest.cases) || manifest.cases.length === 0) throw new Error('invalid or empty real corpus manifest')
+  if (manifest.evidenceHashMode !== undefined && !['raw', 'utf8-lf'].includes(manifest.evidenceHashMode)) throw new Error('unsupported evidence hash mode')
   const seen = new Set()
   const verified = []
   for (const item of manifest.cases) {
@@ -77,7 +85,7 @@ export async function verifyRealCorpus({ reposRoot, manifestPath } = {}) {
     const fileHashes = {}
     for (const evidence of item.evidenceFiles) {
       const filePath = await rejectSymlinkPath(directory, evidence.path)
-      const digest = hash(await readFile(filePath))
+      const digest = hashEvidenceBytes(await readFile(filePath), manifest.evidenceHashMode)
       if (digest !== evidence.sha256) throw new Error(`evidence hash mismatch: ${item.id}/${evidence.path}`)
       fileHashes[evidence.path] = digest
     }
