@@ -1,6 +1,8 @@
 import path from 'node:path'
 import type { Granularity } from '../../shared/types'
 import type { ScannedFile } from './scanner'
+import ts from 'typescript'
+import { analyzeSource } from './source-analysis'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { CODE_EXTS } from './project-file-policy.ts'
 
@@ -19,6 +21,8 @@ const CONFIG_BASENAMES = new Set([
 export interface FileSelectionSignals {
   entryPaths: ReadonlySet<string>
   importedBy: ReadonlyMap<string, number>
+  importEdges?: readonly { fromPath: string; targetPath: string; specifier: string; importedNames: string[] }[]
+  referencedSymbols?: ReadonlyMap<string, readonly string[]>
 }
 
 const normalize = (value: string): string => value.replace(/\\/g, '/').replace(/^\.\//, '')
@@ -166,17 +170,27 @@ export function orderFilesForContext(files: readonly ScannedFile[], granularity:
 
 export function selectProbeFiles(files: readonly ScannedFile[], granularity: Granularity, maxFiles = 128, maxBytes = 2 * 1024 * 1024): ScannedFile[] {
   const manifests = files.filter((file) => file.isContentCandidate && isManifest(file.relPath))
-  const manifestSet = new Set(manifests)
-  const ordered = [...roundRobin(manifests, () => 0), ...orderFilesForContext(files.filter((file) => !manifestSet.has(file)), granularity)]
+  const configs = files.filter((file) => file.isContentCandidate && isTsConfig(file.relPath))
+  const reserved = new Set([...manifests, ...configs])
+  const configLimit = Math.min(16, Math.max(1, Math.floor(Math.max(0, maxFiles) / 8)))
+  const configOrder = roundRobin(configs, () => 0).slice(0, configLimit)
+  const ordered = [...roundRobin(manifests, () => 0), ...configOrder, ...orderFilesForContext(files.filter((file) => !reserved.has(file)), granularity)]
   const selected: ScannedFile[] = []
   let bytes = 0
+  let configBytes = 0
   for (const file of ordered) {
     const size = Number.isFinite(file.size) && file.size >= 0 ? file.size : 0
+    if (isTsConfig(file.relPath) && configBytes + size > Math.min(256 * 1024, Math.floor(Math.max(0, maxBytes) / 8))) continue
     if (selected.length >= Math.max(0, maxFiles) || bytes + size > Math.max(0, maxBytes)) continue
     selected.push(file)
     bytes += size
+    if (isTsConfig(file.relPath)) configBytes += size
   }
   return selected
+}
+
+function isTsConfig(rel: string): boolean {
+  return /^(?:tsconfig(?:\.[^/]+)?|jsconfig)\.json$/i.test(baseName(rel))
 }
 
 function safeManifestPath(value: string): string | undefined {
@@ -186,11 +200,94 @@ function safeManifestPath(value: string): string | undefined {
   return normalize(clean)
 }
 
+interface PathMapping { pattern: string; targets: string[]; origin: string; baseUrl: string }
+interface ParsedConfig { mappings: PathMapping[]; baseUrl: string }
+
+function safeRelative(value: string): string | undefined {
+  if (!value || value.includes('\\') || value.startsWith('/') || /^[a-zA-Z]:/.test(value)) return undefined
+  const normalized = path.posix.normalize(value)
+  return normalized === '..' || normalized.startsWith('../') ? undefined : normalized.replace(/^\.\//, '')
+}
+
+function resolveConfigPath(from: string, spec: string, known: ReadonlySet<string>): string | undefined {
+  if (!(spec.startsWith('./') || spec.startsWith('../')) || spec.includes('\\') || /^[a-zA-Z]:/.test(spec)) return undefined
+  const base = safeRelative(path.posix.join(path.posix.dirname(normalize(from)), spec))
+  if (!base) return undefined
+  const guesses = [base, `${base}.json`, path.posix.join(base, 'tsconfig.json')]
+  return guesses.find((guess) => known.has(guess))
+}
+
+function mappingsForConfig(rel: string, contents: ReadonlyMap<string, string>, knownConfigs: ReadonlySet<string>, cache: Map<string, ParsedConfig>, visiting: Set<string>, depth = 0): ParsedConfig {
+  if (cache.has(rel)) return cache.get(rel) as ParsedConfig
+  if (depth >= 8 || visiting.has(rel)) return { mappings: [], baseUrl: path.posix.dirname(rel) }
+  visiting.add(rel)
+  const raw = contents.get(rel) ?? contents.get(normalize(rel))
+  let json: unknown
+  try {
+    if (!raw) throw new Error('missing')
+    const parsed = ts.parseConfigFileTextToJson(rel, raw)
+    if (parsed.error) throw new Error('invalid')
+    json = parsed.config
+  } catch {
+    visiting.delete(rel)
+    const empty = { mappings: [], baseUrl: path.posix.dirname(rel) }
+    cache.set(rel, empty)
+    return empty
+  }
+  const object = json && typeof json === 'object' ? json as Record<string, unknown> : {}
+  let inherited: ParsedConfig = { mappings: [], baseUrl: path.posix.dirname(rel) }
+  if (typeof object.extends === 'string') {
+    const parent = resolveConfigPath(rel, object.extends, knownConfigs)
+    if (parent) inherited = mappingsForConfig(parent, contents, knownConfigs, cache, visiting, depth + 1)
+  }
+  const options = object.compilerOptions && typeof object.compilerOptions === 'object' ? object.compilerOptions as Record<string, unknown> : {}
+  const baseUrl = typeof options.baseUrl === 'string'
+    ? safeRelative(path.posix.join(path.posix.dirname(rel), options.baseUrl)) ?? path.posix.dirname(rel)
+    : inherited.baseUrl
+  const own: PathMapping[] = []
+  if (options.paths && typeof options.paths === 'object' && !Array.isArray(options.paths)) {
+    for (const [pattern, targets] of Object.entries(options.paths as Record<string, unknown>).slice(0, 128)) {
+      if (typeof pattern !== 'string' || (pattern.match(/\*/g)?.length ?? 0) > 1 || !Array.isArray(targets)) continue
+      const validTargets = targets.filter((v): v is string => typeof v === 'string' && !v.startsWith('/') && !/^[a-zA-Z]:/.test(v) && !v.includes('\\')).slice(0, 16)
+      if (validTargets.length) own.push({ pattern, targets: validTargets, origin: rel, baseUrl })
+    }
+  }
+  const result = { mappings: options.paths ? [...inherited.mappings.filter((m) => !own.some((n) => n.pattern === m.pattern)), ...own] : inherited.mappings, baseUrl }
+  visiting.delete(rel)
+  cache.set(rel, result)
+  return result
+}
+
+function aliasTarget(spec: string, mappings: readonly PathMapping[], candidates: ReadonlySet<string>): string | undefined {
+  for (const mapping of mappings) {
+    const star = mapping.pattern.indexOf('*')
+    let capture: string | undefined
+    if (star < 0) { if (mapping.pattern !== spec) continue }
+    else {
+      const prefix = mapping.pattern.slice(0, star)
+      const suffix = mapping.pattern.slice(star + 1)
+      if (!spec.startsWith(prefix) || !spec.endsWith(suffix) || spec.length < prefix.length + suffix.length) continue
+      capture = spec.slice(prefix.length, spec.length - suffix.length)
+    }
+    for (const target of mapping.targets) {
+      const replaced = capture === undefined ? target : target.replace('*', capture)
+      const rel = safeRelative(path.posix.join(mapping.baseUrl, replaced))
+      if (!rel) continue
+      const ext = path.posix.extname(rel)
+      const guesses = ext ? [rel, ...(ext === '.js' || ext === '.jsx' ? [rel.slice(0, -ext.length) + '.ts', rel.slice(0, -ext.length) + '.tsx'] : [])] : [rel, ...['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'].map((e) => rel + e), ...['index.ts', 'index.tsx', 'index.js', 'index.mjs'].map((n) => path.posix.join(rel, n))]
+      const found = guesses.find((g) => candidates.has(g))
+      if (found) return found
+    }
+  }
+  return undefined
+}
+
 export function collectFileSignals(files: readonly ScannedFile[], contents: ReadonlyMap<string, string>): FileSelectionSignals {
   const candidates = new Set(files.filter((file) => file.isContentCandidate).map((file) => normalize(file.relPath)))
   const entries = new Set<string>()
   const sources = new Map<string, Set<string>>()
-  const addReference = (from: string, raw: string, rootRelative = false): void => {
+  const edges = new Map<string, { fromPath: string; targetPath: string; specifier: string; importedNames: string[] }>()
+  const addReference = (from: string, raw: string, rootRelative = false, importedNames: string[] = []): void => {
     const specifier = safeManifestPath(raw)
     if (!specifier) return
     const dir = rootRelative ? '.' : path.posix.dirname(normalize(from))
@@ -208,6 +305,9 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
     const referrers = sources.get(target) ?? new Set<string>()
     referrers.add(normalize(from))
     sources.set(target, referrers)
+    const key = `${normalize(from)}\0${target}\0${raw}`
+    const prior = edges.get(key)
+    edges.set(key, { fromPath: normalize(from), targetPath: target, specifier: raw, importedNames: [...new Set([...(prior?.importedNames ?? []), ...importedNames])] })
   }
 
   const visitStrings = (value: unknown, visit: (text: string) => void, depth = 0): void => {
@@ -217,6 +317,9 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
     else if (value && typeof value === 'object') Object.values(value).slice(0, 100).forEach((item) => visitStrings(item, visit, depth + 1))
   }
 
+  const configFiles = files.filter((file) => file.isContentCandidate && isTsConfig(file.relPath)).map((file) => normalize(file.relPath))
+  const configCache = new Map<string, ParsedConfig>()
+  const configSet = new Set(configFiles)
   for (const file of files) {
     const rel = normalize(file.relPath)
     const content = contents.get(file.relPath) ?? contents.get(rel)
@@ -245,8 +348,32 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
         }
       } catch { /* malformed or bounded manifest data contributes no entry signal */ }
     }
-    const pattern = /(?:\bfrom\s*|\bimport\s*\(|\brequire\s*\(|^\s*import\s+)["']([^"']+)["']/gm
-    for (const match of content.matchAll(pattern)) if (match[1].startsWith('.')) addReference(rel, match[1])
+    const sourceAnalysis = analyzeSource(rel, content)
+    if (sourceAnalysis) {
+      const sourceDir = path.posix.dirname(rel)
+      const applicable = configFiles.filter((config) => {
+        const dir = path.posix.dirname(config)
+        return dir === '.' || sourceDir === dir || sourceDir.startsWith(`${dir}/`)
+      }).sort((a, b) => path.posix.dirname(b).length - path.posix.dirname(a).length)[0]
+      const parsed = applicable ? mappingsForConfig(applicable, contents, configSet, configCache, new Set()) : undefined
+      for (const ref of sourceAnalysis.imports) {
+        if (ref.specifier.startsWith('.')) addReference(rel, ref.specifier, false, ref.importedNames)
+        else if (!ref.specifier.startsWith('#') && parsed) {
+          const target = aliasTarget(ref.specifier, parsed.mappings, candidates)
+          if (target && target !== rel) {
+            const refs = sources.get(target) ?? new Set<string>()
+            refs.add(rel)
+            sources.set(target, refs)
+            const key = `${rel}\0${target}\0${ref.specifier}`
+            const prev = edges.get(key)
+            edges.set(key, { fromPath: rel, targetPath: target, specifier: ref.specifier, importedNames: [...new Set([...(prev?.importedNames ?? []), ...ref.importedNames])] })
+          }
+        }
+      }
+    } else {
+      const pattern = /(?:\bfrom\s*|\bimport\s*\(|\brequire\s*\(|^\s*import\s+)["']([^"']+)["']/gm
+      for (const match of content.matchAll(pattern)) if (match[1].startsWith('.')) addReference(rel, match[1])
+    }
     if (extension(rel) === 'py') {
       const pyPattern = /^\s*(?:from\s+([.\w]+)\s+import\s+([\w*]+)|import\s+([\w.]+))/gm
       for (const match of content.matchAll(pyPattern)) {
@@ -266,5 +393,17 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
       }
     }
   }
-  return { entryPaths: entries, importedBy: new Map([...sources].map(([target, referrers]) => [target, referrers.size])) }
+  const importEdges = [...edges.values()]
+  const referenced = new Map<string, Set<string>>()
+  for (const edge of importEdges) {
+    const names = referenced.get(edge.targetPath) ?? new Set<string>()
+    edge.importedNames.forEach((name) => names.add(name))
+    referenced.set(edge.targetPath, names)
+  }
+  return {
+    entryPaths: entries,
+    importedBy: new Map([...sources].map(([target, referrers]) => [target, referrers.size])),
+    importEdges,
+    referencedSymbols: new Map([...referenced].map(([target, names]) => [target, [...names].sort()]))
+  }
 }
