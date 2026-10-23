@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 const test = require('node:test')
 const launcher = require('./run-saved-profile.cjs')
 
@@ -35,6 +36,18 @@ test('parses bounded metadata arguments and repeated cases', () => {
 test('--verify and --help do not require output or settings paths', () => {
   assert.equal(launcher.parseArgs(['--verify']).verify, true)
   assert.equal(launcher.parseArgs(['--help']).help, true)
+})
+
+test('Node can execute the shared alias --import hook as a URL', () => {
+  const result = spawnSync(process.execPath, [
+    '--experimental-strip-types',
+    '--import', launcher.sharedAliasImportUrl(process.cwd()),
+    '--input-type=module',
+    '-e', "import('@shared/types').then(() => process.stdout.write('ALIAS-IMPORT-OK\\n'))"
+  ], { cwd: process.cwd(), encoding: 'utf8', windowsHide: true, env: launcher.safeChildEnvironment() })
+  assert.equal(result.error, undefined)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /ALIAS-IMPORT-OK/)
 })
 
 test('child arguments contain metadata only and never accept credential values', () => {

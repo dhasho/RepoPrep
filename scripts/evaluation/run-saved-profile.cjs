@@ -132,13 +132,17 @@ async function verifyCorpus(options, repoRoot) {
   const script = 'const path=require("node:path");import(require("node:url").pathToFileURL(path.join(process.argv[1],"scripts/evaluation/real-runner.mjs")).href).then(({verifyRealCorpus})=>verifyRealCorpus({reposRoot:process.argv[2]})).then(()=>process.stdout.write("CORPUS-VERIFIED\\n"),()=>{process.stderr.write("CORPUS-VERIFY-FAILED\\n");process.exitCode=1})'
   const result = require('node:child_process').spawnSync(process.execPath, [
     '--experimental-strip-types',
-    '--import', path.join(repoRoot, 'tests', 'register-shared-alias.mjs'),
+    '--import', sharedAliasImportUrl(repoRoot),
     '-e', script,
     repoRoot,
     options.reposRoot
   ], { cwd: repoRoot, encoding: 'utf8', timeout: 60_000, windowsHide: true, env: safeChildEnvironment() })
   if (result.error || result.status !== 0 || !result.stdout.includes('CORPUS-VERIFIED')) throw new Error('corpus-verification-failed')
   return true
+}
+
+function sharedAliasImportUrl(repoRoot) {
+  return require('node:url').pathToFileURL(path.join(repoRoot, 'tests', 'register-shared-alias.mjs')).href
 }
 
 function registerSharedAliasHooks(repoRoot) {
@@ -185,6 +189,7 @@ module.exports = {
   readEncryptedSettings,
   registerSharedAliasHooks,
   safeChildEnvironment,
+  sharedAliasImportUrl,
   stageEncryptedSettings,
   validateSettingsSnapshot
 }
