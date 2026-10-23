@@ -355,8 +355,8 @@
         {
           "questionNumber": 2,
           "claim": "“在 finally 中递减 activeCount 并取出下一个任务继续跑。”",
-          "kind": "incorrect",
-          "reason": "当前 run 并未用 finally：它先 await result，在 catch 中吞掉内部观察用的 rejection，然后在 try/catch 之后调用 next。两者成功/失败都释放槽位的行为相近，但答案将不存在的 finally 描述成当前实现。",
+          "kind": "imprecise",
+          "reason": "答案已标注这是根据 README/常见实现的推断；与当前版本源码结构不符（源码是 try/catch 后调用 next，而非 finally），但两者描述的成功/失败释放槽位行为一致，因此不作为已证实的功能失效。",
           "sourceRefs": [
             {
               "path": "index.js",
@@ -387,24 +387,12 @@
               "endLine": 152
             }
           ]
-        },
-        {
-          "questionNumber": 8,
-          "claim": "“同一异步调用链在 await 后失去同步上下文。”",
-          "kind": "incorrect",
-          "reason": "项目测试显式在 store.run 建立 AsyncLocalStorage 上下文，在受限任务中 await Promise.resolve() 后读取并断言同一个 id，证明此处的异步上下文不会因 await 丢失。",
-          "sourceRefs": [
-            {
-              "path": "test.js",
-              "startLine": 45,
-              "endLine": 57
-            }
-          ]
         }
       ]
     }
   ],
   "limitations": [
-    "assistant-assisted non-blind review, not human ratings; coverage is not all-answer accuracy"
+    "assistant-assisted non-blind review, not human ratings; coverage is not all-answer accuracy",
+    "未评估跨环境下通过异步上下文检测嵌套 limiter 调用的可行性。"
   ]
 }
