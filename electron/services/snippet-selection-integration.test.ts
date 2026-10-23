@@ -31,6 +31,9 @@ test('real scan selects a late complete JS/TS unit under a tightened budget and 
     assert.equal(built.selection?.strategy, 'structure-v1')
     assert.ok((built.selection?.selectedRegions ?? 0) >= 1)
     assert.ok((built.selection?.providedChars ?? Infinity) < source.length)
+    assert.ok(built.eligibleFilePaths?.includes('src/core.ts'))
+    assert.equal(built.selection?.providedChars, batch.files.reduce((sum, item) => sum + item.content.length, 0))
+    assert.equal(built.selection?.selectedFiles, new Set(built.batches.flatMap((item) => item.files.map((entry) => entry.relPath))).size)
   } finally {
     const resolved = path.resolve(root)
     assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))

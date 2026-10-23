@@ -89,8 +89,10 @@ test('final prompt fitting keeps complete selected regions and drops the rest', 
   }
   const first = renderBatchWithinBudget('header', 'tree', batch, 1_000)
   assert.equal(first.truncated, false)
+  assert.deepEqual(first.selection, { filePaths: ['src/core.ts'], selectedRegions: 1, providedChars: batch.files[0].content.length })
   const tightened = renderBatchWithinBudget('header'.repeat(30), 'tree', batch, 320)
   assert.equal(tightened.truncated, true)
   assert.ok(tightened.text.includes('complete-marker'))
   assert.ok(tightened.text.includes('```'))
+  assert.deepEqual(tightened.selection, { filePaths: ['src/core.ts'], selectedRegions: 1, providedChars: region.text.length })
 })

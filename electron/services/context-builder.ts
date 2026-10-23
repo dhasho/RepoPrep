@@ -53,6 +53,12 @@ export interface BuildContextOptions {
   signal?: AbortSignal
 }
 
+export interface RenderedSelection {
+  filePaths: string[]
+  selectedRegions: number
+  providedChars: number
+}
+
 export interface ContentSecuritySummary {
   redactedFiles: number
   redactionMatches: number
@@ -83,6 +89,8 @@ export interface BuiltContext {
   /** 模块批的数量（0 表示没有按模块分批）。进度提示用它区分"全局+模块"与"仅全局"。 */
   moduleCount: number
   selection?: { strategy: 'structure-v1'; eligibleFiles: number; selectedFiles: number; selectedRegions: number; omittedFiles: number; truncatedFiles: number; providedChars: number }
+  /** Internal relative-path whitelist for aggregating files actually dispatched after final fitting. */
+  eligibleFilePaths?: string[]
 }
 
 interface PickedFiles {
@@ -424,7 +432,8 @@ export async function buildContext(scan: ScanResult, granularity: Granularity, o
       contentSecurity,
       contentReadSummary,
       moduleCount: 0,
-      selection: makeSelectionSummary(safeScan, files, granularity)
+      selection: makeSelectionSummary(safeScan, files, granularity),
+      eligibleFilePaths: eligibleContextFilePaths(safeScan, granularity)
     }
   }
 
@@ -532,7 +541,8 @@ export async function buildContext(scan: ScanResult, granularity: Granularity, o
     contentSecurity,
     contentReadSummary,
     moduleCount: moduleBatches,
-    selection: makeSelectionSummary(safeScan, batches.flatMap((batch) => batch.files), granularity)
+    selection: makeSelectionSummary(safeScan, batches.flatMap((batch) => batch.files), granularity),
+    eligibleFilePaths: eligibleContextFilePaths(safeScan, granularity)
   }
 }
 
@@ -540,12 +550,16 @@ function formatRegions(regions: readonly SourceRegion[]): string {
   return regions.map((region, index) => `${index ? '…（其他位置省略）…\n' : ''}${region.text}`).join('\n')
 }
 
-function makeSelectionSummary(scan: ScanResult, files: readonly ContextFile[], granularity: Granularity): NonNullable<BuiltContext['selection']> {
-  const eligible = scan.files.filter((file) => file.isContentCandidate && (
+function eligibleContextFilePaths(scan: ScanResult, granularity: Granularity): string[] {
+  return [...new Set(scan.files.filter((file) => file.isContentCandidate && (
     granularity === 'fine' ? isCoarseCandidate(file.relPath) || CODE_EXTS.has(file.ext)
       : granularity === 'coarse' ? isCoarseCandidate(file.relPath)
         : true
-  ))
+  )).map((file) => file.relPath))].sort((a, b) => a.localeCompare(b))
+}
+
+function makeSelectionSummary(scan: ScanResult, files: readonly ContextFile[], granularity: Granularity): NonNullable<BuiltContext['selection']> {
+  const eligible = eligibleContextFilePaths(scan, granularity)
   const unique = new Map(files.map((file) => [file.relPath, file]))
   const values = [...unique.values()]
   return {
@@ -575,14 +589,17 @@ export function renderBatchWithinBudget(
   batch: ContextBatch,
   maxChars: number,
   requestTruncationMarker = ''
-): { text: string; truncated: boolean } {
+): { text: string; truncated: boolean; selection?: RenderedSelection } {
   const text = renderBatch(headerText, treeText, batch)
-  if (text.length <= maxChars) return { text, truncated: false }
+  if (text.length <= maxChars) return { text, truncated: false, selection: summarizeRenderedFiles(batch.files) }
   const outputBudget = maxChars - requestTruncationMarker.length
   const base = renderBatch(headerText, treeText, { ...batch, files: [] })
   if (outputBudget < 0 || base.length > outputBudget) throw new Error('模型请求固定上下文超出支持范围。')
 
   const parts = [base]
+  const includedFiles: ContextFile[] = []
+  let selectedRegions = 0
+  let providedChars = 0
   let renderedChars = base.length
   let truncated = false
   for (let index = 0; index < batch.files.length; index++) {
@@ -592,6 +609,9 @@ export function renderBatchWithinBudget(
     const plainCost = separator + plainTitle.length + 9 + file.content.length
     if (renderedChars + plainCost <= outputBudget) {
       parts.push([plainTitle, '```', file.content, '```'].join('\n'))
+      includedFiles.push(file)
+      selectedRegions += file.selectionRegions?.length ?? (file.content.length ? 1 : 0)
+      providedChars += file.content.length
       renderedChars += plainCost
       continue
     }
@@ -610,6 +630,9 @@ export function renderBatchWithinBudget(
       const content = formatRegions(kept)
       if (kept.length && content.length <= contentAllowance) {
         parts.push([clippedTitle, '```', content, '```'].join('\n'))
+        includedFiles.push(file)
+        selectedRegions += kept.length
+        providedChars += content.length
         renderedChars += separator + clippedTitle.length + 9 + content.length
       }
       truncated = true
@@ -622,5 +645,17 @@ export function renderBatchWithinBudget(
   }
   if (parts.length - 1 < batch.files.length) truncated = true
   const rendered = parts.join('\n')
-  return { text: `${rendered}${requestTruncationMarker}`, truncated: truncated || parts.length - 1 < batch.files.length }
+  return {
+    text: `${rendered}${requestTruncationMarker}`,
+    truncated: truncated || parts.length - 1 < batch.files.length,
+    selection: { filePaths: includedFiles.map((file) => file.relPath), selectedRegions, providedChars }
+  }
+}
+
+function summarizeRenderedFiles(files: readonly ContextFile[]): RenderedSelection {
+  return {
+    filePaths: files.map((file) => file.relPath),
+    selectedRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.length ?? (file.content.length ? 1 : 0)), 0),
+    providedChars: files.reduce((sum, file) => sum + file.content.length, 0)
+  }
 }
