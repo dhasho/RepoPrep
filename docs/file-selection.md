@@ -8,6 +8,8 @@
 
 `electron/services/file-selection.ts` 提供纯选择策略，`context-builder.ts` 按原扫描快照探测信号、读取选中文件并组装批次。Coarse 仍排除业务源码；fine 保留原顶层模块分组与最多十个模块批次。扫描结果仍是文件读取的授权来源。
 
+扫描器识别的源码类型与上下文模块分组使用同一类型策略；例如 TypeScript 的 `.mts`/`.cts`、C/C++ 的 `.hh`/`.mm`、R、Shell 与 PowerShell 源码都应进入 fine 模块正文。依赖锁文件（如 `package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`）可保留在项目树中用于结构参考，但不进入 coarse、medium 或 fine 的上下文正文和模型请求；项目清单（如 `package.json`）仍可作为配置上下文。
+
 此处的启发来自 [Aider 的 repository map](https://aider.chat/docs/repomap.html)，但实现是轻量局部启发式，不是完整 AST 或语义分析：职责和模块优先于全局热度，同一模块内再结合入口、引用数、路径与角色。JavaScript/TypeScript 支持相对导入解析，Python 支持轻量本地 import 解析；其他语言回退到确定性的模块、角色和路径顺序。不会解析 `tsconfig` 路径别名，也不会发现由动态运行时逻辑加载的依赖。
 
 ## Constraints
@@ -23,6 +25,7 @@
 - 反转扫描文件顺序后选择稳定；manifest 入口和被引用的深层核心源码在探测以外也能通过候选白名单得到排序提升。
 - 巨大 README 不会阻止多个源码模块获得内容；普通 medium 项目若完整合计可容纳，README 与其他候选都保留全文。
 - Coarse 不探测或包含业务源码；fine 模块分组和上限保持兼容。
+- 扫描器识别的源码类型均可进入 fine 模块正文；依赖锁文件只保留在树中，清单配置仍可见。
 - 实际渲染批次不超过各自预算，截断与读取警告对应真实省略、裁剪或读取失败。
 - 文件内容只由批准扫描读取，敏感值不会进入信号缓存、批次或模型提示。
 

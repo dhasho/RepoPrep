@@ -46,12 +46,21 @@ async function makeFixture(): Promise<string> {
   await fs.mkdir(path.join(root, 'src', 'shared'), { recursive: true })
   await fs.mkdir(path.join(root, 'src', 'auth'), { recursive: true })
   await fs.mkdir(path.join(root, 'src', 'billing'), { recursive: true })
+  await fs.mkdir(path.join(root, 'src', 'native'), { recursive: true })
+  await fs.mkdir(path.join(root, 'src', 'scripts'), { recursive: true })
   await fs.writeFile(path.join(root, 'README.md'), `README_KEEP_START\n${'overview '.repeat(10_000)}\nREADME_KEEP_END`)
   await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'selection-fixture', main: 'src/core/deep/entry.ts' }))
   await fs.writeFile(path.join(root, 'src', 'core', 'deep', 'entry.ts'), "import { core } from '../../shared/engine.js'\nexport const MANIFEST_DEEP_ENTRY = core\n")
   await fs.writeFile(path.join(root, 'src', 'shared', 'engine.ts'), 'export const DEEP_REFERENCED_CORE = "engine"\n')
   await fs.writeFile(path.join(root, 'src', 'auth', 'service.ts'), 'export const AUTH_MODULE_REPRESENTATIVE = true\nconst OPENAI_API_KEY = "sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnop"\n')
   await fs.writeFile(path.join(root, 'src', 'billing', 'service.ts'), 'export const BILLING_MODULE_REPRESENTATIVE = true\n')
+  await fs.writeFile(path.join(root, 'src', 'core', 'deep', 'runtime.mts'), 'export const MTS_SOURCE_KEEP = true\n')
+  await fs.writeFile(path.join(root, 'src', 'core', 'deep', 'legacy.cts'), 'export const CTS_SOURCE_KEEP = true\n')
+  await fs.writeFile(path.join(root, 'src', 'native', 'public.hh'), 'const int HH_SOURCE_KEEP = 1;\n')
+  await fs.writeFile(path.join(root, 'src', 'native', 'bridge.mm'), 'int MM_SOURCE_KEEP = 1;\n')
+  await fs.writeFile(path.join(root, 'src', 'native', 'analytics.r'), 'R_SOURCE_KEEP <- TRUE\n')
+  await fs.writeFile(path.join(root, 'src', 'scripts', 'release.sh'), 'SH_SOURCE_KEEP=1\n')
+  await fs.writeFile(path.join(root, 'src', 'scripts', 'release.ps1'), '$PS1_SOURCE_KEEP = 1\n')
   return root
 }
 
@@ -140,9 +149,78 @@ test('coarse context limits approved reads to documentation and configuration ca
   assert.ok(built.batches.flatMap((batch) => batch.files).every((file) => !/\.(ts|tsx|js|py)$/i.test(file.relPath)))
 })
 
+test('lock files stay in the tree but never enter context bodies or local model requests', async () => {
+  const root = await makeFixture()
+  await fs.writeFile(path.join(root, 'package-lock.json'), '{"name":"LOCK_BODY_MARKER_PACKAGE_LOCK","lockfileVersion":3}')
+  await fs.writeFile(path.join(root, 'pnpm-lock.yaml'), 'lockfileVersion: LOCK_BODY_MARKER_PNPM_LOCK\n')
+  await fs.writeFile(path.join(root, 'yarn.lock'), '# LOCK_BODY_MARKER_YARN_LOCK\n')
+  const scan = await scanProject(root)
+  for (const relPath of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
+    assert.ok(scan.tree.children.some((node) => node.name === relPath), `${relPath} remains visible in the project tree`)
+  }
+
+  const markers = ['LOCK_BODY_MARKER_PACKAGE_LOCK', 'LOCK_BODY_MARKER_PNPM_LOCK', 'LOCK_BODY_MARKER_YARN_LOCK']
+  for (const granularity of ['coarse', 'medium', 'fine'] as const) {
+    const built = await buildContext(scan, granularity)
+    const body = built.batches.flatMap((batch) => batch.files).map((file) => file.content).join('\n')
+    for (const marker of markers) assert.ok(!body.includes(marker), `${granularity} batch body must exclude ${marker}`)
+    assert.ok(body.includes('selection-fixture') || body.includes('package.json'), `${granularity} retains the real manifest context`)
+    if (granularity === 'fine') {
+      assert.ok(built.batches.some((batch) => batch.kind === 'module' && batch.files.some((file) => file.content.includes('AUTH_MODULE_REPRESENTATIVE'))))
+    }
+
+    const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+    const restoreFetch = installMock(requests)
+    try {
+      await generateInterview({
+        scan, granularity, roleFocus: 'backend', profile,
+        signal: new AbortController().signal, onProgress: () => undefined
+      })
+    } finally { restoreFetch() }
+    const prompt = requests.flatMap((request) => request.messages.map((message) => message.content)).join('\n')
+    for (const marker of markers) assert.ok(!prompt.includes(marker), `${granularity} model requests must exclude ${marker}`)
+    assert.ok(prompt.includes('selection-fixture') || prompt.includes('package.json'))
+    for (const request of requests) {
+      assert.ok(request.messages.reduce((sum, message) => sum + message.content.length, 0) <= CONTEXT_CHAR_BUDGETS[granularity],
+        `${granularity} model request stays within its character budget`)
+    }
+  }
+})
+
+test('fine modules include scanner-recognized source types while coarse keeps business source out', async () => {
+  const root = await makeFixture()
+  const scan = await scanProject(root)
+  const requiredSources = [
+    ['src/core/deep/runtime.mts', 'MTS_SOURCE_KEEP'], ['src/core/deep/legacy.cts', 'CTS_SOURCE_KEEP'],
+    ['src/native/public.hh', 'HH_SOURCE_KEEP'], ['src/native/bridge.mm', 'MM_SOURCE_KEEP'],
+    ['src/native/analytics.r', 'R_SOURCE_KEEP'], ['src/scripts/release.sh', 'SH_SOURCE_KEEP'],
+    ['src/scripts/release.ps1', 'PS1_SOURCE_KEEP']
+  ] as const
+  for (const [relPath] of requiredSources) {
+    assert.ok(scan.files.some((file) => file.relPath === relPath && file.isContentCandidate), `scanner approves ${relPath}`)
+  }
+  const expected = [
+    'MTS_SOURCE_KEEP', 'CTS_SOURCE_KEEP', 'HH_SOURCE_KEEP', 'MM_SOURCE_KEEP',
+    'R_SOURCE_KEEP', 'SH_SOURCE_KEEP', 'PS1_SOURCE_KEEP'
+  ]
+  const fine = await buildContext(scan, 'fine')
+  const fineBody = fine.batches.filter((batch) => batch.kind === 'module')
+    .flatMap((batch) => batch.files).map((file) => file.content).join('\n')
+  const missing = expected.filter((marker) => !fineBody.includes(marker))
+  assert.deepEqual(missing, [], `fine module context should include all scanner-approved source types; missing ${missing.join(', ')}`)
+  assert.equal(fine.moduleCount, 6, 'preserve the existing top-level module grouping contract for this fixture')
+
+  const coarse = await buildContext(scan, 'coarse')
+  const coarseBody = coarse.batches.flatMap((batch) => batch.files).map((file) => file.content).join('\n')
+  for (const marker of expected) assert.ok(!coarseBody.includes(marker), `coarse context must exclude business source ${marker}`)
+  assert.ok(coarseBody.includes('selection-fixture'), 'coarse still includes the root package manifest')
+})
+
 test('a README over the medium budget leaves selected source representatives and exact bounded renders', async () => {
   const root = await makeFixture()
   await fs.writeFile(path.join(root, 'README.md'), `README_CONSTRAINED_START\n${'R'.repeat(230_000)}\nREADME_CONSTRAINED_END`)
+  await fs.mkdir(path.join(root, 'src', 'auth', '__tests__'), { recursive: true })
+  await fs.writeFile(path.join(root, 'src', 'auth', '__tests__', 'noise.test.ts'), `export const TEST_FIXTURE_NOISE = '${'T'.repeat(80_000)}'\n`)
   const scan = await scanProject(root)
   const built = await buildContext(scan, 'medium')
   assert.equal(built.contextTruncation.contentTruncated, true)
@@ -153,11 +231,21 @@ test('a README over the medium budget leaves selected source representatives and
   ]) {
     assert.ok(files.some((file) => file.relPath === relPath), `${relPath} should retain a representative slice`)
   }
+  assert.ok(files.some((file) => file.relPath === 'package.json' && file.content.includes('selection-fixture')),
+    'the root manifest remains useful under constrained budgets')
+  for (const marker of ['MANIFEST_DEEP_ENTRY', 'DEEP_REFERENCED_CORE', 'AUTH_MODULE_REPRESENTATIVE', 'BILLING_MODULE_REPRESENTATIVE']) {
+    assert.ok(files.some((file) => file.content.includes(marker)), `test fixture content must not displace useful implementation ${marker}`)
+  }
   assert.ok(files.find((file) => file.relPath === 'README.md')?.content.includes('README_CONSTRAINED_START'))
   for (const batch of built.batches) {
     assert.equal(batch.totalChars, renderBatch(built.headerText, built.treeText, batch).length)
     assert.ok(batch.totalChars <= CONTEXT_CHAR_BUDGETS.medium)
   }
+  scan.files.reverse()
+  const reversed = await buildContext(scan, 'medium')
+  scan.files.reverse()
+  assert.deepEqual(reversed.batches.map((batch) => batch.files.map((file) => file.relPath)),
+    built.batches.map((batch) => batch.files.map((file) => file.relPath)), 'constrained selection order is stable under reversed scans')
 })
 
 test('a deep referenced core remains in the real prompt beside 2000 ordinary files without thousands of empty picks', async () => {
