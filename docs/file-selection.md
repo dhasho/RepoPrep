@@ -8,7 +8,7 @@
 
 `electron/services/file-selection.ts` 提供纯选择策略，`context-builder.ts` 按原扫描快照探测信号、读取选中文件并组装批次。Coarse 仍排除业务源码；fine 保留原顶层模块分组与最多十个模块批次。扫描结果仍是文件读取的授权来源。
 
-扫描器识别的源码类型与上下文模块分组使用同一类型策略；例如 TypeScript 的 `.mts`/`.cts`、C/C++ 的 `.hh`/`.mm`、R、Shell 与 PowerShell 源码都应进入 fine 模块正文。依赖锁文件（如 `package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`）可保留在项目树中用于结构参考，但不进入 coarse、medium 或 fine 的上下文正文和模型请求；项目清单（如 `package.json`）仍可作为配置上下文。
+扫描器识别的源码类型与上下文模块分组使用同一类型策略；例如 TypeScript 的 `.mts`/`.cts`、C++ 的 `.hh`、Objective-C++ 的 `.mm`、R、Shell 与 PowerShell 源码都应进入 fine 模块正文。依赖锁文件（如 `package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`）可保留在项目树中用于结构参考，但不进入 coarse、medium 或 fine 的上下文正文和模型请求；项目清单（如 `package.json`）仍可作为配置上下文。
 
 此处的启发来自 [Aider 的 repository map](https://aider.chat/docs/repomap.html)，但实现是轻量局部启发式，不是完整 AST 或语义分析：职责和模块优先于全局热度，同一模块内再结合入口、引用数、路径与角色。JavaScript/TypeScript 支持相对导入解析，Python 支持轻量本地 import 解析；其他语言回退到确定性的模块、角色和路径顺序。不会解析 `tsconfig` 路径别名，也不会发现由动态运行时逻辑加载的依赖。
 

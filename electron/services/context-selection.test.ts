@@ -156,7 +156,7 @@ test('lock files stay in the tree but never enter context bodies or local model 
   await fs.writeFile(path.join(root, 'yarn.lock'), '# LOCK_BODY_MARKER_YARN_LOCK\n')
   const scan = await scanProject(root)
   for (const relPath of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
-    assert.ok(scan.tree.children.some((node) => node.name === relPath), `${relPath} remains visible in the project tree`)
+    assert.ok((scan.tree.children ?? []).some((node) => node.name === relPath), `${relPath} remains visible in the project tree`)
   }
 
   const markers = ['LOCK_BODY_MARKER_PACKAGE_LOCK', 'LOCK_BODY_MARKER_PNPM_LOCK', 'LOCK_BODY_MARKER_YARN_LOCK']
@@ -164,7 +164,9 @@ test('lock files stay in the tree but never enter context bodies or local model 
     const built = await buildContext(scan, granularity)
     const body = built.batches.flatMap((batch) => batch.files).map((file) => file.content).join('\n')
     for (const marker of markers) assert.ok(!body.includes(marker), `${granularity} batch body must exclude ${marker}`)
-    assert.ok(body.includes('selection-fixture') || body.includes('package.json'), `${granularity} retains the real manifest context`)
+    assert.ok(built.batches.flatMap((batch) => batch.files).some((file) =>
+      file.relPath === 'package.json' && file.content.includes('selection-fixture')),
+    `${granularity} retains the real root manifest content`)
     if (granularity === 'fine') {
       assert.ok(built.batches.some((batch) => batch.kind === 'module' && batch.files.some((file) => file.content.includes('AUTH_MODULE_REPRESENTATIVE'))))
     }
@@ -179,7 +181,7 @@ test('lock files stay in the tree but never enter context bodies or local model 
     } finally { restoreFetch() }
     const prompt = requests.flatMap((request) => request.messages.map((message) => message.content)).join('\n')
     for (const marker of markers) assert.ok(!prompt.includes(marker), `${granularity} model requests must exclude ${marker}`)
-    assert.ok(prompt.includes('selection-fixture') || prompt.includes('package.json'))
+    assert.ok(prompt.includes('selection-fixture'), `${granularity} model requests retain the root manifest content`)
     for (const request of requests) {
       assert.ok(request.messages.reduce((sum, message) => sum + message.content.length, 0) <= CONTEXT_CHAR_BUDGETS[granularity],
         `${granularity} model request stays within its character budget`)
@@ -208,7 +210,7 @@ test('fine modules include scanner-recognized source types while coarse keeps bu
     .flatMap((batch) => batch.files).map((file) => file.content).join('\n')
   const missing = expected.filter((marker) => !fineBody.includes(marker))
   assert.deepEqual(missing, [], `fine module context should include all scanner-approved source types; missing ${missing.join(', ')}`)
-  assert.equal(fine.moduleCount, 6, 'preserve the existing top-level module grouping contract for this fixture')
+  assert.equal(fine.moduleCount, 1, 'all fixture source files remain grouped under the single top-level src module')
 
   const coarse = await buildContext(scan, 'coarse')
   const coarseBody = coarse.batches.flatMap((batch) => batch.files).map((file) => file.content).join('\n')
