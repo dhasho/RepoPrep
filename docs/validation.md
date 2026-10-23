@@ -26,6 +26,9 @@
 | `npm run test:native-credentials` | 先执行 `npm run build`，再在真实 Electron `safeStorage` 和设置服务中用合成 key、隔离临时数据目录做加密保存、无明文检查、public 回读与私有解密往返。证明本机当前平台的原生存储链路，不证明真实模型调用或跨用户/设备可移植。 |
 | `npm run test:smoke` | 先执行 `npm run build`，再运行 Electron 本地构建产物冒烟。父 runner 创建独立临时目录并给子进程设置隔离 `appData`/`sessionData`；等待 Electron 退出后有限重试清理。只有 Electron 输出 `VERDICT SMOKE-OK`、退出码为 0 且父 runner 确认临时目录已删除，才算通过。 |
 | `npm run test:eval` | 离线评分器和人工复核 CLI 单元/命令行测试；不运行生成器或真实模型。 |
+| `npm run test:eval:real` | 真实语料校验、生产生成器对照链路、请求限额、失败报告及已保存模型启动器的定向测试；使用合成 HTTP 响应和隔离设置，不调用真实模型。 |
+| `npm run eval:real -- verify --repos-root <directory>` | 核验公开仓库的固定提交、工作树、来源及源码事实哈希/行号；不读取模型凭据或访问模型服务。 |
+| `npm run eval:real:saved -- --repos-root <directory> --output <new-directory>` | 在隔离 Electron 主进程内读取已保存模型，执行真实仓库生成和 README 对照。会调用配置的模型服务；默认最多 16 次请求，报告和复核边界见 [真实评测](real-generation-evaluation.md)。 |
 | `npm run eval:offline` | 通过 loopback 本地合成响应器运行固定 fixture、生产生成流程和评分器，生成离线报告；不读取用户设置或密钥，不访问外部模型服务。可用 `npm run eval:offline -- <directory>` 指定报告目录。结果只说明 fixture 关键词和流水线行为，不证明真实模型质量。 |
 | `npm run eval:review -- template <report.json> <review.json>` / `npm run eval:review -- import <report.json> <filled-review.json>` | 基于带 digest 与 fingerprint 绑定的离线报告生成评分模板，或导入人工评分并更新报告。导入会写入 report JSON 和同目录的 review Markdown；规则与局限见 [generation-evaluation.md](generation-evaluation.md)。 |
 | `npm run build` | 构建 Electron 主进程、preload 与 renderer。 |
