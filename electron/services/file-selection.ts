@@ -1,11 +1,10 @@
 import path from 'node:path'
 import type { Granularity } from '../../shared/types'
 import type { ScannedFile } from './scanner'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { CODE_EXTS } from './project-file-policy.ts'
 
-export const CODE_EXTS = new Set([
-  'ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs', 'py', 'java', 'go', 'rs', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp',
-  'cs', 'rb', 'php', 'swift', 'kt', 'kts', 'scala', 'dart', 'lua', 'vue', 'svelte', 'astro', 'sql', 'proto', 'graphql', 'prisma'
-])
+export { CODE_EXTS }
 
 const CONFIG_BASENAMES = new Set([
   'package.json', 'tsconfig.json', 'jsconfig.json', 'vite.config.ts', 'vite.config.js', 'webpack.config.js', 'next.config.js',
