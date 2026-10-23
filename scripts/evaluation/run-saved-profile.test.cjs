@@ -36,6 +36,10 @@ test('parses bounded metadata arguments and repeated cases', () => {
 test('--verify and --help do not require output or settings paths', () => {
   assert.equal(launcher.parseArgs(['--verify']).verify, true)
   assert.equal(launcher.parseArgs(['--help']).help, true)
+  const preflight = launcher.parseArgs(['--preflight', '--repo-root', process.cwd()])
+  assert.equal(preflight.preflight, true)
+  assert.equal(preflight.outputDir, '')
+  assert.throws(() => launcher.parseArgs(['--verify', '--preflight']), /incompatible-mode-flags/)
 })
 
 test('Node can execute the shared alias --import hook as a URL', () => {
@@ -48,6 +52,25 @@ test('Node can execute the shared alias --import hook as a URL', () => {
   assert.equal(result.error, undefined)
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /ALIAS-IMPORT-OK/)
+})
+
+test('native Electron preflight creates isolated paths and imports the real TypeScript runner without settings or network', () => {
+  const runnerRoot = process.env.REPOPREP_EVAL_SOURCE_ROOT || path.resolve(__dirname, '../..')
+  assert.ok(fs.existsSync(path.join(runnerRoot, 'scripts', 'evaluation', 'real-runner.mjs')), 'real-runner.mjs is required for the native preflight')
+  const result = spawnSync(process.execPath, [
+    path.join(__dirname, 'run-saved-profile.cjs'),
+    '--preflight',
+    '--repo-root', runnerRoot
+  ], {
+    cwd: path.resolve(__dirname, '../..'),
+    encoding: 'utf8',
+    timeout: 90_000,
+    windowsHide: true,
+    env: launcher.safeChildEnvironment()
+  })
+  assert.equal(result.error, undefined)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /VERDICT SAVED-PROFILE-PREFLIGHT-OK/)
 })
 
 test('child arguments contain metadata only and never accept credential values', () => {

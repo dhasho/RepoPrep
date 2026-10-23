@@ -15,16 +15,19 @@ const MAX_SETTINGS_BYTES = 2 * 1024 * 1024
 function parseArgs(argv) {
   const options = {
     reposRoot: DEFAULT_REPOS_ROOT,
+    repoRoot: CHECKOUT_ROOT,
     outputDir: '',
     settingsDir: DEFAULT_SETTINGS_DIR,
     profileId: '',
     caseIds: [],
     maxRequests: 16,
     verify: false,
+    preflight: false,
     help: false
   }
   const valueOptions = new Map([
     ['--repos-root', 'reposRoot'],
+    ['--repo-root', 'repoRoot'],
     ['--output', 'outputDir'],
     ['--settings-dir', 'settingsDir'],
     ['--profile-id', 'profileId'],
@@ -35,6 +38,7 @@ function parseArgs(argv) {
     const argument = argv[index]
     if (argument === '--help' || argument === '-h') { options.help = true; continue }
     if (argument === '--verify') { options.verify = true; continue }
+    if (argument === '--preflight') { options.preflight = true; continue }
     const key = valueOptions.get(argument)
     if (!key) throw new Error('unknown-argument')
     const value = argv[++index]
@@ -46,9 +50,10 @@ function parseArgs(argv) {
       if (!Number.isSafeInteger(options.maxRequests) || options.maxRequests < 1 || options.maxRequests > 16) throw new Error('invalid-request-limit')
     } else options[key] = value
   }
-  if (!options.help && !options.verify && !options.outputDir) throw new Error('missing-output')
-  if (!options.help && !options.verify && !options.settingsDir) throw new Error('settings-directory-unavailable')
-  if (!options.help && !options.verify && options.outputDir) {
+  if (options.verify && options.preflight) throw new Error('incompatible-mode-flags')
+  if (!options.help && !options.verify && !options.preflight && !options.outputDir) throw new Error('missing-output')
+  if (!options.help && !options.verify && !options.preflight && !options.settingsDir) throw new Error('settings-directory-unavailable')
+  if (!options.help && !options.verify && !options.preflight && options.outputDir) {
     const outputPath = path.resolve(options.outputDir)
     const settingsPath = path.resolve(options.settingsDir)
     if (isWithin(settingsPath, outputPath) || isWithin(outputPath, settingsPath)) throw new Error('output-settings-overlap')
@@ -81,6 +86,7 @@ function helpText() {
     '  --case <id>                Repeat to select cases',
     '  --max-requests <1..16>     Request cap, defaults to 16',
     '  --verify                   Verify pinned public corpus only; no settings or key access',
+    '  --preflight                Start Electron, isolate paths, and load the runner without settings or network',
     '  --help'
   ].join('\n')
 }
@@ -167,9 +173,10 @@ function registerSharedAliasHooks(repoRoot) {
 }
 
 function buildChildArgs(options, runtimeRoot, repoRoot) {
+  const common = ['--runtime-root', runtimeRoot, '--repo-root', repoRoot]
+  if (options.preflight) return [...common, '--preflight']
   return [
-    '--runtime-root', runtimeRoot,
-    '--repo-root', repoRoot,
+    ...common,
     '--settings-dir', path.resolve(options.settingsDir),
     ...(options.profileId ? ['--profile-id', options.profileId] : []),
     '--repos-root', path.resolve(options.reposRoot),
@@ -210,7 +217,7 @@ async function main() {
     return
   }
   if (options.help) { process.stdout.write(`${helpText()}\n`); return }
-  const repoRoot = path.resolve(__dirname, '..', '..')
+  const repoRoot = path.resolve(options.repoRoot || CHECKOUT_ROOT)
   if (options.verify) {
     try {
       const result = await verifyCorpus(options, repoRoot)
@@ -262,6 +269,11 @@ async function main() {
       child.once('error', reject)
       child.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0)))
     })
+    if (options.preflight && exitCode === 0) {
+      const verdict = JSON.parse(fs.readFileSync(path.join(runtimeRoot, 'preflight-verdict.json'), 'utf8'))
+      if (verdict?.status !== 'ok') throw new Error('preflight-verdict-missing')
+      process.stdout.write('VERDICT SAVED-PROFILE-PREFLIGHT-OK\n')
+    }
     process.exitCode = exitCode
   } finally {
     clearTimeout(hardTimeout)
