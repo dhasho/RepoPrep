@@ -1,0 +1,1002 @@
+{
+  "schemaVersion": "repoprep-real-corpus-v1",
+  "version": "repoprep-real-corpus-v1",
+  "cases": [
+    {
+      "id": "mitt",
+      "repository": "developit/mitt",
+      "url": "https://github.com/developit/mitt",
+      "commit": "6b41670516ed8e8b738612f60491995470aa63b3",
+      "directory": "mitt",
+      "license": "MIT",
+      "language": "TypeScript",
+      "split": "development",
+      "granularity": "medium",
+      "roleFocus": "general",
+      "readme": "README.md",
+      "runtimeDependencies": {
+        "count": 0,
+        "notes": "package.json 未声明 dependencies；TypeScript/Mocha 等均为开发依赖。"
+      },
+      "evidenceFiles": [
+        {
+          "path": "src/index.ts",
+          "sha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7"
+        },
+        {
+          "path": "test/index_test.ts",
+          "sha256": "44d8c2e2b7c10c85054f50dff5877fdbf4d2e2a0bef7dbbb856ee089a14b61f6"
+        }
+      ],
+      "knownFacts": [
+        {
+          "id": "mitt-map-events",
+          "claim": "mitt 用 Map 保存事件类型到处理器数组的映射；事件类型可为 string 或 symbol。",
+          "keywords": [
+            "EventHandlerMap",
+            "Map",
+            "EventType",
+            "symbol"
+          ],
+          "evidence": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 21
+            }
+          ],
+          "interview": {
+            "question": "mitt 如何保存事件监听器，支持哪些事件名？",
+            "referenceAnswer": "事件类型定义为 string 或 symbol，EventHandlerMap 是以事件键（另含 '*' 通配键）索引处理器数组的 Map。",
+            "followUps": [
+              "为什么 Map 对 constructor 这类字符串事件名也安全？"
+            ]
+          },
+          "pitfalls": [
+            "不要把实现说成普通对象属性表。",
+            "事件名区分大小写，测试分别验证大小写不同的事件。"
+          ]
+        },
+        {
+          "id": "mitt-register-duplicates",
+          "claim": "on 会在已有事件类型的数组尾部追加监听器，不会去重，因此同一函数可注册多次。",
+          "keywords": [
+            "on",
+            "handlers.push",
+            "duplicate listeners"
+          ],
+          "evidence": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ],
+          "interview": {
+            "question": "重复调用 on(type, sameHandler) 会怎样？",
+            "referenceAnswer": "每次调用都会追加一个数组项；emit 时会按注册项分别调用。",
+            "followUps": [
+              "如何只撤销一次重复注册？"
+            ]
+          },
+          "pitfalls": [
+            "不要假设 on 会幂等去重。"
+          ]
+        },
+        {
+          "id": "mitt-off",
+          "claim": "off(type, handler) 通过 splice 删除数组中第一个匹配项；省略 handler 时把该类型映射为一个空数组。",
+          "keywords": [
+            "off",
+            "splice",
+            "indexOf",
+            "handlers"
+          ],
+          "evidence": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ],
+          "interview": {
+            "question": "off 如何处理同一监听器注册两次的情况？",
+            "referenceAnswer": "带 handler 时只删除 indexOf 找到的第一个匹配项；不带 handler 时将该事件的处理器列表设为空数组。",
+            "followUps": [
+              "它会从 Map 删除键吗？"
+            ]
+          },
+          "pitfalls": [
+            "不要声称一次 off 会删除所有相同函数。",
+            "未传 handler 是置空数组而非删除 Map 键。"
+          ]
+        },
+        {
+          "id": "mitt-emit-snapshot",
+          "claim": "emit 先对具体事件的处理器列表做 slice 快照并同步调用，再对 '*' 列表做快照并以 (type, event) 参数调用。",
+          "keywords": [
+            "emit",
+            "slice",
+            "wildcard",
+            "type, evt"
+          ],
+          "evidence": [
+            {
+              "path": "src/index.ts",
+              "startLine": 93,
+              "endLine": 120
+            }
+          ],
+          "interview": {
+            "question": "具体事件处理器与通配处理器的调用顺序是什么？",
+            "referenceAnswer": "先遍历具体类型监听器，再遍历 '*' 通配监听器；两类遍历都在调用前复制数组。",
+            "followUps": [
+              "这段实现是否等待处理器返回的 Promise？"
+            ]
+          },
+          "pitfalls": [
+            "处理器是同步调用的，emit 没有等待异步结果。",
+            "不要把通配回调参数说成只有 event；它接收类型和事件值。"
+          ]
+        },
+        {
+          "id": "mitt-optional-payload",
+          "claim": "类型重载允许仅当某事件的值类型包含 undefined 时，不传 payload 调用 emit。",
+          "keywords": [
+            "undefined extends Events",
+            "emit overload"
+          ],
+          "evidence": [
+            {
+              "path": "src/index.ts",
+              "startLine": 23,
+              "endLine": 39
+            }
+          ],
+          "interview": {
+            "question": "mitt 的 TypeScript 类型何时允许 emit 不带第二个参数？",
+            "referenceAnswer": "重载使用条件类型 `undefined extends Events[Key]`，只有该事件类型可包含 undefined 时才提供无 payload 的签名。",
+            "followUps": [
+              "这项约束是否等同于运行时验证 payload？"
+            ]
+          },
+          "pitfalls": [
+            "这是静态类型约束，不是运行时 schema 校验。"
+          ]
+        },
+        {
+          "id": "mitt-injected-map",
+          "claim": "工厂可接收调用方提供的 Map，并把同一个映射作为 emitter 的 all 属性暴露。",
+          "keywords": [
+            "all?",
+            "new Map",
+            "all",
+            "optional event handler map"
+          ],
+          "evidence": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ],
+          "interview": {
+            "question": "mitt 是否只能创建内部事件表？",
+            "referenceAnswer": "不是；mitt 可选接收已有 EventHandlerMap，并把它作为返回对象的 all 属性暴露，测试用预置 Map 注册的回调验证这一点。",
+            "followUps": [
+              "调用方直接修改 all 会发生什么？"
+            ]
+          },
+          "pitfalls": [
+            "公开 all 暴露可变 Map；代码没有封装成只读视图。"
+          ]
+        }
+      ],
+      "forbiddenAssertions": []
+    },
+    {
+      "id": "p-limit",
+      "repository": "sindresorhus/p-limit",
+      "url": "https://github.com/sindresorhus/p-limit",
+      "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+      "directory": "p-limit",
+      "license": "MIT",
+      "language": "JavaScript",
+      "split": "development",
+      "granularity": "medium",
+      "roleFocus": "general",
+      "readme": "readme.md",
+      "runtimeDependencies": {
+        "count": 1,
+        "notes": "唯一直接运行时依赖是 yocto-queue；AVa、XO 等为开发依赖。"
+      },
+      "evidenceFiles": [
+        {
+          "path": "index.js",
+          "sha256": "edde12a4a4dbdbe8d27161cdd0853db0bab435d5dc6c15f9f4dedc27ee9bca60"
+        },
+        {
+          "path": "test.js",
+          "sha256": "a803c332d9af3a9e14d657d63280c2e059e3fe5c343ab7ab869da8a85276204c"
+        },
+        {
+          "path": "package.json",
+          "sha256": "daa6b0d168d7197eccbfef1c678e8f00b79d063129bf48f4ee2db38dc605ca7f"
+        }
+      ],
+      "knownFacts": [
+        {
+          "id": "plimit-validation",
+          "claim": "并发度必须是大于零的整数或正无穷；工厂也接受含 concurrency 与 rejectOnClear 的选项对象。",
+          "keywords": [
+            "validateConcurrency",
+            "POSITIVE_INFINITY",
+            "rejectOnClear"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 3,
+              "endLine": 15
+            },
+            {
+              "path": "index.js",
+              "startLine": 144,
+              "endLine": 148
+            }
+          ],
+          "interview": {
+            "question": "pLimit 接受哪些并发度配置？",
+            "referenceAnswer": "接受正整数或 Number.POSITIVE_INFINITY；对象形式可同时提供 concurrency 和 rejectOnClear，后者必须为布尔值。",
+            "followUps": [
+              "0、负数和小数会怎样？"
+            ]
+          },
+          "pitfalls": [
+            "正无穷是显式允许的。",
+            "拒绝非法值发生在创建 limiter 时。"
+          ]
+        },
+        {
+          "id": "plimit-active-queue",
+          "claim": "limiter 维护 activeCount 与 FIFO 队列；只有 activeCount 小于 concurrency 时才取出队首任务执行。",
+          "keywords": [
+            "activeCount",
+            "resumeNext",
+            "queue.dequeue"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 16,
+              "endLine": 30
+            }
+          ],
+          "interview": {
+            "question": "p-limit 如何限制同时运行任务数？",
+            "referenceAnswer": "闭包保存 activeCount 和队列；resumeNext 仅在当前活动数低于并发上限且队列非空时增加活动数并取出一个队首任务运行。",
+            "followUps": [
+              "任务结束时如何继续处理队列？"
+            ]
+          },
+          "pitfalls": [
+            "这里限制的是正在执行的 promise 函数数量，不是请求速率或每秒配额。"
+          ]
+        },
+        {
+          "id": "plimit-promise-rejection",
+          "claim": "任务执行结果的 Promise 会先交给调用者；内部仍 await 它以便成功或失败后递减 activeCount 并启动后续任务。",
+          "keywords": [
+            "resolve(result)",
+            "await result",
+            "next()"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            }
+          ],
+          "interview": {
+            "question": "任务 reject 后 limiter 是否会卡住后续任务？",
+            "referenceAnswer": "执行器把原始结果 Promise 交还调用者，然后内部捕获其拒绝以避免未处理拒绝，并在 finally 语义的后续路径调用 next 释放槽位。",
+            "followUps": [
+              "原任务失败是否会被转为成功？"
+            ]
+          },
+          "pitfalls": [
+            "内部 catch 不会改变已经交给调用者的原始 Promise 拒绝结果。",
+            "该代码并未提供取消正在运行任务的机制。"
+          ]
+        },
+        {
+          "id": "plimit-clear",
+          "claim": "clearQueue 默认清空待运行队列；启用 rejectOnClear 时，会逐个以 AbortSignal.abort().reason 拒绝排队任务。",
+          "keywords": [
+            "clearQueue",
+            "rejectOnClear",
+            "AbortSignal.abort"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "test.js",
+              "startLine": 184,
+              "endLine": 215
+            }
+          ],
+          "interview": {
+            "question": "调用 clearQueue 对待处理任务有什么影响？",
+            "referenceAnswer": "默认直接清空队列；配置 rejectOnClear 后会取出每个队列项并用 AbortSignal.abort().reason 调用其 reject。",
+            "followUps": [
+              "它会终止已经开始运行的函数吗？"
+            ]
+          },
+          "pitfalls": [
+            "清队只涉及待运行项目，不会中止 active 任务。",
+            "默认清队的外部 promise 结果不应被描述为自动 reject。"
+          ]
+        },
+        {
+          "id": "plimit-concurrency-setter",
+          "claim": "concurrency 属性可在运行时设置；setter 校验新值并在 queueMicrotask 中补足可运行队列槽位。",
+          "keywords": [
+            "concurrency",
+            "queueMicrotask",
+            "validateConcurrency"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 105
+            }
+          ],
+          "interview": {
+            "question": "运行中的 limiter 可以调整并发度吗？",
+            "referenceAnswer": "可以；setter 先校验并更新 concurrency，再安排微任务循环，在新上限允许时从队列恢复任务。",
+            "followUps": [
+              "将上限调低会杀掉正在运行的任务吗？"
+            ]
+          },
+          "pitfalls": [
+            "降低上限不会在代码中取消已有 active 任务；只会影响后续补位。"
+          ]
+        },
+        {
+          "id": "plimit-map-order",
+          "claim": "map 将 iterable 映射为多个受限任务并用 Promise.all 返回结果，因此结果顺序跟随输入顺序。",
+          "keywords": [
+            "map",
+            "Array.from",
+            "Promise.all"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 126
+            },
+            {
+              "path": "test.js",
+              "startLine": 256,
+              "endLine": 269
+            }
+          ],
+          "interview": {
+            "question": "p-limit 的 map 如何调度和收集结果？",
+            "referenceAnswer": "遍历输入时以值和索引提交限流函数，保存每个 Promise，最后返回 Promise.all 的结果数组。",
+            "followUps": [
+              "如果 iterable 遍历本身抛错，它做了什么？"
+            ]
+          },
+          "pitfalls": [
+            "Promise.all 会按提交顺序组织结果，不代表任务完成顺序相同。",
+            "该实现不是惰性地只读取有限个输入项。"
+          ]
+        },
+        {
+          "id": "plimit-wrapper",
+          "claim": "limitFunction 为指定函数创建独立 limiter，并返回把原函数调用包装成限流任务的函数；包装函数也暴露 clearQueue。",
+          "keywords": [
+            "limitFunction",
+            "limitedFunction",
+            "clearQueue"
+          ],
+          "evidence": [
+            {
+              "path": "index.js",
+              "startLine": 133,
+              "endLine": 142
+            },
+            {
+              "path": "test.js",
+              "startLine": 217,
+              "endLine": 227
+            }
+          ],
+          "interview": {
+            "question": "limitFunction 与 pLimit 返回的 limiter 有什么不同？",
+            "referenceAnswer": "limitFunction 接收一个目标函数和选项，内部创建 limiter 并返回专用包装函数，把每次目标调用放入 limiter；还映射 clearQueue 方法。",
+            "followUps": [
+              "每个包装器是否共用同一队列？"
+            ]
+          },
+          "pitfalls": [
+            "每次调用 limitFunction 会创建自己的 limiter 实例。"
+          ]
+        }
+      ],
+      "forbiddenAssertions": []
+    },
+    {
+      "id": "schedule",
+      "repository": "dbader/schedule",
+      "url": "https://github.com/dbader/schedule",
+      "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651",
+      "directory": "schedule",
+      "license": "MIT",
+      "language": "Python",
+      "split": "development",
+      "granularity": "medium",
+      "roleFocus": "general",
+      "readme": "README.rst",
+      "runtimeDependencies": {
+        "count": 0,
+        "notes": "setup.py 未声明必需运行时依赖；显式时区参数路径会导入 pytz，开发依赖不计入运行依赖数。"
+      },
+      "evidenceFiles": [
+        {
+          "path": "schedule/__init__.py",
+          "sha256": "a08bca2887aea78bad3deda335883bb7791b194d07f7ef251d73e5719cf9f0ca"
+        },
+        {
+          "path": "test_schedule.py",
+          "sha256": "3bd4a89843241c67104649d44386127fe1e3862b470289f27f71d55fd4b08cad"
+        },
+        {
+          "path": "setup.py",
+          "sha256": "15ab79d36d3c321859d89abd61fcf9b1f539569c45ffd3d2bc5f9172ead700d0"
+        }
+      ],
+      "knownFacts": [
+        {
+          "id": "schedule-run-pending",
+          "claim": "run_pending 只运行当前到期任务，并按任务排序；漏掉的多个周期不会补跑多次。",
+          "keywords": [
+            "run_pending",
+            "should_run",
+            "does not run missed jobs"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1387,
+              "endLine": 1415
+            }
+          ],
+          "interview": {
+            "question": "如果一小时才调用一次 run_pending，而任务每分钟执行，会补跑 60 次吗？",
+            "referenceAnswer": "不会。实现筛出 should_run 的任务并排序后各运行一次，文档明确说明错过的运行不会补跑。",
+            "followUps": [
+              "需要补偿执行时应用层要考虑什么？"
+            ]
+          },
+          "pitfalls": [
+            "不要把它描述成持久化或追赶式队列。"
+          ]
+        },
+        {
+          "id": "schedule-run-all",
+          "claim": "run_all 会对调用时的任务列表快照逐个执行，不考虑是否到期，并可在每次执行后 sleep 指定秒数。",
+          "keywords": [
+            "run_all",
+            "self.jobs[:]",
+            "delay_seconds"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ],
+          "interview": {
+            "question": "run_all 与 run_pending 的区别是什么？",
+            "referenceAnswer": "run_all 对当前列表快照中的全部任务执行，不论 next_run 是否到期，并在每个任务后 sleep delay_seconds。",
+            "followUps": [
+              "任务运行时新增的任务一定会在本轮执行吗？"
+            ]
+          },
+          "pitfalls": [
+            "run_all 不是一个持续运行的后台循环。"
+          ]
+        },
+        {
+          "id": "schedule-tag-management",
+          "claim": "Scheduler.get_jobs 无 tag 时返回 jobs 的浅拷贝，有 tag 时筛选包含该 tag 的任务；clear 可清空全部或指定 tag 的任务。",
+          "keywords": [
+            "get_jobs",
+            "clear",
+            "job.tags",
+            "self.jobs[:]"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1572,
+              "endLine": 1589
+            }
+          ],
+          "interview": {
+            "question": "如何按 tag 查询或删除一组任务？",
+            "referenceAnswer": "给 get_jobs(tag) 或 clear(tag) 传入 tag；前者筛选 tags 包含该值的 job，后者从调度列表移除匹配 job。",
+            "followUps": [
+              "无参数 get_jobs 返回内部列表本身吗？"
+            ]
+          },
+          "pitfalls": [
+            "无 tag 查询返回列表副本，不能据此说拿到了 Scheduler.jobs 原列表。"
+          ]
+        },
+        {
+          "id": "schedule-cancel-return",
+          "claim": "任务函数返回 CancelJob 类或其实例时，Scheduler._run_job 会从列表移除该任务。",
+          "keywords": [
+            "CancelJob",
+            "_run_job",
+            "cancel_job"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 175
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1503,
+              "endLine": 1515
+            }
+          ],
+          "interview": {
+            "question": "任务如何请求调度器在执行后取消自己？",
+            "referenceAnswer": "返回 CancelJob 或 CancelJob()；_run_job 检查这两种形式并调用 cancel_job 从 jobs 列表移除。",
+            "followUps": [
+              "如果任务已经不在列表中呢？"
+            ]
+          },
+          "pitfalls": [
+            "这是显式返回值约定，不是通用异常重试或自动取消机制。"
+          ]
+        },
+        {
+          "id": "schedule-at",
+          "claim": "at 支持按日、小时或分钟单位使用不同时间字符串格式；传入 tz 时动态导入 pytz 解析时区。",
+          "keywords": [
+            "at",
+            "ScheduleValueError",
+            "pytz.timezone",
+            "time_str"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 528
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 268,
+              "endLine": 284
+            }
+          ],
+          "interview": {
+            "question": "every().hour.at(':30') 与 every().minute.at(':30') 中的字符串为何含义不同？",
+            "referenceAnswer": "at 根据 job 的时间单位解释并验证格式；每小时任务的 MM:SS 与每分钟任务的 :SS 是不同字段含义。",
+            "followUps": [
+              "默认必需安装 pytz 吗？"
+            ]
+          },
+          "pitfalls": [
+            "setup.py 没声明运行依赖；给 at 显式传 tz 的代码分支才 import pytz。",
+            "不要把 at 说成完整 cron 表达式支持。"
+          ]
+        },
+        {
+          "id": "schedule-until",
+          "claim": "until 接受 datetime、timedelta、time 或特定格式字符串作为截止时刻，并把截止时间记录到 cancel_after。",
+          "keywords": [
+            "until",
+            "cancel_after",
+            "datetime.timedelta",
+            "datetime.time"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 620
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 312,
+              "endLine": 339
+            }
+          ],
+          "interview": {
+            "question": "until 的截止参数有哪些形态？",
+            "referenceAnswer": "支持 datetime、timedelta、time 以及列出的日期时间字符串格式；相对 timedelta 会基于当前时间换算为 cancel_after。",
+            "followUps": [
+              "截止时间如何影响将来运行？"
+            ]
+          },
+          "pitfalls": [
+            "只传 time 会与今天的日期组合。",
+            "不能泛化为接受任意自然语言时间。"
+          ]
+        },
+        {
+          "id": "schedule-jitter-next",
+          "claim": "to(latest) 让下一周期在 interval 到 latest 的闭区间内随机选取；下一次时间计算会跳过不晚于当前时刻的时间点。",
+          "keywords": [
+            "latest",
+            "random.randint",
+            "_schedule_next_run",
+            "while next_run <= now"
+          ],
+          "evidence": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 561,
+              "endLine": 574
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 748
+            }
+          ],
+          "interview": {
+            "question": "to() 如何影响周期，以及 next_run 如何避免落在过去？",
+            "referenceAnswer": "当 latest 存在时用 random.randint(interval, latest) 取包含两端的周期；计算结果若小于等于 now 就继续加周期，直到进入未来。",
+            "followUps": [
+              "latest 小于 interval 会怎样？"
+            ]
+          },
+          "pitfalls": [
+            "这是随机周期调度，不提供精确时间保证。",
+            "不能从这段逻辑推断进程重启后会恢复任务。"
+          ]
+        }
+      ],
+      "forbiddenAssertions": []
+    },
+    {
+      "id": "requests",
+      "repository": "psf/requests",
+      "url": "https://github.com/psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "directory": "requests",
+      "license": "Apache-2.0",
+      "language": "Python",
+      "split": "holdout",
+      "granularity": "medium",
+      "roleFocus": "general",
+      "readme": "README.md",
+      "runtimeDependencies": {
+        "count": 4,
+        "notes": "pyproject.toml 声明 charset_normalizer、idna、urllib3、certifi 四个直接运行时依赖；chardet 是可选兼容依赖。"
+      },
+      "evidenceFiles": [
+        {
+          "path": "src/requests/sessions.py",
+          "sha256": "03cef27dd6ce31c5bd1b724a80156a24e9ccb2e7041f1d6c3500fa60c3871d21"
+        },
+        {
+          "path": "src/requests/models.py",
+          "sha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "37e9930f62ed461c813456b322949ca9687fab0aa6c7e5c076ac3e006192a0e5"
+        },
+        {
+          "path": "tests/test_requests.py",
+          "sha256": "bc9a6811d6c0f4247fb4ca844e3eeb84c13088321b684692b0ef3eeac0b38bc5"
+        }
+      ],
+      "knownFacts": [
+        {
+          "id": "requests-prepared-order",
+          "claim": "PreparedRequest.prepare 按 method、URL、headers、cookies、body、auth、hooks 的顺序准备字段，并将 auth 放在后面以支持依赖完整请求的认证方案。",
+          "keywords": [
+            "PreparedRequest",
+            "prepare_method",
+            "prepare_url",
+            "prepare_auth",
+            "must be last"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            }
+          ],
+          "interview": {
+            "question": "为什么 PreparedRequest.prepare 把认证放在其他字段之后？",
+            "referenceAnswer": "源码先准备 method、URL、headers、cookies 和 body，再准备 auth；注释说明认证器可能需要在完整请求上工作，例如 OAuth。",
+            "followUps": [
+              "用户 Request 和 PreparedRequest 的角色区别是什么？"
+            ]
+          },
+          "pitfalls": [
+            "不要把准备请求与网络发送混为一谈。"
+          ]
+        },
+        {
+          "id": "requests-session-merge",
+          "claim": "Session.prepare_request 将请求级 cookies 与 session cookies 合并，并将请求参数与 session 级 headers、params、auth、hooks 等设置合并进 PreparedRequest。",
+          "keywords": [
+            "prepare_request",
+            "merge_cookies",
+            "merge_setting",
+            "self.cookies"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ],
+          "interview": {
+            "question": "Session 如何把会话状态带进单次请求？",
+            "referenceAnswer": "prepare_request 将会话 cookies 与请求 cookies 合并，并通过 merge_setting 组合请求级和 Session 级配置后构造 PreparedRequest。",
+            "followUps": [
+              "某些设置如何表达显式覆盖？"
+            ]
+          },
+          "pitfalls": [
+            "不能只凭合并这一点声称所有键采用相同覆盖规则；要看 merge_setting 的具体语义。"
+          ]
+        },
+        {
+          "id": "requests-send-flow",
+          "claim": "Session.send 选取匹配 URL 的 adapter 发送请求，记录耗时、调用 response hooks、提取 cookies，并按配置处理重定向；stream 为假时读取 response.content。",
+          "keywords": [
+            "get_adapter",
+            "adapter.send",
+            "dispatch_hook",
+            "resolve_redirects",
+            "if not stream"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ],
+          "interview": {
+            "question": "Session.send 在 adapter 返回响应后还做了哪些工作？",
+            "referenceAnswer": "记录 elapsed、分发 response hook、从响应提取 cookies、可选解析重定向并组织 history；stream 为假时访问 content 消费响应体。",
+            "followUps": [
+              "stream=True 是否意味着响应最终一定不被消费？"
+            ]
+          },
+          "pitfalls": [
+            "stream=True 只避免 send 末尾立即读取整个 body，不代表应用永远不读取。"
+          ]
+        },
+        {
+          "id": "requests-env",
+          "claim": "默认 trust_env 为真时，merge_environment_settings 会考虑环境代理和 REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE，再与 Session 的代理、stream、verify、cert 设置合并。",
+          "keywords": [
+            "trust_env",
+            "get_environ_proxies",
+            "REQUESTS_CA_BUNDLE",
+            "merge_setting"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 488,
+              "endLine": 492
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ],
+          "interview": {
+            "question": "trust_env 对 Session 请求配置有什么影响？",
+            "referenceAnswer": "启用时会从环境解析代理，并在 verify 为 True 或 None 时读取 CA bundle 环境变量；随后将请求参数与 Session 设置合并。",
+            "followUps": [
+              "如何让进程环境配置不参与这一段逻辑？"
+            ]
+          },
+          "pitfalls": [
+            "环境配置的处理受 trust_env 控制。",
+            "不要声称环境代理无条件覆盖用户提供值；代码对代理使用 setdefault。"
+          ]
+        },
+        {
+          "id": "requests-redirect-limit",
+          "claim": "Session.resolve_redirects 会在重定向 history 达到 max_redirects 时抛出 TooManyRedirects。",
+          "keywords": [
+            "resolve_redirects",
+            "max_redirects",
+            "TooManyRedirects"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ],
+          "interview": {
+            "question": "Requests 如何限制重定向链长度？",
+            "referenceAnswer": "resolve_redirects 检查响应 history 长度；达到 Session.max_redirects 时抛出 TooManyRedirects，并附带当前响应。",
+            "followUps": [
+              "重定向处理是否只修改 URL？"
+            ]
+          },
+          "pitfalls": [
+            "此事实只说明上限检查，不概括重定向中方法、认证和代理重建的所有细节。"
+          ]
+        },
+        {
+          "id": "requests-response-ok",
+          "claim": "Response.ok/布尔值以 raise_for_status 是否抛 HTTPError 判断，因此状态码小于 400 为真，不代表状态码恰好是 200。",
+          "keywords": [
+            "Response.ok",
+            "__bool__",
+            "raise_for_status",
+            "status_code < 400"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 930,
+              "endLine": 940
+            }
+          ],
+          "interview": {
+            "question": "if response: 是否等价于 status_code == 200？",
+            "referenceAnswer": "不等价；Response 的布尔值委托给 ok，ok 对 raise_for_status 是否遇到 4xx/5xx 错误作判断，所以小于 400 的状态为真。",
+            "followUps": [
+              "raise_for_status 覆盖哪些状态范围？"
+            ]
+          },
+          "pitfalls": [
+            "3xx 也会被 ok 判为真。",
+            "ok 不会自动把非 2xx 都判为失败。"
+          ]
+        },
+        {
+          "id": "requests-stream-content",
+          "claim": "Response.iter_content 可从底层流分块读取，内容已消费后则可从缓存内容切片重放；对尚未缓存且已消费状态会抛 StreamConsumedError。",
+          "keywords": [
+            "iter_content",
+            "raw.stream",
+            "_content_consumed",
+            "StreamConsumedError"
+          ],
+          "evidence": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            }
+          ],
+          "interview": {
+            "question": "iter_content 如何区分首次流读取和已缓存内容？",
+            "referenceAnswer": "未消费时由内部生成器从 raw.stream 或 file-like raw 读取；已消费且缓存为 bytes 时通过 iter_slices 分块；若已消费但内容仍是布尔哨兵则抛 StreamConsumedError。",
+            "followUps": [
+              "chunk_size=None 的行为是否固定为相同？"
+            ]
+          },
+          "pitfalls": [
+            "返回块的实际长度未必等于 chunk_size。",
+            "不要据此承诺流迭代器可并发或重入使用。"
+          ]
+        },
+        {
+          "id": "requests-dependencies",
+          "claim": "该固定版本在 pyproject.toml 中声明四个直接运行时依赖：charset_normalizer、idna、urllib3、certifi；chardet 在可选依赖组中。",
+          "keywords": [
+            "dependencies",
+            "charset_normalizer",
+            "urllib3",
+            "optional-dependencies",
+            "chardet"
+          ],
+          "evidence": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ],
+          "interview": {
+            "question": "Requests 此提交的声明运行时依赖有哪些？",
+            "referenceAnswer": "四个直接依赖为 charset_normalizer、idna、urllib3、certifi；chardet 列在 use_chardet_on_py3 可选组。",
+            "followUps": [
+              "为什么分析依赖数量要区分运行时和开发依赖？"
+            ]
+          },
+          "pitfalls": [
+            "计数是直接声明依赖，不是传递依赖总数。",
+            "pyproject 中的 test/typecheck dependency groups 不计入四项核心运行时依赖。"
+          ]
+        }
+      ],
+      "forbiddenAssertions": [],
+      "limitations": "holdout 只表示本语料的评测切分；一次 holdout 结果不能证明对其他仓库或语言的通用泛化。"
+    }
+  ]
+}
