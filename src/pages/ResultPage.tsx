@@ -9,6 +9,7 @@ import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf }
 import { summarizeQuestions } from '../lib/question-summary'
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
 import TermPopover from '../components/TermPopover'
+import { AppIcon } from '../components/AppIcon'
 
 interface Props {
   result: InterviewResult
@@ -73,6 +74,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   const [activeId, setActiveId] = useState('')
   const [popover, setPopover] = useState<TermTarget | null>(null)
   const [toast, setToast] = useState('')
+  const searchInput = useRef<HTMLInputElement>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   /** 统一的 toast 展示：重置旧定时器，避免上一次的定时器把新 toast 提前清掉 */
@@ -190,12 +192,32 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
       {/* 左：大纲 */}
       <aside aria-hidden={!showSidebar} className={`flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white ${sidebarClassName} ${showSidebar ? '' : 'hidden'}`}>
         <div className="border-b border-slate-100 p-3">
-          <input
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:bg-white"
-            placeholder="🔍 搜索问题 / 答案 / 名词"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <form
+            role="search"
+            className="flex h-10 items-center overflow-hidden rounded-full border border-slate-200 bg-white focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-200"
+            onSubmit={(event) => {
+              event.preventDefault()
+              searchInput.current?.focus()
+            }}
+          >
+            <input
+              ref={searchInput}
+              type="text"
+              role="searchbox"
+              aria-label="搜索问题、答案或名词"
+              className="h-full min-w-0 flex-1 bg-white px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400"
+              placeholder="搜索问题 / 答案 / 名词"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button
+              type="submit"
+              aria-label="搜索"
+              className="flex h-full w-10 shrink-0 items-center justify-center border-l border-slate-200 bg-white text-slate-600 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-slate-500"
+            >
+              <AppIcon name="search" size={18} />
+            </button>
+          </form>
           {query && (
             <p className="mt-1.5 px-1 text-xs text-slate-400">
               匹配 {shownQuestions}/{totalQuestions} 题
@@ -292,7 +314,9 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
 
             {result.projectSummary && (
               <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
-                <h2 className="mb-2 text-sm font-semibold text-indigo-900">📋 项目概览</h2>
+                <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-indigo-900">
+                  <AppIcon name="clipboard" size={16} />项目概览
+                </h2>
                 <div className="text-sm">
                   <MarkdownView markdown={result.projectSummary} onTerm={onTerm({ id: '', question: '项目概览', answer: result.projectSummary, followUps: [] })} />
                 </div>
@@ -328,7 +352,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
               <section className="mb-8">
                 <div className="mb-3 border-b border-slate-200 pb-2">
                   <h2 className="text-base font-semibold text-slate-900">
-                    <span className="mr-2 text-slate-300">📎</span>附录：专业名词表
+                    <AppIcon name="attachment" size={16} className="mr-2 text-slate-300" />附录：专业名词表
                   </h2>
                   <p className="mt-0.5 pl-8 text-xs text-slate-400">
                     生成答案时识别出的专业名词（正文中的下划线名词可点击查看）
@@ -401,8 +425,8 @@ function QuestionCard({
         <span className="min-w-0 flex-1 text-[15px] font-medium leading-6 text-slate-900">
           <TermText text={q.question} onTerm={onTerm} />
         </span>
-        <span className={`mt-1 shrink-0 text-xs text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}>
-          ▾
+        <span className="mt-1 shrink-0 text-slate-400">
+          <AppIcon name="chevron-down" size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </span>
       </button>
 
@@ -432,8 +456,8 @@ function FollowUpItem({ f, index, onTerm, depth = 1 }: { f: FollowUp; index: num
         <span className="min-w-0 flex-1 text-[13.5px] leading-6 text-slate-700">
           <TermText text={f.question} onTerm={onTerm} />
         </span>
-        <span className={`mt-1 shrink-0 text-[10px] text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}>
-          ▾
+        <span className="mt-1 shrink-0 text-slate-400">
+          <AppIcon name="chevron-down" size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>
       {open && (

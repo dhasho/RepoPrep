@@ -499,8 +499,14 @@ test('combined read and context warnings remain bounded in real coarse and fine 
     assert.ok(built.headerText.includes(CONTEXT_TRUNCATION_WARNING))
     assert.ok(built.batches.some((batch) => batch.files.some((file) => file.truncated)),
       `${granularity} should clip the long secondary document while retaining the README`)
-    assert.ok(built.batches.some((batch) => batch.files.some((file) => file.relPath === 'README.md' && file.content.includes('README-NEAR-BUDGET-END'))),
-      `${granularity} should retain the near-budget README`)
+    const readme = built.batches.flatMap((batch) => batch.files).find((file) => file.relPath === 'README.md')
+    assert.ok(readme?.content.includes('README-NEAR-BUDGET-START'),
+      `${granularity} should retain the beginning of the near-budget README`)
+    if (granularity === 'fine') {
+      assert.ok(readme?.content.includes('README-NEAR-BUDGET-END'), 'the fine global context has room for the complete README')
+    } else {
+      assert.equal(readme?.truncated, true, 'coarse shares its constrained budget across multiple project documents')
+    }
     for (const batch of built.batches) {
       assert.equal(batch.totalChars, renderBatch(built.headerText, built.treeText, batch).length,
         `${granularity} totalChars should include both warnings, tree, headings, fences, and content`)

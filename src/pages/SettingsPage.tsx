@@ -11,6 +11,7 @@ import { MAX_LLM_PROFILES, profileFieldErrorId, validateProfiles, type ProfileFi
 import ScanLimitSlider from '../components/ScanLimitSlider'
 import { scanLimitDraftWithDefault, scanLimitDraftWithValue } from '../lib/scan-limit-slider'
 import { canonicalEndpoint, effectiveProtocol, mappedProviderPreset, PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
+import { AppIcon } from '../components/AppIcon'
 
 interface Props {
   settings: PublicSettings
@@ -300,7 +301,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-900">大模型配置</h1>
         <button className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100" onClick={handleBack}>
-          ← 返回
+          <AppIcon name="arrow-left" size={16} className="mr-1" />返回
         </button>
       </div>
 
@@ -356,7 +357,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             onClick={addProfile}
             disabled={profiles.length >= MAX_LLM_PROFILES}
           >
-            ＋ 新增配置
+            <AppIcon name="plus" size={16} className="mr-1" />新增配置
           </button>
           <p className="mt-1 text-center text-xs text-slate-400">配置数量：{profiles.length}/{MAX_LLM_PROFILES}</p>
         </div>
@@ -475,13 +476,13 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                       onClick={detectModels}
                       disabled={modelState.loading}
                     >
-                      {modelState.loading ? '检测中…' : '🔍 检测可用模型'}
+                      {modelState.loading ? <><AppIcon name="loader" size={16} className="mr-1 animate-spin" />检测中…</> : <><AppIcon name="search" size={16} className="mr-1" />检测可用模型</>}
                     </button>
                   </div>
                   {profileError('model') && <p id={profileFieldErrorId(selectedIndex, 'model')} className="mt-1 text-xs text-rose-600">{profileError('model')?.message}</p>}
                   {modelState.message && (
                     <p className={`mt-1.5 text-xs ${modelState.messageOk ? 'text-emerald-600' : 'text-slate-500'}`}>
-                      {modelState.messageOk ? '✓ ' : ''}
+                      {modelState.messageOk && <AppIcon name="check" size={14} className="mr-1" />}
                       {modelState.message}
                     </p>
                   )}
@@ -506,7 +507,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                           title="收起列表"
                           onClick={() => detection.hideList(selectedId)}
                         >
-                          ✕
+                          <AppIcon name="close" size={14} />
                         </button>
                       </div>
                       <div className="max-h-52 overflow-y-auto py-1">
@@ -522,7 +523,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                             }}
                           >
                             <span className="truncate font-mono text-[13px]">{m}</span>
-                            {m === selected.model && <span className="shrink-0 text-xs">✓ 当前</span>}
+                            {m === selected.model && <span className="shrink-0 text-xs"><AppIcon name="check" size={14} className="mr-1" />当前</span>}
                           </button>
                         ))}
                         {filteredModels.length === 0 && (
@@ -579,7 +580,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
 
               {currentTest?.result && (
                 <p className={`text-sm ${currentTest.result.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {currentTest.result.ok ? '✓ ' : '✗ '}
+                  <AppIcon name={currentTest.result.ok ? 'check' : 'error'} size={16} className="mr-1" />
                   {currentTest.result.message}
                 </p>
               )}
@@ -623,8 +624,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
         >
           {saving ? '保存中…' : `保存${dirty ? ' *' : ''}`}
         </button>
-        {saved && <p className="text-sm text-emerald-600">✓ 已保存</p>}
-        {saveError && <p className="text-sm text-rose-600">✗ {saveError}</p>}
+        {saved && <p className="text-sm text-emerald-600"><AppIcon name="check" size={16} className="mr-1" />已保存</p>}
+        {saveError && <p className="text-sm text-rose-600"><AppIcon name="error" size={16} className="mr-1" />{saveError}</p>}
       </div>
 
     </div>

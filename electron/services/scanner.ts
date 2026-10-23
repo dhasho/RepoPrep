@@ -110,7 +110,7 @@ const KEY_FILE_RULES: { match: (base: string, relDir: string) => boolean; reason
   { match: (b, d) => d === '' && /^(Dockerfile|docker-compose\.ya?ml)$/.test(b), reason: '容器化配置' },
   { match: (b, d) => d === '' && /^(Makefile|CMakeLists\.txt)$/.test(b), reason: '构建脚本' },
   { match: (b, d) => d === '' && /\.(csproj|sln)$/i.test(b), reason: '.NET 工程文件' },
-  { match: (b, d) => d.split('/').length <= 1 && /^(main|index|app|server|cli)\.(ts|tsx|js|jsx|py|go|rs|java)$/i.test(b), reason: '可能的入口文件' }
+  { match: (b, d) => d.split('/').length <= 1 && /^(main|index|app|server|cli)\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|go|rs|java)$/i.test(b), reason: '可能的入口文件' }
 ]
 
 /** 单文件送入模型的上限（同时用于题量配额的模块体量估计，故导出） */
@@ -435,16 +435,24 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
   let estimatedSkipped = 0
   const security: SecurityProtectionSummary = { excludedFiles: 0, redactedFiles: 0, redactionMatches: 0, categories: {} }
 
-  async function walk(absDir: string, relDir: string, depth: number): Promise<FileNode[]> {
+  interface DirectoryWork {
+    absDir: string
+    relDir: string
+    entries: fsSync.Dirent[]
+    cursor: number
+    nodes: FileNode[]
+  }
+
+  async function prepareDirectory(absDir: string, relDir: string, nodes: FileNode[]): Promise<DirectoryWork | undefined> {
     let dirStat: import('node:fs').BigIntStats
     try {
       dirStat = await fs.lstat(absDir, { bigint: true })
-      if (!dirStat.isDirectory()) { snapshotValid = false; contentReadable = false; return [] }
+      if (!dirStat.isDirectory()) { snapshotValid = false; contentReadable = false; return undefined }
     } catch (error) {
       snapshotValid = false
       const code = (error as NodeJS.ErrnoException).code
       if (relDir === '' || (code !== 'EACCES' && code !== 'EPERM')) contentReadable = false
-      return []
+      return undefined
     }
     const dirIdentity = identityFromBigIntStats(dirStat)
     if (!dirIdentity) { snapshotValid = false; contentReadable = false }
@@ -455,7 +463,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
       snapshotValid = false
       const code = (error as NodeJS.ErrnoException).code
       if (relDir === '' || (code !== 'EACCES' && code !== 'EPERM')) contentReadable = false
-      return [] // 无权限等错误直接跳过
+      return undefined // 无权限等错误直接跳过
     }
     const names = entries.map((entry) => entry.name).sort()
     if (relDir === '') {
@@ -489,16 +497,56 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
       }
     }
 
-    const nodes: FileNode[] = []
-    // 目录优先、其余按名称排序，保证树稳定
+    const priorityTier = (entry: fsSync.Dirent): number => {
+      if (entry.isDirectory()) return 2
+      const isReadme = /^readme\.(md|txt|rst)$/i.test(entry.name)
+      const isRootMetadata = relDir === '' && KEY_FILE_RULES.some((rule) => rule.match(entry.name, relDir))
+      if (isReadme || isRootMetadata) return 0
+      if (/^(main|index|app|server|cli|entry|mod|lib)\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|go|rs|java|c|cpp|h|hpp|cs|rb|php|swift|kt|kts)$/i.test(entry.name)) return 1
+      return 3
+    }
+    // Scheduler priority only affects which candidates get a scarce budget. Final tree order is sorted separately.
     entries.sort((a, b) => {
-      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1
-      return a.name.localeCompare(b.name)
+      const aPriority = priorityTier(a)
+      const bPriority = priorityTier(b)
+      return aPriority - bPriority || a.name.localeCompare(b.name)
     })
-    for (const entry of entries) {
-      const rel = relDir ? `${relDir}/${entry.name}` : entry.name
+    return { absDir, relDir, entries, cursor: 0, nodes }
+  }
+
+  const rootNodes: FileNode[] = []
+  const queue: Array<DirectoryWork | undefined> = []
+  let queueHead = 0
+  const enqueue = (work: DirectoryWork): void => {
+    queue.push(work)
+  }
+  const compactQueue = (): void => {
+    if (queueHead === queue.length) {
+      queue.length = 0
+      queueHead = 0
+    } else if (queueHead >= 2048 && queueHead * 2 >= queue.length) {
+      queue.splice(0, queueHead)
+      queueHead = 0
+    }
+  }
+  const rootWork = await prepareDirectory(scanRoot, '', rootNodes)
+  if (rootWork) enqueue(rootWork)
+
+  // Give every discovered directory one candidate per round. This lets later
+  // siblings and deeper entry points compete for budgets before a large tree
+  // under the first alphabetic directory can consume them all.
+  while (queueHead < queue.length) {
+    const work = queue[queueHead]
+    queue[queueHead] = undefined
+    queueHead++
+    if (!work) continue
+    let consumedCandidate = false
+    while (work.cursor < work.entries.length && !consumedCandidate) {
+      const entry = work.entries[work.cursor++]
+      const rel = work.relDir ? `${work.relDir}/${entry.name}` : entry.name
       if (isIgnored(rel, entry.isDirectory())) continue
-      if (entry.isDirectory() && await isLinkedWorktreeDirectory(path.join(absDir, entry.name), rel)) continue
+      if (entry.isDirectory() && await isLinkedWorktreeDirectory(path.join(work.absDir, entry.name), rel)) continue
+      consumedCandidate = true
       if (files.length >= eff.maxFiles || treeNodes >= eff.maxTreeNodes) {
         if (files.length >= eff.maxFiles) byFileCount = true
         if (treeNodes >= eff.maxTreeNodes) byTreeNodes = true
@@ -508,13 +556,15 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
 
       if (entry.isDirectory()) {
         treeNodes++
-        const children = await walk(path.join(absDir, entry.name), rel, depth + 1)
         const excluded = Boolean(classifySensitivePath(rel, sensitivePolicyRoot))
-        nodes.push({ name: entry.name, path: rel, type: 'dir', children, ...(excluded ? { modelExcluded: true } : {}) })
+        const children: FileNode[] = []
+        work.nodes.push({ name: entry.name, path: rel, type: 'dir', children, ...(excluded ? { modelExcluded: true } : {}) })
+        const childWork = await prepareDirectory(path.join(work.absDir, entry.name), rel, children)
+        if (childWork) enqueue(childWork)
       } else if (entry.isFile()) {
         let fileStat: import('node:fs').BigIntStats
         try {
-          fileStat = await fs.lstat(path.join(absDir, entry.name), { bigint: true })
+          fileStat = await fs.lstat(path.join(work.absDir, entry.name), { bigint: true })
         } catch (error) {
           snapshotValid = false
           const code = (error as NodeJS.ErrnoException).code
@@ -535,7 +585,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
         }
         treeNodes++
         const sensitive = classifySensitivePath(rel, sensitivePolicyRoot)
-        nodes.push({ name: entry.name, path: rel, type: 'file', size, ...(sensitive ? { modelExcluded: true } : {}) })
+        work.nodes.push({ name: entry.name, path: rel, type: 'file', size, ...(sensitive ? { modelExcluded: true } : {}) })
 
         const ext = path.extname(entry.name).slice(1).toLowerCase()
         const isBinary = BINARY_EXT.has(ext)
@@ -548,7 +598,7 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
           if (overSize && !sensitive && !CONTENT_SKIP_PATTERNS.some((re) => re.test(rel))) oversizedFiles++
           const sf: ScannedFile = {
             relPath: rel,
-            absPath: path.join(absDir, entry.name),
+            absPath: path.join(work.absDir, entry.name),
             size,
             ext,
             textBytes: size,
@@ -560,17 +610,29 @@ export async function scanProject(root: string, limits?: Partial<ScanLimits>): P
           totalBytes += size
           const lang = EXT_LANG[ext]
           if (lang) langCount.set(lang, (langCount.get(lang) ?? 0) + 1)
-          const matched = KEY_FILE_RULES.find((r) => r.match(entry.name, relDir))
+          const matched = KEY_FILE_RULES.find((r) => r.match(entry.name, work.relDir))
           if (matched && keyFiles.length < 30) keyFiles.push({ path: rel, reason: matched.reason })
         }
       }
     }
-    return nodes
+    if (work.cursor < work.entries.length) enqueue(work)
+    compactQueue()
   }
+
+  const sortTree = (nodes: FileNode[]): void => {
+    nodes.sort((a, b) => {
+      if ((a.type === 'dir') !== (b.type === 'dir')) return a.type === 'dir' ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+    for (const node of nodes) if (node.type === 'dir') sortTree(node.children ?? [])
+  }
+  sortTree(rootNodes)
+  files.sort((a, b) => a.relPath.localeCompare(b.relPath))
+  keyFiles.sort((a, b) => a.path.localeCompare(b.path))
 
   const projectName = projectDisplayName(root)
   const tree: FileNode = {
-    name: projectName, path: '', type: 'dir', children: await walk(scanRoot, '', 0),
+    name: projectName, path: '', type: 'dir', children: rootNodes,
     ...(rootSensitive ? { modelExcluded: true } : {})
   }
 

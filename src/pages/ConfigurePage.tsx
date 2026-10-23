@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { GenerateOptions, Granularity, ProjectOverview, RoleFocus, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
 import FileTreeView from '../components/FileTreeView'
+import { AppIcon } from '../components/AppIcon'
 
 interface Props {
   overview: ProjectOverview
@@ -62,13 +63,16 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
                 </div>
               </div>
               {overview.truncation && (
-                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
-                  ⚠️ 扫描不完整：
-                  {overview.truncation.byFileCount && `文件数达到上限 ${overview.truncation.limits.maxFiles}；`}
-                  {overview.truncation.byTreeNodes && `树节点数达到上限 ${overview.truncation.limits.maxTreeNodes}；`}
-                  {overview.truncation.oversizedFiles > 0 && `${overview.truncation.oversizedFiles} 个文件超过单文件大小上限未纳入阅读；`}
-                  {overview.truncation.estimatedSkipped > 0 && `估计至少还有 ${overview.truncation.estimatedSkipped} 项未扫描；`}
-                  生成结果可能遗漏内容。可在「设置 → 扫描安全上限」调整扫描上限后重新扫描。
+                <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                  <AppIcon name="warning" size={16} className="mt-0.5" />
+                  <span>
+                    扫描不完整：
+                    {overview.truncation.byFileCount && `文件数达到上限 ${overview.truncation.limits.maxFiles}；`}
+                    {overview.truncation.byTreeNodes && `树节点数达到上限 ${overview.truncation.limits.maxTreeNodes}；`}
+                    {overview.truncation.oversizedFiles > 0 && `${overview.truncation.oversizedFiles} 个文件超过单文件大小上限未纳入阅读；`}
+                    {overview.truncation.estimatedSkipped > 0 && `估计至少还有 ${overview.truncation.estimatedSkipped} 项未扫描；`}
+                    生成结果可能遗漏内容。可在「设置 → 扫描安全上限」调整扫描上限后重新扫描。
+                  </span>
                 </div>
               )}
               {overview.languages.length > 0 && (
@@ -199,7 +203,7 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
               <h2 className="mb-3 text-[15px] font-semibold text-slate-900">③ 大模型</h2>
               {profile ? (
                 <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <span className="text-2xl">🤖</span>
+                  <AppIcon name="bot" size={24} className="text-slate-500" />
                   <div className="flex-1">
                     <div className="text-sm font-medium text-slate-800">{profile.name}</div>
                     <div className="text-xs text-slate-400">

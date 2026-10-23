@@ -16,6 +16,8 @@ import { ProjectScanCache } from './scan-cache.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { resolveScanLimits, scanLimitsKey, scanProject } from './scanner.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { CODE_EXTS, collectFileSignals, orderFilesForContext } from './file-selection.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { DEFAULT_SCAN_LIMITS, type ScanTruncation } from '../../shared/types.ts'
 
 const createdRoots = new Set<string>()
@@ -56,6 +58,138 @@ test('边界：文件数上限（达到上限才截断，恰好等于上限不�
     const exact = await scanProject(root, { maxFiles: 3 })
     assert.equal(exact.truncation, undefined, '恰好等于上限不应触发截断')
     assert.equal(exact.totalFiles, 3)
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('公平调度：根清单优先，深层 z-core 入口不会被大量 a-files 源码挤掉', async () => {
+  const files: Record<string, string> = { 'package.json': '{"name":"fixture"}', 'z-core/deep/entry.ts': 'export const core = true' }
+  for (let index = 0; index < 40; index++) files[`a-files/file-${String(index).padStart(2, '0')}.ts`] = 'export const value = 1'
+  const root = await makeProject(files)
+  try {
+    const scan = await scanProject(root, { maxFiles: 5, maxTreeNodes: 100 })
+    const selected = new Set(scan.files.map((file) => file.relPath))
+    assert.ok(selected.has('package.json'), '根目录清单应在普通目录内容前调度')
+    assert.ok(selected.has('z-core/deep/entry.ts'), '较后目录中的深层入口应能竞争有限文件预算')
+    assert.ok(scan.truncation?.byFileCount, '硬预算仍须准确报告发生截断')
+    assert.ok(scan.truncation!.estimatedSkipped > 0)
+    assert.equal(scan.files.length, 5)
+  } finally {
+    await removeProject(root)
+  }
+})
+
+test('扫描调度与文件选择契约：选择器支持的常见入口扩展名在硬上限下仍可达', async () => {
+  const selectorEntryExts = ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs', 'py', 'go', 'rs', 'java']
+  for (const ext of selectorEntryExts) {
+    assert.ok(CODE_EXTS.has(ext), `${ext} 应仍是文件选择器支持的代码扩展名`)
+    const entryPath = `main.${ext}`
+    const files = {
+      'package.json': JSON.stringify({ main: entryPath }),
+      [entryPath]: 'export const entry = true',
+      [`src/main.${ext}`]: 'export const nestedEntry = true',
+      [`a000.${ext}`]: 'export const ordinary = true'
+    }
+    const root = await makeProject(files)
+    try {
+      for (const limits of [{ maxFiles: 2, maxTreeNodes: 50 }, { maxFiles: 50, maxTreeNodes: 2 }]) {
+        const scan = await scanProject(root, limits)
+        const selected = new Set(scan.files.map((file) => file.relPath))
+        assert.ok(selected.has('package.json'), `${ext}: manifest should fit the hard budget`)
+        assert.ok(selected.has(entryPath), `${ext}: declared root entry should fit the hard budget`)
+        assert.ok(scan.truncation, `${ext}: the independent hard budget should still report truncation`)
+
+        const contents = new Map(scan.files.map((file) => [file.relPath, files[file.relPath as keyof typeof files]]))
+        const signals = collectFileSignals(scan.files, contents)
+        assert.ok(signals.entryPaths.has(entryPath), `${ext}: manifest entry should remain visible to file selection`)
+        const fineOrder = orderFilesForContext(scan.files, 'fine', signals).map((file) => file.relPath)
+        assert.ok(fineOrder.indexOf(entryPath) >= 0, `${ext}: declared entry should remain selectable for fine context`)
+        assert.ok(!orderFilesForContext(scan.files, 'coarse', signals).some((file) => file.relPath === entryPath), `${ext}: code entry should remain outside coarse context`)
+      }
+
+      if (ext === 'mts' || ext === 'cts' || ext === 'mjs' || ext === 'cjs') {
+        const scan = await scanProject(root, { maxFiles: 20, maxTreeNodes: 20 })
+        const keyPaths = new Set(scan.keyFiles.map((file) => file.path))
+        assert.ok(keyPaths.has(entryPath), `${ext}: root entry should be reported as a key file`)
+        assert.ok(keyPaths.has(`src/main.${ext}`), `${ext}: shallow entry should be reported as a key file`)
+      }
+    } finally {
+      await removeProject(root)
+    }
+  }
+})
+
+test('深层入口在文件数与树节点硬上限下优先于同目录普通源码', async () => {
+  const deepEntryExts = ['mts', 'cts', 'mjs', 'cjs', 'rs', 'c']
+  const deepEntries = ['lib.rs', 'mod.rs', 'main.c']
+  for (const entryName of [...deepEntryExts.map((ext) => `main.${ext}`), ...deepEntries]) {
+    const entryPath = `src/deep/${entryName}`
+    const ordinaryPath = `src/deep/a000.${entryName.endsWith('.rs') ? 'rs' : entryName.endsWith('.c') ? 'c' : entryName.split('.').at(-1)}`
+    const files = {
+      'package.json': JSON.stringify({ main: entryPath }),
+      [ordinaryPath]: 'ordinary source',
+      [entryPath]: 'export const entry = true'
+    }
+    const root = await makeProject(files)
+    try {
+      for (const { limits, truncationFlag } of [
+        { limits: { maxFiles: 2, maxTreeNodes: 50 }, truncationFlag: 'byFileCount' },
+        { limits: { maxFiles: 50, maxTreeNodes: 4 }, truncationFlag: 'byTreeNodes' }
+      ] as const) {
+        const scan = await scanProject(root, limits)
+        const selected = new Set(scan.files.map((file) => file.relPath))
+        assert.ok(selected.has('package.json'), `${entryName}: manifest should fit the hard budget`)
+        assert.ok(selected.has(entryPath), `${entryName}: deep entry should beat its same-directory ordinary source`)
+        assert.ok(!selected.has(ordinaryPath), `${entryName}: ordinary source should not consume the remaining budget first`)
+        assert.equal(scan.truncation?.[truncationFlag], true, `${entryName}: the reached hard budget should be reported`)
+
+        const contents = new Map(scan.files.map((file) => [file.relPath, files[file.relPath as keyof typeof files]]))
+        const signals = collectFileSignals(scan.files, contents)
+        assert.ok(signals.entryPaths.has(entryPath), `${entryName}: manifest entry should remain visible to file selection`)
+        assert.ok(orderFilesForContext(scan.files, 'fine', signals).some((file) => file.relPath === entryPath), `${entryName}: deep entry should remain selectable for fine context`)
+      }
+    } finally {
+      await removeProject(root)
+    }
+  }
+})
+
+test('公平调度：创建顺序不影响选择顺序和最终文件树顺序', async () => {
+  const entries = [
+    ['package.json', '{}'], ['a-files/z.ts', 'z'], ['a-files/a.ts', 'a'],
+    ['z-core/deep/entry.ts', 'core'], ['z-core/README.md', 'readme']
+  ] as const
+  const first = await makeProject(Object.fromEntries(entries))
+  const second = await makeProject(Object.fromEntries([...entries].reverse()))
+  try {
+    const limits = { maxFiles: 4, maxTreeNodes: 20 }
+    const a = await scanProject(first, limits)
+    const b = await scanProject(second, limits)
+    assert.deepEqual(a.files.map((file) => file.relPath), b.files.map((file) => file.relPath))
+    assert.deepEqual((a.tree.children ?? []).map((node) => node.path), (b.tree.children ?? []).map((node) => node.path))
+    assert.deepEqual((a.tree.children ?? []).map((node) => node.name), ['a-files', 'z-core', 'package.json'])
+  } finally {
+    await removeProject(first)
+    await removeProject(second)
+  }
+})
+
+test('深层常见入口优先：超过 1000 个 a-files 时仍选入 z-core/deep/main.ts', async () => {
+  const files: Record<string, string> = {
+    'package.json': '{}',
+    'z-core/deep/aaa.ts': 'lower priority source',
+    'z-core/deep/main.ts': 'export const core = true'
+  }
+  for (let index = 0; index < 1200; index++) files[`a-files/file-${String(index).padStart(4, '0')}.ts`] = 'export const value = 1'
+  const root = await makeProject(files)
+  try {
+    const scan = await scanProject(root, { maxFiles: 5, maxTreeNodes: 100 })
+    const selected = new Set(scan.files.map((file) => file.relPath))
+    assert.ok(selected.has('z-core/deep/main.ts'), '常见入口优先级应与目录深度无关')
+    assert.ok(!selected.has('z-core/deep/aaa.ts'), '同目录普通文件不能抢在入口前耗尽预算')
+    assert.ok(scan.truncation?.byFileCount)
+    assert.equal(scan.files.length, 5)
   } finally {
     await removeProject(root)
   }

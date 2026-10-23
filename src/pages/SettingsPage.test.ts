@@ -267,7 +267,7 @@ test('SettingsPage preserves newer edits when an older save completes, then save
     assert.equal(nameInput().value, 'B', '保存窗口中新编辑的草稿应继续显示')
     assert.equal(contentLimit().getAttribute('aria-valuetext'), '64KB', '父组件的保存回读不能覆盖更新后的 slider 草稿')
     assert.match(saveButton().textContent ?? '', /\*$/, '新草稿仍应标记未保存')
-    assert.equal(rootElement.textContent?.includes('✓ 已保存'), false)
+    assert.equal([...rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), false)
     await act(async () => backButton().click())
     assert.equal(rootElement.textContent?.includes('有未保存的修改'), true, '返回应要求确认未保存修改')
 
@@ -279,12 +279,12 @@ test('SettingsPage preserves newer edits when an older save completes, then save
       saves[1].control.resolve()
       await saves[1].promise
     })
-    assert.equal(rootElement.textContent?.includes('✓ 已保存'), true)
+    assert.equal([...rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), true)
     assert.doesNotMatch(saveButton().textContent ?? '', /\*$/)
 
     // 已成功后再次发起保存，等待期间必须清掉之前的成功提示。
     await act(async () => saveButton().click())
-    assert.equal(rootElement.textContent?.includes('✓ 已保存'), false)
+    assert.equal([...rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), false)
     await act(async () => {
       saves[2].control.resolve()
       await saves[2].promise
@@ -344,15 +344,15 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
     })
     assert.equal(nameInput.value, 'Retry me')
     assert.match(saveButton().textContent ?? '', /\*$/)
-    assert.equal(rootElement.textContent?.includes('✗ 保存失败，请重试'), true)
-    assert.equal(rootElement.textContent?.includes('✓ 已保存'), false)
+    assert.equal(rootElement.textContent?.includes('保存失败，请重试'), true)
+    assert.equal([...rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), false)
     assert.equal(savedCalls, 0, '保存失败时不能通知父组件写盘成功')
 
     await React.act(async () => saveButton().click())
     assert.equal(saves.length, 2, '失败后应允许重试')
     saves[1].control.resolve()
     await React.act(async () => saves[1].promise)
-    assert.equal(rootElement.textContent?.includes('✓ 已保存'), true)
+    assert.equal([...rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), true)
   } finally {
     if (root) {
       const React = require('react') as typeof import('react')
@@ -717,7 +717,7 @@ test('SettingsPage keeps an empty-list draft after a failed save, blocks duplica
     assert.equal(JSON.stringify(backend).includes('synthetic-issue-68-key'), true, 'a failed save must leave persisted settings intact')
     assert.equal(page.savedCalls, 0, 'onSaved must run only after IPC success')
     assert.match(page.saveButton().textContent ?? '', /\*$/, 'the failed deletion remains a dirty draft')
-    assert.equal(page.rootElement.textContent?.includes('✗ 保存失败，请重试'), true, 'the error should remain visible outside the editor')
+    assert.equal(page.rootElement.textContent?.includes('保存失败，请重试'), true, 'the error should remain visible outside the editor')
 
     await page.React.act(async () => page.saveButton().click())
     assert.equal(requests.length, 2, 'a failed save should be retryable')
@@ -1093,7 +1093,7 @@ test('SettingsPage counts edits made while authoritative getSettings is pending 
     await page.React.act(async () => refreshPromise)
     assert.equal(name.value, 'Edited during refresh')
     assert.match(page.saveButton().textContent ?? '', /\*$/, 'an edit during public readback remains dirty')
-    assert.equal(page.rootElement.textContent?.includes('✓ 已保存'), false)
+    assert.equal([...page.rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), false)
   } finally {
     await page.unmount()
   }
@@ -1143,7 +1143,7 @@ test('SettingsPage switches protocol with known provider mappings and round trip
     assert.equal(writes[0].profiles[0].temperature, undefined, 'Claude profiles omit the OpenAI temperature setting')
     assert.equal(page.savedSettings?.profiles[0].protocol, 'anthropic', 'the protocol survives authoritative readback')
     assert.equal(protocolButton('Claude').getAttribute('aria-pressed'), 'true')
-    assert.equal(page.rootElement.textContent?.includes('✓ 已保存'), true)
+    assert.equal([...page.rootElement.querySelectorAll('p')].some((status) => status.textContent?.trim() === '已保存'), true)
   } finally {
     await page.unmount()
   }

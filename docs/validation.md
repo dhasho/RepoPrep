@@ -20,6 +20,7 @@
 | `npm run test:lib` | 设置保存、服务商预设、扫描滑条、模型探测及导航等纯逻辑测试。 |
 | `npm run test:renderer` | 组件实际挂载与交互，包括设置、滑条、接口规范切换、项目侧栏和结果页。 |
 | `npm run test:scan-cache` | 项目快照和扫描缓存测试。 |
+| `npm run test:file-selection` | 文件选择策略与真实扫描、上下文构建、模型请求的集成覆盖，包括深层引用、模块覆盖、Coarse 限制和渲染预算。 |
 | `npm run test:question-budget` | 问题预算、集成预算与生成合并测试。 |
 | `npm run test:security` | 先执行 `npm run build`，再运行窗口安全、敏感信息及安全集成测试。 |
 | `npm run test:native-credentials` | 先执行 `npm run build`，再在真实 Electron `safeStorage` 和设置服务中用合成 key、隔离临时数据目录做加密保存、无明文检查、public 回读与私有解密往返。证明本机当前平台的原生存储链路，不证明真实模型调用或跨用户/设备可移植。 |
@@ -38,7 +39,7 @@
 | 改动范围 | 提交前最低检查 |
 | --- | --- |
 | 仅文档、模板或 `.gitignore` | `git diff --check`；人工核对相对链接、命令是否存在、版本与 `package.json`/lockfile 是否一致。无需产品全量测试或模型调用。 |
-| 局部产品逻辑 | `npm run typecheck` 加对应测试套件：IPC 用 `test:ipc`，扫描/缓存用 `test:scan-cache`，问题预算/生成合并用 `test:question-budget`，安全边界用 `test:security`。 |
+| 局部产品逻辑 | `npm run typecheck` 加对应测试套件：IPC 用 `test:ipc`，扫描/缓存用 `test:scan-cache`，文件选择和上下文组装用 `test:file-selection`，问题预算/生成合并用 `test:question-budget`，安全边界用 `test:security`。 |
 | 跨模块或 UI/主进程行为 | `npm run typecheck`、所有受影响测试套件，以及 `npm run test:smoke` 检查构建产物能否启动并完成有限渲染/IPC 检查。 |
 | IPC、权限或安全边界 | `npm run typecheck`、`npm run test:ipc`、`npm run test:security`；若改动影响启动或渲染，再加 `npm run test:smoke`。 |
 | 生成逻辑或生成数据流 | `npm run typecheck`、`npm run test:question-budget`；按涉及边界加 `test:ipc` 或 `test:security`。这些测试不等同于真实模型验收。 |
