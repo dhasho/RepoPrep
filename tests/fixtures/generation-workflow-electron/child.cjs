@@ -241,6 +241,11 @@ async function runWorkflow() {
   const totalQuestions = loadedResult.sections.reduce((sum, section) => sum + section.questions.length, 0)
   assert.equal(totalQuestions, 20)
   assert.ok(loadedResult.sections[0].questions[0].question.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
+  assert.equal(loadedResult.generationDiagnostics.status, 'succeeded')
+  assert.equal(loadedResult.generationDiagnostics.requestCount, 1)
+  assert.equal(loadedResult.generationDiagnostics.usageComplete, true)
+  assert.deepEqual(loadedResult.generationDiagnostics.actualUsage, { inputTokens: 37, outputTokens: 19, totalTokens: 56 })
+  assert.deepEqual(loadedAnalysis.generationDiagnostics, loadedResult.generationDiagnostics)
   await click('button[aria-label="项目分析目录"]', 'open project and history sidebar')
   await waitFor('project A sidebar row', async () => activeWindow.webContents.executeJavaScript(`Boolean([...document.querySelectorAll('[data-project-path]')].find((item) => item.dataset.projectPath === ${JSON.stringify(projectA)}))`))
   await activeWindow.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.getAttribute('aria-label') === ${JSON.stringify(`展开 ${firstProjectName} 的分析`)}); if (!button) return false; button.click(); return true })()`).then((ok) => assert.equal(ok, true))
@@ -250,7 +255,10 @@ async function runWorkflow() {
   evidence.uiActions.push('open saved A analysis from history list')
   await waitForPage('history analysis opened', (text) => text.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
   const resultText = await bodyText()
-  evidence.scopeUi = resultText.includes('本次分析范围') || resultText.includes('上下文范围') ? 'present' : 'legacy-result-ui'
+  assert.ok(resultText.includes('分析范围与用量'))
+  assert.ok(resultText.includes('系统估算输入'))
+  assert.match(resultText, /服务商回执：输入\s+37、输出\s+19/)
+  evidence.scopeUi = 'present'
 
   // Export the actual rendered result through IPC and the patched native save picker.
   await clickButton('导出 Markdown', 'export Markdown from result UI')
@@ -258,6 +266,9 @@ async function runWorkflow() {
   const markdown = await fs.readFile(exportPath, 'utf8')
   assert.ok(markdown.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
   assert.ok(markdown.includes('Loopback workflow') || markdown.includes('中粒度'))
+  assert.ok(markdown.includes('## 分析范围与用量'))
+  assert.ok(markdown.includes('系统估算输入'))
+  assert.match(markdown, /服务商回执：输入\s+37、输出\s+19/)
   evidence.checks.export = { wroteFile: true, containsGeneratedQuestion: true, bytes: Buffer.byteLength(markdown) }
 
   // Start a second A generation, move to B in the background, then deliver A's

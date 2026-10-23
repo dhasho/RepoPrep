@@ -52,7 +52,10 @@ function jsonResponse(response, result) {
 }
 
 function jsonBody(response, result) {
-  response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(result) } }] }))
+  response.end(JSON.stringify({
+    choices: [{ message: { content: JSON.stringify(result) } }],
+    usage: { prompt_tokens: 37, completion_tokens: 19, total_tokens: 56 }
+  }))
 }
 
 async function readRequestBody(request) {
@@ -182,7 +185,7 @@ async function run() {
   let spawnError = null
   let timedOut = false
   const publicAssetPaths = await fs.readdir(path.join(root, 'out', 'renderer', 'assets'))
-  const sourcePaths = ['electron/main.ts', 'electron/preload.ts', 'src/App.tsx', 'src/pages/ResultPage.tsx', 'electron/services/exporter.ts']
+  const sourcePaths = ['electron/main.ts', 'electron/preload.ts', 'src/App.tsx', 'src/pages/ResultPage.tsx', 'electron/services/exporter.ts', 'electron/services/generator.ts', 'electron/services/context-builder.ts', 'electron/services/llm.ts', 'shared/types.ts', 'shared/result-contract.ts']
   const builtPaths = [
     'out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html',
     ...publicAssetPaths.filter((file) => /\.(js|css)$/.test(file)).map((file) => path.join('out/renderer/assets', file))
@@ -264,6 +267,8 @@ async function run() {
     log: output
   }
   await fs.mkdir(evidenceDirectory, { recursive: true })
+  const receiptName = startedAt.replaceAll(':', '-')
+  await fs.writeFile(path.join(evidenceDirectory, `${receiptName}.json`), `${JSON.stringify(report, null, 2)}\n`)
   await fs.writeFile(path.join(evidenceDirectory, 'latest.json'), `${JSON.stringify(report, null, 2)}\n`)
   await fs.writeFile(path.join(evidenceDirectory, 'latest.log'), output || errorMessage || '(no child output)')
   if (verdict !== 'WORKFLOW-OK') {
