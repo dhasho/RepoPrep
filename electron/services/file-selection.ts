@@ -173,7 +173,13 @@ export function selectProbeFiles(files: readonly ScannedFile[], granularity: Gra
   const configs = files.filter((file) => file.isContentCandidate && isTsConfig(file.relPath))
   const reserved = new Set([...manifests, ...configs])
   const configLimit = Math.min(16, Math.max(1, Math.floor(Math.max(0, maxFiles) / 8)))
-  const configOrder = roundRobin(configs, () => 0).slice(0, configLimit)
+  const configOrder = roundRobin(configs, (file) => {
+    const root = path.posix.dirname(normalize(file.relPath)) === '.'
+    const basename = baseName(file.relPath)
+    return root
+      ? basename === 'tsconfig.json' ? 0 : basename === 'jsconfig.json' ? 1 : 2
+      : basename === 'tsconfig.json' ? 3 : basename === 'jsconfig.json' ? 4 : 5
+  }).slice(0, configLimit)
   const ordered = [...roundRobin(manifests, () => 0), ...configOrder, ...orderFilesForContext(files.filter((file) => !reserved.has(file)), granularity)]
   const selected: ScannedFile[] = []
   let bytes = 0
@@ -193,6 +199,27 @@ function isTsConfig(rel: string): boolean {
   return /^(?:tsconfig(?:\.[^/]+)?|jsconfig)\.json$/i.test(baseName(rel))
 }
 
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+function preferredConfig(configs: readonly string[], sourcePath: string): string | undefined {
+  const sourceDir = path.posix.dirname(normalize(sourcePath))
+  const applicable = configs.filter((config) => {
+    const dir = path.posix.dirname(config)
+    return dir === '.' || sourceDir === dir || sourceDir.startsWith(`${dir}/`)
+  })
+  if (!applicable.length) return undefined
+  const dirs = [...new Set(applicable.map((config) => path.posix.dirname(config)))]
+    .sort((a, b) => b.split('/').length - a.split('/').length || b.length - a.length || compareText(a, b))
+  const nearestDir = dirs[0]
+  const inDir = applicable.filter((config) => path.posix.dirname(config) === nearestDir).sort((a, b) => {
+    const priority = (item: string): number => baseName(item) === 'tsconfig.json' ? 0 : baseName(item) === 'jsconfig.json' ? 1 : 2
+    return priority(a) - priority(b) || compareText(a, b)
+  })
+  return inDir[0]
+}
+
 function safeManifestPath(value: string): string | undefined {
   if (!value || value.startsWith('/') || /^[a-zA-Z]:/.test(value) || value.includes('\\')) return undefined
   const clean = value.replace(/^\.\//, '').split(/[?#]/, 1)[0]
@@ -200,13 +227,19 @@ function safeManifestPath(value: string): string | undefined {
   return normalize(clean)
 }
 
-interface PathMapping { pattern: string; targets: string[]; origin: string; baseUrl: string }
-interface ParsedConfig { mappings: PathMapping[]; baseUrl: string }
+interface PathMapping { pattern: string; targets: string[]; origin: string }
+interface ParsedConfig { mappings: PathMapping[]; baseUrl?: string }
 
 function safeRelative(value: string): string | undefined {
   if (!value || value.includes('\\') || value.startsWith('/') || /^[a-zA-Z]:/.test(value)) return undefined
   const normalized = path.posix.normalize(value)
   return normalized === '..' || normalized.startsWith('../') ? undefined : normalized.replace(/^\.\//, '')
+}
+
+function candidatePath(value: string): string | undefined {
+  if (!value || value.includes('\\') || value.startsWith('/') || /^[a-zA-Z]:/.test(value)) return undefined
+  if (value.split('/').some((segment) => segment === '..')) return undefined
+  return safeRelative(value)
 }
 
 function resolveConfigPath(from: string, spec: string, known: ReadonlySet<string>): string | undefined {
@@ -217,9 +250,16 @@ function resolveConfigPath(from: string, spec: string, known: ReadonlySet<string
   return guesses.find((guess) => known.has(guess))
 }
 
-function mappingsForConfig(rel: string, contents: ReadonlyMap<string, string>, knownConfigs: ReadonlySet<string>, cache: Map<string, ParsedConfig>, visiting: Set<string>, depth = 0): ParsedConfig {
+function mappingsForConfig(
+  rel: string,
+  contents: ReadonlyMap<string, string>,
+  knownConfigs: ReadonlySet<string>,
+  cache: Map<string, ParsedConfig>,
+  visiting: Set<string>,
+  depth = 0
+): ParsedConfig {
   if (cache.has(rel)) return cache.get(rel) as ParsedConfig
-  if (depth >= 8 || visiting.has(rel)) return { mappings: [], baseUrl: path.posix.dirname(rel) }
+  if (depth >= 8 || visiting.has(rel)) return { mappings: [] }
   visiting.add(rel)
   const raw = contents.get(rel) ?? contents.get(normalize(rel))
   let json: unknown
@@ -230,40 +270,74 @@ function mappingsForConfig(rel: string, contents: ReadonlyMap<string, string>, k
     json = parsed.config
   } catch {
     visiting.delete(rel)
-    const empty = { mappings: [], baseUrl: path.posix.dirname(rel) }
+    const empty = { mappings: [] }
     cache.set(rel, empty)
     return empty
   }
   const object = json && typeof json === 'object' ? json as Record<string, unknown> : {}
-  let inherited: ParsedConfig = { mappings: [], baseUrl: path.posix.dirname(rel) }
+  let inherited: ParsedConfig = { mappings: [] }
   if (typeof object.extends === 'string') {
     const parent = resolveConfigPath(rel, object.extends, knownConfigs)
     if (parent) inherited = mappingsForConfig(parent, contents, knownConfigs, cache, visiting, depth + 1)
   }
   const options = object.compilerOptions && typeof object.compilerOptions === 'object' ? object.compilerOptions as Record<string, unknown> : {}
-  const baseUrl = typeof options.baseUrl === 'string'
-    ? safeRelative(path.posix.join(path.posix.dirname(rel), options.baseUrl)) ?? path.posix.dirname(rel)
-    : inherited.baseUrl
+  const ownBaseUrl = typeof options.baseUrl === 'string'
+    ? safeRelative(path.posix.join(path.posix.dirname(rel), options.baseUrl))
+    : undefined
+  const hasBaseUrl = Object.prototype.hasOwnProperty.call(options, 'baseUrl')
+  const baseUrl = hasBaseUrl ? ownBaseUrl : inherited.baseUrl
   const own: PathMapping[] = []
-  if (options.paths && typeof options.paths === 'object' && !Array.isArray(options.paths)) {
+  const hasPaths = Object.prototype.hasOwnProperty.call(options, 'paths')
+  if (hasPaths && options.paths && typeof options.paths === 'object' && !Array.isArray(options.paths)) {
     for (const [pattern, targets] of Object.entries(options.paths as Record<string, unknown>).slice(0, 128)) {
       if (typeof pattern !== 'string' || (pattern.match(/\*/g)?.length ?? 0) > 1 || !Array.isArray(targets)) continue
-      const validTargets = targets.filter((v): v is string => typeof v === 'string' && !v.startsWith('/') && !/^[a-zA-Z]:/.test(v) && !v.includes('\\')).slice(0, 16)
-      if (validTargets.length) own.push({ pattern, targets: validTargets, origin: rel, baseUrl })
+      const validTargets = targets
+        .filter((value): value is string => typeof value === 'string' && !value.startsWith('/') && !/^[a-zA-Z]:/.test(value) && !value.includes('\\'))
+        .slice(0, 16)
+      if (validTargets.length) own.push({ pattern, targets: validTargets, origin: path.posix.dirname(rel) })
     }
   }
-  const result = { mappings: options.paths ? [...inherited.mappings.filter((m) => !own.some((n) => n.pattern === m.pattern)), ...own] : inherited.mappings, baseUrl }
+  const mappings = hasPaths ? own : inherited.mappings
+  const result = { mappings: sortMappings(mappings), baseUrl }
   visiting.delete(rel)
   cache.set(rel, result)
   return result
 }
 
-function aliasTarget(spec: string, mappings: readonly PathMapping[], candidates: ReadonlySet<string>): string | undefined {
-  for (const mapping of mappings) {
+function sortMappings(mappings: readonly PathMapping[]): PathMapping[] {
+  return [...mappings].sort((a, b) => {
+    const aExact = a.pattern.includes('*') ? 1 : 0
+    const bExact = b.pattern.includes('*') ? 1 : 0
+    if (aExact !== bExact) return aExact - bExact
+    const aPrefix = a.pattern.indexOf('*') < 0 ? a.pattern.length : a.pattern.indexOf('*')
+    const bPrefix = b.pattern.indexOf('*') < 0 ? b.pattern.length : b.pattern.indexOf('*')
+    const aSuffix = a.pattern.indexOf('*') < 0 ? a.pattern.length : a.pattern.length - a.pattern.indexOf('*') - 1
+    const bSuffix = b.pattern.indexOf('*') < 0 ? b.pattern.length : b.pattern.length - b.pattern.indexOf('*') - 1
+    return bPrefix - aPrefix || bSuffix - aSuffix || compareText(a.pattern, b.pattern)
+  })
+}
+
+function resolveCandidate(base: string, raw: string, candidates: ReadonlySet<string>): string | undefined {
+  const rel = safeRelative(path.posix.join(base, raw))
+  if (!rel) return undefined
+  const ext = path.posix.extname(rel)
+  const guesses = ext
+    ? [rel, ...(ext === '.js' || ext === '.jsx' ? [rel.slice(0, -ext.length) + '.ts', rel.slice(0, -ext.length) + '.tsx', rel.slice(0, -ext.length) + '.d.ts'] : [])]
+    : [
+        rel,
+        ...['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.js', '.jsx', '.mjs', '.cjs'].map((suffix) => rel + suffix),
+        ...['index.ts', 'index.tsx', 'index.d.ts', 'index.js', 'index.mjs'].map((name) => path.posix.join(rel, name))
+      ]
+  return guesses.find((guess) => candidates.has(guess))
+}
+
+function aliasTarget(spec: string, mappings: readonly PathMapping[], candidates: ReadonlySet<string>, baseUrl?: string): string | undefined {
+  for (const mapping of sortMappings(mappings)) {
     const star = mapping.pattern.indexOf('*')
     let capture: string | undefined
-    if (star < 0) { if (mapping.pattern !== spec) continue }
-    else {
+    if (star < 0) {
+      if (mapping.pattern !== spec) continue
+    } else {
       const prefix = mapping.pattern.slice(0, star)
       const suffix = mapping.pattern.slice(star + 1)
       if (!spec.startsWith(prefix) || !spec.endsWith(suffix) || spec.length < prefix.length + suffix.length) continue
@@ -271,11 +345,7 @@ function aliasTarget(spec: string, mappings: readonly PathMapping[], candidates:
     }
     for (const target of mapping.targets) {
       const replaced = capture === undefined ? target : target.replace('*', capture)
-      const rel = safeRelative(path.posix.join(mapping.baseUrl, replaced))
-      if (!rel) continue
-      const ext = path.posix.extname(rel)
-      const guesses = ext ? [rel, ...(ext === '.js' || ext === '.jsx' ? [rel.slice(0, -ext.length) + '.ts', rel.slice(0, -ext.length) + '.tsx'] : [])] : [rel, ...['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'].map((e) => rel + e), ...['index.ts', 'index.tsx', 'index.js', 'index.mjs'].map((n) => path.posix.join(rel, n))]
-      const found = guesses.find((g) => candidates.has(g))
+      const found = resolveCandidate(baseUrl ?? mapping.origin, replaced, candidates)
       if (found) return found
     }
   }
@@ -283,7 +353,10 @@ function aliasTarget(spec: string, mappings: readonly PathMapping[], candidates:
 }
 
 export function collectFileSignals(files: readonly ScannedFile[], contents: ReadonlyMap<string, string>): FileSelectionSignals {
-  const candidates = new Set(files.filter((file) => file.isContentCandidate).map((file) => normalize(file.relPath)))
+  const candidates = new Set(files.flatMap((file) => {
+    const candidate = file.isContentCandidate && !file.sensitive ? candidatePath(file.relPath) : undefined
+    return candidate ? [candidate] : []
+  }))
   const entries = new Set<string>()
   const sources = new Map<string, Set<string>>()
   const edges = new Map<string, { fromPath: string; targetPath: string; specifier: string; importedNames: string[] }>()
@@ -317,11 +390,20 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
     else if (value && typeof value === 'object') Object.values(value).slice(0, 100).forEach((item) => visitStrings(item, visit, depth + 1))
   }
 
-  const configFiles = files.filter((file) => file.isContentCandidate && isTsConfig(file.relPath)).map((file) => normalize(file.relPath))
+  const configFiles = files.flatMap((file) => {
+    const candidate = file.isContentCandidate && !file.sensitive ? candidatePath(file.relPath) : undefined
+    return candidate && isTsConfig(candidate) ? [candidate] : []
+  })
   const configCache = new Map<string, ParsedConfig>()
-  const configSet = new Set(configFiles)
+  const suppliedJsonFiles = files.flatMap((file) => {
+    const candidate = file.isContentCandidate && !file.sensitive ? candidatePath(file.relPath) : undefined
+    const supplied = contents.has(file.relPath) || (candidate ? contents.has(candidate) : false)
+    return candidate && extension(candidate) === 'json' && supplied ? [candidate] : []
+  })
+  const configSet = new Set([...configFiles, ...suppliedJsonFiles])
   for (const file of files) {
     const rel = normalize(file.relPath)
+    if (!candidates.has(rel)) continue
     const content = contents.get(file.relPath) ?? contents.get(rel)
     if (!content || isTest(rel) || isGenerated(rel)) continue
     if (isManifest(rel)) {
@@ -350,16 +432,13 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
     }
     const sourceAnalysis = analyzeSource(rel, content)
     if (sourceAnalysis) {
-      const sourceDir = path.posix.dirname(rel)
-      const applicable = configFiles.filter((config) => {
-        const dir = path.posix.dirname(config)
-        return dir === '.' || sourceDir === dir || sourceDir.startsWith(`${dir}/`)
-      }).sort((a, b) => path.posix.dirname(b).length - path.posix.dirname(a).length)[0]
+      const applicable = preferredConfig(configFiles, rel)
       const parsed = applicable ? mappingsForConfig(applicable, contents, configSet, configCache, new Set()) : undefined
       for (const ref of sourceAnalysis.imports) {
         if (ref.specifier.startsWith('.')) addReference(rel, ref.specifier, false, ref.importedNames)
         else if (!ref.specifier.startsWith('#') && parsed) {
-          const target = aliasTarget(ref.specifier, parsed.mappings, candidates)
+          const target = aliasTarget(ref.specifier, parsed.mappings, candidates, parsed.baseUrl)
+            ?? (parsed.baseUrl ? resolveCandidate(parsed.baseUrl, ref.specifier, candidates) : undefined)
           if (target && target !== rel) {
             const refs = sources.get(target) ?? new Set<string>()
             refs.add(rel)
@@ -393,7 +472,7 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
       }
     }
   }
-  const importEdges = [...edges.values()]
+  const importEdges = [...edges.values()].sort((a, b) => a.targetPath.localeCompare(b.targetPath) || a.fromPath.localeCompare(b.fromPath) || a.specifier.localeCompare(b.specifier))
   const referenced = new Map<string, Set<string>>()
   for (const edge of importEdges) {
     const names = referenced.get(edge.targetPath) ?? new Set<string>()
@@ -401,8 +480,8 @@ export function collectFileSignals(files: readonly ScannedFile[], contents: Read
     referenced.set(edge.targetPath, names)
   }
   return {
-    entryPaths: entries,
-    importedBy: new Map([...sources].map(([target, referrers]) => [target, referrers.size])),
+    entryPaths: new Set([...entries].sort()),
+    importedBy: new Map([...sources].sort(([a], [b]) => a.localeCompare(b)).map(([target, referrers]) => [target, referrers.size])),
     importEdges,
     referencedSymbols: new Map([...referenced].map(([target, names]) => [target, [...names].sort()]))
   }
