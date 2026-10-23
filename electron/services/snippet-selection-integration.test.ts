@@ -123,6 +123,31 @@ test('README excerpt remains visible when both build and final fitting tighten t
   }
 })
 
+test('fair final fitting keeps an important entry point beside an oversized README', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    await fs.mkdir(path.join(root, 'src'), { recursive: true })
+    await fs.writeFile(path.join(root, 'README.md'), `README-IMPORTANT-START\n${'project architecture and design notes\n'.repeat(6500)}\nREADME_KEEP_END`)
+    await fs.writeFile(path.join(root, 'src', 'entry.ts'), "export const CORE_SOURCE_KEEP = 'core-entry-marker'\n")
+    const built = await buildContext(await scanProject(root), 'medium')
+    const batch = built.batches[0]
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, 24_000)
+    assert.ok(final.truncated)
+    assert.ok(final.text.includes('README-IMPORTANT-START'))
+    assert.ok(final.text.includes('README_KEEP_END'))
+    assert.ok(final.text.includes('CORE_SOURCE_KEEP'))
+    assert.ok(final.text.includes('core-entry-marker'))
+    assert.ok(final.text.length <= 24_000)
+    assert.ok(final.selection?.filePaths.includes('README.md'))
+    assert.ok(final.selection?.filePaths.includes('src/entry.ts'))
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('an already-aborted context build stops before reading project contents', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {

@@ -595,73 +595,100 @@ export function renderBatchWithinBudget(
   const outputBudget = maxChars - requestTruncationMarker.length
   const base = renderBatch(headerText, treeText, { ...batch, files: [] })
   if (outputBudget < 0 || base.length > outputBudget) throw new Error('模型请求固定上下文超出支持范围。')
+  const baseChars = base.length
+  const plans = batch.files.map((file, index) => {
+    const clippedTitle = `### 文件：${file.relPath}（内容过长已截断）`
+    return {
+      file,
+      index,
+      kind: isDocumentOrConfigPath(file.relPath) ? 'document' as const : file.selectionRegions?.length ? 'regions' as const : 'whole' as const,
+      overhead: 1 + clippedTitle.length + 9,
+      demand: file.content.length
+    }
+  })
+  // Reserve entry framing for code first, then documents, before sharing the
+  // remaining body allowance. A large README can no longer consume the space
+  // needed to represent later small source files.
+  const overheadPriority = [...plans].sort((a, b) =>
+    (a.kind === 'document' ? 1 : 0) - (b.kind === 'document' ? 1 : 0) || a.index - b.index
+  )
+  let candidates = overheadPriority
+  let included: typeof plans = []
+  let allocations: number[] = []
+  while (true) {
+    let availableOverhead = outputBudget - baseChars
+    included = candidates.filter((plan) => {
+      if (plan.overhead > availableOverhead) return false
+      availableOverhead -= plan.overhead
+      return true
+    })
+    if (!included.length) { allocations = []; break }
+    const overhead = included.reduce((sum, plan) => sum + plan.overhead, 0)
+    allocations = allocateBodyBudget(included.map((plan) => plan.demand), Math.max(0, outputBudget - baseChars - overhead))
+    const failed = included.filter((plan, index) => !canRenderPlannedFile(plan, allocations[index]))
+    if (!failed.length) break
+    const failedSet = new Set(failed)
+    candidates = candidates.filter((plan) => !failedSet.has(plan))
+  }
 
+  const byIndex = new Map(included.map((plan, index) => [plan.index, { plan, allocation: allocations[index] }]))
   const parts = [base]
   const includedFiles: ContextFile[] = []
   let selectedRegions = 0
   let providedChars = 0
-  let renderedChars = base.length
-  let truncated = false
+  let truncated = included.length < batch.files.length
   for (let index = 0; index < batch.files.length; index++) {
-    const file = batch.files[index]
-    const separator = 1
-    const plainTitle = `### 文件：${file.relPath}${file.truncated ? '（内容过长已截断）' : ''}`
-    const plainCost = separator + plainTitle.length + 9 + file.content.length
-    if (renderedChars + plainCost <= outputBudget) {
-      parts.push([plainTitle, '```', file.content, '```'].join('\n'))
-      includedFiles.push(file)
-      selectedRegions += file.selectionRegions?.length ?? (file.content.length ? 1 : 0)
-      providedChars += file.content.length
-      renderedChars += plainCost
-      continue
-    }
-
-    const clippedTitle = `### 文件：${file.relPath}（内容过长已截断）`
-    const contentAllowance = outputBudget - renderedChars - separator - clippedTitle.length - 9
-    if (contentAllowance > 0 && isDocumentOrConfigPath(file.relPath)) {
-      const content = clipDocumentExcerpt(file.content, contentAllowance)
-      if (content.length) {
-        parts.push([clippedTitle, '```', content, '```'].join('\n'))
-        includedFiles.push(file)
-        selectedRegions++
-        providedChars += content.length
-        renderedChars += separator + clippedTitle.length + 9 + content.length
-      }
+    const entry = byIndex.get(index)
+    if (!entry) { truncated = true; continue }
+    const { plan, allocation } = entry
+    const { file, kind } = plan
+    let content: string
+    let regionCount: number
+    if (kind === 'document') {
+      content = allocation >= file.content.length ? file.content : clipDocumentExcerpt(file.content, allocation)
+      regionCount = content.length ? 1 : 0
+    } else if (kind === 'regions') {
+      const regions = regionsWithinBudget(file.selectionRegions ?? [], allocation)
+      content = formatRegions(regions)
+      regionCount = regions.length
+    } else if (allocation >= file.content.length) {
+      content = file.content
+      regionCount = content.length ? 1 : 0
+    } else {
       truncated = true
       continue
     }
-    if (contentAllowance > 0 && file.selectionRegions?.length) {
-      const kept: SourceRegion[] = []
-      let used = 0
-      for (const region of file.selectionRegions) {
-        const cost = region.text.length + (kept.length ? 20 : 0)
-        if (used + cost > contentAllowance) continue
-        kept.push(region)
-        used += cost
-      }
-      const content = formatRegions(kept)
-      if (kept.length && content.length <= contentAllowance) {
-        parts.push([clippedTitle, '```', content, '```'].join('\n'))
-        includedFiles.push(file)
-        selectedRegions += kept.length
-        providedChars += content.length
-        renderedChars += separator + clippedTitle.length + 9 + content.length
-      }
-      truncated = true
-      continue
-    }
-    // If no known structure is available, omit the file whole. Slicing at an
-    // arbitrary character offset could split a function and claim it is useful.
-    truncated = true
-    continue
+    if (!content.length && file.content.length) { truncated = true; continue }
+    const wasClipped = content !== file.content
+    truncated ||= wasClipped
+    const title = `### 文件：${file.relPath}${file.truncated || wasClipped ? '（内容过长已截断）' : ''}`
+    parts.push([title, '```', content, '```'].join('\n'))
+    includedFiles.push(file)
+    selectedRegions += regionCount
+    providedChars += content.length
   }
-  if (parts.length - 1 < batch.files.length) truncated = true
   const rendered = parts.join('\n')
+  if (rendered.length > outputBudget) throw new Error('模型请求固定上下文超出支持范围。')
   return {
     text: `${rendered}${requestTruncationMarker}`,
-    truncated: truncated || parts.length - 1 < batch.files.length,
+    truncated,
     selection: { filePaths: includedFiles.map((file) => file.relPath), selectedRegions, providedChars }
   }
+}
+
+function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number): SourceRegion[] {
+  const selected: SourceRegion[] = []
+  for (const region of regions) {
+    const candidate = [...selected, region]
+    if (formatRegions(candidate).length <= maxChars) selected.push(region)
+  }
+  return selected
+}
+
+function canRenderPlannedFile(plan: { kind: 'document' | 'regions' | 'whole'; file: ContextFile }, allocation: number): boolean {
+  if (plan.kind === 'document') return allocation > 0 || plan.file.content.length === 0
+  if (plan.kind === 'regions') return regionsWithinBudget(plan.file.selectionRegions ?? [], allocation).length > 0 || plan.file.content.length === 0
+  return allocation >= plan.file.content.length
 }
 
 function summarizeRenderedFiles(files: readonly ContextFile[]): RenderedSelection {
