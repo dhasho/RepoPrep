@@ -27,7 +27,7 @@ import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles } from './file-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { selectSourceRegions, type SourceRegion } from './snippet-selection.ts'
+import { selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -45,6 +45,8 @@ export interface ContextFile {
   redactionMatches: number
   /** Private, already-redacted selection source used only for bounded re-rendering. */
   selectionRegions?: SourceRegion[]
+  /** Ranked complete source candidates cached after one redacted analysis pass. */
+  selectionCandidates?: SourceRegion[]
 }
 
 export interface BuildContextOptions {
@@ -300,11 +302,15 @@ async function pickFiles(
     const regions = truncated
       ? selectSourceRegions(redaction.content, analysis, allocations[index], { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext }).regions
       : [{ start: 0, end: redaction.content.length, text: redaction.content, label: 'whole-file', complete: true, priority: 100 }]
+    const selectionCandidates = isDocumentOrConfigPath(file.relPath)
+      ? undefined
+      : sourceRegionCandidates(redaction.content, analysis, { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext })
     const renderedContent = truncated ? formatRegions(regions) : redaction.content
     out.push({
       relPath: file.relPath,
       content: renderedContent,
       selectionRegions: truncated ? regions : undefined,
+      selectionCandidates: selectionCandidates?.length ? selectionCandidates : undefined,
       truncated,
       redacted: redaction.totalMatches > 0,
       redactionMatches: redaction.totalMatches
@@ -601,7 +607,7 @@ export function renderBatchWithinBudget(
     return {
       file,
       index,
-      kind: isDocumentOrConfigPath(file.relPath) ? 'document' as const : file.selectionRegions?.length ? 'regions' as const : 'whole' as const,
+      kind: isDocumentOrConfigPath(file.relPath) ? 'document' as const : file.selectionCandidates?.length || file.selectionRegions?.length ? 'regions' as const : 'whole' as const,
       overhead: 1 + clippedTitle.length + 9,
       demand: file.content.length
     }
@@ -648,9 +654,15 @@ export function renderBatchWithinBudget(
       content = allocation >= file.content.length ? file.content : clipDocumentExcerpt(file.content, allocation)
       regionCount = content.length ? 1 : 0
     } else if (kind === 'regions') {
-      const regions = regionsWithinBudget(file.selectionRegions ?? [], allocation)
-      content = formatRegions(regions)
-      regionCount = regions.length
+      const candidates = file.selectionCandidates?.length ? file.selectionCandidates : file.selectionRegions ?? []
+      if (!file.truncated && allocation >= file.content.length) {
+        content = file.content
+        regionCount = content.length ? 1 : 0
+      } else {
+        const regions = regionsWithinBudget(candidates, allocation)
+        content = formatRegions(regions)
+        regionCount = regions.length
+      }
     } else if (allocation >= file.content.length) {
       content = file.content
       regionCount = content.length ? 1 : 0
@@ -678,16 +690,22 @@ export function renderBatchWithinBudget(
 
 function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number): SourceRegion[] {
   const selected: SourceRegion[] = []
-  for (const region of regions) {
+  const ranked = [...regions].sort((a, b) => b.priority - a.priority || a.start - b.start)
+  for (const region of ranked) {
+    if (selected.some((item) => item.start < region.end && item.end > region.start)) continue
     const candidate = [...selected, region]
     if (formatRegions(candidate).length <= maxChars) selected.push(region)
   }
-  return selected
+  return selected.sort((a, b) => a.start - b.start)
 }
 
 function canRenderPlannedFile(plan: { kind: 'document' | 'regions' | 'whole'; file: ContextFile }, allocation: number): boolean {
   if (plan.kind === 'document') return allocation > 0 || plan.file.content.length === 0
-  if (plan.kind === 'regions') return regionsWithinBudget(plan.file.selectionRegions ?? [], allocation).length > 0 || plan.file.content.length === 0
+  if (plan.kind === 'regions') {
+    if (!plan.file.truncated && allocation >= plan.file.content.length) return true
+    const candidates = plan.file.selectionCandidates?.length ? plan.file.selectionCandidates : plan.file.selectionRegions ?? []
+    return regionsWithinBudget(candidates, allocation).length > 0 || plan.file.content.length === 0
+  }
   return allocation >= plan.file.content.length
 }
 

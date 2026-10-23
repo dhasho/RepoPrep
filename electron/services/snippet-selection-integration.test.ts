@@ -148,6 +148,36 @@ test('fair final fitting keeps an important entry point beside an oversized READ
   }
 })
 
+test('final token-style fitting extracts a late complete function from a full CJK-heavy file', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const comments = `${'// 这是位于文件前部的中文说明，帮助解释模块背景和历史设计。\n'.repeat(1500)}`
+    const functionSource = `export function processJob(input: string) {\n  const normalized = input.trim()\n  return { status: 'done', value: normalized, marker: 'LATE_CJK_CORE_FUNCTION' }\n}\n`
+    await fs.mkdir(path.join(root, 'src'), { recursive: true })
+    await fs.writeFile(path.join(root, 'src', 'main.ts'), `${comments}${functionSource}`)
+    const built = await buildContext(await scanProject(root), 'medium')
+    const batch = built.batches[0]
+    const wholeFile = batch.files.find((file) => file.relPath === 'src/main.ts')
+    assert.ok(wholeFile)
+    assert.equal(wholeFile.truncated, false, 'the complete file fits in the build character budget')
+    assert.equal(wholeFile.selectionRegions, undefined)
+    assert.ok((wholeFile.selectionCandidates?.length ?? 0) > 0, 'the redacted AST candidates are cached for final fitting')
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, 15_000)
+    assert.ok(final.truncated)
+    assert.ok(final.text.includes('export function processJob(input: string)'))
+    assert.ok(final.text.includes('LATE_CJK_CORE_FUNCTION'))
+    assert.ok(final.text.includes("return { status: 'done', value: normalized, marker: 'LATE_CJK_CORE_FUNCTION' }"))
+    assert.ok(final.selection?.filePaths.includes('src/main.ts'))
+    assert.ok((final.selection?.selectedRegions ?? 0) >= 1)
+    assert.ok(final.text.length <= 15_000)
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('an already-aborted context build stops before reading project contents', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {

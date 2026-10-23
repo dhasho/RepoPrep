@@ -105,15 +105,11 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
   })
 }
 
-export function selectSourceRegions(
+export function sourceRegionCandidates(
   content: string,
   analysis: SourceAnalysis | null,
-  maxChars: number,
   options: { roleFocus?: RoleFocus; referencedSymbols?: ReadonlySet<string>; extension?: string } = {}
-): SnippetSelection {
-  const budget = Math.max(0, Math.floor(maxChars))
-  if (content.length <= budget) return { regions: [{ start: 0, end: content.length, text: content, label: 'whole-file', complete: true, priority: 100 }], truncated: false }
-  if (budget === 0) return { regions: [], truncated: content.length > 0 }
+): SourceRegion[] {
   const referenced = options.referencedSymbols ?? new Set<string>()
   let candidates: SourceRegion[]
   if (options.extension?.replace(/^\./, '').toLowerCase() === 'py') {
@@ -141,8 +137,19 @@ export function selectSourceRegions(
       return { start, end, text: content.slice(start, end), label: `heuristic-declaration-${lineIndex + 1}`, complete: false, priority: 10 + position / Math.max(1, starts.length - 1) * 15 }
     })
   }
+  return candidates.sort((a, b) => b.priority - a.priority || a.start - b.start)
+}
 
-  candidates.sort((a, b) => b.priority - a.priority || a.start - b.start)
+export function selectSourceRegions(
+  content: string,
+  analysis: SourceAnalysis | null,
+  maxChars: number,
+  options: { roleFocus?: RoleFocus; referencedSymbols?: ReadonlySet<string>; extension?: string } = {}
+): SnippetSelection {
+  const budget = Math.max(0, Math.floor(maxChars))
+  if (content.length <= budget) return { regions: [{ start: 0, end: content.length, text: content, label: 'whole-file', complete: true, priority: 100 }], truncated: false }
+  if (budget === 0) return { regions: [], truncated: content.length > 0 }
+  const candidates = sourceRegionCandidates(content, analysis, options)
   const selected: SourceRegion[] = []
   let used = 0
   for (const region of candidates) {
