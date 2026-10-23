@@ -618,6 +618,18 @@ export function renderBatchWithinBudget(
 
     const clippedTitle = `### 文件：${file.relPath}（内容过长已截断）`
     const contentAllowance = outputBudget - renderedChars - separator - clippedTitle.length - 9
+    if (contentAllowance > 0 && isDocumentOrConfigPath(file.relPath)) {
+      const content = clipDocumentExcerpt(file.content, contentAllowance)
+      if (content.length) {
+        parts.push([clippedTitle, '```', content, '```'].join('\n'))
+        includedFiles.push(file)
+        selectedRegions++
+        providedChars += content.length
+        renderedChars += separator + clippedTitle.length + 9 + content.length
+      }
+      truncated = true
+      continue
+    }
     if (contentAllowance > 0 && file.selectionRegions?.length) {
       const kept: SourceRegion[] = []
       let used = 0
@@ -632,18 +644,6 @@ export function renderBatchWithinBudget(
         parts.push([clippedTitle, '```', content, '```'].join('\n'))
         includedFiles.push(file)
         selectedRegions += kept.length
-        providedChars += content.length
-        renderedChars += separator + clippedTitle.length + 9 + content.length
-      }
-      truncated = true
-      continue
-    }
-    if (contentAllowance > 0 && isDocumentOrConfigPath(file.relPath)) {
-      const content = clipDocumentExcerpt(file.content, contentAllowance)
-      if (content.length) {
-        parts.push([clippedTitle, '```', content, '```'].join('\n'))
-        includedFiles.push(file)
-        selectedRegions++
         providedChars += content.length
         renderedChars += separator + clippedTitle.length + 9 + content.length
       }

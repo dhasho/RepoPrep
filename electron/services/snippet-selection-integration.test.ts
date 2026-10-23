@@ -96,6 +96,33 @@ test('real README survives final second-fit through a budgeted head and tail exc
   }
 })
 
+test('README excerpt remains visible when both build and final fitting tighten the budget', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const readme = `README-IMPORTANT-START\n${'second-stage documentation detail\n'.repeat(4200)}\nREADME_KEEP_END`
+    await fs.writeFile(path.join(root, 'README.md'), readme)
+    const scan = await scanProject(root)
+    const built = await buildContext(scan, 'medium', { maxChars: 16_000 })
+    const batch = built.batches[0]
+    const firstFitFile = batch.files.find((file) => file.relPath === 'README.md')
+    assert.ok(firstFitFile?.truncated, 'the initial build should honestly mark its partial README')
+    assert.ok(firstFitFile.content.includes('README-IMPORTANT-START'))
+    assert.ok(firstFitFile.content.includes('README_KEEP_END'))
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, 9_000)
+    assert.ok(final.truncated)
+    assert.ok(final.text.includes('README-IMPORTANT-START'))
+    assert.ok(final.text.includes('README_KEEP_END'))
+    assert.ok(final.text.includes('文档片段已截断'))
+    assert.ok(final.text.length <= 9_000)
+    assert.ok(final.selection?.filePaths.includes('README.md'))
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('an already-aborted context build stops before reading project contents', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {
