@@ -14,5 +14,7 @@ describe('mixed token budgeting', () => {
     assert.equal(resolveGenerationBudget({ protocol: 'anthropic', model: 'x', contextWindowTokens: 32000 }, 'medium').inputTokens, 15616)
     assert.equal(resolveGenerationBudget({ protocol: 'openai', model: 'deepseek-v4-flash' }, 'coarse').reservedOutputTokens, 65536)
     assert.equal(resolveGenerationBudget({ protocol: 'openai', model: 'unknown' }, 'fine').contextWindowTokens, null)
+    assert.equal(resolveGenerationBudget({ protocol: 'openai', model: 'unknown' }, 'medium').inputTokens, 64_000)
+    assert.equal(resolveGenerationBudget({ protocol: 'openai', model: 'unknown', contextWindowTokens: 49_152 }, 'medium').inputTokens, 32_768)
   })
 })

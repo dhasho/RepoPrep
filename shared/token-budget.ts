@@ -1,7 +1,7 @@
 import type { Granularity, LlmProfile } from './types'
 
 export const TOKEN_ESTIMATE_METHOD = 'mixed-text-v1' as const
-export const INPUT_TOKEN_TARGETS: Record<Granularity, number> = { coarse: 16_000, medium: 32_000, fine: 24_000 }
+export const INPUT_TOKEN_TARGETS: Record<Granularity, number> = { coarse: 16_000, medium: 64_000, fine: 24_000 }
 export const DEFAULT_OUTPUT_RESERVE = 16_384
 export const DEEPSEEK_THINKING_RESERVE = 65_536
 

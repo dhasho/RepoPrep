@@ -402,7 +402,10 @@ test('large documentation clipped by the estimated token budget is marked and wa
       scan,
       granularity: 'medium',
       roleFocus: 'backend',
-      profile,
+      // The generic medium default target no longer clips this fixture, so an
+      // explicit smaller window (49,152 − 16,384 reserve = 32,768 input tokens)
+      // keeps exercising request-level token clipping.
+      profile: { ...profile, contextWindowTokens: 49_152 },
       signal: new AbortController().signal,
       onProgress: (step, detail) => progress.push({ step, detail })
     })
