@@ -244,6 +244,7 @@ async function runWorkflow() {
   assert.ok(loadedResult.sections[0].questions[0].question.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
   assert.equal(loadedResult.generationDiagnostics.status, 'succeeded')
   assert.equal(loadedResult.generationDiagnostics.requestCount, 1)
+  assert.equal(loadedResult.generationDiagnostics.inputTokenBudget, 64_000)
   assert.equal(loadedResult.generationDiagnostics.usageComplete, true)
   assert.deepEqual(loadedResult.generationDiagnostics.actualUsage, { inputTokens: 37, outputTokens: 19, totalTokens: 56 })
   assert.deepEqual(loadedAnalysis.generationDiagnostics, loadedResult.generationDiagnostics)

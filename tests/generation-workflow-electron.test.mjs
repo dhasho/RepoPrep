@@ -185,7 +185,7 @@ async function run() {
   let spawnError = null
   let timedOut = false
   const publicAssetPaths = await fs.readdir(path.join(root, 'out', 'renderer', 'assets'))
-  const sourcePaths = ['electron/main.ts', 'electron/preload.ts', 'src/App.tsx', 'src/pages/ResultPage.tsx', 'electron/services/exporter.ts', 'electron/services/generator.ts', 'electron/services/context-builder.ts', 'electron/services/llm.ts', 'shared/types.ts', 'shared/result-contract.ts', 'tests/generation-workflow-electron.test.mjs', 'tests/fixtures/generation-workflow-electron/child.cjs']
+  const sourcePaths = ['electron/main.ts', 'electron/preload.ts', 'src/App.tsx', 'src/pages/ResultPage.tsx', 'electron/services/exporter.ts', 'electron/services/generator.ts', 'electron/services/context-builder.ts', 'electron/services/llm.ts', 'shared/types.ts', 'shared/token-budget.ts', 'shared/result-contract.ts', 'tests/generation-workflow-electron.test.mjs', 'tests/fixtures/generation-workflow-electron/child.cjs']
   const builtPaths = [
     'out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html',
     ...publicAssetPaths.filter((file) => /\.(js|css)$/.test(file)).map((file) => path.join('out/renderer/assets', file))
