@@ -6,7 +6,7 @@ import test from 'node:test'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { buildContext, renderBatch } from './context-builder.ts'
+import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder.ts'
 
 test('real scan selects a late complete JS/TS unit under a tightened budget and reports actual selection', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
@@ -59,6 +59,35 @@ test('real Python scan uses indentation regions and ignores fake methods inside 
     assert.ok(!rendered?.selectionRegions?.some((region) => region.label === 'fake_method'))
     assert.ok(!rendered?.content.includes('FAKE_DOCSTRING_METHOD_MARKER'))
     assert.ok(rendered?.truncated)
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
+test('real README survives final second-fit through a budgeted head and tail excerpt', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const readme = `README-IMPORTANT-START\n${'project documentation details\n'.repeat(4500)}\nREADME_KEEP_END`
+    await fs.writeFile(path.join(root, 'README.md'), readme)
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'document-second-fit' }))
+    const built = await buildContext(await scanProject(root), 'medium')
+    const batch = built.batches[0]
+    const fullReadme = batch.files.find((file) => file.relPath === 'README.md')
+    assert.ok(fullReadme?.content.includes('README_KEEP_END'), 'the first build has room for the complete README')
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, 18_000)
+    assert.ok(final.truncated)
+    assert.ok(final.text.includes('README-IMPORTANT-START'))
+    assert.ok(final.text.includes('README_KEEP_END'))
+    assert.ok(final.text.includes('文档片段已截断'))
+    assert.ok(final.text.length <= 18_000)
+    assert.ok(final.selection?.filePaths.includes('README.md'))
+    const newline = String.fromCharCode(10)
+    const readmeBody = final.text.split('### 文件：README.md（内容过长已截断）' + newline + '```' + newline)[1]?.split(newline + '```')[0] ?? ''
+    const manifestBody = final.text.split('### 文件：package.json' + newline + '```' + newline)[1]?.split(newline + '```')[0] ?? ''
+    assert.equal(final.selection?.providedChars, readmeBody.length + manifestBody.length)
   } finally {
     const resolved = path.resolve(root)
     assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))

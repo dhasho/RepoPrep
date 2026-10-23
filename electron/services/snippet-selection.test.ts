@@ -96,3 +96,31 @@ test('final prompt fitting keeps complete selected regions and drops the rest', 
   assert.ok(tightened.text.includes('```'))
   assert.deepEqual(tightened.selection, { filePaths: ['src/core.ts'], selectedRegions: 1, providedChars: region.text.length })
 })
+
+test('final fitting keeps bounded head and tail excerpts for documents but never slices code', () => {
+  const document = {
+    relPath: 'README.md', content: `README-IMPORTANT-START\n${'x'.repeat(600)}\nREADME_KEEP_END`,
+    truncated: false, redacted: false, redactionMatches: 0
+  }
+  const batch: ContextBatch = { label: 'overview', kind: 'global', weight: 1, totalChars: 0, files: [document] }
+  const rendered = renderBatchWithinBudget('header', 'tree', batch, 180)
+  assert.ok(rendered.truncated)
+  assert.ok(rendered.text.includes('README-IMPORTANT-START'))
+  assert.ok(rendered.text.includes('README_KEEP_END'))
+  assert.ok(rendered.text.includes('文档片段已截断'))
+  assert.ok(rendered.text.length <= 180)
+  assert.deepEqual(rendered.selection, { filePaths: ['README.md'], selectedRegions: 1, providedChars: documentExcerptLength(rendered.text) })
+
+  const codeBatch: ContextBatch = {
+    ...batch, files: [{ ...document, relPath: 'src/core.ts', content: 'function doNotCut() { return "body" }'.repeat(40) }]
+  }
+  const code = renderBatchWithinBudget('header', 'tree', codeBatch, 180)
+  assert.ok(code.truncated)
+  assert.ok(!code.text.includes('doNotCut'))
+  assert.deepEqual(code.selection, { filePaths: [], selectedRegions: 0, providedChars: 0 })
+})
+
+function documentExcerptLength(rendered: string): number {
+  const match = rendered.match(/### 文件：README\.md（内容过长已截断）\n```\n([\s\S]*?)\n```/)
+  return match?.[1]?.length ?? -1
+}

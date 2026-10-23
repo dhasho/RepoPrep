@@ -21,7 +21,7 @@ import { ProjectContentBoundaryError, ProjectContentReadError, readProjectConten
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { isProjectContentReadable, resolveProjectIdentity } from './project-snapshot.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
-import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, treeCharBudget } from '../../shared/context-budget.ts'
+import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, safeClipText, treeCharBudget } from '../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -638,6 +638,18 @@ export function renderBatchWithinBudget(
       truncated = true
       continue
     }
+    if (contentAllowance > 0 && isDocumentOrConfigPath(file.relPath)) {
+      const content = clipDocumentExcerpt(file.content, contentAllowance)
+      if (content.length) {
+        parts.push([clippedTitle, '```', content, '```'].join('\n'))
+        includedFiles.push(file)
+        selectedRegions++
+        providedChars += content.length
+        renderedChars += separator + clippedTitle.length + 9 + content.length
+      }
+      truncated = true
+      continue
+    }
     // If no known structure is available, omit the file whole. Slicing at an
     // arbitrary character offset could split a function and claim it is useful.
     truncated = true
@@ -658,4 +670,34 @@ function summarizeRenderedFiles(files: readonly ContextFile[]): RenderedSelectio
     selectedRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.length ?? (file.content.length ? 1 : 0)), 0),
     providedChars: files.reduce((sum, file) => sum + file.content.length, 0)
   }
+}
+
+const DOCUMENT_AND_CONFIG_EXTENSIONS = new Set([
+  'md', 'mdx', 'markdown', 'txt', 'rst', 'json', 'jsonc', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'properties', 'xml', 'csv'
+])
+
+function isDocumentOrConfigPath(relPath: string): boolean {
+  const extension = relPath.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase() ?? ''
+  return DOCUMENT_AND_CONFIG_EXTENSIONS.has(extension)
+}
+
+function tailAtCodePointBoundary(text: string, length: number): string {
+  if (length <= 0) return ''
+  let clipped = text.slice(-length)
+  const first = clipped.charCodeAt(0)
+  if (first >= 0xdc00 && first <= 0xdfff) clipped = clipped.slice(1)
+  return clipped
+}
+
+function clipDocumentExcerpt(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  if (maxChars <= 0) return ''
+  const preferredMarker = '…（文档片段已截断）…'
+  const marker = preferredMarker.length <= maxChars ? preferredMarker : '…'
+  const available = maxChars - marker.length
+  const headLength = Math.ceil(available / 2)
+  const tailLength = Math.floor(available / 2)
+  const head = safeClipText(text, headLength, '')
+  const tail = tailAtCodePointBoundary(text, tailLength)
+  return `${head}${marker}${tail}`
 }
