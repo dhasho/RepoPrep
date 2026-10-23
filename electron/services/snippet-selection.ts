@@ -116,7 +116,7 @@ export function selectSourceRegions(
   if (budget === 0) return { regions: [], truncated: content.length > 0 }
   const referenced = options.referencedSymbols ?? new Set<string>()
   let candidates: SourceRegion[]
-  if (options.extension?.toLowerCase() === '.py') {
+  if (options.extension?.replace(/^\./, '').toLowerCase() === 'py') {
     candidates = pythonRegions(content, options.roleFocus, referenced)
   } else if (analysis?.parseable) {
     candidates = analysis.symbols

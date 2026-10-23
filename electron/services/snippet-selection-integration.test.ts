@@ -42,6 +42,31 @@ test('real scan selects a late complete JS/TS unit under a tightened budget and 
   }
 })
 
+test('real Python scan uses indentation regions and ignores fake methods inside a docstring', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const prefix = `${'# early module documentation that should not dominate context\n'.repeat(2600)}`
+    const fakeDocstringBody = `    def fake_method():\n        return 'FAKE_DOCSTRING_METHOD_MARKER'\n${'    explanatory text inside a Python docstring\n'.repeat(1800)}`
+    const source = `${prefix}class OversizedService:\n    \"\"\"\n${fakeDocstringBody}    \"\"\"\n    def read_late(self):\n        return 'REAL_LATE_PYTHON_METHOD_MARKER'\n`
+    await fs.writeFile(path.join(root, 'service.py'), source)
+    const scan = await scanProject(root)
+    const scanned = scan.files.find((file) => file.relPath === 'service.py')
+    assert.equal(scanned?.ext, 'py', 'exercise the scanner extension value without normalizing the fixture')
+    const built = await buildContext(scan, 'medium', { maxChars: 14_000 })
+    const rendered = built.batches.flatMap((batch) => batch.files).find((file) => file.relPath === 'service.py')
+    assert.ok(rendered?.content.includes('REAL_LATE_PYTHON_METHOD_MARKER'))
+    assert.ok(rendered?.content.includes('def read_late'))
+    assert.ok(!rendered?.selectionRegions?.some((region) => region.label === 'fake_method'))
+    assert.ok(!rendered?.content.includes('FAKE_DOCSTRING_METHOD_MARKER'))
+    assert.ok(rendered?.truncated)
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('an already-aborted context build stops before reading project contents', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {
