@@ -215,6 +215,8 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             model: profile.model === submitted.model ? savedProfile.model : profile.model,
             protocol: profile.protocol === submitted.protocol ? savedProfile.protocol : profile.protocol,
             temperature: profile.temperature === submitted.temperature ? savedProfile.temperature : profile.temperature,
+            contextWindowTokens: profile.contextWindowTokens === submitted.contextWindowTokens ? savedProfile.contextWindowTokens : profile.contextWindowTokens,
+            maxOutputTokens: profile.maxOutputTokens === submitted.maxOutputTokens ? savedProfile.maxOutputTokens : profile.maxOutputTokens,
             ...(sameCredentialIntent ? {
               apiKey: '',
               credentialAction: 'keep' as const,
@@ -547,6 +549,18 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                   />
                 </Field>
               )}
+
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+                {(['contextWindowTokens', 'maxOutputTokens'] as const).map((field) => (
+                  <Field key={field} label={field === 'contextWindowTokens' ? '上下文窗口 token（可选）' : '最大输出 token（可选）'}>
+                    <input className={inputCls} type="number" min={field === 'contextWindowTokens' ? 4096 : 256} max={field === 'contextWindowTokens' ? 2097152 : 393216} step="1"
+                      value={selected[field] ?? ''} placeholder="留空使用默认值" aria-invalid={Boolean(profileError(field))}
+                      onChange={(e) => patchSelected({ [field]: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                    {profileError(field) && <p className="mt-1 text-xs text-rose-600">{profileError(field)?.message}</p>}
+                  </Field>
+                ))}
+                <p className="col-span-2 text-xs text-slate-500">此设置用于约束请求预算与输出上限。输入 token 为估算值，实际用量以服务商回执为准。</p>
+              </div>
 
               <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
                 <button

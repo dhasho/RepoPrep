@@ -58,7 +58,7 @@ function url(value: unknown): asserts value is string {
 }
 function profile(value: unknown): asserts value is LlmProfileDraft {
   if (!record(value)) fail()
-  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'temperature', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
+  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'temperature', 'contextWindowTokens', 'maxOutputTokens', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
   string(value.id, LLM_PROFILE_LIMITS.id); string(value.name, LLM_PROFILE_LIMITS.name); url(value.baseUrl)
   if (value.apiKey !== undefined) string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)
   string(value.model, LLM_PROFILE_LIMITS.model)
@@ -68,6 +68,9 @@ function profile(value: unknown): asserts value is LlmProfileDraft {
   if (value.credentialStatus !== undefined) enumValue(value.credentialStatus, ['missing', 'stored', 'locked', 'migration-pending'] as const)
   if (value.credentialAction !== undefined) enumValue(value.credentialAction, ['keep', 'replace', 'clear'] as const)
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature) || value.temperature < 0 || value.temperature > 2)) fail()
+  if (value.contextWindowTokens !== undefined && (!Number.isInteger(value.contextWindowTokens) || Number(value.contextWindowTokens) < 4096 || Number(value.contextWindowTokens) > 2097152)) fail()
+  if (value.maxOutputTokens !== undefined && (!Number.isInteger(value.maxOutputTokens) || Number(value.maxOutputTokens) < 256 || Number(value.maxOutputTokens) > 393216)) fail()
+  if (value.contextWindowTokens !== undefined && value.maxOutputTokens !== undefined && Number(value.maxOutputTokens) >= Number(value.contextWindowTokens)) fail()
 }
 function scanLimits(value: unknown): void {
   if (!record(value)) fail()

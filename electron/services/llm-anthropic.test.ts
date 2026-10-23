@@ -94,6 +94,17 @@ test('Anthropic Messages uses normalized endpoints, dedicated headers, required 
   ])
 })
 
+test('Anthropic usage receipts expose only bounded numeric token counts', async () => {
+  const receipts: unknown[] = []
+  await withFetch(async () => new Response(JSON.stringify({
+    type: 'message', role: 'assistant', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn',
+    usage: { input_tokens: 19, output_tokens: 3 }
+  })), async () => {
+    assert.equal(await chatCompletion(profile, [{ role: 'user', content: 'hello' }], { onUsage: (usage) => receipts.push(usage) }), 'ok')
+  })
+  assert.deepEqual(receipts, [{ inputTokens: 19, outputTokens: 3, totalTokens: 22 }])
+})
+
 test('Anthropic requests normalize compatible provider base paths and honor an explicit output limit', async () => {
   const cases = [
     ['https://api.anthropic.com', 'https://api.anthropic.com/v1/messages'],

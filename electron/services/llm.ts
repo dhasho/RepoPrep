@@ -1,5 +1,5 @@
 // OpenAI / Anthropic 大模型客户端（主进程中调用，避免渲染进程跨域与密钥暴露）
-import type { ListModelsResult, LlmProfile, TestConnectionResult } from '@shared/types'
+import type { ListModelsResult, LlmProfile, LlmUsage, TestConnectionResult } from '@shared/types'
 // @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
 import { SseDecoder } from './sse-parser.ts'
 // @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
@@ -73,7 +73,7 @@ function requestBody(profile: LlmProfile, messages: ChatMessage[], stream: boole
       ...(system ? { system } : {}),
       messages: messages.filter((message) => message.role !== 'system'),
       stream,
-      max_tokens: opts.maxOutputTokens ?? DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS
+      max_tokens: opts.maxOutputTokens ?? profile.maxOutputTokens ?? DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS
     }
   }
   return {
@@ -81,7 +81,7 @@ function requestBody(profile: LlmProfile, messages: ChatMessage[], stream: boole
     messages,
     temperature: profile.temperature ?? 0.4,
     stream,
-    ...(opts.maxOutputTokens ? { max_tokens: opts.maxOutputTokens } : {})
+    ...((opts.maxOutputTokens ?? profile.maxOutputTokens) ? { max_tokens: opts.maxOutputTokens ?? profile.maxOutputTokens } : {})
   }
 }
 
@@ -182,10 +182,21 @@ function handleAnthropicStreamEvent(
   }
 }
 
-interface CallOptions {
+export interface CallOptions {
   signal?: AbortSignal
   timeoutMs?: number
   maxOutputTokens?: number
+  onUsage?: (usage: LlmUsage) => void
+  onRequest?: () => void
+}
+
+function boundedUsage(value: unknown, protocol: LlmProfile['protocol']): LlmUsage | null {
+  if (!isRecord(value)) return null
+  const input = protocol === 'anthropic' ? value.input_tokens : value.prompt_tokens
+  const output = protocol === 'anthropic' ? value.output_tokens : value.completion_tokens
+  if (!Number.isSafeInteger(input) || !Number.isSafeInteger(output) || Number(input) < 0 || Number(output) < 0 || Number(input) > 10_000_000 || Number(output) > 10_000_000) return null
+  const inputTokens = Number(input); const outputTokens = Number(output)
+  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens }
 }
 
 export const LLM_RESPONSE_LIMITS = Object.freeze({
@@ -249,10 +260,15 @@ async function request(
       if (!settled) abort('timeout')
     }, opts.timeoutMs ?? 300_000)
 
-    response = await fetch(endpoint(profile), {
+    const url = endpoint(profile)
+    const headers = requestHeaders(profile)
+    const body = JSON.stringify(requestBody(profile, messages, stream, opts))
+    throwIfAborted()
+    try { opts.onRequest?.() } catch { /* diagnostics cannot affect generation */ }
+    response = await fetch(url, {
       method: 'POST',
-      headers: requestHeaders(profile),
-      body: JSON.stringify(requestBody(profile, messages, stream, opts)),
+      headers,
+      body,
       signal: controller.signal
     })
     throwIfAborted()
@@ -274,6 +290,8 @@ async function request(
       } catch {
         throw new LlmRequestError('response')
       }
+      const usage = isRecord(json) ? boundedUsage(json.usage, profile.protocol) : null
+      if (usage) { try { opts.onUsage?.(usage) } catch { /* diagnostics cannot affect generation */ } }
       let content: string
       if (profile.protocol === 'anthropic') {
         content = parseAnthropicMessage(json)

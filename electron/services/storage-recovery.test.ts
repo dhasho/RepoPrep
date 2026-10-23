@@ -414,6 +414,28 @@ test('settings save keeps only the matching endpoint credential and rejects endp
   }), /替换或清除/)
 })
 
+test('optional token caps survive replace, keep, clear, public readback, and private profile reads', async () => {
+  const { store } = await makeHarness()
+  const base = { id: 'token-profile', name: 'Token profile', baseUrl: 'https://example.test/v1', model: 'model', contextWindowTokens: 32768, maxOutputTokens: 4096 }
+  await store.saveSettings({ profiles: [{ ...base, apiKey: 'first-secret', credentialAction: 'replace' }], defaultProfileId: base.id })
+  let publicProfile = (await store.getSettings()).profiles[0]
+  assert.equal(publicProfile.contextWindowTokens, 32768)
+  assert.equal(publicProfile.maxOutputTokens, 4096)
+  assert.equal((await store.getPrivateProfile(base.id))?.contextWindowTokens, 32768)
+  assert.equal((await store.getPrivateProfile(base.id))?.maxOutputTokens, 4096)
+  await store.saveSettings({ profiles: [{ ...base, contextWindowTokens: 65536, apiKey: '', credentialAction: 'keep' }], defaultProfileId: base.id })
+  assert.equal((await store.getPrivateProfile(base.id))?.apiKey, 'first-secret')
+  publicProfile = (await store.getSettings()).profiles[0]
+  assert.equal(publicProfile.contextWindowTokens, 65536)
+  assert.equal(publicProfile.maxOutputTokens, 4096)
+  await store.saveSettings({ profiles: [{ ...base, contextWindowTokens: 65536, apiKey: '', credentialAction: 'clear' }], defaultProfileId: base.id })
+  publicProfile = (await store.getSettings()).profiles[0]
+  assert.equal(publicProfile.contextWindowTokens, 65536)
+  assert.equal(publicProfile.maxOutputTokens, 4096)
+  assert.equal(publicProfile.hasApiKey, false)
+  assert.equal((await store.getPrivateProfile(base.id))?.apiKey, '')
+})
+
 test('legacy profiles default to OpenAI without adding an undefined protocol property', async () => {
   const { store, userData } = await makeHarness()
   const file = path.join(userData, 'settings.json')

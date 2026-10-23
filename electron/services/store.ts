@@ -157,7 +157,7 @@ function isSettings(value: unknown): value is StoredSettings {
   if (!Array.isArray(profiles) || profiles.length > MAX_LLM_PROFILES) return false
   const ids = new Set<string>()
   for (const profile of profiles) {
-    if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'credential', 'model', 'protocol', 'temperature'].includes(key))) return false
+    if (!isObject(profile) || Object.keys(profile).some((key) => !['id', 'name', 'baseUrl', 'apiKey', 'credential', 'model', 'protocol', 'temperature', 'contextWindowTokens', 'maxOutputTokens'].includes(key))) return false
     if (!validText(profile.id, LLM_PROFILE_LIMITS.id)) return false
     if (ids.has(profile.id)) return false
     ids.add(profile.id)
@@ -175,6 +175,9 @@ function isSettings(value: unknown): value is StoredSettings {
     if (!validText(profile.model, LLM_PROFILE_LIMITS.model)) return false
     if (profile.protocol !== undefined && profile.protocol !== 'openai' && profile.protocol !== 'anthropic') return false
     if (profile.temperature !== undefined && (typeof profile.temperature !== 'number' || !Number.isFinite(profile.temperature) || profile.temperature < 0 || profile.temperature > 2)) return false
+    if (profile.contextWindowTokens !== undefined && (typeof profile.contextWindowTokens !== 'number' || !Number.isInteger(profile.contextWindowTokens) || profile.contextWindowTokens < 4096 || profile.contextWindowTokens > 2097152)) return false
+    if (profile.maxOutputTokens !== undefined && (typeof profile.maxOutputTokens !== 'number' || !Number.isInteger(profile.maxOutputTokens) || profile.maxOutputTokens < 256 || profile.maxOutputTokens > 393216)) return false
+    if (profile.contextWindowTokens !== undefined && profile.maxOutputTokens !== undefined && profile.maxOutputTokens >= profile.contextWindowTokens) return false
   }
   if (value.defaultProfileId !== undefined && value.defaultProfileId !== null && !validText(value.defaultProfileId, 128)) return false
   if (typeof value.defaultProfileId === 'string' && !profiles.some((profile) => isObject(profile) && profile.id === value.defaultProfileId)) return false
@@ -327,6 +330,8 @@ function publicSettings(settings: StoredSettings, status: PublicSettings['profil
         model: profile.model,
         ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
         ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+        ...(profile.contextWindowTokens !== undefined ? { contextWindowTokens: profile.contextWindowTokens } : {}),
+        ...(profile.maxOutputTokens !== undefined ? { maxOutputTokens: profile.maxOutputTokens } : {}),
         hasApiKey,
         credentialStatus: hasApiKey ? status : 'missing'
       }

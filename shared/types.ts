@@ -13,6 +13,31 @@ export interface LlmProfile {
   model: string
   protocol?: LlmProtocol
   temperature?: number
+  contextWindowTokens?: number
+  maxOutputTokens?: number
+}
+
+export interface LlmUsage { inputTokens: number; outputTokens: number; totalTokens: number }
+export interface GenerationDiagnostics {
+  version: 1
+  status: 'succeeded' | 'failed' | 'cancelled'
+  failedStage?: 'context' | 'model' | 'merge' | 'validation'
+  contextStrategy: 'structure-v1'
+  tokenEstimateMethod: 'mixed-text-v1'
+  estimatedInputTokens: number
+  inputTokenBudget: number
+  reservedOutputTokens: number
+  actualUsage: LlmUsage | null
+  usageComplete: boolean
+  requestCount: number
+  repairRequestCount: number
+  compensationRequestCount: number
+  contextBuildMs: number
+  modelMs: number
+  totalMs: number
+  selectedFiles: number
+  selectedRegions: number
+  omittedFiles: number
 }
 
 export interface Settings {

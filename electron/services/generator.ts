@@ -7,17 +7,21 @@ import type {
   LlmProfile,
   QuestionItem,
   RoleFocus,
-  Section
+  Section,
+  GenerationDiagnostics,
+  LlmUsage
 } from '@shared/types'
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
 import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
 import { contentReadWarning } from '@shared/content-read'
-import { chatCompletion, isLlmTimeoutError, type ChatMessage } from './llm'
+import { chatCompletion, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
 import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
 import { buildCompensationInstruction, selectUniqueQuestions } from './question-dedupe'
 import type { ScanResult } from './scanner'
+// @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
+import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
 export interface GenerateParams {
   scan: ScanResult
@@ -26,6 +30,7 @@ export interface GenerateParams {
   profile: LlmProfile
   signal: AbortSignal
   onProgress: (step: string, detail: string | undefined, percent: number) => void
+  onDiagnostics?: (diagnostics: GenerationDiagnostics) => void
 }
 
 const SYSTEM_PROMPT = `你是一位经验丰富的资深技术面试官，擅长通读候选人的项目代码与文档，围绕真实项目出有深度的面试题。
@@ -212,22 +217,54 @@ async function callForJson(
   minimumContextChars: number,
   budget: number,
   signal: AbortSignal,
-  onRequestTruncation: () => void
+  onRequestTruncation: () => void,
+  inputTokenBudget: number,
+  counters: {
+    estimated: number; requests: number; repairs: number; compensationRequests: number; compensationPending: number
+    usage: LlmUsage | null; usageCount: number; modelMs: number
+    dispatchedFiles: Set<string>; dispatchedRegions: number; eligibleFiles: Set<string>
+    pendingSelection: { filePaths: string[]; selectedRegions: number; providedChars: number } | null
+  }
 ): Promise<ParsedBatch> {
   let lastError = ''
   let previousReply = ''
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (signal.aborted) throw new Error('生成已取消。')
     const repair = attempt ? { reply: safeClipText(previousReply, 20_000), error: lastError } : undefined
-    const fitted = fitMessages(buildMessages, contextChars, minimumContextChars, budget, repair)
+    const fitted = fitMessages(buildMessages, contextChars, minimumContextChars, budget, repair, inputTokenBudget)
     if (fitted.contextLimit < contextChars) onRequestTruncation()
     if (!validateMessageCharBudget(fitted.messages, budget)) throw new Error('模型请求内容超出支持范围。')
-    const reply = await chatCompletion(profile, fitted.messages, { signal, timeoutMs: 600_000 })
+    const estimated = estimateMessageTokens(fitted.messages)
+    const requestStarted = Date.now()
     try {
-      return normalizeParsed(JSON.parse(extractJson(reply)))
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err)
-      previousReply = reply
-    }
+      const reply = await chatCompletion(profile, fitted.messages, {
+        signal, timeoutMs: 600_000,
+        maxOutputTokens: profile.maxOutputTokens,
+        onRequest: () => {
+          counters.estimated += estimated; counters.requests++
+          if (attempt) counters.repairs++
+          else if (counters.compensationPending > 0) { counters.compensationRequests++; counters.compensationPending-- }
+          const selection = counters.pendingSelection
+          if (selection) {
+            for (const filePath of selection.filePaths) counters.dispatchedFiles.add(filePath)
+            counters.dispatchedRegions += selection.selectedRegions
+          }
+        },
+        onUsage: (usage) => {
+          counters.usage = {
+            inputTokens: (counters.usage?.inputTokens ?? 0) + usage.inputTokens,
+            outputTokens: (counters.usage?.outputTokens ?? 0) + usage.outputTokens,
+            totalTokens: (counters.usage?.totalTokens ?? 0) + usage.totalTokens
+          }
+          counters.usageCount++
+        }
+      })
+      counters.modelMs += Date.now() - requestStarted
+      try { return normalizeParsed(JSON.parse(extractJson(reply))) } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err)
+        previousReply = reply
+      }
+    } catch (error) { counters.modelMs += Date.now() - requestStarted; throw error }
   }
   throw new Error(`模型两次均未返回合法 JSON：${lastError}`)
 }
@@ -239,11 +276,13 @@ function fitMessages(
   contextChars: number,
   minimumContextChars: number,
   budget: number,
-  repair?: { reply: string; error: string }
+  repair?: { reply: string; error: string },
+  tokenBudget = Number.MAX_SAFE_INTEGER
 ): { messages: ChatMessage[]; contextLimit: number } {
   const fits = (limit: number): boolean => {
     try {
-      return validateMessageCharBudget(buildMessages(limit, repair), budget)
+      const messages = buildMessages(limit, repair)
+      return validateMessageCharBudget(messages, budget) && estimateMessageTokens(messages) <= tokenBudget
     } catch {
       return false
     }
@@ -265,12 +304,48 @@ function fitMessages(
 
 export async function generateInterview(params: GenerateParams): Promise<InterviewResult> {
   const { scan, granularity, roleFocus, profile, signal, onProgress } = params
+  const startedAt = Date.now()
+  const counters = {
+    estimated: 0, requests: 0, repairs: 0, compensationRequests: 0, compensationPending: 0,
+    usage: null as LlmUsage | null, usageCount: 0, modelMs: 0,
+    dispatchedFiles: new Set<string>(), dispatchedRegions: 0, eligibleFiles: new Set<string>(),
+    pendingSelection: null as { filePaths: string[]; selectedRegions: number; providedChars: number } | null
+  }
+  const tokenBudget = resolveGenerationBudget(profile, granularity)
+  const emitDiagnostics = (status: GenerationDiagnostics['status'], failedStage?: GenerationDiagnostics['failedStage'], contextBuildMs = 0): void => {
+    try {
+      params.onDiagnostics?.({
+        version: 1,
+        status,
+        ...(failedStage ? { failedStage } : {}),
+        contextStrategy: 'structure-v1',
+        tokenEstimateMethod: TOKEN_ESTIMATE_METHOD,
+        estimatedInputTokens: counters.estimated,
+        inputTokenBudget: tokenBudget.inputTokens,
+        reservedOutputTokens: tokenBudget.reservedOutputTokens,
+        actualUsage: counters.usage,
+        usageComplete: counters.requests > 0 && counters.usageCount === counters.requests,
+        requestCount: counters.requests,
+        repairRequestCount: counters.repairs,
+        compensationRequestCount: counters.compensationRequests,
+        contextBuildMs,
+        modelMs: counters.modelMs,
+        totalMs: Date.now() - startedAt,
+        selectedFiles: counters.dispatchedFiles.size,
+        selectedRegions: counters.dispatchedRegions,
+        omittedFiles: Math.max(0, [...counters.eligibleFiles].filter((file) => !counters.dispatchedFiles.has(file)).length)
+      })
+    } catch { /* callbacks are observational only */ }
+  }
   let latestPercent = 0
   const reportProgress = (step: string, detail: string | undefined, percent: number): void => {
     latestPercent = Math.max(latestPercent, Math.min(100, Math.max(0, percent)))
     onProgress(step, detail, latestPercent)
   }
+  let failedStage: GenerationDiagnostics['failedStage'] = 'validation'
+  let contextBuildMs = 0
 
+  try {
   try {
     assertProjectIdentityContract(scan.name, scan.root)
   } catch {
@@ -278,7 +353,15 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   }
 
   reportProgress('构建项目上下文', `颗粒度：${GRANULARITY_META[granularity].label}`, 8)
-  const built = await buildContext(scan, granularity)
+  failedStage = 'context'
+  const contextStarted = Date.now()
+  const contextMaxChars = Math.min(CONTEXT_CHAR_BUDGETS[granularity], tokenBudget.inputTokens * 4)
+  let built: Awaited<ReturnType<typeof buildContext>>
+  try {
+    built = await buildContext(scan, granularity, { maxChars: contextMaxChars, roleFocus, signal })
+  } finally { contextBuildMs = Date.now() - contextStarted }
+  if (signal.aborted) throw new Error('生成已取消。')
+  for (const filePath of built.eligibleFilePaths ?? []) counters.eligibleFiles.add(filePath)
   const markRequestTruncation = (): void => {
     if (built.contextTruncation.requestTruncated) return
     built.contextTruncation.requestTruncated = true
@@ -303,8 +386,10 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   )
 
   // 合并各批次产出，并在总量低于下限时对"少给的批次"发起一轮补偿请求。
+  failedStage = 'merge'
   const mergeResult = await mergeWithCompensation({
     budget,
+    signal,
     batches: built.batches,
     quotas: plan.quotas.map((q) => q.quota),
     total: plan.total,
@@ -316,8 +401,10 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         Math.round(15 + fraction * 80)
       ),
     // 补偿轮使用同一进度条末端，文案由调用方给
-    onCompensate: (detail) => reportProgress('补充请求（题量不足）', detail, 94),
-    requestBatch: (index, quota, extraInstruction) => {
+    onCompensate: (detail) => { counters.compensationPending++; reportProgress('补充请求（题量不足）', detail, 94) },
+    requestBatch: async (index, quota, extraInstruction) => {
+      failedStage = 'model'
+      if (signal.aborted) throw new Error('生成已取消。')
       const contextText = renderBatch(built.headerText, built.treeText, built.batches[index])
       const minimumContextChars = renderBatch(
         built.headerText,
@@ -332,6 +419,11 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           contextLimit,
           REQUEST_TRUNCATION_MARKER
         )
+        counters.pendingSelection = bounded.selection ?? {
+          filePaths: built.batches[index].files.map((file) => file.relPath),
+          selectedRegions: built.batches[index].files.length,
+          providedChars: bounded.text.length
+        }
         const userPrompt = buildUserPrompt({
           contextText: bounded.text,
           granularity,
@@ -356,19 +448,27 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         }
         return messages
       }
-      return callForJson(
-        profile,
-        makePrompt,
-        contextText.length,
-        minimumContextChars,
-        CONTEXT_CHAR_BUDGETS[granularity],
-        signal,
-        markRequestTruncation
-      )
+      failedStage = 'model'
+      try {
+        const parsed = await callForJson(
+          profile,
+          makePrompt,
+          contextText.length,
+          minimumContextChars,
+          CONTEXT_CHAR_BUDGETS[granularity],
+          signal,
+          markRequestTruncation,
+          tokenBudget.inputTokens,
+          counters
+        )
+        failedStage = 'merge'
+        return parsed
+      } catch (error) { failedStage = 'model'; throw error }
     }
   })
 
   const merged = mergeResult
+  if (signal.aborted) throw new Error('生成已取消。')
   const capped = capSectionsToMax(merged.sections, budget.max)
   // 裁剪后收敛 glossary：丢弃不再被引用的孤儿词条（多批合并 + 裁剪会明显膨胀）
   const glossary = pruneGlossary(merged.glossary, capped.sections)
@@ -417,16 +517,25 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     },
     ...(built.contentReadSummary.failedReads > 0 ? { contentReadSummary: built.contentReadSummary } : {})
   }
+  failedStage = 'validation'
   try {
     assertInterviewResultContract(result)
   } catch {
     throw new Error(RESULT_CONTRACT_MESSAGES.generated)
   }
+  if (signal.aborted) throw new Error('生成已取消。')
   reportProgress('完成', undefined, 100)
+  if (signal.aborted) throw new Error('生成已取消。')
+  emitDiagnostics('succeeded', undefined, contextBuildMs)
   return result
+  } catch (error) {
+    emitDiagnostics(signal.aborted || (error instanceof Error && error.name === 'LlmRequestError' && error.message === '请求已取消。') ? 'cancelled' : 'failed', failedStage, contextBuildMs)
+    throw error
+  }
 }
 
 export interface MergeInput {
+  signal?: AbortSignal
   /** 该颗粒度的题量预算 */
   budget: { min: number; target: number; max: number }
   /** 各批次的标识（仅用于进度文案） */
@@ -474,7 +583,7 @@ export async function mergeWithCompensation(
   input: MergeInput,
   maxCompensationRounds = 2
 ): Promise<MergeResult> {
-  const { budget, batches, quotas, total, requestBatch, onBatch, onCompensate } = input
+  const { budget, batches, quotas, total, requestBatch, onBatch, onCompensate, signal } = input
   const merged: MergeResult = {
     projectSummary: '',
     sections: [],
@@ -509,6 +618,7 @@ export async function mergeWithCompensation(
   }
 
   for (let i = 0; i < batches.length; i++) {
+    if (signal?.aborted) throw new LlmRequestError('cancelled')
     const quota = quotas[i]
     const span = 1 / Math.max(1, batches.length)
     onBatch?.(
@@ -527,6 +637,7 @@ export async function mergeWithCompensation(
 
   // 补偿：总量低于下限时，挑贡献最少的批次补一次，只要求补足缺口。
   for (let round = 0; round < maxCompensationRounds; round++) {
+    if (signal?.aborted) throw new LlmRequestError('cancelled')
     const gap = budget.min - merged.collected
     if (gap <= 0) break
     let target = 0
@@ -554,6 +665,7 @@ export async function mergeWithCompensation(
       )
       merged.compensated += absorb(parsed, ask, target)
     } catch (error) {
+      if (signal?.aborted) throw error
       // Timeouts need to reach the main IPC layer so it can surface the explicit
       // timeout state; ordinary compensation failures remain best-effort.
       if (isLlmTimeoutError(error)) throw error

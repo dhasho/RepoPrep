@@ -96,6 +96,13 @@ test('profile protocol accepts both providers, preserves the legacy optional sha
   }
 })
 
+test('token capacity settings accept bounded values and reject invalid pairs', () => {
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [{ ...profile, contextWindowTokens: 8192, maxOutputTokens: 2048 }], defaultProfileId: profile.id }]))
+  for (const fields of [{ contextWindowTokens: 4095 }, { contextWindowTokens: 2097153 }, { maxOutputTokens: 255 }, { maxOutputTokens: 393217 }, { contextWindowTokens: 4096, maxOutputTokens: 4096 }, { contextWindowTokens: 4096.5 }]) {
+    rejects(IPC.settingsSave, { profiles: [{ ...profile, ...fields }], defaultProfileId: profile.id })
+  }
+})
+
 test('settingsSave 接受共享数量上限且继续拒绝超过上限的直接调用', () => {
   const profiles = Array.from({ length: MAX_LLM_PROFILES }, (_, index) => ({ ...profile, id: `limit-${index}` }))
   assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles, defaultProfileId: profiles[0].id }]))

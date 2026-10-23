@@ -51,6 +51,8 @@ function publicSettingsOf(settings: Settings | PublicSettings): PublicSettings {
         model: profile.model,
         ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
         ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+        ...(profile.contextWindowTokens !== undefined ? { contextWindowTokens: profile.contextWindowTokens } : {}),
+        ...(profile.maxOutputTokens !== undefined ? { maxOutputTokens: profile.maxOutputTokens } : {}),
         hasApiKey,
         credentialStatus: profile.credentialStatus ?? (hasApiKey ? 'stored' : 'missing')
       }
@@ -128,6 +130,8 @@ async function mountSettingsPage(
             id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
             ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
             ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+            ...(profile.contextWindowTokens !== undefined ? { contextWindowTokens: profile.contextWindowTokens } : {}),
+            ...(profile.maxOutputTokens !== undefined ? { maxOutputTokens: profile.maxOutputTokens } : {}),
             hasApiKey, credentialStatus: hasApiKey ? 'stored' : 'missing'
           }
         })
@@ -970,6 +974,29 @@ test('SettingsPage keeps saved fields blank and submits keep, replace, and clear
   } finally {
     await page.unmount()
   }
+})
+
+test('SettingsPage edits, validates, saves, and restores optional token capacity values', async () => {
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initialSettings, async (next) => { writes.push(structuredClone(next)) })
+  try {
+    const fields = [...page.rootElement.querySelectorAll<HTMLInputElement>('input[placeholder="留空使用默认值"]')]
+    assert.equal(fields.length, 2)
+    await page.React.act(async () => {
+      setInput(fields[0], '8192')
+      setInput(fields[1], '2048')
+    })
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes[0].profiles[0].contextWindowTokens, 8192)
+    assert.equal(writes[0].profiles[0].maxOutputTokens, 2048)
+    assert.equal(page.savedSettings?.profiles[0].contextWindowTokens, 8192)
+    assert.equal(page.savedSettings?.profiles[0].maxOutputTokens, 2048)
+
+    await page.React.act(async () => setInput(fields[1], '8192'))
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes.length, 1, 'a window equal to output capacity must not be saved')
+    assert.match(page.rootElement.textContent ?? '', /上下文窗口必须大于最大输出 token/)
+  } finally { await page.unmount() }
 })
 
 test('SettingsPage trusts locked status from getSettings and preserves a newer key edit during save', async () => {

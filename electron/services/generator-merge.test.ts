@@ -137,6 +137,14 @@ test('补偿请求超时必须向上传递，不能静默返回部分结果', as
   })
 })
 
+test('补偿请求期间取消必须传播，不能返回部分成功结果', async () => {
+  const { input } = makeInput(FULL_QUOTAS, () => 1)
+  const controller = new AbortController()
+  input.signal = controller.signal
+  input.onCompensate = () => controller.abort()
+  await assert.rejects(mergeWithCompensation(input), LlmRequestError)
+})
+
 test('补偿时挑选"贡献最少"的批次', async () => {
   const delivered = [12, 1, 10] // 第 1 个批次给得最少
   const { input, calls } = makeInput(FULL_QUOTAS, ({ index, quota, isCompensation }) =>

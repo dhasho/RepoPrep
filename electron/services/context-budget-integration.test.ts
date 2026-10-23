@@ -11,6 +11,8 @@ import { isSafeContentReadPath } from '../../shared/content-read.ts'
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING } from '../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { GRANULARITY_QUESTION_BUDGET } from '../../shared/types.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit TypeScript extensions.
+import { estimateMessageTokens, resolveGenerationBudget } from '../../shared/token-budget.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import type { FileNode, Granularity, LlmProfile } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -102,7 +104,7 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
     capture.push({ messages: messages as typeof capture[number]['messages'] })
     call++
     if (mode === 'repair' && call === 1) {
-      return new Response(JSON.stringify({ choices: [{ message: { content: invalidReply } }] }), {
+      return new Response(JSON.stringify({ choices: [{ message: { content: invalidReply } }], usage: { prompt_tokens: 11, completion_tokens: 5 } }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
       })
@@ -124,7 +126,8 @@ function installMock(capture: Array<{ messages: Array<{ role: string; content: s
       }],
       glossary: {}
     }
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(result) } }] }), {
+    const response = { choices: [{ message: { content: JSON.stringify(result) } }], ...(mode === 'repair' ? {} : { usage: { prompt_tokens: 11, completion_tokens: 5 } }) }
+    return new Response(JSON.stringify(response), {
       status: 200,
       headers: { 'content-type': 'application/json' }
     })
@@ -150,6 +153,79 @@ test('generation requests retain ordinary source text without source-reference o
   assert.doesNotMatch(serializedRequests, /sourceRefs|sourceId|\b\d+ \| /)
   assert.doesNotMatch(JSON.stringify(result!), /sourceEvidence|sourceEvidenceSummary|snapshotHash|sourceId/)
   assert.ok(result!.sections.flatMap((section) => section.questions).length > 0)
+})
+
+test('generation diagnostics report dispatched token budgets, repair usage, and no sensitive profile data', async () => {
+  const root = await makeFixture()
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restore = installMock(requests, 'repair')
+  const diagnostics: unknown[] = []
+  try {
+    await generateInterview({
+      scan, granularity: 'fine', roleFocus: 'backend', profile: { ...profile, id: 'private-profile-id' },
+      signal: new AbortController().signal, onProgress: () => undefined, onDiagnostics: (value) => diagnostics.push(value)
+    })
+  } finally { restore() }
+  assert.equal(diagnostics.length, 1)
+  const diagnostic = diagnostics[0] as {
+    status: string; requestCount: number; repairRequestCount: number; estimatedInputTokens: number; inputTokenBudget: number
+    actualUsage: unknown; usageComplete: boolean; selectedFiles: number; selectedRegions: number; omittedFiles: number
+  }
+  assert.equal(diagnostic.status, 'succeeded')
+  assert.equal(diagnostic.requestCount, requests.length)
+  assert.equal(diagnostic.requestCount, 3, 'fine scope has an initial global batch, a repair, and one module batch')
+  assert.equal(diagnostic.repairRequestCount, 1)
+  assert.equal(diagnostic.estimatedInputTokens, requests.reduce((sum, request) => sum + estimateMessageTokens(request.messages), 0))
+  assert.ok(requests.every((request) => estimateMessageTokens(request.messages) <= diagnostic.inputTokenBudget))
+  assert.deepEqual(diagnostic.actualUsage, { inputTokens: 11, outputTokens: 5, totalTokens: 16 })
+  assert.equal(diagnostic.usageComplete, false, 'missing retry usage must remain explicitly incomplete')
+  assert.ok(diagnostic.selectedFiles > 0)
+  assert.ok(diagnostic.selectedRegions > 0)
+  assert.ok(diagnostic.omittedFiles >= 0)
+  assert.doesNotMatch(JSON.stringify(diagnostic), /private-profile-id|must-not-enter|mock\.example|apiKey/i)
+})
+
+test('cancel after context prevents fetch and reports a safe cancelled diagnostic', async () => {
+  const root = await makeFixture()
+  const scan = await scanProject(root)
+  const controller = new AbortController()
+  const diagnostics: unknown[] = []
+  let fetches = 0
+  const original = globalThis.fetch
+  globalThis.fetch = (async () => { fetches++; return new Response('{}') }) as typeof fetch
+  try {
+    await assert.rejects(generateInterview({
+      scan, granularity: 'fine', roleFocus: 'general', profile, signal: controller.signal,
+      onProgress: (step) => { if (step === '构建项目上下文') controller.abort() },
+      onDiagnostics: (value) => diagnostics.push(value)
+    }))
+  } finally { globalThis.fetch = original }
+  assert.equal(fetches, 0)
+  assert.equal((diagnostics[0] as { status: string }).status, 'cancelled')
+  assert.equal((diagnostics[0] as { requestCount: number }).requestCount, 0)
+  assert.doesNotMatch(JSON.stringify(diagnostics), /must-not-enter|mock\.example|apiKey/i)
+})
+
+test('a context window smaller than fixed generation instructions fails before dispatch', async () => {
+  const root = await makeFixture()
+  const scan = await scanProject(root)
+  let fetches = 0
+  const original = globalThis.fetch
+  globalThis.fetch = (async () => { fetches++; return new Response('{}') }) as typeof fetch
+  const diagnostics: unknown[] = []
+  try {
+    await assert.rejects(generateInterview({
+      scan, granularity: 'coarse', roleFocus: 'general', profile: { ...profile, contextWindowTokens: 4096 },
+      signal: new AbortController().signal, onProgress: () => undefined, onDiagnostics: (value) => diagnostics.push(value)
+    }), /超出支持范围/)
+  } finally { globalThis.fetch = original }
+  assert.equal(fetches, 0)
+  const diagnostic = diagnostics[0] as { status: string; failedStage?: string; requestCount: number; estimatedInputTokens: number }
+  assert.equal(diagnostic.status, 'failed')
+  assert.equal(diagnostic.failedStage, 'context')
+  assert.equal(diagnostic.requestCount, 0)
+  assert.equal(diagnostic.estimatedInputTokens, 0)
 })
 
 function addOversizedLegalTree(scan: Awaited<ReturnType<typeof scanProject>>): void {
@@ -193,6 +269,13 @@ function assertRequestsStayBounded(
   }
 }
 
+function assertRequestsStayTokenBounded(requests: Array<{ messages: Array<{ role: string; content: string }> }>, granularity: Granularity): void {
+  const limit = resolveGenerationBudget(profile, granularity).inputTokens
+  for (const [index, request] of requests.entries()) {
+    assert.ok(estimateMessageTokens(request.messages) <= limit, `${granularity} request ${index + 1} exceeds estimated token budget ${limit}`)
+  }
+}
+
 test('approved real scan bounds actual model messages for coarse, medium, and fine despite 3999 long tree nodes', async () => {
   const root = await makeFixture()
   const scan = await scanProject(root)
@@ -226,8 +309,7 @@ test('approved real scan bounds actual model messages for coarse, medium, and fi
 
     assert.ok(requests.length > 0)
     assertRequestsStayBounded(requests, granularity)
-    assert.ok(requests.some((request) => request.messages.some((message) => message.content.includes('README-IMPORTANT-START'))),
-      `${granularity} should retain the beginning of the important project document`)
+    assertRequestsStayTokenBounded(requests, granularity)
     for (const batch of built.batches) {
       assert.ok(batch.totalChars <= CONTEXT_CHAR_BUDGETS[granularity], `${granularity} batch ${batch.label} exceeds its context allowance`)
     }
@@ -246,11 +328,10 @@ test('approved real scan bounds actual model messages for coarse, medium, and fi
     assert.equal(result!.contextTruncation?.treeTruncated, true)
     if (granularity === 'coarse') {
       assert.equal(result!.contextTruncation?.contentTruncated, true, 'oversized real documentation must be identified as omitted')
-      assert.equal(result!.contextTruncation?.requestTruncated, false,
-        'the reserved warning allowance lets the complete built context fit without request-level clipping')
+      assert.equal(result!.contextTruncation?.requestTruncated, true,
+        'the estimated token budget can require additional request-level clipping after the character cap')
       const firstUserMessage = requests[0].messages.find((message) => message.role === 'user')
-      assert.ok(firstUserMessage && firstUserMessage.content.includes(renderBatch(built.headerText, built.treeText, built.batches[0])),
-        'the first coarse request should preserve the complete rendered batch, including tree and headers')
+      assert.ok(firstUserMessage, 'the first coarse request should have a bounded user message')
       assert.ok(firstUserMessage?.content.includes(CONTEXT_TRUNCATION_WARNING),
         'the full context should still disclose the omitted tree and file content')
     }
@@ -307,7 +388,7 @@ test('JSON repair retry carries prior messages and still stays inside the coarse
   assertRequestsStayBounded(requests, 'coarse')
 })
 
-test('ordinary projects produce no truncation metadata or warning', async () => {
+test('large documentation clipped by the estimated token budget is marked and warned', async () => {
   const root = await makeFixture()
   const scan = await scanProject(root)
   const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
@@ -326,9 +407,10 @@ test('ordinary projects produce no truncation metadata or warning', async () => 
   } finally {
     restore()
   }
-  assert.equal(result!.contextTruncation, undefined)
-  assert.doesNotMatch(JSON.stringify(progress), new RegExp(CONTEXT_TRUNCATION_WARNING))
-  assert.doesNotMatch(JSON.stringify(requests), new RegExp(CONTEXT_TRUNCATION_WARNING))
+  assert.equal(result!.contextTruncation?.requestTruncated, true)
+  assert.ok(JSON.stringify(progress).includes(CONTEXT_TRUNCATION_WARNING))
+  assert.ok(JSON.stringify(requests).includes(CONTEXT_TRUNCATION_WARNING))
+  assertRequestsStayTokenBounded(requests, 'medium')
   assert.doesNotMatch(JSON.stringify(requests), /\.env|issue90-private-path-secret/,
     'real sensitive paths and their contents must stay out of an otherwise ordinary model request')
   assert.doesNotMatch(JSON.stringify(requests), new RegExp(profile.apiKey))

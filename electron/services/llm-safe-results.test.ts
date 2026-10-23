@@ -27,6 +27,31 @@ test('connection success never echoes model generated text', async () => {
   })
 })
 
+test('HTTP usage reports bounded numeric receipts and honors explicit output override precedence', async () => {
+  let body: Record<string, unknown> | undefined
+  const usage: unknown[] = []
+  let requests = 0
+  await withFetch(async (_url, init) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 7, completion_tokens: 3 } }))
+  }, async () => {
+    await chatCompletion({ ...profile, maxOutputTokens: 512 }, [{ role: 'user', content: 'hi' }], { maxOutputTokens: 16, onRequest: () => { requests++ }, onUsage: (receipt) => usage.push(receipt) })
+  })
+  assert.equal(requests, 1)
+  assert.equal(body?.max_tokens, 16)
+  assert.deepEqual(usage, [{ inputTokens: 7, outputTokens: 3, totalTokens: 10 }])
+})
+
+test('missing or invalid provider usage stays unknown', async () => {
+  for (const usage of [undefined, { prompt_tokens: -1, completion_tokens: 2 }, { prompt_tokens: 1.5, completion_tokens: 2 }]) {
+    let calls = 0
+    await withFetch(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }], ...(usage === undefined ? {} : { usage }) })), async () => {
+      await chatCompletion(profile, [{ role: 'user', content: 'hello' }], { onUsage: () => { calls++ } })
+    })
+    assert.equal(calls, 0)
+  }
+})
+
 test('model-list HTTP errors expose status and recovery guidance but not provider response data', async () => {
   const secret = 'UPSTREAM_SECRET https://private.example/path secret-key'
   await withFetch(async () => new Response(secret, { status: 401, statusText: 'Unauthorized' }), async () => {
