@@ -6,6 +6,7 @@
 // 选中项目 / 生成 / 导出这些需要交互与真实模型服务的路径仍需人工走一遍（见 README）。
 const path = require('node:path')
 const os = require('node:os')
+const nativeFs = require('original-fs')
 const { fileURLToPath } = require('node:url')
 
 // 明确的自检：ELECTRON_RUN_AS_NODE 会让 Electron 以纯 Node 模式启动，此时
@@ -36,7 +37,23 @@ const collectedErrors = []
 /** 是否已经输出过判定结论。用于识别「应用自行退出、根本没跑到断言」这种假绿。 */
 let verdictEmitted = false
 /** 构建产物的绝对路径（用来断言加载的确实是它，而不是 dev server）。 */
-const expectedEntry = path.join(root, 'out', 'renderer', 'index.html')
+function parseArguments(args) {
+  if (args.length === 1) return { fixtureRoot: args[0], asarPath: null }
+  if (args.length === 3 && args[1] === '--asar' && path.isAbsolute(args[2])) {
+    return { fixtureRoot: args[0], asarPath: path.resolve(args[2]) }
+  }
+  throw new Error('usage: electron tests/smoke.cjs <isolated-temp-dir> [--asar <absolute app.asar>]')
+}
+
+const smokeOptions = (() => {
+  try { return parseArguments(process.argv.slice(2)) } catch (error) {
+    console.error(`[smoke] invalid arguments: ${error instanceof Error ? error.message : String(error)}`)
+    process.exit(1)
+  }
+})()
+const expectedEntry = smokeOptions.asarPath
+  ? path.join(smokeOptions.asarPath, 'out', 'renderer', 'index.html')
+  : path.join(root, 'out', 'renderer', 'index.html')
 
 app.on('browser-window-created', (_event, win) => {
   const contents = win.webContents
@@ -56,18 +73,54 @@ app.on('browser-window-created', (_event, win) => {
 
 // 父 runner 为该 Electron 子进程创建唯一临时目录，并在子进程完全退出后清理。
 try {
-  const fixtureRoot = path.resolve(process.argv[2] || '')
+  const fixtureRoot = path.resolve(smokeOptions.fixtureRoot || '')
   const relative = path.relative(path.resolve(os.tmpdir()), fixtureRoot)
-  if (!path.basename(fixtureRoot).startsWith('repoprep-smoke-') || !relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+  const fixtureInfo = nativeFs.lstatSync(fixtureRoot)
+  if (!path.basename(fixtureRoot).startsWith('repoprep-smoke-') || path.dirname(fixtureRoot) !== path.resolve(os.tmpdir()) ||
+      !relative || relative.startsWith('..') || path.isAbsolute(relative) || !fixtureInfo.isDirectory() || fixtureInfo.isSymbolicLink() ||
+      nativeFs.realpathSync(fixtureRoot) !== fixtureRoot) {
     throw new Error('unsafe-smoke-fixture')
   }
   app.setPath('appData', path.join(fixtureRoot, 'app-data'))
   app.setPath('sessionData', path.join(fixtureRoot, 'session-data'))
+  if (smokeOptions.asarPath) {
+    const expectedAsar = path.join(root, 'dist', 'win-unpacked', 'resources', 'app.asar')
+    const asarInfo = nativeFs.lstatSync(smokeOptions.asarPath)
+    if (smokeOptions.asarPath.toLowerCase() !== expectedAsar.toLowerCase()) throw new Error('asar-path-mismatch')
+    if (!asarInfo.isFile() || asarInfo.isSymbolicLink()) throw new Error('asar-is-not-an-ordinary-file')
+    if (nativeFs.realpathSync(smokeOptions.asarPath).toLowerCase() !== smokeOptions.asarPath.toLowerCase()) throw new Error('asar-realpath-mismatch')
+    if (process.env.ELECTRON_RENDERER_URL) throw new Error('renderer-url-env-present-in-asar-smoke')
+  }
 } catch (error) {
   console.error(`[smoke] 无法建立隔离的临时 Electron 数据目录：${error && error.message ? error.message : String(error)}`)
   process.exit(1)
 }
-require(path.join(root, 'out', 'main', 'index.js'))
+const mainEntry = smokeOptions.asarPath
+  ? path.join(smokeOptions.asarPath, 'out', 'main', 'index.js')
+  : path.join(root, 'out', 'main', 'index.js')
+let loadedMainEntry = ''
+let loadedTypeScriptPath = ''
+let packagedTypeScriptVerified = false
+try {
+  loadedMainEntry = require.resolve(mainEntry)
+  if (smokeOptions.asarPath) {
+    if (!loadedMainEntry.toLowerCase().startsWith(`${smokeOptions.asarPath.toLowerCase()}${path.sep}`)) {
+      throw new Error('main-entry-did-not-resolve-from-app-asar')
+    }
+    loadedTypeScriptPath = require.resolve('typescript', { paths: [path.join(smokeOptions.asarPath, 'out', 'main')] })
+    if (!loadedTypeScriptPath.toLowerCase().startsWith(`${smokeOptions.asarPath.toLowerCase()}${path.sep}`)) {
+      throw new Error('typescript-did-not-resolve-from-app-asar')
+    }
+    const typescript = require(loadedTypeScriptPath)
+    const source = typescript.createSourceFile('smoke.ts', 'export const smoke = 1', typescript.ScriptTarget.Latest, true)
+    if (source.statements.length !== 1) throw new Error('packaged-typescript-parser-did-not-run')
+    packagedTypeScriptVerified = true
+  }
+  require(mainEntry)
+} catch (error) {
+  console.error(`[smoke] packaged entry preflight failed: ${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -154,11 +207,25 @@ app.whenReady().then(async () => {
     loadedIsBuildOutput = false
   }
   result.loadedIsBuildOutput = loadedIsBuildOutput
+  result.loadedMainEntry = loadedMainEntry
+  result.loadedMainFromAsar = smokeOptions.asarPath
+    ? loadedMainEntry.toLowerCase().startsWith(`${smokeOptions.asarPath.toLowerCase()}${path.sep}`)
+    : false
+  result.loadedRendererFromAsar = smokeOptions.asarPath
+    ? loadedIsBuildOutput && path.resolve(fileURLToPath(result.url.split('#')[0].split('?')[0])).toLowerCase() === path.resolve(expectedEntry).toLowerCase()
+    : false
+  result.packagedTypeScriptPath = loadedTypeScriptPath
+  result.packagedTypeScriptVerified = packagedTypeScriptVerified
 
   log(`windowCount=${result.windowCount} crashed=${result.crashed}`)
   log(`url=${result.url}`)
   log(`title=${JSON.stringify(result.title)} rootChildren=${result.rootChildren} hasApi=${result.hasApi}`)
   log(`loadedIsBuildOutput=${result.loadedIsBuildOutput} (expected ${expectedEntry})`)
+  if (smokeOptions.asarPath) {
+    log(`loadedMainFromAsar=${result.loadedMainFromAsar} main=${result.loadedMainEntry}`)
+    log(`loadedRendererFromAsar=${result.loadedRendererFromAsar}`)
+    log(`packagedTypeScriptVerified=${result.packagedTypeScriptVerified} path=${result.packagedTypeScriptPath}`)
+  }
   log(`ipc=${JSON.stringify(result.ipc)}`)
   if (result.evalError) log(`evalError=${result.evalError}`)
   for (const error of collectedErrors) log(`collected-error: ${error}`)
@@ -177,6 +244,7 @@ app.whenReady().then(async () => {
     typeof result.ipc === 'string' &&
     result.ipc.startsWith('OK') &&
     !result.evalError &&
+    (!smokeOptions.asarPath || (result.loadedMainFromAsar && result.loadedRendererFromAsar && result.packagedTypeScriptVerified)) &&
     collectedErrors.length === 0
 
   finish(ok)
