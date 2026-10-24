@@ -16,7 +16,7 @@ import type { LlmProfile } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { buildContext, renderBatch } from './context-builder.ts'
+import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { generateInterview } from './generator.ts'
 
@@ -433,6 +433,22 @@ test('a fixed budget keeps mutually referenced core methods whole beside many au
   assert.deepEqual(reversed.batches.map((batch) => [batch.label, batch.files.map((file) => file.relPath)]),
     built.batches.map((batch) => [batch.label, batch.files.map((file) => file.relPath)]),
     'weighted selection stays deterministic under reversed scans')
+})
+
+test('small structured configuration keeps middle dependency sections beside large documents', async () => {
+  const root = await makeWeightedFixture(40)
+  const config = `[project]\nname = "sample"\ndependencies = ["transport-lib"]\n${'# build configuration background\n'.repeat(60)}[project.optional-dependencies]\nextra_feature = ["optional-lib"]\n${'# tooling configuration background\n'.repeat(60)}[tool.checker]\nstrict = true\n`
+  await fs.writeFile(path.join(root, 'pyproject.toml'), config)
+  const built = await buildContext(await scanProject(root), 'medium', { maxChars: 120_000 })
+  const manifest = built.batches[0].files.find(file => file.relPath === 'pyproject.toml')
+  assert.ok(manifest)
+  assert.equal(manifest.truncated, false)
+  assert.equal(manifest.content, config)
+  const final = renderBatchWithinBudget(built.headerText, built.treeText, built.batches[0], 100_000)
+  assert.ok(final.text.length <= 100_000)
+  assert.ok(final.text.includes(config), 'both runtime and optional dependency sections survive the final fit')
+  assert.ok(final.text.includes(CORE_PIPELINE_SOURCE), 'core implementation keeps its complete unit')
+  assert.ok(final.text.includes('README_HEAD_START') && final.text.includes('README_TAIL_END'))
 })
 
 test('a small fully fitting project keeps every file whole regardless of importance signals', async () => {

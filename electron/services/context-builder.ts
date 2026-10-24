@@ -148,14 +148,17 @@ function normalizeContextWeight(value: unknown): number {
 
 function contextFileWeight(relPath: string, signals: FileSelectionSignals): number {
   const rel = relPath.replace(/\\/g, '/')
-  if (isDocumentOrConfigPath(rel) || TEST_PATH_PATTERN.test(rel) || GENERATED_PATH_PATTERN.test(rel)) {
+  if (TEST_PATH_PATTERN.test(rel) || GENERATED_PATH_PATTERN.test(rel)) {
     return CONTEXT_WEIGHT_MIN
   }
+  // Structured configuration carries runtime dependencies and optional feature
+  // switches; keep small manifests ahead of long narrative documents.
+  if (isDocumentOrConfigPath(rel)) return /\.(?:jsonc?|json5|toml|ya?ml|ini|cfg|xml)$/i.test(rel) ? 4 : CONTEXT_WEIGHT_MIN
   const extension = rel.split('/').pop()?.split('.').pop()?.toLowerCase() ?? ''
   if (!CODE_EXTS.has(extension)) return CONTEXT_WEIGHT_MIN
   if (signals.entryPaths.has(rel)) return CONTEXT_WEIGHT_MAX
   const inbound = signals.importedBy.get(rel) ?? 0
-  if (inbound > 0) return Math.min(CONTEXT_WEIGHT_MAX - 1, 2 + Math.min(4, inbound))
+  if (inbound > 0) return Math.min(CONTEXT_WEIGHT_MAX, 3 + Math.min(5, inbound * 2))
   return 2
 }
 
