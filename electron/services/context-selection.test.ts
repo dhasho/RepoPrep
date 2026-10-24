@@ -64,6 +64,67 @@ async function makeFixture(): Promise<string> {
   return root
 }
 
+const CORE_PIPELINE_SOURCE = [
+  'export function corePipeline(input: string) {',
+  '  const staged = engineCycle(input)',
+  '  // CORE_PIPELINE_HEAD',
+  '  const normalized = staged.trim().toLowerCase()',
+  '  const parts = normalized.split(/\\s+/)',
+  '  const deduped = [...new Set(parts)]',
+  '  const scored = deduped.map((part, index) => part + ":" + index)',
+  '  const joined = scored.join("|")',
+  Array.from({ length: 100 }, () => '  // pipeline stage detail').join('\n'),
+  '  const label = formatLabel(joined)',
+  '  // CORE_PIPELINE_TAIL',
+  '  return { label, parts: deduped.length }',
+  '}'
+].join('\n')
+
+const ENGINE_CYCLE_SOURCE = [
+  'export function engineCycle(value: string) {',
+  '  // ENGINE_CYCLE_HEAD',
+  '  const trimmed = value.trim()',
+  Array.from({ length: 60 }, () => '  // cycle stage detail').join('\n'),
+  '  // ENGINE_CYCLE_TAIL',
+  '  return trimmed.split("-").reverse().join("-")',
+  '}'
+].join('\n')
+
+/** Many large low-priority documents/tests coexisting with mutually referencing core modules. */
+async function makeWeightedFixture(docCount: number): Promise<string> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-context-selection-'))
+  tempDirs.push(root)
+  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'weighted-selection', main: 'src/core/entry.ts' }))
+  await fs.writeFile(path.join(root, 'README.md'), `README_HEAD_START\n${'项目总体说明与使用指南。'.repeat(2_450)}\nREADME_TAIL_END`)
+  await fs.mkdir(path.join(root, 'src', 'core'), { recursive: true })
+  await fs.writeFile(path.join(root, 'src', 'core', 'entry.ts'), [
+    "import { engineCycle } from './engine.js'",
+    "import { formatLabel } from './format.js'",
+    Array.from({ length: 60 }, () => '// entry padding before the pipeline').join('\n'),
+    CORE_PIPELINE_SOURCE,
+    Array.from({ length: 120 }, () => '// entry trailing detail line').join('\n'),
+    "export const ENTRY_KEEP = 'ENTRY_MODULE_MARKER'"
+  ].join('\n'))
+  await fs.writeFile(path.join(root, 'src', 'core', 'engine.ts'), [
+    "import { formatLabel } from './format.js'",
+    ENGINE_CYCLE_SOURCE,
+    Array.from({ length: 60 }, () => '// engine trailing detail line').join('\n'),
+    "export const ENGINE_KEEP = 'ENGINE_MODULE_MARKER'"
+  ].join('\n'))
+  await fs.writeFile(path.join(root, 'src', 'core', 'format.ts'), 'export function formatLabel(value: string) {\n  return value.slice(0, 80)\n}\n')
+  await fs.writeFile(path.join(root, 'plain.ts'), `export const PLAIN_MODULE_MARKER = 'plain'\n${'// plain module detail\n'.repeat(55)}`)
+  await fs.mkdir(path.join(root, 'tests'), { recursive: true })
+  for (let index = 0; index < docCount; index++) {
+    const id = String(index + 1).padStart(2, '0')
+    await fs.writeFile(path.join(root, `guide-${id}.md`), `DOC_${id}_HEAD\n${'项目设计背景说明段落。'.repeat(1_800)}\nDOC_${id}_TAIL`)
+  }
+  for (let index = 0; index < 4; index++) {
+    const id = String(index + 1).padStart(2, '0')
+    await fs.writeFile(path.join(root, 'tests', `core-${id}.test.ts`), `export const TEST_${id}_HEAD = 'tests'\n${'it handles a synthetic case with a bounded expectation\n'.repeat(300)}`)
+  }
+  return root
+}
+
 function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>): () => void {
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -327,4 +388,62 @@ test('more than 128 small files near the fine boundary use exact rendered overhe
   assert.ok(batch.totalChars >= CONTEXT_CHAR_BUDGETS.fine - 8_000, 'the selected text should use the available budget without crossing it')
   assert.equal(batch.totalChars, renderBatch(built.headerText, built.treeText, batch).length)
   assert.ok(batch.totalChars <= CONTEXT_CHAR_BUDGETS.fine)
+})
+
+test('a fixed budget keeps mutually referenced core methods whole beside many auxiliary documents', async () => {
+  const root = await makeWeightedFixture(40)
+  const scan = await scanProject(root)
+  const built = await buildContext(scan, 'medium', { maxChars: 120_000 })
+  assert.equal(built.contextTruncation.contentTruncated, true, 'the fixed budget cannot hold the whole fixture, and that must be disclosed')
+  const files = built.batches.flatMap((batch) => batch.files)
+  const byPath = new Map(files.map((file) => [file.relPath, file]))
+
+  const entry = byPath.get('src/core/entry.ts')
+  assert.ok(entry, 'the manifest-declared entry stays selected')
+  assert.equal(entry.truncated, false, 'the entry keeps enough room to stay whole under the constrained budget')
+  assert.ok(entry.content.includes(CORE_PIPELINE_SOURCE), 'the complete core pipeline method is retained verbatim')
+  const engine = byPath.get('src/core/engine.ts')
+  assert.ok(engine && engine.content.length > 0, 'the locally referenced core module keeps a useful slice')
+  const plain = byPath.get('plain.ts')
+  assert.ok(plain?.content.includes('PLAIN_MODULE_MARKER'), 'a small unreferenced module keeps real coverage')
+
+  const readme = byPath.get('README.md')
+  assert.ok(readme?.truncated, 'the oversized README is honestly marked partial')
+  assert.ok(readme?.content.includes('README_HEAD_START') && readme?.content.includes('README_TAIL_END'),
+    'the README keeps both its beginning and its end as necessary document context')
+
+  const docs = files.filter((file) => /^guide-\d+\.md$/.test(file.relPath))
+  assert.equal(docs.length, 40, 'every auxiliary document stays represented instead of being dropped')
+  assert.ok(docs.every((doc) => doc.content.length > 0 && doc.truncated), 'each document is clipped rather than removed or silently complete')
+  assert.ok(docs.some((doc) => doc.content.includes('DOC_01_HEAD')), 'documents keep their beginning as a usable excerpt')
+  const tests = files.filter((file) => /^tests\//.test(file.relPath))
+  assert.equal(tests.length, 4, 'test files remain covered with a bounded slice')
+
+  for (const batch of built.batches) {
+    assert.equal(batch.totalChars, renderBatch(built.headerText, built.treeText, batch).length,
+      'totalChars must include headings, tree, fences, and content exactly')
+    assert.ok(batch.totalChars <= 120_000, 'the constrained batch stays inside the requested budget')
+  }
+  assert.equal(built.selection?.providedChars, files.reduce((sum, file) => sum + file.content.length, 0))
+  assert.equal(built.selection?.omittedFiles, 0, 'no eligible file was dropped entirely from the fixed window')
+
+  scan.files.reverse()
+  const reversed = await buildContext(scan, 'medium', { maxChars: 120_000 })
+  scan.files.reverse()
+  assert.deepEqual(reversed.batches.map((batch) => [batch.label, batch.files.map((file) => file.relPath)]),
+    built.batches.map((batch) => [batch.label, batch.files.map((file) => file.relPath)]),
+    'weighted selection stays deterministic under reversed scans')
+})
+
+test('a small fully fitting project keeps every file whole regardless of importance signals', async () => {
+  const root = await makeWeightedFixture(2)
+  const scan = await scanProject(root)
+  const built = await buildContext(scan, 'medium')
+  assert.equal(built.contextTruncation.contentTruncated, false, 'everything fits, so nothing may be flagged as omitted')
+  for (const file of built.batches.flatMap((batch) => batch.files)) {
+    assert.equal(file.truncated, false, `${file.relPath} must remain complete when the budget affords every file`)
+  }
+  const byPath = new Map(built.batches.flatMap((batch) => batch.files).map((file) => [file.relPath, file]))
+  assert.ok(byPath.get('src/core/entry.ts')?.content.includes(CORE_PIPELINE_SOURCE))
+  assert.ok(byPath.get('README.md')?.content.includes('README_TAIL_END'))
 })

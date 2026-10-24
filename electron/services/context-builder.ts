@@ -25,7 +25,7 @@ import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, safeClipText, treeCha
 // @ts-ignore TS5097 -- extension is required by the direct Node security test runner.
 import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles } from './file-selection.ts'
+import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles, type FileSelectionSignals } from './file-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -47,6 +47,8 @@ export interface ContextFile {
   selectionRegions?: SourceRegion[]
   /** Ranked complete source candidates cached after one redacted analysis pass. */
   selectionCandidates?: SourceRegion[]
+  /** Internal bounded importance weight for constrained budget sharing; absent means equal share. */
+  weight?: number
 }
 
 export interface BuildContextOptions {
@@ -123,8 +125,49 @@ function addContentSecurity(target: ContentSecuritySummary, source: ContentSecur
   }
 }
 
+/**
+ * Bounded per-file weights for constrained budget sharing: manifest-declared
+ * entries and locally referenced source earn more room than plain source,
+ * which earns more than documents, tests, and generated files. Derived only
+ * from the same generic signals that already order the context, so the result
+ * is deterministic and never project-specific.
+ */
+const CONTEXT_WEIGHT_MIN = 1
+const CONTEXT_WEIGHT_MAX = 8
+/** Every hungry file keeps at least this slice before weights differentiate. */
+const WEIGHTED_MIN_SHARE = 1024
+
+const TEST_PATH_PATTERN = /(^|\/)(__tests__|tests?|spec|fixtures?)(\/|$)|\.(test|spec)\.[^.]+$/i
+const GENERATED_PATH_PATTERN = /(^|\/)(generated|dist|build|coverage|vendor)(\/|$)|\.(min|generated)\.[^.]+$/i
+
+function normalizeContextWeight(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= CONTEXT_WEIGHT_MIN
+    ? Math.min(CONTEXT_WEIGHT_MAX, Math.floor(value))
+    : CONTEXT_WEIGHT_MIN
+}
+
+function contextFileWeight(relPath: string, signals: FileSelectionSignals): number {
+  const rel = relPath.replace(/\\/g, '/')
+  if (isDocumentOrConfigPath(rel) || TEST_PATH_PATTERN.test(rel) || GENERATED_PATH_PATTERN.test(rel)) {
+    return CONTEXT_WEIGHT_MIN
+  }
+  const extension = rel.split('/').pop()?.split('.').pop()?.toLowerCase() ?? ''
+  if (!CODE_EXTS.has(extension)) return CONTEXT_WEIGHT_MIN
+  if (signals.entryPaths.has(rel)) return CONTEXT_WEIGHT_MAX
+  const inbound = signals.importedBy.get(rel) ?? 0
+  if (inbound > 0) return Math.min(CONTEXT_WEIGHT_MAX - 1, 2 + Math.min(4, inbound))
+  return 2
+}
+
+function allocateBodyBudget(demands: readonly number[], budget: number, weights?: readonly number[]): number[] {
+  if (!weights || weights.length !== demands.length) return allocateEqualShare(demands, budget)
+  const effective = demands.map((_, index) => normalizeContextWeight(weights[index]))
+  if (effective.every((weight) => weight === effective[0])) return allocateEqualShare(demands, budget)
+  return allocateWeightedShare(demands, budget, effective)
+}
+
 /** Equal-share water filling: short files return unused space to longer files. */
-function allocateBodyBudget(demands: readonly number[], budget: number): number[] {
+function allocateEqualShare(demands: readonly number[], budget: number): number[] {
   const allocations = demands.map(() => 0)
   let remaining = Math.max(0, Math.floor(budget))
   let active = demands.map((_, index) => index).filter((index) => demands[index] > 0)
@@ -148,6 +191,55 @@ function allocateBodyBudget(demands: readonly number[], budget: number): number[
     for (const index of active) allocations[index] += share
     remaining -= share * active.length
     for (let index = 0; index < remaining; index++) allocations[active[index]]++
+    break
+  }
+  return allocations
+}
+
+/**
+ * Weighted water filling with a floor share: every still-hungry file first
+ * keeps a minimum slice while the budget affords one, then the remainder is
+ * shared in proportion to bounded weights. Saturated files return their unused
+ * space to the rest, and the process stays deterministic throughout.
+ */
+function allocateWeightedShare(demands: readonly number[], budget: number, weights: readonly number[]): number[] {
+  const allocations = demands.map(() => 0)
+  let remaining = Math.max(0, Math.floor(budget))
+  let active = demands.map((_, index) => index).filter((index) => demands[index] > 0)
+  // One floor pass: every still-hungry file keeps a minimum slice while the
+  // budget affords one; files filled by it are done and return nothing later.
+  if (active.length && remaining > 0) {
+    const floorShare = Math.min(WEIGHTED_MIN_SHARE, Math.floor(remaining / active.length))
+    if (floorShare > 0) {
+      const filled: number[] = []
+      for (const index of active) {
+        const desired = demands[index] - allocations[index]
+        allocations[index] += Math.min(desired, floorShare)
+        remaining -= Math.min(desired, floorShare)
+        if (desired <= floorShare) filled.push(index)
+      }
+      const filledSet = new Set(filled)
+      active = active.filter((index) => !filledSet.has(index))
+    }
+  }
+  while (active.length && remaining > 0) {
+    const weightSum = active.reduce((sum, index) => sum + weights[index], 0)
+    const shares = active.map((index) => Math.floor((remaining * weights[index]) / weightSum))
+    const saturated = active.filter((index, position) => demands[index] - allocations[index] <= shares[position])
+    if (saturated.length) {
+      const saturatedSet = new Set(saturated)
+      active = active.filter((index) => !saturatedSet.has(index))
+      for (const index of saturated) {
+        const amount = demands[index] - allocations[index]
+        allocations[index] += amount
+        remaining -= amount
+      }
+      continue
+    }
+    for (const [position, index] of active.entries()) allocations[index] += shares[position]
+    remaining -= shares.reduce((sum, share) => sum + share, 0)
+    const remainderOrder = [...active].sort((a, b) => weights[b] - weights[a] || a - b)
+    for (let index = 0; index < remaining; index++) allocations[remainderOrder[index]]++
     break
   }
   return allocations
@@ -285,7 +377,8 @@ async function pickFiles(
   }, 0)
   const bodyBudget = Math.max(0, budgetChars - warningReserve - baseChars - truncatedOverhead)
   const demands = selected.map(({ redaction }) => redaction.content.length)
-  const allocations = keepWholeSelected ? demands : allocateBodyBudget(demands, bodyBudget)
+  const weights = selected.map(({ file }) => contextFileWeight(file.relPath, signals))
+  const allocations = keepWholeSelected ? demands : allocateBodyBudget(demands, bodyBudget, weights)
   const out: ContextFile[] = []
   const contentSecurity = emptyContentSecurity()
   let contentTruncated = candidateIndex < candidates.length || readBudgetSkipped
@@ -313,7 +406,8 @@ async function pickFiles(
       selectionCandidates: selectionCandidates?.length ? selectionCandidates : undefined,
       truncated,
       redacted: redaction.totalMatches > 0,
-      redactionMatches: redaction.totalMatches
+      redactionMatches: redaction.totalMatches,
+      weight: weights[index]
     })
     contentTruncated ||= truncated
     if (redaction.totalMatches > 0) {
@@ -609,7 +703,8 @@ export function renderBatchWithinBudget(
       index,
       kind: isDocumentOrConfigPath(file.relPath) ? 'document' as const : file.selectionCandidates?.length || file.selectionRegions?.length ? 'regions' as const : 'whole' as const,
       overhead: 1 + clippedTitle.length + 9,
-      demand: file.content.length
+      demand: file.content.length,
+      weight: normalizeContextWeight(file.weight)
     }
   })
   // Reserve entry framing for code first, then documents, before sharing the
@@ -630,7 +725,11 @@ export function renderBatchWithinBudget(
     })
     if (!included.length) { allocations = []; break }
     const overhead = included.reduce((sum, plan) => sum + plan.overhead, 0)
-    allocations = allocateBodyBudget(included.map((plan) => plan.demand), Math.max(0, outputBudget - baseChars - overhead))
+    allocations = allocateBodyBudget(
+      included.map((plan) => plan.demand),
+      Math.max(0, outputBudget - baseChars - overhead),
+      included.map((plan) => plan.weight)
+    )
     const failed = included.filter((plan, index) => !canRenderPlannedFile(plan, allocations[index]))
     if (!failed.length) break
     const failedSet = new Set(failed)

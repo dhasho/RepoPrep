@@ -18,7 +18,7 @@ import type { FileNode, Granularity, LlmProfile } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { buildContext, renderBatch } from './context-builder.ts'
+import { buildContext, renderBatch, renderBatchWithinBudget, type ContextBatch, type ContextFile } from './context-builder.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { generateInterview } from './generator.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -90,6 +90,61 @@ async function makeModuleCapFixture(directoryCount: number, includeRootCode = tr
     const moduleName = `module${String(index).padStart(2, '0')}`
     await fs.mkdir(path.join(root, moduleName), { recursive: true })
     await fs.writeFile(path.join(root, moduleName, 'service.ts'), `export const MODULE_CAP_KEEP_${String(index).padStart(2, '0')} = true\n`)
+  }
+  return root
+}
+
+const CORE_PIPELINE_SOURCE = [
+  'export function corePipeline(input: string) {',
+  '  const staged = engineCycle(input)',
+  '  // CORE_PIPELINE_HEAD',
+  '  const normalized = staged.trim().toLowerCase()',
+  '  const parts = normalized.split(/\\s+/)',
+  '  const deduped = [...new Set(parts)]',
+  '  const scored = deduped.map((part, index) => part + ":" + index)',
+  '  const joined = scored.join("|")',
+  Array.from({ length: 100 }, () => '  // pipeline stage detail').join('\n'),
+  '  const label = formatLabel(joined)',
+  '  // CORE_PIPELINE_TAIL',
+  '  return { label, parts: deduped.length }',
+  '}'
+].join('\n')
+
+/** CJK-heavy auxiliary documents force the token-budgeted request-level final fit. */
+async function makeWeightedGenerateFixture(): Promise<string> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue90-context-budget-'))
+  tempDirs.push(root)
+  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'weighted-generate-fixture', main: 'src/core/entry.ts' }))
+  await fs.writeFile(path.join(root, 'README.md'), `README_HEAD_START\n${'项目总体说明与使用指南。'.repeat(2_450)}\nREADME_TAIL_END`)
+  await fs.mkdir(path.join(root, 'src', 'core'), { recursive: true })
+  await fs.writeFile(path.join(root, 'src', 'core', 'entry.ts'), [
+    "import { engineCycle } from './engine.js'",
+    "import { formatLabel } from './format.js'",
+    CORE_PIPELINE_SOURCE,
+    Array.from({ length: 60 }, () => '// entry trailing detail line').join('\n'),
+    "export const ENTRY_KEEP = 'ENTRY_MODULE_MARKER'"
+  ].join('\n'))
+  await fs.writeFile(path.join(root, 'src', 'core', 'engine.ts'), [
+    "import { formatLabel } from './format.js'",
+    'export function engineCycle(value: string) {',
+    '  // ENGINE_CYCLE_HEAD',
+    '  const trimmed = value.trim()',
+    Array.from({ length: 40 }, () => '  // cycle stage detail').join('\n'),
+    '  // ENGINE_CYCLE_TAIL',
+    '  return trimmed.split("-").reverse().join("-")',
+    '}',
+    "export const ENGINE_KEEP = 'ENGINE_MODULE_MARKER'"
+  ].join('\n'))
+  await fs.writeFile(path.join(root, 'src', 'core', 'format.ts'), 'export function formatLabel(value: string) {\n  return value.slice(0, 80)\n}\n')
+  await fs.writeFile(path.join(root, 'plain.ts'), `export const PLAIN_MODULE_MARKER = 'plain'\n${'// plain module detail\n'.repeat(55)}`)
+  for (let index = 0; index < 8; index++) {
+    const id = String(index + 1).padStart(2, '0')
+    await fs.writeFile(path.join(root, `guide-${id}.md`), `DOC_${id}_HEAD\n${'项目设计背景说明段落。'.repeat(1_800)}\nDOC_${id}_TAIL`)
+  }
+  await fs.mkdir(path.join(root, 'tests'), { recursive: true })
+  for (let index = 0; index < 2; index++) {
+    const id = String(index + 1).padStart(2, '0')
+    await fs.writeFile(path.join(root, 'tests', `core-${id}.test.ts`), `export const TEST_${id}_HEAD = 'tests'\n${'it handles a synthetic case with a bounded expectation\n'.repeat(300)}`)
   }
   return root
 }
@@ -662,5 +717,120 @@ test('combined read and context warnings remain bounded in real coarse and fine 
       assert.ok(!value.includes(JSON.stringify(root)), 'warning output must not expose a JSON-escaped absolute root')
     }
     assert.doesNotMatch(serializedRequests, /issue90-private-path-secret|\.env/)
+  }
+})
+
+test('a constrained window keeps the complete core method in the real request beside document ends', async () => {
+  const root = await makeWeightedGenerateFixture()
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restore = installMock(requests)
+  const diagnostics: unknown[] = []
+  let result: Awaited<ReturnType<typeof generateInterview>>
+  try {
+    result = await generateInterview({
+      scan, granularity: 'medium', roleFocus: 'general',
+      profile: { ...profile, contextWindowTokens: 49_152 },
+      signal: new AbortController().signal, onProgress: () => undefined,
+      onDiagnostics: (value) => diagnostics.push(value)
+    })
+  } finally { restore() }
+
+  assert.equal(requests.length, 1, 'a medium single-batch generation sends exactly one initial request')
+  const prompt = requests[0].messages.map((message) => message.content).join('\n')
+  assert.ok(prompt.includes(CORE_PIPELINE_SOURCE), 'the dispatched request contains the complete core method verbatim')
+  assert.ok(prompt.includes('README_HEAD_START') && prompt.includes('README_TAIL_END'),
+    'the README keeps both ends as necessary document context inside the request')
+  assert.ok(prompt.includes('DOC_01_HEAD') && prompt.includes('DOC_08_TAIL'),
+    'auxiliary documents keep both-end excerpts instead of being dropped')
+  assert.ok(prompt.includes('PLAIN_MODULE_MARKER'), 'the small unreferenced module stays covered in the request')
+  const inputBudget = resolveGenerationBudget({ ...profile, contextWindowTokens: 49_152 }, 'medium').inputTokens
+  assert.ok(estimateMessageTokens(requests[0].messages) <= inputBudget, 'the request stays inside its estimated token budget')
+  assert.equal(result!.contextTruncation?.contentTruncated, true, 'the build stage must disclose omitted content')
+  assert.equal(result!.contextTruncation?.requestTruncated, true, 'the request-level fit must disclose its additional clipping')
+  assert.doesNotMatch(prompt, new RegExp(profile.apiKey))
+  const diagnostic = diagnostics[0] as { status: string; requestCount: number; selectedFiles: number; selectedRegions: number }
+  assert.equal(diagnostic.status, 'succeeded')
+  assert.equal(diagnostic.requestCount, requests.length)
+  assert.ok(diagnostic.selectedFiles > 0)
+  assert.ok(diagnostic.selectedRegions > 0)
+})
+
+test('weighted final fitting keeps the core region whole and only clips the auxiliary document', () => {
+  const core = [
+    'export function engineCycle(value: string) {',
+    '  // ENGINE_CYCLE_HEAD',
+    Array.from({ length: 500 }, () => '  // cycle stage detail').join('\n'),
+    '  // ENGINE_CYCLE_TAIL',
+    '  return value.trim()',
+    '}'
+  ].join('\n')
+  const doc = `DOC_HEAD\n${'auxiliary documentation filler '.repeat(220)}DOC_MIDDLE_RARE_MARKER\n${'auxiliary documentation filler '.repeat(220)}\nDOC_TAIL`
+  const coreFile: ContextFile = {
+    relPath: 'src/core/engine.ts', content: core, truncated: false, redacted: false, redactionMatches: 0,
+    selectionCandidates: [{ start: 0, end: core.length, text: core, label: 'engineCycle', complete: true, priority: 100 }],
+    weight: 8
+  }
+  const docFile: ContextFile = { relPath: 'docs/guide.md', content: doc, truncated: true, redacted: false, redactionMatches: 0 }
+  const batch: ContextBatch = { label: 'weighted-final-fit', files: [coreFile, docFile], totalChars: 0, kind: 'global', weight: 1 }
+
+  const weighted = renderBatchWithinBudget('H', 'T', batch, 21_000)
+  assert.ok(weighted.text.length <= 21_000)
+  assert.equal(weighted.truncated, true)
+  assert.ok(weighted.text.includes(core), 'the weighted core region stays complete in the fitted request')
+  assert.ok(weighted.text.includes('DOC_HEAD') && weighted.text.includes('DOC_TAIL'),
+    'the document keeps its bounded head-and-tail excerpt')
+  assert.ok(!weighted.text.includes('DOC_MIDDLE_RARE_MARKER'), 'the document is genuinely clipped, not silently complete')
+  assert.deepEqual(weighted.selection?.filePaths, ['src/core/engine.ts', 'docs/guide.md'])
+
+  const unweighted = renderBatchWithinBudget('H', 'T', {
+    ...batch,
+    files: batch.files.map((file) => ({
+      relPath: file.relPath, content: file.content, truncated: file.truncated,
+      redacted: file.redacted, redactionMatches: file.redactionMatches, selectionCandidates: file.selectionCandidates
+    }))
+  }, 21_000)
+  assert.ok(unweighted.text.length <= 21_000)
+  assert.equal(unweighted.truncated, true)
+  assert.ok(!unweighted.text.includes(core),
+    'without weights the legacy equal share cannot afford the whole core region, which is what the weighting fixes')
+})
+
+test('illegal weights fall back to the legacy equal share and unconstrained fits stay byte-identical', () => {
+  const sources = [
+    { relPath: 'src/entry.ts', content: 'export const entry = 1\n'.repeat(900), weight: 3 },
+    { relPath: 'src/engine.ts', content: 'export const engine = 2\n'.repeat(900), weight: 7 },
+    { relPath: 'docs/guide.md', content: '设计说明段落。'.repeat(600), weight: 1 }
+  ]
+  const stripWeights = sources.map(({ relPath, content }) => ({ relPath, content, truncated: false, redacted: false, redactionMatches: 0 }) as ContextFile)
+  const keepWeights = sources.map(({ relPath, content, weight }) => ({ relPath, content, truncated: false, redacted: false, redactionMatches: 0, weight }) as ContextFile)
+  const headerText = 'Header'
+  const treeText = 'Tree'
+  const batchOf = (files: ContextFile[]): ContextBatch => ({ label: 'weights-contract', files, totalChars: 0, kind: 'global', weight: 1 })
+
+  const whole = renderBatch(headerText, treeText, batchOf(keepWeights))
+  const fitted = renderBatchWithinBudget(headerText, treeText, batchOf(keepWeights), whole.length + 8)
+  assert.equal(fitted.text, whole, 'when everything fits, weights must not change a single request byte')
+  assert.equal(fitted.truncated, false)
+
+  const illegal = sources.map(({ relPath, content }) => ({
+    relPath, content, truncated: false, redacted: false, redactionMatches: 0,
+    weight: Number.NaN
+  }) as ContextFile)
+  const budget = Math.floor(whole.length / 2)
+  const legacy = renderBatchWithinBudget(headerText, treeText, batchOf(stripWeights), budget)
+  const collapsed = renderBatchWithinBudget(headerText, treeText, batchOf(illegal), budget)
+  assert.equal(collapsed.text, legacy.text, 'weights that all normalize to the same floor must collapse to the legacy equal share')
+  assert.equal(collapsed.truncated, true)
+  assert.ok(collapsed.text.length <= budget)
+
+  const mixed = sources.map(({ relPath, content }, index) => ({
+    relPath, content, truncated: false, redacted: false, redactionMatches: 0,
+    weight: [Number.NaN, 1e12, 0][index]
+  }) as ContextFile)
+  for (const fraction of [2, 3, 5]) {
+    const limit = Math.floor(whole.length / fraction)
+    const extreme = renderBatchWithinBudget(headerText, treeText, batchOf(mixed), limit)
+    assert.ok(extreme.text.length <= limit, `mixed illegal weights must stay inside the budget at 1/${fraction}`)
   }
 })
