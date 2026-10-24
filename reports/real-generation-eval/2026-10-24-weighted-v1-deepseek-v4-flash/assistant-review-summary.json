@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "2178580d-a8d4-45e7-b8bc-147d7c4bb8f6",
+  "reportDigest": "sha256:0a1ae0e191fbaef17cabbb02cc88883c39d66290e02a90eacfeef7efb629dfce",
+  "status": "reviewed-by-assistant",
+  "method": "Primary-agent source review of all40freshanswers and follow-ups",
+  "blind": false,
+  "humanReviewStatus": "pending",
+  "completedCases": [
+    "schedule",
+    "requests"
+  ],
+  "pendingCases": [],
+  "reviewedFacts": 15,
+  "questions": 40,
+  "requests": 2,
+  "usage": {
+    "inputTokens": 85073,
+    "outputTokens": 46890,
+    "totalTokens": 131963
+  },
+  "aggregate": {
+    "generation": {
+      "covered": 9,
+      "partial": 3,
+      "missing": 3,
+      "contradicted": 0,
+      "incorrect": 1,
+      "imprecise": 2
+    }
+  },
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "This is a completed two-case run, not a new four-case generation."
+  ]
+}

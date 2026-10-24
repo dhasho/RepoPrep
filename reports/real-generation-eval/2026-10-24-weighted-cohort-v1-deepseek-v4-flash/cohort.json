@@ -1,0 +1,363 @@
+{
+  "schemaVersion": "repoprep-real-eval-cohort-v1",
+  "composedAt": "2026-10-24T12:02:21.264Z",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "model": "deepseek-v4-flash",
+  "protocol": "openai",
+  "config": {
+    "granularity": "medium",
+    "budget": {
+      "min": 15,
+      "target": 20,
+      "max": 25
+    },
+    "temperature": 0.4
+  },
+  "inputReports": {
+    "baseline": {
+      "role": "baseline",
+      "status": "complete",
+      "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+      "generatedAt": "2026-10-23T09:14:49.649Z",
+      "reference": "../2026-10-23-deepseek-v4-flash/report.json",
+      "canonicalHash": "3279159288ace996a57d8012f6eff6752b21c62866854945dbc41294058639e0"
+    },
+    "current": {
+      "role": "current",
+      "status": "complete",
+      "runId": "2178580d-a8d4-45e7-b8bc-147d7c4bb8f6",
+      "generatedAt": "2026-10-24T11:39:13.914Z",
+      "reference": "../2026-10-24-weighted-v1-deepseek-v4-flash/report.json",
+      "canonicalHash": "c93dbf09a541ae3f99b70099e0bffedfaeb5a36183dfb22579ad1d69bb730132"
+    },
+    "reuse": {
+      "role": "reuse",
+      "status": "complete",
+      "runId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+      "generatedAt": "2026-10-23T18:52:13.674Z",
+      "reference": "../2026-10-24-balanced-v1-deepseek-v4-flash/report.json",
+      "canonicalHash": "b7aa2de46b08271ee301dca24584f82ec4141e7a99fc831ff30f57001e88b9e2"
+    }
+  },
+  "reuseProof": {
+    "canonicalHash": "d225fde510c0404d710247e1a5e1f15508478d7b71b724fd1aeabfad460a3f02"
+  },
+  "measurement": {
+    "caseCount": 4,
+    "freshCases": [
+      "requests",
+      "schedule"
+    ],
+    "reusedCases": [
+      "mitt",
+      "p-limit"
+    ],
+    "selectedMeasurementsRequests": 4,
+    "freshNetworkRequests": 2,
+    "reusedMeasurements": 2
+  },
+  "cases": [
+    {
+      "id": "mitt",
+      "repository": "developit/mitt",
+      "commit": "6b41670516ed8e8b738612f60491995470aa63b3",
+      "source": "reused",
+      "originRunId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+      "sourceReportRole": "reuse",
+      "sourceReportReference": "../2026-10-24-balanced-v1-deepseek-v4-flash/report.json",
+      "sourceReportHash": "b7aa2de46b08271ee301dca24584f82ec4141e7a99fc831ff30f57001e88b9e2",
+      "firstRequestPromptHash": "fe7ebd3fcc1e5a7c8907f0573cf517bbf021609f2f9cfc1ab189313559d65c71",
+      "questionFingerprints": [
+        "021809ab343b08549ffc5327707984b37172be8443989ffd9b5d19d871f9f86e",
+        "1a94817b5b581e700c344fc996fdb0df63bb858d99d219afb527b7146ffa56bd",
+        "24f48f615fa05004543c9f1934c48317c04771b366b766141289a1bcad83fbdb",
+        "4e086ce426790675f133619eedcdf50d387da57a3db404643fef5a3a53a50f66",
+        "57760102cb8e87692cd8ab5abd9756e975f56cd5eda84fa0487705a102b96999",
+        "598f3d6a5465d5508548a89ec6fd33887e65a49c5220ca7db9ba7b314d6764a7",
+        "61e42834eada4f4a88c24e95f1f4884a255a84ab249e4ff08915bdb1b5a83ffc",
+        "7907414e1405f1b60ac89138716605ed52062291246dc7e403db7927a2e81935",
+        "7e591aeeb27366d6ef3d26940e85deddf8af69bea0ea9740dcdf25b03c765eac",
+        "7e628ca435a965176da4e7df46ced861365e7975cbae016dbca805a801fe3ce0",
+        "8225be3499d89c2c3d768cbf7cceea07a8ba7f3227115a15b7c07413198985d8",
+        "9a5023be4f15a2ba79bd17713672d70093739eb8aad908de5efca237b67f3d15",
+        "9dd7d27cdb1a5032f33eef261b5fa999205db40dd0382735b7787016cee9134b",
+        "9f478184866e1d38c5e381f05edd13479704aeeea673d6cc11a407f70e21f0be",
+        "b29021ffe7b2a0870a01164e0c3bcb24ab70fd8cf5774da72d0a6df04901251a",
+        "b7f47ce92c79bb53add1fa89740bf13793cd6bd37a26e3bfb437b0dd8c3f3bac",
+        "bc6d2a748cdbbdb5888523be8c16c63e302f1e3d55b1084b63325756564f61bb",
+        "cd6282bab19a131bf521cbbe357b5e4ae8f173b02cdc21f0ba1cf6739a6dbb31",
+        "ec01b978bab5f01be0584664a8cb85bfb89bb42465eda993033893492e87f148",
+        "f2cb09cc4da10ea7e4b546d8c80971e06c92b6f02da9f2769c0b3e20ba176a86"
+      ],
+      "requests": [
+        {
+          "attempt": "initial",
+          "inputChars": 26759,
+          "promptHash": "fe7ebd3fcc1e5a7c8907f0573cf517bbf021609f2f9cfc1ab189313559d65c71",
+          "elapsedMs": 126237,
+          "status": 200,
+          "errorType": null,
+          "usage": {
+            "inputTokens": 9831,
+            "outputTokens": 25923,
+            "totalTokens": 35754
+          }
+        }
+      ],
+      "metrics": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 126362,
+        "generationMs": 126337,
+        "actualUsage": {
+          "inputTokens": 9831,
+          "outputTokens": 25923,
+          "totalTokens": 35754
+        },
+        "estimatedInputTokens": 14028,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "contextBuildMs": 81,
+        "modelMs": 126242,
+        "keywordCoverage": {
+          "covered": 6,
+          "total": 6
+        }
+      }
+    },
+    {
+      "id": "p-limit",
+      "repository": "sindresorhus/p-limit",
+      "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+      "source": "reused",
+      "originRunId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+      "sourceReportRole": "reuse",
+      "sourceReportReference": "../2026-10-24-balanced-v1-deepseek-v4-flash/report.json",
+      "sourceReportHash": "b7aa2de46b08271ee301dca24584f82ec4141e7a99fc831ff30f57001e88b9e2",
+      "firstRequestPromptHash": "561321bcd3d6b169fe34d842d75b779f5a5011335a84c011b45dd3e725680428",
+      "questionFingerprints": [
+        "021122cd3e44df6667ee38ec4dab71adf476c54c0b45de07aa5711e4402b02dd",
+        "2c15c4101d9c67d3ddbe0c215539931b0d2be6c45a292e2a22dd427dbb08a5f5",
+        "3722d3014b22554cd0297fb91eb7e4deecb8f4814b21687c3d0f0311f4973b23",
+        "3aaa902f512772d1f7054a0b97e6e695e15aae301684f69b0dde03aa1593dff1",
+        "455213e91de68b4774910349138d61b1a85c69f34b9e83e9db3796d5f6eef5f9",
+        "4d19ddee38840c3c7a215f56b27eed1cb25fdcf1053f480e852673afa58e67de",
+        "52ef514e135cbffa7405396e258bed8b33e40d4767291ce576f1943499d7d61d",
+        "60117c47b0560b8a16ba3b15946ebfd4db468ea07ec5c8392e3686a204d35309",
+        "629e9c480d2fa48789f85ef330a8e70df3876a66e0d8a0c57f77e6601ef77537",
+        "675822232a8820b39466fe66a7bb4261b984af75eaa64bc36d5cf3404ae5e23b",
+        "7aadab3527064f8a5554f7c3fd069f5187563d4319dd2fbe32814007952cd50d",
+        "ab13c49de8a6250561aa3b1427536973ccdd48c755ead0b65d503dce260c8a2e",
+        "b33b0cdf7410871f63d0fd4c04e69521ae439edc5e90a2a153a1555b01a1ed48",
+        "b8cd104a8efcd91da6d89157999a316c7bf17291befb462c407a9888bd4acf46",
+        "c338fce7db427d275396eb09c53ed341e42b26919194c2b21c569a65f0980763",
+        "e17f4c7b20fe15b56bf548929801b173c4f8c97879160ec414a58b2d504cb97f",
+        "ee546d2e4c6969f9dfddf76bcbea11304663c6063068e6cbad1f54ea551a812b",
+        "f61be6b39ee42a1801f1136bd4d6cc197c3042941645b0e42d12fb795349c995",
+        "f8e4d22b8a0bcd337d419a71379ef7ac21698e5b08a2b25caf2ecca47b2a5dc8",
+        "fc1e21a38dd837a1bb4aef429c52129c9cfc4e51c26bae0bc88278dd1140cfd4"
+      ],
+      "requests": [
+        {
+          "attempt": "initial",
+          "inputChars": 51549,
+          "promptHash": "561321bcd3d6b169fe34d842d75b779f5a5011335a84c011b45dd3e725680428",
+          "elapsedMs": 168105,
+          "status": 200,
+          "errorType": null,
+          "usage": {
+            "inputTokens": 14520,
+            "outputTokens": 33776,
+            "totalTokens": 48296
+          }
+        }
+      ],
+      "metrics": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 168250,
+        "generationMs": 168234,
+        "actualUsage": {
+          "inputTokens": 14520,
+          "outputTokens": 33776,
+          "totalTokens": 48296
+        },
+        "estimatedInputTokens": 26471,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "contextBuildMs": 118,
+        "modelMs": 168107,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      }
+    },
+    {
+      "id": "requests",
+      "repository": "psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "source": "fresh",
+      "originRunId": "2178580d-a8d4-45e7-b8bc-147d7c4bb8f6",
+      "sourceReportRole": "current",
+      "sourceReportReference": "../2026-10-24-weighted-v1-deepseek-v4-flash/report.json",
+      "sourceReportHash": "c93dbf09a541ae3f99b70099e0bffedfaeb5a36183dfb22579ad1d69bb730132",
+      "firstRequestPromptHash": "2e771bad28300141d1f22acc337a822226ab1ed22144cc949fcc3d3e49938ff6",
+      "questionFingerprints": [
+        "0683d373bba0c0a92b03d79d8f3c9820662ee166441be8d2663b114514c502f2",
+        "0724de7e5241e527461b47ae96a5e6ce998dfac7a8a89ff74afe65ec29dc67a5",
+        "119d9dff7cc8d75c80c3ebd271032c0ed5d689fce839c35dc16ebaa2f771df6c",
+        "1e8880fbc4b04739e5fe385334a1d92a42c02936ff14aa53fa96996a55ff1228",
+        "339201b0236cd234b6e9c42cced8c213a5fb2a60c1ed645e8131a4bd65b1dddb",
+        "383a2d159cfbb5550f2e2ee1248cc3480dea337b26091ad3ca2eeb39d5cb6dc4",
+        "44a4e2b52e34d9c5f9266f211acc6987ada914262f7d2e6eb766ca9716a9cc57",
+        "48d07bd937fb9966271dbc607220bd9bb7cba25605cf7cdedcca82209677292e",
+        "55005e6b1c9ae48a696a517f195d515ea9c37cdabee497f1812f126b159d588d",
+        "5e550fbed6b60f54b707a343e788ff26a25ff854f874cd429d8b7e4254f88a17",
+        "649ad5fc4031c06f63265e717452e10ba54c21a8ea62e5b0076c30bdfc852582",
+        "8ccb3f76271556890ea0d5243579751cc979afae18008a9e84c122b5893aa6e2",
+        "8dde15fdd914014f0a03e466db5e26204f7c7cd66c4c2f156bf8e732f554e09f",
+        "95aa2415bb81ec1a0d6d17ff7186ff0b2effa7773e66ab1ab6f0b73d2643ec11",
+        "96abfea797f54e64449c5ef79b38300b34926314142938e7ef9430d6db7d705d",
+        "a9ddff9fa9349f0f8a1b125294d22e6067f55f4f8bd2c99c46a786a998f7cbe5",
+        "bbbd01ac1dfe16c9edda55376a4573e07f96bdfaa7cb341ddb9d02fe268deb87",
+        "c5bc00465ccc6caaeed4157137ecc41f76b06a2f2766d644b7846be4aa63471a",
+        "da771efe3de5eb3680706faf4c3b2fe9559629db7bd4d0e5349a1bb7ee50e63e",
+        "e527415510962e1e6346a6687dc20a1b61826b7d3e31ff01d7173c25fc3a5ddb"
+      ],
+      "requests": [
+        {
+          "attempt": "initial",
+          "inputChars": 137400,
+          "promptHash": "2e771bad28300141d1f22acc337a822226ab1ed22144cc949fcc3d3e49938ff6",
+          "elapsedMs": 126830,
+          "status": 200,
+          "errorType": null,
+          "usage": {
+            "inputTokens": 42373,
+            "outputTokens": 25784,
+            "totalTokens": 68157
+          }
+        }
+      ],
+      "metrics": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 127848,
+        "generationMs": 127766,
+        "actualUsage": {
+          "inputTokens": 42373,
+          "outputTokens": 25784,
+          "totalTokens": 68157
+        },
+        "estimatedInputTokens": 63992,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "contextBuildMs": 694,
+        "modelMs": 126833,
+        "keywordCoverage": {
+          "covered": 8,
+          "total": 8
+        }
+      }
+    },
+    {
+      "id": "schedule",
+      "repository": "dbader/schedule",
+      "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651",
+      "source": "fresh",
+      "originRunId": "2178580d-a8d4-45e7-b8bc-147d7c4bb8f6",
+      "sourceReportRole": "current",
+      "sourceReportReference": "../2026-10-24-weighted-v1-deepseek-v4-flash/report.json",
+      "sourceReportHash": "c93dbf09a541ae3f99b70099e0bffedfaeb5a36183dfb22579ad1d69bb730132",
+      "firstRequestPromptHash": "41db9e7bd1484223bb7e9cac2edca8258e6f57e3cc604faa2008c4ac7f8a1677",
+      "questionFingerprints": [
+        "107271315e78732c95a761a151fd40ec206a83cf33a7b53d7f2f3046636acc2c",
+        "10d4aeb83c4ee03a24eb0f125a44d99ad7d016fdfadbd0feb954c5328171af8a",
+        "25ae203c2f41898db65ae735629db4e50df1d2d1aa06cc42df5745ed1008217f",
+        "309c1a1156a09274c5fa79f912f7be5b03af2fd267f1dc58e1375663a40d83bc",
+        "3111ed1b1ab1e64771947f0cae2890de96cdf0d5e3481b248b95e92c079d0a7d",
+        "37c09e58bb2986cb635f2134f7227f8ebe2a8f88110dbccf9e9d8cf9574fe94c",
+        "549ca9dac58d46fe355e738ad249c787e4c8dfb1a5284088772c39c2eb735ea7",
+        "63ace0654470892860dcc47402cbfa66f1f9671952ed1a63431bc40b250c3d1e",
+        "6a972f6a6dcdcbe45d544b6ca8d6ab852470c2c5fff28e02f789bc534e5c199a",
+        "7454b07ad975e13df5143619da080ec437a78e7a596df529959784dbdb7d5e24",
+        "74fd7052844b702e8690ed81fda8c98e065c1bab57f3f46f6e2185aa53f640fd",
+        "7dfdc731bf6aee1f1dea6f3abaaf48cbf79c3261296f98bb07439d9dc3e5ac36",
+        "8b5430a4ef813b8d3373c0211cbdec022d14dcec114ccb8eca40496d7c73ded3",
+        "9f246c917ef694380efdaa587ada047a5f39a0bd520396336663306ddad66731",
+        "9feb3e0bbbd3b8f7d90f8b4c9fbcb8b4da0d0423a48d93248be8c863f0f7fb87",
+        "a32780c392fb4b3575f3cd8a49fe2428243783bf3986df7b591c93652a007768",
+        "b706405c18958c02ae701437e3f54bc22e81ae889fa7002461c231e0d6c96ee1",
+        "b7518bd6383d3197589ae03379778e3bdb73b8959ef2d84d02d3c3feeb5a2b85",
+        "c8eb0656232e8a7316d9ce55890ef5179d7bc2bd970da1edfdd8cf54a00591af",
+        "f6699d685ef5483d5ccaa5143f3625d5e25e55304131c82fc6518f4f257d4f6b"
+      ],
+      "requests": [
+        {
+          "attempt": "initial",
+          "inputChars": 135271,
+          "promptHash": "41db9e7bd1484223bb7e9cac2edca8258e6f57e3cc604faa2008c4ac7f8a1677",
+          "elapsedMs": 107618,
+          "status": 200,
+          "errorType": null,
+          "usage": {
+            "inputTokens": 42700,
+            "outputTokens": 21106,
+            "totalTokens": 63806
+          }
+        }
+      ],
+      "metrics": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 108180,
+        "generationMs": 108144,
+        "actualUsage": {
+          "inputTokens": 42700,
+          "outputTokens": 21106,
+          "totalTokens": 63806
+        },
+        "estimatedInputTokens": 63992,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "contextBuildMs": 210,
+        "modelMs": 107626,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      }
+    }
+  ],
+  "summary": {
+    "questions": 80,
+    "requests": 4,
+    "elapsedMs": 530640,
+    "generationMs": 530481,
+    "actualUsage": {
+      "inputTokens": 109424,
+      "outputTokens": 106589,
+      "totalTokens": 216013
+    },
+    "estimatedInputTokens": 168483,
+    "repairRequests": 0,
+    "compensationRequests": 0,
+    "contextBuildMs": 1103,
+    "modelMs": 528808,
+    "keywordCoverage": {
+      "covered": 28,
+      "total": 28
+    }
+  },
+  "caveats": [
+    "Actual provider token totals are null when complete usage receipts are unavailable; missing usage is never filled with zero.",
+    "Estimated input tokens are application estimates and are reported separately from provider usage.",
+    "Keyword fact coverage counts configured keyword matches; it is not factual accuracy.",
+    "No monetary cost, model accuracy, or human review score is claimed anywhere in this cohort; human review in the source reports remains pending.",
+    "Reused measurements are the original recorded production HTTP requests from the prior run, accepted only when the reuse proof attests identical request bodies; they are not new requests and never relabeled as fresh.",
+    "This cohort is an aggregation of existing reports with explicit per-case provenance; it is not itself a repoprep-eval-report-v2 run and must not be presented as one fresh generation run.",
+    "The legacy report digest does not bind generation metadata; the composer checks canonical output and question cross-links and records canonical hashes of all inputs.",
+    "Endpoint origin hashes must match when both reports record them; older reports may omit that field."
+  ]
+}

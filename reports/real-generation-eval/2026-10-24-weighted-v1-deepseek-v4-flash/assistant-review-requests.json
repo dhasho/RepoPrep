@@ -1,0 +1,264 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "2178580d-a8d4-45e7-b8bc-147d7c4bb8f6",
+  "reportDigest": "sha256:0a1ae0e191fbaef17cabbb02cc88883c39d66290e02a90eacfeef7efb629dfce",
+  "caseId": "requests",
+  "reviewer": {
+    "executor": "Codex primary agent",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen core facts plus concrete source-backed errors; not exhaustive answer correctness"
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "8dde15fdd914014f0a03e466db5e26204f7c7cd66c4c2f156bf8e732f554e09f",
+        "da771efe3de5eb3680706faf4c3b2fe9559629db7bd4d0e5349a1bb7ee50e63e",
+        "95aa2415bb81ec1a0d6d17ff7186ff0b2effa7773e66ab1ab6f0b73d2643ec11",
+        "a9ddff9fa9349f0f8a1b125294d22e6067f55f4f8bd2c99c46a786a998f7cbe5",
+        "bbbd01ac1dfe16c9edda55376a4573e07f96bdfaa7cb341ddb9d02fe268deb87",
+        "55005e6b1c9ae48a696a517f195d515ea9c37cdabee497f1812f126b159d588d",
+        "383a2d159cfbb5550f2e2ee1248cc3480dea337b26091ad3ca2eeb39d5cb6dc4",
+        "1e8880fbc4b04739e5fe385334a1d92a42c02936ff14aa53fa96996a55ff1228",
+        "e527415510962e1e6346a6687dc20a1b61826b7d3e31ff01d7173c25fc3a5ddb",
+        "119d9dff7cc8d75c80c3ebd271032c0ed5d689fce839c35dc16ebaa2f771df6c",
+        "0724de7e5241e527461b47ae96a5e6ce998dfac7a8a89ff74afe65ec29dc67a5",
+        "48d07bd937fb9966271dbc607220bd9bb7cba25605cf7cdedcca82209677292e",
+        "339201b0236cd234b6e9c42cced8c213a5fb2a60c1ed645e8131a4bd65b1dddb",
+        "0683d373bba0c0a92b03d79d8f3c9820662ee166441be8d2663b114514c502f2",
+        "5e550fbed6b60f54b707a343e788ff26a25ff854f874cd429d8b7e4254f88a17",
+        "649ad5fc4031c06f63265e717452e10ba54c21a8ea62e5b0076c30bdfc852582",
+        "96abfea797f54e64449c5ef79b38300b34926314142938e7ef9430d6db7d705d",
+        "8ccb3f76271556890ea0d5243579751cc979afae18008a9e84c122b5893aa6e2",
+        "c5bc00465ccc6caaeed4157137ecc41f76b06a2f2766d644b7846be4aa63471a",
+        "44a4e2b52e34d9c5f9266f211acc6987ada914262f7d2e6eb766ca9716a9cc57"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ],
+          "reason": "准确给出字段顺序和auth后置的OAuth依赖理由；额外的hooks顺序反事实有错误，单独记finding。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "Q1仅提调用prepare_request，Q15为响应Cookie提取；未说明请求Cookie与会话Cookie及headers/params/auth/hooks合并。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            4,
+            15
+          ],
+          "reason": "覆盖适配器发送、hooks、当前及history Cookie、重定向history与stream=False读取content的主要编排；与旧基线相同，未展开elapsed不单独降级。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "partial",
+          "questionNumbers": [
+            1,
+            12
+          ],
+          "reason": "覆盖utils环境代理与trust_env、no_proxy和显式代理优先；Session.merge_environment_settings的CA变量与stream/verify/cert合并未覆盖。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 488,
+              "endLine": 492
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "未说明history达到max_redirects时抛TooManyRedirects。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "明确ok委托raise_for_status，4xx/5xx为False、3xx也为True；未把缺少__bool__别名说明当作主要语义缺失。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 930,
+              "endLine": 940
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "partial",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "底层raw.stream、消费标记与StreamConsumedError条件准确；未展开缓存bytes时iter_slices切片重放，追问只附带缓存例外，保守计部分。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "Q17讨论兼容导入、Q20讨论工具配置，均未列四个直接运行依赖与可选chardet。",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 2,
+          "questionPart": "answer and followUps[0]",
+          "kind": "incorrect",
+          "claim": "把prepare_hooks提前到prepare_auth之前会漏掉认证添加的hook。",
+          "reason": "prepare_hooks通过register_hook追加，register_hook使用append/extend；交换两者不会据此删除或遗漏认证hook，主要会改变先后次序。注释给出顺序要求，不证明回答声称的丢失后果。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 257,
+              "endLine": 270
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 722,
+              "endLine": 729
+            }
+          ],
+          "questionFingerprint": "da771efe3de5eb3680706faf4c3b2fe9559629db7bd4d0e5349a1bb7ee50e63e"
+        },
+        {
+          "questionNumber": 4,
+          "questionPart": "followUps[0]",
+          "kind": "imprecise",
+          "claim": "Response.next()能按需继续。",
+          "reason": "next是返回PreparedRequest或None的property，不是可调用方法，也不会自行发送下一跳。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 891,
+              "endLine": 894
+            }
+          ],
+          "questionFingerprint": "a9ddff9fa9349f0f8a1b125294d22e6067f55f4f8bd2c99c46a786a998f7cbe5"
+        },
+        {
+          "questionNumber": 7,
+          "questionPart": "followUps[2]",
+          "kind": "imprecise",
+          "claim": "每次ok判断都有异常构造和捕获开销。",
+          "reason": "只有raise_for_status在错误状态分支抛HTTPError才发生异常构造/捕获；正常1xx/2xx/3xx没有该异常路径。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 861,
+              "endLine": 874
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1144,
+              "endLine": 1171
+            }
+          ],
+          "questionFingerprint": "383a2d159cfbb5550f2e2ee1248cc3480dea337b26091ad3ca2eeb39d5cb6dc4"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant source review, not human blind review.",
+    "Material omissions in a compound fact count as partial.",
+    "Budget omissions are not fabricated implementations; factual coverage and incorrect claims are separate measurements."
+  ]
+}
