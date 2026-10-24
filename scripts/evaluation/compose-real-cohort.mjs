@@ -324,9 +324,15 @@ export function composeRealCohort({ baseline, current, reuse, reuseProof, refere
     freshCases: cases.filter(item => item.source === 'fresh').map(item => item.id),
     reusedCases: cases.filter(item => item.source === 'reused').map(item => item.id),
     selectedMeasurementsRequests: cases.reduce((sum, item) => sum + item.metrics.requestCount, 0),
-    freshNetworkRequests: cases.filter(item => item.source === 'fresh').reduce((sum, item) => sum + item.metrics.requestCount, 0),
+    freshNetworkRequests: Array.isArray(current.network?.requests)
+      ? current.network.requests.length
+      : current.config.variants.length === 1
+        ? cases.filter(item => item.source === 'fresh').reduce((sum, item) => sum + item.metrics.requestCount, 0)
+        : null,
     reusedMeasurements: cases.filter(item => item.source === 'reused').length
   }
+  const selectedFreshRequests = cases.filter(item => item.source === 'fresh').reduce((sum, item) => sum + item.metrics.requestCount, 0)
+  if (measurement.freshNetworkRequests !== null && measurement.freshNetworkRequests < selectedFreshRequests) throw new Error('current network receipt omits selected generation requests')
   return {
     schemaVersion: COHORT_SCHEMA_VERSION,
     composedAt: new Date().toISOString(),
@@ -371,7 +377,7 @@ export function cohortMarkdown(cohort) {
     `- Fresh measurements from the current run: ${cohort.measurement.freshCases.length} (${cohort.measurement.freshCases.join(', ') || 'none'})`,
     `- Reused measurements from the prior run: ${cohort.measurement.reusedCases.length} (${cohort.measurement.reusedCases.join(', ') || 'none'})`,
     `- Selected measurement requests (raw request count across the selected cases): ${cohort.measurement.selectedMeasurementsRequests}`,
-    `- Fresh network requests (selected current-run requests): ${cohort.measurement.freshNetworkRequests}`,
+    `- Fresh network requests (all calls in the current source run, including controls): ${formatNumber(cohort.measurement.freshNetworkRequests)}`,
     `- Reused measurements (filled case count): ${cohort.measurement.reusedMeasurements}`,
     '', '## Aggregated measured totals', '',
     '| Metric | Cohort |', '|---|---:|',

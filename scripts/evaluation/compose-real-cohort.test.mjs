@@ -209,13 +209,39 @@ test('composes a 2-fresh 2-reuse cohort with provenance, measured totals, and ma
   assert.match(markdown, /Fresh measurements from the current run: 2 \(alpha, beta\)/u)
   assert.match(markdown, /Reused measurements from the prior run: 2 \(delta, gamma\)/u)
   assert.match(markdown, /Selected measurement requests \(raw request count across the selected cases\): 4/u)
-  assert.match(markdown, /Fresh network requests \(selected current-run requests\): 2/u)
+  assert.match(markdown, /Fresh network requests \(all calls in the current source run, including controls\): 2/u)
   assert.match(markdown, /Reused measurements \(filled case count\): 2/u)
   assert.match(markdown, /\| Actual total tokens \| 1200 \|/u)
   assert.match(markdown, /\| alpha \| fresh \|/u)
   assert.match(markdown, /\| gamma \| reused \|/u)
   assert.match(markdown, /not itself a repoprep-eval-report-v2 run/u)
   assert.match(markdown, /not factual accuracy/u)
+})
+
+test('fresh network totals include README controls outside selected generation measurements', () => {
+  const scenario = buildScenario()
+  scenario.current.config.variants.push('baseline')
+  scenario.current.network = { requests: scenario.current.cases.flatMap(item => item.generation.requests) }
+  for (const item of scenario.current.cases) {
+    const control = buildGeneration({ runId: 'readme-control', caseId: item.id, withDiagnostics: false })
+    item.baseline = control.generation
+    scenario.current.network.requests.push(...control.generation.requests)
+    scenario.current.questions.push(...control.generation.questions.map(question => ({ ...question, caseId: item.id, variant: 'baseline' })))
+  }
+  recomputeHashes(scenario.current)
+  const cohort = composeRealCohort(scenario)
+  assert.equal(cohort.measurement.selectedMeasurementsRequests, 4)
+  assert.equal(cohort.measurement.freshNetworkRequests, 4)
+  assert.equal(cohort.summary.questions, 8, 'controls do not enter the selected generation cohort')
+  assert.match(cohortMarkdown(cohort), /including controls\): 4/u)
+
+  delete scenario.current.network
+  const unknown = composeRealCohort(scenario)
+  assert.equal(unknown.measurement.freshNetworkRequests, null)
+  assert.match(cohortMarkdown(unknown), /including controls\): unknown/u)
+
+  scenario.current.network = { requests: [] }
+  assert.throws(() => composeRealCohort(scenario), /network receipt omits selected generation requests/u)
 })
 
 test('keeps missing usage unknown and falls back to recorded request receipts', () => {
