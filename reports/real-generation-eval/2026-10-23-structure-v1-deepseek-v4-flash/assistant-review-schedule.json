@@ -1,0 +1,227 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "04cc5679-1e4b-4fb5-a724-1e7fe9ff1548",
+  "caseId": "schedule",
+  "reviewer": {
+    "executor": "ZCode",
+    "model": "unknown",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "326690bd46436fd422f4cd0fd87d2f7164cf86d48852ccd09d0dd6a1faf11f6e",
+        "fac24c6fbb6faf8492053a7c578922b540019b042b63e1aef7cd22eadd51a518",
+        "74fcdf4b2f8fdde308df6e2c80b1a0b8dda389642d2ff945e3d0bddd09290dcf",
+        "6feecf2328a057dbe1c83598d6e6cf3733537cbf3f73420f4384ba13800af7d8",
+        "e8f9a5fe208fa0e5b439e3b746ecb6b61d8c31b0eb9e8fa1bbb7a4ab1f12c5d8",
+        "c0243b1eeb713460604d1384b42856faa79327be75295b3b5b328873dfe1926c",
+        "712a79d24deb9b5059adb67f1ced3f0ce85db2fd72b884b2e426b4795bcba778",
+        "626898d2e1e8b8bd89fb5bcffb00933683c20dd60bcee7835906f0e08a12f8dc",
+        "5ec41663624a7b3771fc43195c898359be90a83f352d030aeca9236acf8ea67f",
+        "88b9271f519fd2dc14ee8f82e27136777c95189ad2faaf7efcd28fa94cb5a3f2",
+        "d44359adcfa7b0be5ebba8ff4bda4b02f0d3a7b9dda26882df6ec664988759ac",
+        "c4aebd4b953821a9a1e1fea67baf39f37bd1c659eea8b57a1a4436cf66c2f541",
+        "cc3b17a5ed737d2233225f076a569eb7d8bdebf50ab89e862b2d41570cde3443",
+        "a953e96b328cbed3a54969c64d0d21468cc9867fd9b686ccae79bc07e97c746a",
+        "d1f4c02ce8bef220e6e7982c318431fff197492c4cb5c1746d73aa18bfb9ff5c",
+        "714e111e22975dc9ffebf0731c9b46cbc0a68d550d3e556a6dcce0f43d9ad53a",
+        "ac86386b88d72349f94c6c8675680ea5cd6b51275da0125f47986e2d2f562dd4",
+        "17ac77b70536f19f5e6cd9cf223e3e48e7755e484b9d79f0abf059d4fab24095",
+        "e0c191c975aaa100ef2570a28fb12e3bbe5c5b91b59549466063bfc86315bca0",
+        "01cdd1aa8878f08f7c91526307792028714e5fdd0670e0b653a253b629a31b43"
+      ],
+      "factReviews": [
+        {
+          "factId": "schedule-run-pending",
+          "coverage": "covered",
+          "questionNumbers": [
+            9,
+            17
+          ],
+          "reason": "第9题说明 run_pending 不是补跑机制、错过多次只执行一次，追问9.1引用 test_run_pending 注释确认；第17题说明该测试用 mock_datetime 验证不补跑语义。核心语义完整且正确；“按任务排序”这一细节未提及，但不影响覆盖判断。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1387,
+              "endLine": 1415
+            }
+          ]
+        },
+        {
+          "factId": "schedule-run-all",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题没有说明 run_all 无视到期状态、对调用时任务列表快照逐个执行、可在每次执行后 sleep 的语义；第15题仅提到 run_all 会被 job 异常中断，第16题仅提到其日志文案。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "schedule-tag-management",
+          "coverage": "partial",
+          "questionNumbers": [
+            2,
+            18
+          ],
+          "reason": "第2题说明 tag() 的可哈希校验、set 去重与链式返回；第18题说明 get_jobs 按tag筛选的计数结果、clear 按tag删除与清空全部、None 表示全部；“无tag返回jobs浅拷贝”这一点第18题追问如实标注未确认而非误述。 主代理裁定：该冻结事实要求的浅拷贝、取消类/实例移除、动态pytz导入或until输入类型等实质部分被省略或明确标为未确认，应计部分覆盖。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1572,
+              "endLine": 1589
+            }
+          ]
+        },
+        {
+          "factId": "schedule-cancel-return",
+          "coverage": "partial",
+          "questionNumbers": [
+            6,
+            14
+          ],
+          "reason": "第6题说明任务返回 CancelJob 时 run() 的两个取消检查点和 CancelJob 优先于其他返回值；追问6.1正确指出 Job.run 只原样返回、不自行移除，取消由上层 Scheduler 处理；追问14.1强调 CancelJob 只是 job 函数返回值。移除动作的 _run_job 细节被如实标注未展示。 主代理裁定：该冻结事实要求的浅拷贝、取消类/实例移除、动态pytz导入或until输入类型等实质部分被省略或明确标为未确认，应计部分覆盖。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 175
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1503,
+              "endLine": 1515
+            }
+          ]
+        },
+        {
+          "factId": "schedule-at",
+          "coverage": "partial",
+          "questionNumbers": [
+            7,
+            8,
+            10
+          ],
+          "reason": "第7题按 unit 与 start_day 解释 at() 设置哪些时间字段并给出 .hour.at(':42')、.day.at('10:30') 等格式示例；第8题覆盖星期调度；第10题说明 pytz 是可选依赖、只有 .at() 传时区才需要。动态导入 pytz 的具体位置第10题如实标注未确认。 主代理裁定：该冻结事实要求的浅拷贝、取消类/实例移除、动态pytz导入或until输入类型等实质部分被省略或明确标为未确认，应计部分覆盖。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 528
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 268,
+              "endLine": 284
+            }
+          ]
+        },
+        {
+          "factId": "schedule-until",
+          "coverage": "partial",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "第6题准确覆盖 until→cancel_after、执行前 _is_overdue 直接返回 CancelJob、执行并重排后再次检查、CancelJob 优先于任务返回值、严格大于才算过期、异常时 last_run/next_run 不更新；until 接受的输入类型枚举未展开但核心语义完整。 主代理裁定：该冻结事实要求的浅拷贝、取消类/实例移除、动态pytz导入或until输入类型等实质部分被省略或明确标为未确认，应计部分覆盖。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 620
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 312,
+              "endLine": 339
+            }
+          ]
+        },
+        {
+          "factId": "schedule-jitter-next",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题及全部追问均未涉及 to(latest) 的随机区间语义，也未涉及 _schedule_next_run 中 next_run<=now 时按周期递增跳过的逻辑。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 561,
+              "endLine": 574
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 748
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 16,
+          "claim": "日志消息包含 Job 的 repr",
+          "kind": "imprecise",
+          "reason": "Job.run 的日志用 logger.debug(\"Running job %s\", self)，%s 格式化调用的是 Job.__str__（输出 Job(interval=..., unit=..., do=..., args=..., kwargs=...)），不是 __repr__（输出 Every ... do ... (last run: ..., next run: ...)），两者字段构成不同；docs/logging.rst 的示例输出也是 __str__ 格式。\"args/kwargs 可能泄露\"的结论仍然成立（__str__ 同样包含 args 与 kwargs），但把该输出称为 repr 不准确。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 686,
+              "endLine": 690
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 264,
+              "endLine": 276
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 278,
+              "endLine": 323
+            },
+            {
+              "path": "docs/logging.rst",
+              "startLine": 30,
+              "endLine": 30
+            }
+          ],
+          "questionFingerprint": "714e111e22975dc9ffebf0731c9b46cbc0a68d550d3e556a6dcce0f43d9ad53a"
+        }
+      ]
+    }
+  ],
+  "humanReview": {
+    "status": "pending",
+    "reviewedCount": 0,
+    "coverage": 0
+  },
+  "limitations": [
+    "assistant-assisted non-blind, not human ratings; fact coverage is not all-answer accuracy",
+    "answers were generated under a truncated structure-v1 context; honest hedges about unshown code were not counted as errors"
+  ],
+  "primaryAudit": {
+    "reviewer": "Codex primary agent",
+    "method": "source inspection and conservative adjudication",
+    "originalReviewPath": "zcode-originals/assistant-review-schedule.json",
+    "originalReviewSha256": "a0a5ac8973cf36d9a229a390dd4a4ddf0cee99ad77394c423d39229905fe195d",
+    "modelMetadata": "ZCode model identifiers, when present, are executor self-reports; MCP final usage metadata was unavailable after transport timeout.",
+    "delegationStatus": "MCP observation timed out at 300 seconds; both recorded task PIDs exited and requested final artifacts were inspected.",
+    "changes": [
+      "四条复合事实存在实质遗漏或未确认，按与事实文本一致的保守口径改为partial。"
+    ]
+  }
+}

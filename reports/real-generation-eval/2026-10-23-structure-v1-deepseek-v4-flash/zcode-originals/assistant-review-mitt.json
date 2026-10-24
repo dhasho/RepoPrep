@@ -1,0 +1,194 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "04cc5679-1e4b-4fb5-a724-1e7fe9ff1548",
+  "caseId": "mitt",
+  "reviewer": {
+    "executor": "ZCode",
+    "model": "zcode-coding-plan/GLM-5.3-Flash",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "a291414931fb350e113b8b612550651d9273f633200581fc6e3a48f44e64aa3c",
+        "ad61491f2741ac188708fffb042c2a07e7d60b6a2cd1e6a362b3a2f121298e4d",
+        "8978f2b41d3b80c63b4fa9ef2ceedb14e6d633c06a274346fd2266b6c0487271",
+        "e53dceb994b57eb879ff4f54ea9ba44b5121bbc9dad702cebb706635e24165c6",
+        "ef05db45355cabbd24c39cc01591e1868bd018e980f084f15346c138f0d42f22",
+        "bc780914adb053d39872ce1c266807a1c33930d79e3925a8995df4c092058c28",
+        "5d8dd4299698b3ce1dd37c287fcbb696da0e8a6f5cffdd3eab3de901fa7dea4b",
+        "1daaf42882986217cc9be554ef020a16897dcc291244cd310cc4dc7ba1b03cf6",
+        "ea8c9cfe97b15a6a439d31a9ce80924e500d37e7bf8f1a70997dfd13c2b0c0d6",
+        "c6bfd60b6267a8952af17277499a1af0352416e924e0f64e59f332adc748cff3",
+        "d449647d40583f29cf9711c88a5bd1f04b0c104815e4aed40a094bb6ea31578b",
+        "79d96bebe361e19aede10f53031682d057eeb9098ef3a0c5d5238ec472a400e9",
+        "9a807c7697720a68687456bdb31f83cf4eee2e42ea2c4f1c0379e249bb24f530",
+        "898bab2b5d37f580dc2331b9554cf8c51123eb7e69310c5b8ed4405e2508b109",
+        "54d569fc2c59b845159378e11af730a8195aa1a7aaee2009810abeec02a0e5d3",
+        "885b72a74846f7ae09350496cd44f5d43d0036020881e029fb75d251810c901a",
+        "488b2f37878ca23da780cb5b08092f1dd6b970b73ea5404e302f8230529cc559",
+        "d562a56fc6dc01ad7dd5e45ff75e0c3a56d7b5ad919fa9a2054f6850e3c1eacd",
+        "14c6c2fce2230fa658ecf1783e60d0de554d2c7b025d1bcf84475deacf448f2a",
+        "c74e1292daeb5dcb80676f32bd5a9a3dc9b163afeb5a9e22dfcda76399bc6547"
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            3,
+            5
+          ],
+          "reason": "第3题完整说明事件表是键为事件类型或 '*'、值为处理器数组的 Map，支持 string 与 symbol 键并避免普通对象原型键干扰，且引用 'constructor' 测试佐证；第5题补充 EventType 为 string | symbol。与 src/index.ts 的 EventHandlerMap 类型定义及测试一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 17,
+              "endLine": 21
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 63,
+              "endLine": 96
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            9,
+            10
+          ],
+          "reason": "第9题准确说明 on 先 get、已有数组则 push 追加且不去重，并引用测试断言 [foo, foo]；第10题指出重复监听同一函数需多次 off、一次 off 对应一次订阅。与 src/index.ts 的 push 追加逻辑和测试的 duplicate listeners 用例一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            11
+          ],
+          "reason": "第10题准确解释 indexOf 找第一个匹配下标、'>>> 0' 把 -1 转为超大下标使 splice 成为 no-op，并指出匹配依据是引用相等；第11题说明省略 handler 时执行 set(type, []) 用新空数组替换、键仍保留。与 src/index.ts 82-91 行及测试 138-157 行一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            9,
+            13,
+            14,
+            16
+          ],
+          "reason": "第2题完整描述先对具体事件列表 slice 快照并调用 handler(evt)、再对 '*' 列表快照并以 handler(type, evt) 调用的两阶段顺序；第13题解释快照对监听器增删的影响（本轮移除仍被调用、新增下一轮生效）；第9题追问正确说明 emit 过程中 on 的新处理器本轮不被调用；第16题准确覆盖异常会中止当前数组剩余处理器与通配符的行为。未发现把通配符遍历说成与普通列表同一快照之类的错误。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 103,
+              "endLine": 121
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            7,
+            8
+          ],
+          "reason": "第7题准确解释 emit 的两个重载与 'undefined extends Events[Key] ? Key : never' 条件类型：bar?: number 的键可省略载荷而 foo: string 不行，且 evt?/evt! 是运行时代码、安全性依赖类型层；第5题追问与第8题从类型测试角度佐证必填/可选行为。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 35,
+              "endLine": 39
+            },
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 63,
+              "endLine": 78
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            12
+          ],
+          "reason": "第12题说明 all = all || new Map() 直接复用传入 Map、无拷贝、多实例可共享同一映射并互相影响，且引用注入测试验证预置处理器被调用；第1题追问补充共享可变状态的能力与风险（外部可直接增删数组，代码无拷贝或校验）。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 17,
+          "claim": "回答称 test/index_test.ts 未覆盖『共享 Map 外部变更』。",
+          "kind": "imprecise",
+          "reason": "该测试文件实际存在多处对共享 Map 的外部直接写入并断言其生效：第12-22行的注入测试先 map.set('foo', [a, b]) 再 mitt(map) 并 emit 验证预置处理器被调用（本报告第12题追问 FU12.1 也确认了这一点）；第179-180行 events.set('Foo'/'FOO', ...) 与第194行 events.set('*', [star]) 同样是在创建 emitter 后从外部写入 Map 并断言 emit 调用这些处理器。未被覆盖的是『两个 emitter 共享同一 Map』或『emit 过程中的外部变更』等更细分场景，原表述未作此限定，与同文件测试内容不符。",
+          "sourceRefs": [
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 176,
+              "endLine": 194
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "第18题主答案与 FU18.3 引用 .github/workflows/main.yml（Node 14、npm install、npm run build --if-present、npm test）及 compressed-size-action 匹配 ./dist/*.{js,mjs,cjs} 等细节：冻结 fixture（fixtureHashes 仅含 src/index.ts 与 test/index_test.ts）与本次给定 checkout 均不含 .github 文件，无法独立核验，故未计入 finding。",
+        "FU8.2 与 Q19 提到 index.d.ts 被 .gitignore 忽略：给定文件树中无 .gitignore，无法核验，未计入 finding。",
+        "未核验 microbundle、documentation、compressed-size-action 等外部工具的实际行为；相关回答仅转述 package.json 字段或 README，未据此计错误。"
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted, non-blind; not human ratings; fact coverage does not equal all-answer accuracy",
+    "humanReview in the main report remains pending; this sidecar neither completes nor alters it"
+  ]
+}

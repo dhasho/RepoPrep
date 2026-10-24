@@ -1,0 +1,243 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "04cc5679-1e4b-4fb5-a724-1e7fe9ff1548",
+  "caseId": "requests",
+  "reviewer": {
+    "executor": "ZCode",
+    "model": "unknown",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "79ddc43f893fcc63b78e85675e259ea78489b4559d4d9f112fec1c918c4eb58e",
+        "1b98eadf40cb6b7f3b0fa206ca663f3bc3769b238dbd313e8e3c470d0677ff3b",
+        "210bae5cd9eb6aa7ee8be06bd1ee1653b45d34ca65b2e28f11d8f93ada6ffd2a",
+        "6826f0eef38786effd9878696a975d9a0cce681bf0502ab3a27634c61b16b6e3",
+        "85fd1232c9118a75e40178fd6388ac30dd7f7808362818c0d5eb3ab748761a2a",
+        "7958130a3411bb78f64922e4eed03f7d6642b554a5026c415a1e367feee4a25a",
+        "fa09221960f61253278b9922573f9ef589b2858b76ba551f10c023a332733a70",
+        "6ef18a2941d77490972db00931635e01ff632f9688351c8dcafc3e844c192a14",
+        "ad2073ba1d836640e4d7fa0fdffbe3803b7e92043a9c34184cf2d7772671caca",
+        "76c2083dcd37a979cb920ad50fcf7d5a8e606b471548d25572be7f7c2bed6cd0",
+        "a741459c604f3fe7b57a9fd60b0b5ccba2c98b3f15efb5d3011b58fc8880a882",
+        "ec397a9da6b1351b075f0de0b040bdf3c7548c6e5110955fdf8f9b5347da249a",
+        "e7989840c1c22b76d59d2072b8e7f1c7c1c5248298eac71501e83b9b7a8f8afe",
+        "4e5460454cbf8333df98f21f6d0a07acb9ff1b58361711fc83dc23bf45d5735d",
+        "fa851dc90aa4a503d72a219265494093b40193a41d147ccc805eb9ee66e142e6",
+        "ae15cc34153da249b5d614bb377dddea33ae628b655c7ef7cee3074591244c65",
+        "65fe8cc6b399937204c63fb884527bbda488988665142c0ac83a1f92c2f30dd3",
+        "4482b6af506e89350981de95fc6d64c54e2fe59feda56837967887ee7ee25f89",
+        "a9f74fbb5650c888c4aac028503946a1c8e182e2fd1c4a20c432bea2b0336f07",
+        "858dc9986d91568804602f80af3a6dde1cd352940287af42c38a4bbe788c127c"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题没有覆盖 PreparedRequest.prepare 按 method、URL、headers、cookies、body、auth、hooks 的顺序准备字段以及 auth 靠后以支持依赖完整请求的认证方案；第1题追问只把 PreparedRequest 描述为序列化结果，未提字段顺序。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题没有说明 Session.prepare_request 将请求级 cookies 与 session cookies 合并、以及请求参数与 session 级 headers/params/auth/hooks 合并的行为。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "无回答描述 Session.send 选取匹配 URL 的 adapter、记录耗时、调用 response hooks、提取 cookies、按配置处理重定向并在非 stream 时读取 content 的流程；第4题还明确说重定向处理逻辑未显示。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "merge_environment_settings 只在第1题被点名，无回答说明 trust_env 默认为真、环境代理以及 REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE 的读取顺序；第6题反而明确说环境变量覆盖无法确认。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 488,
+              "endLine": 492
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题没有出现 resolve_redirects 在重定向 history 达到 max_redirects 时抛 TooManyRedirects 的行为。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "partial",
+          "questionNumbers": [
+            8
+          ],
+          "reason": "第8题准确说明 raise_for_status 只对 4xx/5xx 抛 HTTPError 且异常携带 response，但没有回答提到 ok/__bool__ 属性，也没有给出\"状态码小于400为真、不代表恰好200\"的语义。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 930,
+              "endLine": 940
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "partial",
+          "questionNumbers": [
+            8
+          ],
+          "reason": "第8题追问触及流式响应与 .text 消费内容的边界，但 iter_content 分块读取底层流、已消费后从缓存切片重放、未缓存且已消费时抛 StreamConsumedError 这三个要点均未说明，且\"无法再 iter_content\"的表述不准确（见 findings）。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "partial",
+          "questionNumbers": [
+            6,
+            7
+          ],
+          "reason": "第7题给出 pyproject.toml 中 urllib3>=1.26,<3 与 charset_normalizer>=2,<4 的安装期约束，第6题说明 certifi 是默认信任根来源；但四个直接运行时依赖的完整清单、idna 的依赖身份以及 chardet 位于可选依赖组的定位没有说明。",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 2,
+          "claim": "若只做赋值，顺序取决于用户的 mount 顺序，`http://` 先注册就会劫持 https 请求。",
+          "kind": "incorrect",
+          "reason": "get_adapter 用 url.lower().startswith(prefix.lower()) 做字面前缀匹配，\"https://…\" 不可能以 \"http://\" 开头，因此 http:// 与 https:// 两个前缀互相不会命中，先注册 http:// 不会劫持 https 请求。重排逻辑真正防止的是互为前缀的键被注册顺序颠倒，例如先注册 \"https://\" 再注册 \"https://api.example.com\" 的一般适配器把专用前缀覆盖掉的场景。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 876,
+              "endLine": 878
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 893,
+              "endLine": 897
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 500,
+              "endLine": 503
+            }
+          ]
+        },
+        {
+          "questionNumber": 8,
+          "claim": "对流式响应，访问 `.text` 会隐式消费内容，导致用户后续无法再 `iter_content`。",
+          "kind": "imprecise",
+          "reason": ".text/.content 会把 body 读入并缓存到 _content 且置 _content_consumed=True；此后调用 iter_content 时会走 iter_slices(self._content, chunk_size) 从缓存切片重放，仍可调用，并不会失败。只有生成器被部分消费后（_content 仍为 False 而 _content_consumed 已置位）再访问 content 才抛 RuntimeError，未缓存的已消费流才抛 StreamConsumedError。\"raise_for_status 不用 .text 以避免触发 IO\"的结论仍然成立，但所述后果不准确。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1035,
+              "endLine": 1051
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 967,
+              "endLine": 977
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 958,
+              "endLine": 959
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "humanReview": {
+    "status": "pending",
+    "reviewedCount": 0,
+    "coverage": 0
+  },
+  "limitations": [
+    "assistant-assisted non-blind, not human ratings; fact coverage is not all-answer accuracy",
+    "answers were generated under a truncated structure-v1 context; honest hedges about unshown code were not counted as errors"
+  ]
+}

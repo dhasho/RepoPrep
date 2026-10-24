@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+  "caseId": "p-limit",
+  "reviewer": {
+    "executor": "ZCode",
+    "model": "unknown",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "humanReview": {
+    "pending": true
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "f8e4d22b8a0bcd337d419a71379ef7ac21698e5b08a2b25caf2ecca47b2a5dc8",
+        "b8cd104a8efcd91da6d89157999a316c7bf17291befb462c407a9888bd4acf46",
+        "52ef514e135cbffa7405396e258bed8b33e40d4767291ce576f1943499d7d61d",
+        "f61be6b39ee42a1801f1136bd4d6cc197c3042941645b0e42d12fb795349c995",
+        "e17f4c7b20fe15b56bf548929801b173c4f8c97879160ec414a58b2d504cb97f",
+        "ee546d2e4c6969f9dfddf76bcbea11304663c6063068e6cbad1f54ea551a812b",
+        "3aaa902f512772d1f7054a0b97e6e695e15aae301684f69b0dde03aa1593dff1",
+        "fc1e21a38dd837a1bb4aef429c52129c9cfc4e51c26bae0bc88278dd1140cfd4",
+        "021122cd3e44df6667ee38ec4dab71adf476c54c0b45de07aa5711e4402b02dd",
+        "675822232a8820b39466fe66a7bb4261b984af75eaa64bc36d5cf3404ae5e23b",
+        "60117c47b0560b8a16ba3b15946ebfd4db468ea07ec5c8392e3686a204d35309",
+        "b33b0cdf7410871f63d0fd4c04e69521ae439edc5e90a2a153a1555b01a1ed48",
+        "4d19ddee38840c3c7a215f56b27eed1cb25fdcf1053f480e852673afa58e67de",
+        "7aadab3527064f8a5554f7c3fd069f5187563d4319dd2fbe32814007952cd50d",
+        "2c15c4101d9c67d3ddbe0c215539931b0d2be6c45a292e2a22dd427dbb08a5f5",
+        "629e9c480d2fa48789f85ef330a8e70df3876a66e0d8a0c57f77e6601ef77537",
+        "455213e91de68b4774910349138d61b1a85c69f34b9e83e9db3796d5f6eef5f9",
+        "c338fce7db427d275396eb09c53ed341e42b26919194c2b21c569a65f0980763",
+        "3722d3014b22554cd0297fb91eb7e4deecb8f4814b21687c3d0f0311f4973b23",
+        "ab13c49de8a6250561aa3b1427536973ccdd48c755ead0b65d503dce260c8a2e"
+      ],
+      "factReviews": [
+        {
+          "factId": "plimit-validation",
+          "coverage": "covered",
+          "questionNumbers": [2, 17],
+          "reason": "Q2 正文完整回答了对象参数解构（concurrency 与 rejectOnClear）、validateConcurrency 要求整数或 Infinity 且大于 0、rejectOnClear 必须为布尔，并列举 pLimit(0)/(1.2)/(undefined)/({}) 均失败、对象形式可用，还正确补充了 null 会在解构时抛错而不走自定义校验；追问确认 Infinity 显式允许及 setter 复用同一校验，Q17 补充 Options 中 rejectOnClear 为可选布尔。claim 的各实质部分均有正确回答。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 3, "endLine": 15},
+            {"path": "index.js", "startLine": 144, "endLine": 148}
+          ]
+        },
+        {
+          "factId": "plimit-active-queue",
+          "coverage": "covered",
+          "questionNumbers": [4, 6, 8],
+          "reason": "Q4 按 enqueue/resumeNext/run/next 完整描述闭包内 activeCount 与 yocto-queue 队列，明确 resumeNext 仅在 activeCount<concurrency 且队列非空时先自增再 dequeue().run() 执行队首任务；Q6 给出 activeCount/pendingCount 精确定义并区分占槽与函数体执行，Q8 覆盖动态调整只影响后续补位。限的是并发执行数而非速率这一 pitfalls 语义也与回答一致。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 16, "endLine": 30}
+          ]
+        },
+        {
+          "factId": "plimit-promise-rejection",
+          "coverage": "covered",
+          "questionNumbers": [4, 7, 10],
+          "reason": "Q7 详细说明 run 先以 async IIFE 包装任务、resolve(result) 先把结果 Promise 交给调用者、内部再 await result 并 catch 以便 next() 递减 activeCount 并续跑队列，且明确内部 catch 不改变调用者拿到的原始 rejection、外层仍需调用方观察；Q4 从生命周期、Q10 从同步抛错/异步 reject/同步返回值三条路径相互印证，均与源码及测试 continues after sync throw、does not ignore errors 一致。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 32, "endLine": 48}
+          ]
+        },
+        {
+          "factId": "plimit-clear",
+          "coverage": "covered",
+          "questionNumbers": [11, 16, 6],
+          "reason": "Q11 准确区分默认分支 queue.clear()（被丢弃的 pending Promise 永不 settle、运行中任务不受影响）与 rejectOnClear=true 时用 AbortSignal.abort().reason 逐个 reject 排队任务，并正确指出已被 dequeue 占槽但未进入微任务的任务不在清理范围；Q16 从优雅关闭配方印证默认清队不 settle 的行为，Q6 追问覆盖 clearQueue 后计数变化。与 index.js:77-89 及 test.js:184-215（含 Node 20 跳过说明）一致。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 77, "endLine": 89},
+            {"path": "test.js", "startLine": 184, "endLine": 215}
+          ]
+        },
+        {
+          "factId": "plimit-concurrency-setter",
+          "coverage": "covered",
+          "questionNumbers": [8, 2],
+          "reason": "Q8 准确描述 setter 先 validateConcurrency(newConcurrency) 再更新闭包变量，并在 queueMicrotask 中以 while (activeCount < concurrency && queue.size > 0) resumeNext() 补足槽位；提高/降低并发的行为差异与测试日志（4→2、2→4）对应，追问确认可设 Infinity、不接受对象、循环读取最新闭包值。Q2 追问 3 亦确认 setter 复用同一校验且 index.d.ts 声明为 number。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 91, "endLine": 105}
+          ]
+        },
+        {
+          "factId": "plimit-map-order",
+          "coverage": "covered",
+          "questionNumbers": [12, 13, 14],
+          "reason": "Q12 完整说明 map 为 generator 上的 async value 方法，经 Array.from 按 (value,index) 对每项调用 generator 提交限流任务并以 Promise.all 收集，结果顺序跟随输入顺序而非完成顺序，且 Set/数组迭代器/类数组均有测试覆盖；Q13 覆盖 iterable 抛错路径，Q14 覆盖急切物化与无背压的限制。与 index.js:106-126、test.js:256-269 一致。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 106, "endLine": 126},
+            {"path": "test.js", "startLine": 256, "endLine": 269}
+          ]
+        },
+        {
+          "factId": "plimit-wrapper",
+          "coverage": "covered",
+          "questionNumbers": [3, 15],
+          "reason": "Q3 与 Q15 准确描述 limitFunction 为指定函数创建独立 pLimit 实例、包装函数每次调用执行 limit(() => function_(...args))，并用 Object.defineProperty 把同一个 clearQueue 函数值挂到返回函数上，因此共享同一闭包队列与 rejectOnClear 配置；类型返回函数与 Pick<LimitFunction,'clearQueue'> 的交叉类型、运行时未暴露 activeCount/pendingCount/concurrency 也被正确引用。",
+          "sourceRefs": [
+            {"path": "index.js", "startLine": 133, "endLine": 142},
+            {"path": "test.js", "startLine": 217, "endLine": 227}
+          ]
+        }
+      ],
+      "findings": [],
+      "notes": [
+        "复核依据：专用 bundle（runId=e03c5a43-ad43-4c04-b410-8693f2725ee6，sourceCommit=a8a6fbec4e0e866d6d779b10889bb4f5567e70eb）及 E:\\Vibe Coding\\RepoPrep-Eval-Cases\\p-limit 检出（HEAD 一致）。bundle 中 index.js/test.js/index.d.ts/package.json/.github/workflows/main.yml/.gitignore 的行号摘录与检出逐行一致；16 项文件清单与 git ls-files 完全一致。",
+        "已逐题核对全部 20 题正文及所有追问（含嵌套追问），全部实质陈述均能在源码中找到对应依据；findings 为空是逐条核对后的结论，并非跳过检查。",
+        "重点核查过的易错点：AsyncLocalStorage 上下文捕获时序（Q5/Q9，与 index.js:50-64 内部 Promise + 入队时注册 .then(run) 的机制及源码注释一致）；clearQueue 对已出队未执行任务的影响（Q11，回答正确：已占槽任务不在清理范围）；默认清队不 settle（Q16，与 index.js:79-82 一致）；类型层 limitFunction 只要求 PromiseLike 而 pLimit 调用签名允许同步返回值的不对称（Q3/Q17，与 index.d.ts:56/136 及 index.test-d.ts:29 一致）；benchmark 的 High-Volume Queue 场景使用 pLimit+Promise.all 而非 limit.map（Q14，与 benchmark.js:158-176 一致）；Q18 所述并发 1/5 与测试实际取值（concurrency: 1 与 concurrency 值为 5 的用例）一致。",
+        "候选回答中涉及设计取舍、性能影响、兼容性改造的段落均明确标注为推断或建议（如'这是基于源码的取舍分析''属于设计建议''当前上下文没有实际结果'），未发现把假设冒充为当前行为的陈述；对仓库外事实（npm 发布细节、浏览器实际运行、基准数值）回答均以'当前上下文不能确认'等方式限定，按约定不计为事实错误，本复核也未引入外部资料判定。",
+        "问答中的 repo/model/gold 文本仅作为被复核数据使用，gold 参考问答未冒充本轮候选回答；本轮未运行测试或基准，未核查 bundle 之外的其他 case。",
+        "humanReview.pending 保留，未填写人工评分或总准确率。"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+  "caseId": "mitt",
+  "reviewer": {
+    "executor": "ZCode",
+    "model": "unknown",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "humanReview": {
+    "pending": true
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "4e086ce426790675f133619eedcdf50d387da57a3db404643fef5a3a53a50f66",
+        "f2cb09cc4da10ea7e4b546d8c80971e06c92b6f02da9f2769c0b3e20ba176a86",
+        "bc6d2a748cdbbdb5888523be8c16c63e302f1e3d55b1084b63325756564f61bb",
+        "b7f47ce92c79bb53add1fa89740bf13793cd6bd37a26e3bfb437b0dd8c3f3bac",
+        "7907414e1405f1b60ac89138716605ed52062291246dc7e403db7927a2e81935",
+        "021809ab343b08549ffc5327707984b37172be8443989ffd9b5d19d871f9f86e",
+        "598f3d6a5465d5508548a89ec6fd33887e65a49c5220ca7db9ba7b314d6764a7",
+        "cd6282bab19a131bf521cbbe357b5e4ae8f173b02cdc21f0ba1cf6739a6dbb31",
+        "b29021ffe7b2a0870a01164e0c3bcb24ab70fd8cf5774da72d0a6df04901251a",
+        "ec01b978bab5f01be0584664a8cb85bfb89bb42465eda993033893492e87f148",
+        "8225be3499d89c2c3d768cbf7cceea07a8ba7f3227115a15b7c07413198985d8",
+        "9dd7d27cdb1a5032f33eef261b5fa999205db40dd0382735b7787016cee9134b",
+        "9f478184866e1d38c5e381f05edd13479704aeeea673d6cc11a407f70e21f0be",
+        "1a94817b5b581e700c344fc996fdb0df63bb858d99d219afb527b7146ffa56bd",
+        "24f48f615fa05004543c9f1934c48317c04771b366b766141289a1bcad83fbdb",
+        "61e42834eada4f4a88c24e95f1f4884a255a84ab249e4ff08915bdb1b5a83ffc",
+        "57760102cb8e87692cd8ab5abd9756e975f56cd5eda84fa0487705a102b96999",
+        "7e628ca435a965176da4e7df46ced861365e7975cbae016dbca805a801fe3ce0",
+        "7e591aeeb27366d6ef3d26940e85deddf8af69bea0ea9740dcdf25b03c765eac",
+        "9a5023be4f15a2ba79bd17713672d70093739eb8aad908de5efca237b67f3d15"
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            2,
+            6,
+            13,
+            17
+          ],
+          "reason": "第1题说明 all 是以 Map 保存事件名到处理器数组的注册表；第2题明确事件名允许 string | symbol、on/off/emit 走 Map.get/set，并引用 constructor 与 symbol 事件测试；第6题给出 get/push/set 注册流程及 symbol 键按引用相等；第13题明确 EventType 为 string | symbol；第17题把大小写敏感与 symbol 列入测试覆盖。与 src/index.ts:1-21、46-58 及 test/index_test.ts 一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 21
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 63,
+              "endLine": 96
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            6,
+            17
+          ],
+          "reason": "第6题完整说明 on 先 get、已有则 push 到数组尾部、不存在则 set 新数组，不去重，同一函数注册两次会被调用两次，并引用 \"should add duplicate listeners\" 测试及 Node 语义；第17题将重复监听列入测试覆盖点。与 src/index.ts:66-73 和 test/index_test.ts:98-105 一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            7,
+            8,
+            17
+          ],
+          "reason": "第7题解释 splice(handlers.indexOf(handler) >>> 0, 1) 删除第一个匹配项、未命中时 >>>0 把 -1 变为超大下标成为安全 no-op、重复注册每次只移除一个；第8题说明省略 handler 时执行 all.set(type, []) 保留键而非 delete，并引用测试对空数组的断言；第17题概括 off 的\"精确移除/只移除第一个/按类型清空\"覆盖。与 src/index.ts:82-91 和 test/index_test.ts:138-157 一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            9,
+            10,
+            11,
+            12,
+            17
+          ],
+          "reason": "第9题完整说明 emit 分两段：先对具体类型列表 slice 后同步调用 handler(evt)，再对 '*' 列表 slice 后以 (type, evt) 调用，普通处理器先于通配符；第10题展开快照语义、第11题说明同步无 try/catch 与重入行为、第12题描述运行时 emit('*') 的两段行为；第17题列出通配符测试。与 src/index.ts:103-121 及 test/index_test.ts:189-202 一致（快照语义的两处边缘表述见 findings，不影响本事实实质覆盖）。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 103,
+              "endLine": 121
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 189,
+              "endLine": 202
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            13,
+            14,
+            18
+          ],
+          "reason": "第14题完整解释第二个 emit 重载的 undefined extends Events[Key] ? Key : never 条件类型，并以 bar?: number 与 foo: string 举例说明何时可省略 payload，且引用类型测试正反例；第13题说明 Key 关联机制；第18题追问复核 emit('bar') 无 expect-error、emit('foo') 带 expect-error。已核对 test/test-types-compilation.ts:63-78 属实。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 35,
+              "endLine": 39
+            },
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 63,
+              "endLine": 78
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            3,
+            4,
+            17
+          ],
+          "reason": "第3题说明传入的 Map 直接作为返回对象的 all 属性、on/off/emit 读写同一份数据，并讨论共享与无运行时校验风险；第4题说明 all 直接暴露的利弊与 emitter.all.clear()；第17题把\"可传入 Map、all 暴露\"列入测试覆盖。与 src/index.ts:46-58 和 test/index_test.ts:12-22 一致。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 10,
+          "kind": "incorrect",
+          "claim": "Q10追问1：如果不用 slice、直接 forEach 原数组，\"遍历期间 push 可能让新 handler 也被本次 emit 调用\"。",
+          "reason": "Array.prototype.forEach/map 的遍历范围在调用开始时即按当时长度固定（ECMAScript 规范），遍历期间 push 追加的元素不会被本次遍历访问；即去掉 slice、直接 map/forEach 原数组，emit 期间新注册的同类型 handler 同样不会被调用。该推断与 JS 数组遍历语义不符，也与本题正文\"handler 内部 on 新注册的函数不会在本次 emit 中被调用\"自相矛盾（同一句中 splice 导致跳过元素的部分正确）。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 103,
+              "endLine": 111
+            }
+          ]
+        },
+        {
+          "questionNumber": 10,
+          "kind": "imprecise",
+          "claim": "Q10正文：\"handler 内部 on 新注册的函数不会在本次 emit 中被调用\"。",
+          "reason": "该说法对同一处理器列表成立，但作为普适结论不严谨：emit 在类型处理器阶段结束后才重新执行 all.get('*')（src/index.ts:113），若某类型处理器在 emit 过程中以 on('*') 注册通配符处理器，新注册的 '*' 处理器会在同一次 emit 的通配符阶段被调用。属范围未限定的不精确表述，非方向性错误。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 104,
+              "endLine": 120
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "本轮以专用 bundle（runId e03c5a43-ad43-4c04-b410-8693f2725ee6）冻结的 src/index.ts、test/index_test.ts、package.json、README.md、.gitignore、.github/workflows/main.yml、.github/workflows/compressed-size.yml 全文为核对基础，逐题核查正文与全部追问；bundle 未含全文的 test/test-types-compilation.ts 与 tsconfig.json 已从 clone（E:\\Vibe Coding\\RepoPrep-Eval-Cases\\mitt）单独读取，Q13/Q14/Q15/Q18 对其的引用（fooHandler/barHandler 签名、on('*') 正反例、emit('bar') 无 expect-error、emit('foo') 带 expect-error、strict:true、include 含 src/*.ts 与 test/*.ts）均与实际文件一致。",
+        "gold 参考问答仅作数据对待，未将任何 gold 内容当作候选回答；全部覆盖与 finding 判定只对照冻结 claim 与仓库源码。",
+        "边缘裁量（未计入 finding）：Q3 追问2 称传入 Map 中\"值不是数组\"会抛错，对 falsy 值（null/undefined）不成立（on 走新建数组分支、emit 跳过），但属罕见输入且答案主旨\"无运行时校验\"正确；Q17 追问1 称测试未覆盖\"off 不存在的 handler\"，off 大小写测试（test/index_test.ts:121-136）附带执行了事件类型不存在的提前返回分支，但\"类型存在而 handler 未注册\"（indexOf>>>0 路径）确无专项测试，该表述可接受。",
+        "既往易误判点核对：本轮 20 题未涉及 build 脚本 \"npm-run-all --silent clean -p bundle -s docs\" 的并行/串行结构；Q20 追问2 称 npm test 串行执行 typecheck、lint、mocha、test-types，与 package.json:19 一致；本轮回答未引用 .github/.gitignore，该注意项与本轮无交集。",
+        "未核验项：microbundle、documentation.js、compressed-size-action 等外部工具的实际行为及 dist 产物（.gitignore 忽略 /dist 与 /index.d.ts，仓库无产物文件）；相关回答已自带\"无法确认/仅配置意图\"限定，未计入错误。本复核为静态源码比对，未运行测试或类型检查（未安装依赖）。"
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted, non-blind; not human ratings; fact coverage does not equal all-answer accuracy",
+    "humanReview remains pending; this report neither completes nor alters it"
+  ]
+}

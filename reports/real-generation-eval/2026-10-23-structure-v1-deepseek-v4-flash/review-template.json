@@ -1,0 +1,1954 @@
+{
+  "schemaVersion": "repoprep-human-review-v2",
+  "runId": "04cc5679-1e4b-4fb5-a724-1e7fe9ff1548",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "configHash": "c0fa91ed8a79a3620c394cf5fecb27257fd741a4527e2dac1bbd72ecaddf3ee3",
+  "reportDigest": "sha256:1e371dac556f25ca15775876ae5a44c1283ee79ae25ff01c59f1daf62aa593de",
+  "rubric": {
+    "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.",
+    "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
+    "semanticDuplication": "1 duplicates another question; 2 near duplicate; 3 partial overlap; 4 distinct with minor overlap; 5 clearly distinct."
+  },
+  "ratings": [
+    {
+      "fingerprint": "a291414931fb350e113b8b612550651d9273f633200581fc6e3a48f44e64aa3c",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "请从入口文件出发，介绍 mitt 的模块职责和整体结构；它为什么可以做到单文件实现？",
+      "answer": "`src/index.ts` 同时承担类型声明与运行时实现：导出 `EventType`、`Handler`、`Emitter` 等类型，默认导出 `mitt` [[工厂函数]]。工厂接收或创建 [[Map]]，返回包含 `all`、`on`、`off`、`emit` 的对象；`on/off/emit` 通过[[闭包]]操作同一份[[事件映射]]。它没有类继承、插件系统或外部依赖，核心只是维护数组并遍历调用，所以单文件即可。[[TypeScript]] 负责在编译期约束调用方式；构建、测试、文档脚本另放在 `package.json`。",
+      "followUps": [
+        {
+          "question": "为什么采用工厂函数而不是 class？方法不依赖 this 有什么实际收益？",
+          "answer": "工厂返回普通对象，`on/off/emit` 由[[闭包]]捕获 `all`，因此解构后调用也不会丢失[[this绑定]]；class 也能实现，但需要处理方法和实例关系。当前设计让 [[API]] 更函数式，也减少运行时结构。",
+          "followUps": []
+        },
+        {
+          "question": "参数 `all` 由外部传入而不是总是内部创建，会带来哪些能力与风险？",
+          "answer": "能力是可预置处理器、让多个发射器共享[[事件映射]]；风险是外部可直接增删数组、改变生命周期，代码没有拷贝或校验。该风险是共享可变状态的自然结果，不是线程安全问题。",
+          "followUps": []
+        },
+        {
+          "question": "如果未来要在不改变公共 API 的前提下拆分模块，你会怎么拆？",
+          "answer": "可把类型定义、事件表操作、分发策略拆成内部模块，但仍由入口导出同一个 `Emitter` 接口。当前单文件是事实，拆分属于设计建议，不是现状。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ad61491f2741ac188708fffb042c2a07e7d60b6a2cd1e6a362b3a2f121298e4d",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "一次 `emit(type, evt)` 从调用到所有处理函数执行，数据如何流动？普通事件和 `'*'` 事件的顺序是什么？",
+      "answer": "`emit` 先从 `all` 取出该 `type` 对应的数组，存在则先 `slice()` 生成[[快照]]，再逐个调用 `handler(evt)`；随后再取 `'*'` 数组，调用[[通配符事件]]处理器 `handler(type, evt)`。因此普通[[处理函数]]先执行，通配符后执行；同一数组内按注册顺序执行。`map` 的返回值没有被使用，只是借它遍历。",
+      "followUps": [
+        {
+          "question": "为什么通配符放在普通处理器之后？如果要求之前执行，需要改哪里？",
+          "answer": "这是 `src/index.ts` 中两个代码块的先后顺序决定的，文档也这样描述；换顺序只需交换两段查找和遍历，但会改变可观察行为，属于破坏性变更。",
+          "followUps": []
+        },
+        {
+          "question": "handler 抛异常时，后续处理器和通配符还会执行吗？",
+          "answer": "不会。当前没有 `try/catch`，异常会从 `emit` 传给调用方，当前数组剩余处理器和后续[[通配符事件]]都不会执行，也没有[[错误隔离]]。",
+          "followUps": []
+        },
+        {
+          "question": "`emit` 的返回值是什么？这对调用方意味着什么？",
+          "answer": "实现没有 `return`，所以返回 `undefined`。调用方无法拿到处理器结果，也无法通过返回值判断是否有人监听；只能依赖副作用，异常则同步抛出。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "8978f2b41d3b80c63b4fa9ef2ceedb14e6d633c06a274346fd2266b6c0487271",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`all` 为什么设计成 `Map<keyof Events | '*', Handler[]>`？与普通对象相比有哪些关键差异？",
+      "answer": "该 [[Map]] 的键是[[事件类型]]或 `'*'`，值是[[事件处理器]]数组。`Map` 允许 string 和 [[符号类型]] 键，避免普通对象原型键干扰，测试用 `'constructor'` 验证了这一点；它也保持插入顺序并支持 `clear()`。`EventHandlerMap` 用联合类型描述普通列表和通配符列表。平均查找可视为 O(1)，但具体性能未在本项目中做[[时间复杂度]]基准。",
+      "followUps": [
+        {
+          "question": "为什么值类型要区分普通 Handler 数组和 WildcardHandler 数组？",
+          "answer": "主要是类型层区分：普通处理器只接 event，通配符还要接 type；运行时都存进同一个 `Map`，实现中通过类型断言把数组当作相应列表使用。",
+          "followUps": []
+        },
+        {
+          "question": "如果把 Map 换成对象，`constructor`、`__proto__` 等键会有什么问题？",
+          "answer": "普通对象会继承原型属性，`events['constructor']` 可能不是用户数据；`__proto__` 还会触发特殊赋值。`test/index_test.ts` 专门测试 `'constructor'` 可注册，[[Map]] 避免了这类键冲突。",
+          "followUps": []
+        },
+        {
+          "question": "Map 的生命周期由谁管理？调用方如何彻底释放监听器？",
+          "answer": "生命周期由持有 `all` 的发射器及外部共享者决定。`on` 不删除键，`off(type)` 只是置空数组；README 展示了 `all.clear()`，它会清空整个[[事件映射]]，但外部仍持有旧数组时旧引用不会被自动清理。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e53dceb994b57eb879ff4f54ea9ba44b5121bbc9dad702cebb706635e24165c6",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`'*'` 通配符在类型层和运行时如何协作？它有没有可能和用户事件名冲突？",
+      "answer": "类型层在 `Emitter` 接口中单独重载 `on(type: '*', handler: WildcardHandler)` 和 `off`，`EventHandlerMap` 的键也包含 `'*'`；运行时 `on` 把处理器存到 `'*'` 键，`emit` 每次额外读取该键。因此 `'*'` 是保留语义。若用户把 `'*'` 声明为普通事件键，会和[[通配符事件]]共用同一存储，产生类型和运行时冲突。",
+      "followUps": [
+        {
+          "question": "文档说手动触发 `'*'` 不支持，代码层面是如何限制的？",
+          "answer": "类型接口没有提供 `emit('*')` 的正常重载，除非 `Events` 自己含 `'*'` 键；运行时没有 `if (type === '*')` 之类的保护，JS 或 `any` 可以绕过。",
+          "followUps": []
+        },
+        {
+          "question": "如果业务真的需要名为 `'*'` 的事件，你会如何改设计？",
+          "answer": "建议把通配符放到独立字段或使用专用 symbol，而不是复用事件键；这样普通事件 `'*'` 和通配监听互不冲突。这是设计建议，当前实现未这样做。",
+          "followUps": []
+        },
+        {
+          "question": "通配符处理器能否阻止普通处理器执行或阻止后续通配符？",
+          "answer": "没有提供取消或优先级机制。普通处理器先执行，通配符只能通过抛异常中断后续调用；抛异常也会把错误传给 `emit` 调用方。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ef05db45355cabbd24c39cc01591e1868bd018e980f084f15346c138f0d42f22",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`Emitter<Events>` 的泛型约束和主要成员是什么？这样的约束想保证什么？",
+      "answer": "`Emitter<Events extends Record<EventType, unknown>>` 用[[泛型]]和[[类型约束]]要求事件表的值可被索引。成员包括 `all`、`on`、`off`、`emit`；`on/off` 用 `Key extends keyof Events` 把事件名和处理器参数关联起来，`emit` 同样约束事件值类型。`EventType` 是 `string | symbol`，所以[[符号类型]]也能作为键。[[索引类型]]让 `Events[Key]` 参与签名。",
+      "followUps": [
+        {
+          "question": "`Record<EventType, unknown>` 为什么不是 `Record<string, any>`？",
+          "answer": "前者覆盖 symbol，值用 `unknown` 迫使调用方在消费前收窄；`any` 会绕过类型检查。但当前源码没有运行时校验，类型约束只在 TS 编译期生效。",
+          "followUps": []
+        },
+        {
+          "question": "Events 中的可选属性如何影响 emit？",
+          "answer": "`bar?: number` 让 `emit('bar')` 合法，因为事件值包含 `undefined`；必填的 `foo: string` 则必须传参数。这是通过 `undefined extends Events[Key] ? Key : never` 的[[重载]]实现的。",
+          "followUps": []
+        },
+        {
+          "question": "如果事件值是函数或 undefined，类型上会有什么边界？",
+          "answer": "事件值是函数时，`Handler` 的参数类型就是该函数类型，不会自动当回调调用；值为 `undefined` 时允许省略参数。运行时仍把传入值原样交给处理器，不做额外包装。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "bc780914adb053d39872ce1c266807a1c33930d79e3925a8995df4c092058c28",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`on` 的接口重载和实现签名为什么看起来不一致？实现时有没有运行时校验 `'*'`？",
+      "answer": "接口为普通键和 `'*'` 分别声明[[重载]]，能精确约束 handler 类型；实现签名只写一个泛型加 `GenericEventHandler` 联合类型，方便在同一函数体里处理两种情况。实现没有检查 `type === '*'`，也没有校验 handler 是否为函数，类型层通过 [[API]] 约束，JS 调用或 `any` 可绕过。",
+      "followUps": [
+        {
+          "question": "如果传入不存在的 type 或 handler，运行时会怎样？",
+          "answer": "不存在 type 时会新建数组；handler 不是函数也会被 push，直到 emit 时才抛 `TypeError`。这些行为由当前实现决定，源码没有参数校验。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 `on` 返回 void 而不是链式返回实例？",
+          "answer": "当前设计是函数式工具，没有链式 API；返回 void 可避免调用方依赖内部对象，也减少类型复杂度。若要链式调用，需要改接口并考虑 [[this绑定]] 或返回类型。",
+          "followUps": []
+        },
+        {
+          "question": "重载和联合类型参数各有什么取舍？",
+          "answer": "重载能表达 type 与 handler 的精确配对，但实现签名较松；联合类型写起来短，却可能允许不匹配的组合。这里外层用重载、内部用联合，是两者折中。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5d8dd4299698b3ce1dd37c287fcbb696da0e8a6f5cffdd3eab3de901fa7dea4b",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`emit` 如何做到可选事件参数？`undefined extends Events[Key] ? Key : never` 解决了什么问题？",
+      "answer": "`emit` 通过[[可选参数]]和两个[[重载]]表达：一个要求 `(type, event)`，另一个只接受 type，且 type 被限制为事件值包含 `undefined` 的键。`bar?: number` 的键会匹配第二个重载，所以 `emit('bar')` 合法；`foo: string` 不匹配，所以 `emit('foo')` 报错。实现里 `evt?` 和 `evt!` 是运行时代码，安全性主要依赖类型层。",
+      "followUps": [
+        {
+          "question": "如果把实现改成 `event?: Events[Key]` 会怎样？",
+          "answer": "那会允许所有键省略参数，削弱[[类型推断]]和约束，`emit('foo')` 也可能通过。当前用条件类型只放行真正可 undefined 的事件。",
+          "followUps": []
+        },
+        {
+          "question": "`evt!` 非空断言安全吗？",
+          "answer": "在类型层，它依赖重载保证省略时事件值可为 undefined；但运行时仍可能是 undefined，处理器收到的就是 undefined。它不是运行时校验，不能防止 JS 调用方传错。",
+          "followUps": []
+        },
+        {
+          "question": "事件类型为 `string | undefined` 时两个重载如何选择？",
+          "answer": "该键满足 `undefined extends Events[Key]`，因此 type-only 调用可用；显式传 `undefined` 也符合事件值类型。是否接受字符串由 `Events[Key]` 决定，和重载本身无关。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "1daaf42882986217cc9be554ef020a16897dcc291244cd310cc4dc7ba1b03cf6",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`test/test-types-compilation.ts` 验证了什么？它能否证明运行时行为正确？",
+      "answer": "它是编译期类型测试：用 `@ts-expect-error` 标注应失败的调用，覆盖 `on/off` 的事件名与 handler 匹配、`'*'` 处理器、`emit` 的必填/可选参数。`package.json` 的 `test-types` 脚本用 `tsc ... --noEmit --strict` 执行它。它不能证明运行时正确，例如通过 `any` 调 `emit('*')` 或处理器抛异常都不会在这里暴露；[[声明文件]]也未在给定文件中提供。",
+      "followUps": [
+        {
+          "question": "`@ts-expect-error` 与 `@ts-ignore` 的区别对测试有什么意义？",
+          "answer": "`@ts-expect-error` 要求下一行确实有类型错误，没有错误时自身会报错，因此适合做负向断言；`@ts-ignore` 只是压制，无法保证错误存在。",
+          "followUps": []
+        },
+        {
+          "question": "为什么包需要生成 `index.d.ts`，而源码中没有它？",
+          "answer": "`package.json` 的 `typings` 和 `exports.types` 都指向 `index.d.ts`，但 `.gitignore` 忽略它，给定文件树也没有该文件。它通常由构建生成或单独维护，但当前上下文无法确认生成内容。",
+          "followUps": []
+        },
+        {
+          "question": "类型测试通过但运行时仍可能出错，举一个本项目中的例子。",
+          "answer": "类型接口没有 `emit('*')` 重载，但 JS 或 `any` 可以调用；运行时会按 `'*'` 键触发两次且参数不同。另一个例子是 handler 非函数，类型测试不覆盖运行时 push。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ea8c9cfe97b15a6a439d31a9ce80924e500d37e7bf8f1a70997dfd13c2b0c0d6",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`on` 如何维护某类事件的处理器列表？重复注册同一个函数会发生什么？",
+      "answer": "`on` 先 `all.get(type)`；已有数组就 `push(handler)`，否则 `all.set(type, [handler])`。它不检查重复，因此同一个函数注册两次会存两份；`test/index_test.ts` 明确断言 `[foo, foo]`。数组是原地追加，外部通过 `all` 能看到变化。",
+      "followUps": [
+        {
+          "question": "为什么选择允许重复监听而不是去重？",
+          "answer": "这是对 [[Node.js]] `EventEmitter` 语义的靠拢：每次 `on` 都是一次独立订阅；去重会让 `off` 的配对和计数变复杂。测试注释也把重复监听作为预期行为。",
+          "followUps": []
+        },
+        {
+          "question": "如果在一个处理器执行过程中再次 `on` 同类事件，本次 emit 会调用新处理器吗？",
+          "answer": "不会。`emit` 使用 `slice()` 的[[快照]]遍历，新 push 进原数组的处理器不在快照里；下一次 emit 才会被调用。",
+          "followUps": []
+        },
+        {
+          "question": "`on` 存储数组引用而不拷贝 handler 数组，会带来什么外部可观察性？",
+          "answer": "外部拿到 `all` 后可直接 push/splice 同一个数组，绕开 `on/off`；多个发射器共享 Map 时也能互相看到。这是公开 `all` 的契约，代码没有封装保护。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c6bfd60b6267a8952af17277499a1af0352416e924e0f64e59f332adc748cff3",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`off(type, handler)` 中 `handlers.indexOf(handler) >>> 0` 的作用是什么？它有哪些边界行为？",
+      "answer": "`indexOf` 找第一个匹配下标，`>>> 0` 把 `-1` 转成 4294967295，`splice` 在该超大下标处删除不到任何元素，于是“未找到”自然变成 no-op。找到时只删除第一个匹配项；重复监听同一函数需调用多次。匹配依据是[[引用相等]]，不是函数名或内容。",
+      "followUps": [
+        {
+          "question": "为什么只删除第一个匹配项而不是全部？",
+          "answer": "这与重复 `on` 的计数语义一致：一次 `off` 对应一次订阅。若要清空某类全部处理器，使用 `off(type)`；当前实现没有提供按内容批量删除。",
+          "followUps": []
+        },
+        {
+          "question": "如果要按函数名或内容删除，是否可行？",
+          "answer": "不可靠。函数名可能重复，`toString()` 也不保证语义唯一；当前 API 以函数引用为键，调用方应保存原 handler 引用。",
+          "followUps": []
+        },
+        {
+          "question": "`>>> 0` 这种写法可读性如何？有没有更直观的替代？",
+          "answer": "可读性偏技巧化，替代是显式判断 `const i = handlers.indexOf(handler); if (i >= 0) handlers.splice(i, 1)`。两者功能等价，后者更易读但多一个分支。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d449647d40583f29cf9711c88a5bd1f04b0c104815e4aed40a094bb6ea31578b",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`off(type)` 不带 handler 时如何清空？它与 `all.clear()` 有什么区别？",
+      "answer": "`off(type)` 找到该 type 的数组后执行 `all.set(type, [])`，用新的空数组替换旧数组，键仍保留。`all.clear()` 清空整个[[事件映射]]，所有键都删除。前者只影响一个事件类型，后者影响全部；两者都不会清理外部仍持有的旧数组引用。另外，接口中 `off('*', handler)` 的 handler 是必填，尽管运行时省略会走清空分支。",
+      "followUps": [
+        {
+          "question": "为什么清空要 `set(type, [])` 而不是 `delete(type)`？",
+          "answer": "当前代码选择保留键并让 `all.get(type)` 返回空数组；这样 `events.get(type)` 仍可见。`delete` 会移除键，改变外部观察结果和后续 `get` 行为。",
+          "followUps": []
+        },
+        {
+          "question": "如果外部持有旧的处理器数组，`off(type)` 后它会被清空吗？",
+          "answer": "不会。`set(type, [])` 替换的是 Map 中的值，旧数组仍保持原内容；只有直接调用 `all.clear()` 或外部自己清空旧数组才会释放其中引用。",
+          "followUps": []
+        },
+        {
+          "question": "`all.clear()` 之后已有的 Emitter 实例还能继续用吗？",
+          "answer": "能。`on` 会重新 `set` 新数组，`emit` 找不到处理器就跳过；`all` 仍是同一个 Map 对象，只是内容为空。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "79d96bebe361e19aede10f53031682d057eeb9098ef3a0c5d5238ec472a400e9",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "允许传入已有 `EventHandlerMap` 时，状态所有权如何划分？多实例共享会发生什么？",
+      "answer": "`all = all || new Map()` 表明传入的[[事件映射]]被直接复用，没有拷贝。调用方可预置处理器，多个 Emitter 可共享同一 Map 和数组，因此一个实例的 `on/off` 会影响另一个实例；外部直接改 Map 也绕开方法。生命周期由共享者共同承担。",
+      "followUps": [
+        {
+          "question": "测试如何利用这个能力？",
+          "answer": "`test/index_test.ts` 中先 `map.set('foo', [a, b])`，再 `mitt(map)`，随后 `emit('foo')` 验证预置处理器被调用。这直接证明了 Map 复用而非复制。",
+          "followUps": []
+        },
+        {
+          "question": "如果想让每个实例隔离，应该在哪一层拷贝？",
+          "answer": "至少复制 Map，并按需复制每个处理器数组；只复制 Map 而共享数组仍会被 `on` 的 push 影响。拷贝是设计建议，当前实现为性能和体积没有做。",
+          "followUps": []
+        },
+        {
+          "question": "共享 Map 在并发/多线程下安全吗？",
+          "answer": "当前代码面向普通 JS 单线程执行；若跨 Worker 共享内存，需要额外同步，Map 本身不提供锁。给定源码没有并发控制，不能推断线程安全。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "9a807c7697720a68687456bdb31f83cf4eee2e42ea2c4f1c0379e249bb24f530",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`emit` 为什么在遍历前调用 `.slice()`？这个快照对监听器的增删有什么影响？",
+      "answer": "`slice()` 对处理器数组做[[浅拷贝]]，生成本轮[[快照]]。这样在处理器中 `on/off` 不会改变正在遍历的数组：本轮已移除的处理器仍可能被调用，新加的处理器要到下一轮；这避免数组变动导致跳过或重复。`map` 只用于副作用，返回值未使用。",
+      "followUps": [
+        {
+          "question": "如果去掉 slice，会出现什么问题？",
+          "answer": "如果处理器内部 `splice` 当前数组，直接遍历可能跳过后续元素或改变长度；`slice` 固定本轮列表。代价是每次 emit 分配一个数组。",
+          "followUps": []
+        },
+        {
+          "question": "`map` 与 `forEach` 在这里语义上有区别吗？",
+          "answer": "对当前代码几乎无区别，二者都按数组顺序调用回调，`map` 的返回数组被丢弃。用 `forEach` 语义更直观，但改成 `forEach` 不改变分发行为。",
+          "followUps": []
+        },
+        {
+          "question": "快照能否防止处理器抛异常中断？",
+          "answer": "不能。快照只隔离结构变化；异常仍会沿调用栈抛出，停止当前数组后续项和通配符。若需要继续执行，需要显式 try/catch。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "898bab2b5d37f580dc2331b9554cf8c51123eb7e69310c5b8ed4405e2508b109",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`'*'` 处理器收到的参数是什么？普通事件参数和通配符参数在传递时有没有复制？",
+      "answer": "普通处理器收到 `evt`；[[通配符事件]]处理器收到 `(type, evt)`，第一个参数是事件名，第二个是同一个事件值引用。代码没有克隆或序列化，因此对象参数在处理器间共享；某个处理器修改对象，后续处理器能看到。",
+      "followUps": [
+        {
+          "question": "如果通配符处理器修改了对象参数，后续通配符处理器会看到吗？",
+          "answer": "会，因为传的是同一[[引用相等]]的对象。除非处理器把参数重新赋值为新对象，否则原对象上的修改对后续处理器可见。",
+          "followUps": []
+        },
+        {
+          "question": "多个通配符处理器的执行顺序如何确定？",
+          "answer": "由 `'*'` 数组的 push 顺序决定，即注册顺序；`slice()` 后按该顺序遍历。没有优先级参数。",
+          "followUps": []
+        },
+        {
+          "question": "能否让某个事件不触发通配符？",
+          "answer": "当前 API 没有开关。只能在通配符处理器内部根据 type 过滤，或调用方不注册通配符；emit 总是会查 `'*'`。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "54d569fc2c59b845159378e11af730a8195aa1a7aaee2009810abeec02a0e5d3",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "如果通过 JS 或 `any` 调用 `emit('*', payload)`，按当前实现会发生什么？",
+      "answer": "类型接口通常阻止这种调用，但运行时没有保护。`emit('*', payload)` 会先取 `'*'` 数组并调用 `handler(payload)`，此时通配符处理器少了一个 type 参数；随后又取 `'*'` 数组调用 `handler('*', payload)`。结果同一批[[通配符事件]]处理器被调用两次，第一次参数语义错误。",
+      "followUps": [
+        {
+          "question": "如何在运行时安全地禁止手动触发 `'*'`？",
+          "answer": "在 `emit` 开头判断 `type === '*'` 并直接返回或抛错；若要保留名为 `'*'` 的普通事件，则需把通配符移到独立存储，不能只加判断。",
+          "followUps": []
+        },
+        {
+          "question": "TypeScript 类型能否完全阻止这种调用？",
+          "answer": "不能。它只能约束遵守类型的 TS 调用；`any`、类型断言和纯 JS 都能绕过。`test/test-types-compilation.ts` 也没有覆盖这个运行时分支。",
+          "followUps": []
+        },
+        {
+          "question": "如果 Events 中声明了 `'*'` 键，会与通配符语义冲突吗？",
+          "answer": "会。`on('*', ...)` 的重载和普通键重载可能同时匹配，运行时又共用 Map 的同一个键；普通 emit('*') 也会触发通配符逻辑。当前代码没有隔离。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "885b72a74846f7ae09350496cd44f5d43d0036020881e029fb75d251810c901a",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "mitt 的处理器抛异常或重入 emit 时，当前实现的行为是什么？",
+      "answer": "没有 `try/catch` 或[[错误隔离]]，处理器抛异常会同步传给 `emit` 调用方，并中止当前数组剩余处理器及后续通配符。[[重入]] emit 是允许的：内层 emit 会重新取快照同步执行，外层的快照和数组状态仍在，内层完成后外层继续。没有队列、取消或 once 机制。",
+      "followUps": [
+        {
+          "question": "如果希望一个处理器异常不影响其他处理器，应如何改？",
+          "answer": "可在每个 handler 调用处包 try/catch，收集错误后统一抛出或回调上报。但这会改变当前“异常立即中断”的语义，需要作为显式选项或新版本处理。",
+          "followUps": []
+        },
+        {
+          "question": "重入时监听器顺序和状态会怎样？",
+          "answer": "内层 emit 按自己的快照和当时状态执行，可能再次触发同一处理器；外层不会重新遍历。共享 Map 的增删在内外层之间立即可见，但当前快照不更新。",
+          "followUps": []
+        },
+        {
+          "question": "当前有没有 `once` 或取消订阅令牌？",
+          "answer": "没有。只能保存 handler 引用并调用 `off`；要实现一次性监听，可在包装函数中先解绑再调用原函数，并处理异常路径。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "488b2f37878ca23da780cb5b08092f1dd6b970b73ea5404e302f8230529cc559",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`test/index_test.ts` 覆盖了哪些关键行为？有哪些明显的未覆盖边界？",
+      "answer": "这是针对核心行为的[[单元测试]]，使用 [[Mocha]] 和 [[Sinon]]。它覆盖默认导出是函数、可注入 Map、`all` 是 Map、`on` 的新增/追加/大小写敏感/symbol/重复监听、`off` 的删除首个/清空类型、`emit` 的普通匹配/大小写/通配符。未覆盖 `emit('*')`、处理器抛异常、emit 过程中 `on/off`、`off('*')` 省略 handler、共享 Map 外部变更等。",
+      "followUps": [
+        {
+          "question": "为什么测试既断言 `events` 内部 Map，又断言行为？",
+          "answer": "内部断言能验证存储结构和引用，行为断言验证调用结果。两者混用能定位问题，但也让测试依赖 `all` 公开的实现细节，重构时更脆弱。",
+          "followUps": []
+        },
+        {
+          "question": "如果要补一个针对 `off` 在 emit 过程中调用的测试，期望是什么？",
+          "answer": "按当前快照实现，被移除的处理器在本轮仍应被调用一次，下一轮不再调用。测试可先注册两个处理器，在第一个中 off 第二个，断言本轮两个都执行。",
+          "followUps": []
+        },
+        {
+          "question": "测试里 `events.set('*',[star])` 直接改 Map，说明了什么契约？",
+          "answer": "说明 `all` 是公开可变的[[事件映射]]，外部可绕过 `on` 注入处理器。这是现有契约，不保证未来版本兼容。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d562a56fc6dc01ad7dd5e45ff75e0c3a56d7b5ad919fa9a2054f6850e3c1eacd",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`npm test` 和 GitHub Actions 的工作流分别执行哪些步骤？从这些配置能确认什么、不能确认什么？",
+      "answer": "`package.json` 的 `test` 通过 `npm-run-all` 组合 `typecheck`、`lint`、`mocha`、`test-types`；`mocha` 用 `ts-node/register` 和 esm 跑 `test/*_test.ts`。`.github/workflows/main.yml` 是 [[CI]] 配置，在 Node 14 下执行 `npm install`、`npm run build --if-present` 和 `npm test`。这些只证明脚本被定义，不能证明本地或 CI 已成功运行；`dist` 也不在给定文件树中。",
+      "followUps": [
+        {
+          "question": "为什么把 typecheck、lint、mocha、test-types 拆成多个脚本？",
+          "answer": "拆分后可以单独运行和定位失败，[[npm]] 的 `npm-run-all` 负责组合。当前 `test` 是顺序执行；具体退出码和输出由各工具决定，配置文件本身不证明全部通过。",
+          "followUps": []
+        },
+        {
+          "question": "`npm run build --if-present` 在 CI 中意味着什么？",
+          "answer": "表示若存在 build 脚本就执行；`package.json` 确实定义了 `build`，它会 `clean` 后并行执行 `bundle` 和 `docs`。是否生成 `dist` 仍取决于依赖安装和构建成功。",
+          "followUps": []
+        },
+        {
+          "question": "compressed-size workflow 能检查什么？",
+          "answer": "它在 PR 上使用 `preactjs/compressed-size-action` 匹配 `./dist/*.{js,mjs,cjs}`，检查压缩体积变化。它依赖构建产物存在，不能替代功能测试。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "14c6c2fce2230fa658ecf1783e60d0de554d2c7b025d1bcf84475deacf448f2a",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "package.json 的入口字段与 exports 如何支持多种模块消费方式？有哪些无法从当前上下文确认的点？",
+      "answer": "`main` 指向 CommonJS 的 `dist/mitt.js`，`module`/`jsnext:main` 指向 ESM 的 `dist/mitt.mjs`，`umd:main` 指 UMD，`source` 指 `src/index.ts`；`exports` 又按 types/module/import/require/default 映射。`bundle` 脚本使用 [[microbundle]] 输出多格式。理论上支持 [[CommonJS]]、[[ESM]] 和 [[UMD]] 消费。但 `dist` 与 `index.d.ts` 未提供且被忽略，无法确认实际[[打包产物]]、[[声明文件]]内容或 [[tree-shaking]] 效果。",
+      "followUps": [
+        {
+          "question": "exports 中把 `types` 放第一位有什么意义？",
+          "answer": "便于 [[TypeScript]] 解析类型入口，避免先命中运行时条件。具体解析还取决于 TS 版本和模块解析配置，当前未提供生成后的声明文件。",
+          "followUps": []
+        },
+        {
+          "question": "同时提供 ESM 和 CJS 会有什么双包风险？",
+          "answer": "若同一应用分别加载两种格式，可能得到两个模块实例和两份内部状态；这是通用[[双包风险]]，本项目是否触发取决于打包器和依赖解析。",
+          "followUps": []
+        },
+        {
+          "question": "`files` 只发布 dist 和 index.d.ts，对使用 source 的调试有什么影响？",
+          "answer": "[[npm]] 包默认不会带 `src`，source map 或源码跳转需另行提供；当前 `files` 只列 dist 和 index.d.ts，给定配置无法确认 source map 是否存在。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c74e1292daeb5dcb80676f32bd5a9a3dc9b163afeb5a9e22dfcda76399bc6547",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "在不破坏现有 API 的前提下，为 mitt 增加 `once`、错误隔离或异步 emit，你会怎么设计？",
+      "answer": "当前[[API]]只有 `all/on/off/emit`，且 `emit` 同步返回 undefined。建议把新能力做成显式扩展：`once` 用包装 handler，在首次调用前先 `off`；错误隔离作为工厂选项或新方法，默认保持异常冒泡；异步 emit 用独立方法或 Promise 返回的新方法，避免改变现有同步顺序。新增字段可能影响实现 `Emitter` 接口的代码。",
+      "followUps": [
+        {
+          "question": "`once` 包装器在处理器抛异常时是否还能自动解绑？",
+          "answer": "若在调用原 handler 前先 `off`，即使抛异常也已解绑；若在调用后 `off`，异常会跳过解绑。推荐先解绑，并考虑包装函数与原始函数的引用映射。",
+          "followUps": []
+        },
+        {
+          "question": "错误隔离默认开启会改变哪些现有行为？",
+          "answer": "当前处理器异常会中断后续处理器并抛给 `emit` 调用方；默认隔离后异常可能被吞掉或汇总，调用方不再同步收到，属于语义变更。应作为 opt-in 以保持兼容。",
+          "followUps": []
+        },
+        {
+          "question": "异步 emit 与当前同步顺序、通配符顺序如何协调？",
+          "answer": "需要明确 await 所有普通处理器后再跑通配符，还是并发执行；还要定义错误如何聚合。当前实现是全同步、普通后通配符，异步化会引入[[重入]]和顺序复杂度。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ac3c43a17511a809292a7035b3be35c797fdea868ab72f6f981172f73ef0468a",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "请从模块职责和数据流角度说明，一次 `limit(fn)` 从入队到结束经历了哪些步骤？",
+      "answer": "`pLimit` 返回一个可调用函数（本质是 [[闭包]]），它创建 [[Promise]] 并调用 `enqueue`。`enqueue` 构造 `{reject, run}` 队列项，其中 `run` 是内部 Promise 的 resolve；把队列项放入 [[yocto-queue]] 后，如果 `activeCount < concurrency`，`resumeNext` 会先增加 `activeCount` 再出队并调用 `run()`。随后在 [[微任务]] 中执行 `run`：用异步立即执行函数调用 `fn(...args)`，把结果 [[Promise]] 交给外层 `resolve`，再 `await` 结果以等待完成；完成后 `next()` 递减 `activeCount` 并继续出队。`map` 和 `limitFunction` 都建立在这个生成器之上。",
+      "followUps": [
+        {
+          "question": "为什么要先 `resolve(result)`，再 `await result`，而不是直接 `return await`？",
+          "answer": "外层 `resolve(result)` 让调用方拿到的 Promise 采用任务结果，成功或失败都会传播；内部 `await` 只是为了等待完成并确保 `next()` 执行，同时吞掉内部拒绝，避免未处理拒绝。若在 `run` 中直接 `return await result`，`.then(run)` 产生的 Promise 可能变成无人处理的拒绝。",
+          "followUps": []
+        },
+        {
+          "question": "队列为什么不直接存 `fn` 而是存 `{reject, run}`？",
+          "answer": "`run` 用于启动内部 Promise 的 then 链，从而保留调用方异步上下文；`reject` 用于 `clearQueue` 的 `rejectOnClear` 模式拒绝外层 Promise。只存 `fn` 无法同时支持上下文保留和清理时拒绝。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "1205539fbc7ca20a88a9da8a2d9129a9bc15f2c19f706a7a81370ecfcd747278",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`pLimit` 对构造参数做了哪些校验？`null`、数组、`Infinity`、`rejectOnClear` 非布尔值分别会怎样？",
+      "answer": "构造时若 `typeof concurrency === 'object'`，会解构 `concurrency` 和 `rejectOnClear`。`validateConcurrency` 要求是正整数或 `Number.POSITIVE_INFINITY` 且大于 0；`rejectOnClear` 必须是布尔值，否则抛 `TypeError`。因此 `Infinity` 合法；数组或缺少 `concurrency` 的对象会因 `undefined` 校验失败；`null` 也会进入对象分支，解构 `null` 会抛原生 `TypeError`，不是自定义错误。额外属性被忽略。setter 复用同一校验。",
+      "followUps": [
+        {
+          "question": "为什么允许 `Infinity`？",
+          "answer": "表示不限制并发，所有排队任务可在一次调度中启动；校验仍排除 0、负数和 NaN。是否适合生产取决于内存和下游承受能力，源码只提供能力，不做保护。",
+          "followUps": []
+        },
+        {
+          "question": "如果传入 `new Number(3)` 会通过吗？",
+          "answer": "不会。它 typeof 为 object，解构不到 concurrency，得到 undefined，校验失败；源码没有拆箱逻辑。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "8022912ae6fa5964ae09edbe2797c9a0f23b92f9cdd1c4c523665c271e0b149b",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`enqueue` 为什么要创建内部 Promise 并在其上 `.then(run)`，而不是把 `run.bind(...)` 直接放进队列？",
+      "answer": "核心目的在源码注释中说是保留异步执行上下文。若直接把绑定后的 `run` 入队，它会在前一个任务完成、`next()` 调用 `resumeNext()` 的上下文中被调用，[[AsyncLocalStorage]] 等上下文可能串到前一个任务。当前做法在调用 `limit` 时注册 `.then`，回调绑定当时的上下文；之后只是 resolve 内部 Promise 触发它。它同时保证任务不会同步执行，测试 `runs all tasks asynchronously` 依赖这一点。",
+      "followUps": [
+        {
+          "question": "如果 `clearQueue` 不启用 rejectOnClear，这个内部 Promise 会怎样？",
+          "answer": "队列项的 `run` 不会被调用，内部 Promise 及其 `.then` 永不执行，外层 Promise 也永不 settle；这符合 README 对 pending 任务保留未决状态的描述，但可能让等待者挂起。",
+          "followUps": []
+        },
+        {
+          "question": "测试为什么用 AsyncLocalStorage？",
+          "answer": "验证不同 `limit` 调用创建的异步任务在后续执行时仍能读到各自调用方的 store，而不是被前一个任务覆盖；这是上下文隔离问题。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e04745997ef97155c9a30674766f8d37e066a6ae36cabd5a2b1ce74fe7de6176",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`activeCount` 与 `pendingCount` 的准确含义是什么？为什么 `limit` 返回后可能出现 activeCount 已增加但回调还没执行？",
+      "answer": "`activeCount` 表示已从队列取出、尚未完成的槽位，递增发生在 `resumeNext` 出队前，递减发生在 `run` 的 `await result` 之后；`pendingCount` 直接读 `queue.size`，只统计仍在 [[yocto-queue]] 中等待的项。因为出队后 `run` 还要等内部 Promise 的 [[微任务]] 才执行，所以在 `limit(...)` 同步返回后，`activeCount` 已加一而 `fn` 尚未被调用，`pendingCount` 可能为 0。测试 `runs all tasks asynchronously` 依赖这一可观察行为。",
+      "followUps": [
+        {
+          "question": "如果把 activeCount 改成 fn 真正开始时才递增，会破坏什么？",
+          "answer": "同步连续调用多个 `limit` 时，多个 `enqueue` 都可能看到未满的 activeCount 并出队，导致超额调度；现有先占槽位避免这一点。",
+          "followUps": []
+        },
+        {
+          "question": "`pendingCount` 的文档说 fn 尚未调用，和源码有差异吗？",
+          "answer": "有细微差异：出队但尚未在微任务中执行的项不计入 pendingCount，却计入 activeCount；源码和测试共同定义了实际语义。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a10364a8eeb38b2d14d7ee896302461af8019ededf4302e9cfe88998adaa663c",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`resumeNext` 和 `next` 如何维护调度不变量？把并发调小到低于 activeCount 时会破坏它吗？",
+      "answer": "`resumeNext` 只有在 `activeCount < concurrency` 且队列非空时才出队，并先 `activeCount++`；`next` 在任务完成后 `activeCount--` 再尝试补位。单线程 JS 下检查和递增在同一同步段完成，因此固定并发下不会超发。setter 把 concurrency 调小到低于 activeCount 时，已运行任务不取消，activeCount 可暂时大于当前 concurrency；此时 `resumeNext` 不再出队，直到完成数使 activeCount 降到新阈值以下。",
+      "followUps": [
+        {
+          "question": "setter 为什么用 queueMicrotask 包 while？",
+          "answer": "源码没有解释动机；效果是赋值先完成，扩容在微任务中批量补位，避免在 setter 同步栈里启动任务，也降低重入风险。",
+          "followUps": []
+        },
+        {
+          "question": "如果 concurrency=Infinity 会怎样？",
+          "answer": "校验通过；扩容微任务中的 while 会在队列非空时连续出队，activeCount 可达队列长度，等于一次放行所有等待任务。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ea239b1db30cfac73fdbf92458fd34eabaa923408e7876e62f498c116e40c896",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`run` 如何处理同步抛错、返回普通值、返回 thenable 和异步 reject？如何保证错误传给调用方且 activeCount 最终递减？",
+      "answer": "`(async () => function_(...arguments_))()` 把同步抛错转成 rejected [[Promise]]，普通值转成 fulfilled Promise，[[thenable]] 也会被 async 函数同化。`resolve(result)` 让外层 Promise 采用该结果，因此调用方拿到原始成功值或拒绝原因；随后 `try { await result } catch {}` 只负责吞掉内部拒绝，避免未处理拒绝，并在完成后执行 `next()`。所以同步 throw 不会阻止后续任务，异步 reject 仍由外层 Promise 传播。",
+      "followUps": [
+        {
+          "question": "为什么不把 catch 的错误再抛给调用方？",
+          "answer": "调用方拿到的是 `resolve(result)` 采用后的外层 Promise，拒绝原因已经传播；内部再抛只会制造 run 自身的未处理拒绝，且 next 可能不执行。",
+          "followUps": []
+        },
+        {
+          "question": "这段 `.then(run...)` 没有 rejection handler，有风险吗？",
+          "answer": "正常路径下 run 不向外抛：resolve 和 next 只做内部操作。若未来在 next/resumeNext 中加入可能抛错的逻辑，这个 then 链会变成未处理拒绝，需要补 catch。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d38e9927befed3e553a2aa860446e2a9ef02ab6e07a722736935082861831713",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "动态修改 `limit.concurrency` 时，调大和调小的执行语义分别是什么？测试中的 log 序列说明什么？",
+      "answer": "setter 先 `validateConcurrency`，再更新闭包变量，然后 `queueMicrotask` 中循环补位。调大时，微任务里只要 activeCount < 新值且队列非空就 `resumeNext`，因此会一次补多个任务。调小时不取消正在运行的任务，activeCount 可能高于新并发；只有当完成使 activeCount 低于新值时才会继续出队。`test.js` 中从 4 调到 2 的 log `[1,2,3,4,2,2,...]`，以及从 2 调到 4 的 `[1,2,3,4,4,...]`，正好体现这两个方向。",
+      "followUps": [
+        {
+          "question": "如果在同一个同步 tick 内先调大再调小，最终以哪个为准？",
+          "answer": "setter 同步更新闭包变量，后一次覆盖前一次；但每次都会排一个微任务，执行时读取的是最终 concurrency，并重新检查 activeCount。",
+          "followUps": []
+        },
+        {
+          "question": "为什么调小时不立即中断任务？",
+          "answer": "实现没有取消令牌；Promise 无法通用取消。强行中断会破坏调用方语义，所以只能停止启动新任务，等待已运行任务自然完成。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5f9205bf470515b8480446d5f8caa6a6fd74a8b0ad01b32798eb577b370a1376",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`clearQueue` 在 `rejectOnClear=false` 和 `true` 下分别做了什么？运行中任务和内部 Promise 会怎样？",
+      "answer": "`false` 时直接 `queue.clear()`：被清除的队列项不再出队，内部 Promise 的 `run` 永不调用，外层 Promise 永不 settle；运行中任务和 activeCount 不受影响。`true` 时先用 `AbortSignal.abort().reason` 取得 abort 原因（通常是 [[DOMException]] 形式的 `AbortError`），再循环出队并调用每个队列项保存的 `reject`，让外层 Promise 拒绝；内部 Promise 仍不会被 resolve，任务不会运行。两种模式都不会取消已运行任务，也不会把 activeCount 归零。",
+      "followUps": [
+        {
+          "question": "为什么不 reject 内部 Promise 而 reject 外层？",
+          "answer": "队列项只保存外层 reject；内部 Promise 的 resolve 是启动 run 的触发器。直接拒绝内部 Promise 不会让调用方拿到错误，也无法阻止后续 then 行为。",
+          "followUps": []
+        },
+        {
+          "question": "Node 20 测试跳过说明什么？",
+          "answer": "测试文件注明 Node 20 下 AVA 对 DOMException 的 throwsAsync 处理有 bug，因此跳过该用例；这不等于实现不使用 DOMException，具体运行时行为仍需在目标 Node 版本验证。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c5430f37f764f125725d3d3b68372bdd9fea3340581c843591b5b274e9f943c3",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "README 警告不要在已被同一 limiter 限制的函数内部再调用同一 limiter。请结合实现解释死锁条件，并给出替代设计。",
+      "answer": "以 concurrency=1 为例：外层任务被 `resumeNext` 取出后 activeCount=1，它内部再调用同一个 limit 时只能入队；外层又 `await` 内层结果，内层要等外层完成释放槽位，形成 [[死锁]]。并发大于 1 时，如果嵌套调用耗尽所有槽位且外层都在等待内层，也会死锁。当前实现没有重入检测或槽位借用。替代方案是内层使用独立 limiter，或把嵌套任务拍平成同一层任务；`limitFunction` 同样只是包装，不解决重入。",
+      "followUps": [
+        {
+          "question": "能否用 AsyncLocalStorage 自动识别重入并放行？",
+          "answer": "理论上可记录当前上下文持有的槽位并做重入策略，但会改变并发上限语义，还要处理嵌套深度和清理；当前源码没有这类逻辑。",
+          "followUps": []
+        },
+        {
+          "question": "如果内层不 await 外层会怎样？",
+          "answer": "内层仍可能排队，但外层不等待就能先完成并释放槽位，通常不会死锁；不过任务完成顺序和错误传播需要调用方自己管理。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "de37cf70b333bc66b2cedb312c17b8ebef6971f175270cece984ca1ccc47b33a",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`limit.map` 如何接收 iterable、传入索引并保证结果顺序？它是流式处理吗？",
+      "answer": "`map` 是定义在返回函数上的 async 属性，内部用 `Array.from(iterable, (value, index) => { const promise = generator(function_, value, index); promises.push(promise); return promise; })` 逐个调度任务，然后 `Promise.all(promises)`。因此 mapper 会收到 value 和索引，结果按输入数组下标顺序返回，而不是按完成顺序。它不是流式：迭代会先全部完成并把所有 Promise 放入数组，再等待；大输入或无限 [[迭代器]] 会造成排队和内存增长。",
+      "followUps": [
+        {
+          "question": "空 iterable 和 array-like 对象会怎样？",
+          "answer": "空 iterable 返回空数组，不调用 mapper；array-like（有 length 和下标）可被 Array.from 转换，测试覆盖了 `{0:'a',1:'b',length:2}`。",
+          "followUps": []
+        },
+        {
+          "question": "为什么测试强调 map detached 仍能工作？",
+          "answer": "因为 map 用闭包引用 generator，不依赖 this；解构后 `const {map}=limit` 仍共享同一个 limiter。若改成使用 this.queue 的普通方法就会丢失 this。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "50b41ee48ed807588b11fd569e1986717e17d32c83e9dcb9f0fb1ba1d711da61",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "当 iterable 在迭代中抛错时，`map` 如何处理已经调度的任务？为什么没有产生 unhandled rejection？",
+      "answer": "`map` 用 try 包住 `Array.from` 的调度过程。若迭代器抛错，它先对 `promises` 中每个已调度 Promise 执行 `promise.catch(() => {})`，再把原始错误抛出，因此已经排队的 mapper 仍会继续运行，但结果被丢弃；返回的 `map` Promise 立即以 iterable 错误拒绝，不等待这些任务。源码注释明确说这是为了避免 `Promise.all` 永远观察不到已调度 Promise 而出现未处理拒绝。测试验证了错误立即 reject、稍后任务才完成。",
+      "followUps": [
+        {
+          "question": "如果错误来自 mapper 而不是 iterable 呢？",
+          "answer": "`Promise.all` 会以第一个 mapper 拒绝而拒绝，其他任务不会被取消，仍会继续跑完；Promise.all 已为所有数组项注册处理，避免未处理拒绝。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不在 catch 里 `await Promise.allSettled(promises)` 再抛错？",
+          "answer": "那会把拒绝时机推迟到所有已调度任务结束，改变当前“立即失败”的语义；现实现选择快速失败并丢弃结果。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e2f8e771385368ff75c69e3b4b561bb1604f3ec4db292b923a31b094c9c66039",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`limit.map` 与手写 `Promise.all` + `limit`、以及 README 提到的 [[p-map]] 应如何取舍？",
+      "answer": "`limit.map` 等价于 `Promise.all(Array.from(iterable, (item, index) => limit(mapper, item, index)))`，适合已知批量、可一次性调度的输入。手写方式更灵活，可自行控制失败策略、重试、批大小和是否取消。README 把复杂场景指向 [[p-map]]，但当前上下文没有 p-map 的实现细节，不能据此断言其具体功能。若输入很大、无限或需要逐项拉取，`limit.map` 的 eager 调度缺少 [[背压]]，应改用流式队列或分页调度。",
+      "followUps": [
+        {
+          "question": "如何给 map 增加背压？",
+          "answer": "可以改成 async generator/for-await，维护在途任务集合，超过并发就不再拉取下一项；当前源码是 Array.from 全量调度，没有这个机制。",
+          "followUps": []
+        },
+        {
+          "question": "如果只需要部分成功结果怎么办？",
+          "answer": "README 的 recipes 使用 Promise.allSettled 配合 limit；map 本身是 Promise.all 语义，一个 mapper 拒绝就会整体拒绝。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "67b80b60c705d1bb261dce1db135754c49589582ae6e0206885c0d80a6ced5d1",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "测试 `map works when detached from the limit` 对实现有什么要求？如果 map 依赖 `this` 会怎样？",
+      "answer": "该测试把 `map` 解构后单独调用，说明 `map` 必须通过 [[闭包]] 捕获 `generator` 和队列状态，不能读取调用时的 `this`。当前 `map` 是 `Object.defineProperties` 中的 async value，确实不使用 `this`，所以解构后仍与直接 `limit` 调用共享同一并发限制。若改成普通对象方法并访问 `this.queue`，解构调用会丢掉 `this`，导致运行时报错或访问不到队列。",
+      "followUps": [
+        {
+          "question": "解构后的 map 与原来的 limit 共享 activeCount 吗？",
+          "answer": "共享。两者引用同一个 `generator` 和同一份 `queue`/`activeCount` 闭包状态；测试中 direct 调用和 map 并发执行时 maxRunning 仍为 1。",
+          "followUps": []
+        },
+        {
+          "question": "如果把 map 改成 getter 每次返回新函数，会有什么影响？",
+          "answer": "功能上仍可能工作，但每次访问产生新函数身份，可能影响缓存、比较和类型推断；当前实现是固定 value，行为更稳定。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "40dfab522afd5b69ed155313696c0671881909f8713f32489ce2659e588c2efc",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`limitFunction(fn, options)` 如何复用 `pLimit`？返回函数暴露哪些能力，又隐藏了哪些状态？",
+      "answer": "它先 `const limit = pLimit(options)`，再返回 `(...args) => limit(() => fn(...args))`，并用 `Object.defineProperty` 把 `clearQueue` 指向 `limit.clearQueue`。因此每次调用都走同一个 limiter，`options.concurrency` 和 `rejectOnClear` 生效；但返回函数没有暴露 `activeCount`、`pendingCount`、`concurrency` 的 getter/setter，类型上也只有调用签名和 `clearQueue`。每次调用会额外创建一个箭头 [[闭包]] 作为 `limit` 的回调，未利用 `limit(fn, ...args)` 的参数透传优化。",
+      "followUps": [
+        {
+          "question": "为什么不能直接返回 `limit`？",
+          "answer": "`limit` 接受的是函数参数，调用方仍需传 fn；`limitFunction` 的目标是把 fn 固定住，只暴露更简单的调用形式。",
+          "followUps": []
+        },
+        {
+          "question": "如果要运行时调整这个函数的并发怎么办？",
+          "answer": "当前返回对象没有暴露 concurrency；只能改回使用 pLimit 自己保存 limiter，或修改 API 暴露 setter。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a46a9ae7e6104a2b900411367904f37b182ef0f4dec2c5af7ba1273d158aeae5",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`limitFunction` 的 `clearQueue` 与 `pLimit` 的清理逻辑是什么关系？`rejectOnClear` 如何生效？类型上为什么不允许同步函数？",
+      "answer": "返回函数上的 `clearQueue` 是同一个函数引用，即 `value: limit.clearQueue`，调用时操作的是内部 limiter 的队列；`rejectOnClear` 在 `pLimit` 构造时确定，因此 pending 调用会按同一逻辑被丢弃或拒绝。测试覆盖了 `{concurrency:1, rejectOnClear:true}` 时 pending 调用收到 `AbortError`。类型声明中 `limitFunction` 的 `function_` 返回 `PromiseLike<ReturnType>`，而 `pLimit` 允许 `PromiseLike<ReturnType> | ReturnType`；因此 `limitFunction((_a:string)=>'x', ...)` 在 [[tsd]] 中被判为错误，尽管运行时 async 包装可能也能处理普通返回值。",
+      "followUps": [
+        {
+          "question": "运行时和类型不一致会有什么风险？",
+          "answer": "JS 用户可传同步函数并可能正常工作，TS 用户却被拒绝；这是类型收窄而非运行时限制，若要让两者一致，可放宽类型或明确要求只接受异步函数。",
+          "followUps": []
+        },
+        {
+          "question": "clearQueue 作为 value 定义有什么属性？",
+          "answer": "Object.defineProperty 默认 writable/enumerable/configurable 都为 false；不能覆盖，也不会出现在普通枚举中。源码没有依赖这些特性。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "69d95ba2ac4a71f1376ccd235e24a8795dda61369517e24b1d442c43451e6d2d",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`index.d.ts` 如何把限流函数描述成“可调用对象 + 属性”？`map` 和 `limitFunction` 的泛型有哪些值得注意的点？",
+      "answer": "`LimitFunction` 先定义调用签名 `<Arguments extends unknown[], ReturnType>(fn, ...args) => Promise<ReturnType>`，再声明 `activeCount`/`pendingCount` 只读、`concurrency` 可读写、`clearQueue` 和 `map`。`map` 用 `<Input, ReturnType>(Iterable<Input>, mapper)` 接收同步或异步 mapper，返回 `Promise<ReturnType[]>`；`limitFunction` 返回调用签名与 `Pick<LimitFunction,'clearQueue'>` 的交叉类型。`Options` 的 concurrency 是 readonly，但 `LimitFunction.concurrency` 不是 readonly，因为运行时可 set。",
+      "followUps": [
+        {
+          "question": "`readonly activeCount` 在运行时如何保证？",
+          "answer": "defineProperties 只提供 getter 没有 setter；ESM 严格模式下赋值会抛 TypeError，非严格旧代码可能静默失败。类型和运行时方向一致。",
+          "followUps": []
+        },
+        {
+          "question": "tsd 测试主要验证什么？",
+          "answer": "验证返回 Promise 类型、参数透传、map 对 Set/数组迭代器的类型推导、clearQueue 返回 void，以及错误输入（rejectOnClear 非布尔、limitFunction 同步返回）会被类型系统拒绝。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e8750f8c667bde49eea698662fbf09f82149f700c404851069c6aa0e502c712f",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`test.js` 覆盖了哪些核心行为？哪些用例依赖时间或环境，可能不稳定？",
+      "answer": "测试覆盖不同并发、[[AsyncLocalStorage]] 上下文、同步抛错后继续、额外参数、shared context、错误传播、异步启动、active/pending、clearQueue、rejectOnClear、map 的迭代器/数组/生成器/错误路径、options 校验、动态并发和 limitFunction。`concurrency: 1` 用 timeSpan + inRange(590,650) 卡总时长，`concurrency: 5` 用 randomInt 延迟，依赖真实计时；在负载高时可能抖动。Node 20 的 clearQueue reject 用例因 [[AVA]] 对 [[DOMException]] 的 bug 被 skip。",
+      "followUps": [
+        {
+          "question": "如何让调度测试更稳定？",
+          "answer": "用可控 fake timer 或注入时钟，断言事件顺序和最大并发而非绝对耗时；保留少量集成计时测试作为补充。",
+          "followUps": []
+        },
+        {
+          "question": "测试没有覆盖哪些文档承诺？",
+          "answer": "没有浏览器环境测试，也没有覆盖 clearQueue 非 reject 模式下 pending Promise 永不 settle 的显式断言；benchmark 不在 npm test 中。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c9ce7b29ec802aa78aa30d948049307fa84926e605744d0f2b5bfdf270e60e94",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`benchmark.js` 与 `scripts/benchmarker.js` 的职责是什么？这些结果能证明什么、不能证明什么？",
+      "answer": "`Benchmarker` 提供 suite/scenario、warmup、iterations、平均耗时和吞吐量格式化；`benchmark.js` 用 API 限流、文件流水线、数据库连接池、混合 CPU/IO、高并发队列、limitFunction、动态并发等场景对比不同 concurrency。它测量的是当前机器上的墙钟时间和以返回数字为操作数的吞吐量，受随机延迟、系统负载、Node 版本影响。它不是正确性测试，也没有统计显著性、基线或 CI 门禁；benchmark 不在 `npm test` 中。",
+      "followUps": [
+        {
+          "question": "为什么场景函数返回数字？",
+          "answer": "Benchmarker 把 number 类型的 lastResult 当作操作数计算 ops/s；返回数组或对象时只显示耗时。",
+          "followUps": []
+        },
+        {
+          "question": "benchmark 依赖哪些运行时能力？",
+          "answer": "使用 styleText、fs.mkdtempDisposableSync、using 等较新 Node API；CI 只跑测试矩阵，不跑 benchmark，因此它在 Node 20 等版本是否可运行无法从当前上下文确认。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "7d9b94fa557a27519d98477b2609b2245b232c13ec10ec1bc98a657315b6eea5",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "`package.json` 的 `type`、`exports`、`files`、`sideEffects` 和 `engines` 如何影响发布与消费？有无工程隐患？",
+      "answer": "`type: module` 表明是 [[ESM]]；`exports` 用 `types` 和 `default` 指向 `index.d.ts`/`index.js`，没有 `main`；`sideEffects:false` 方便打包器做 [[tree-shaking]]；`files` 只显式包含两个入口文件，npm 通常还会带上 README、license、package.json；测试、benchmark、recipes 不发布。`engines` 要求 Node >=20，CI 覆盖 20/22/24。隐患是 README 链接 `recipes.md`，但 `files` 未包含它，发布包中该链接可能失效；[[CI]] 用 `npm install` 而非 `npm ci`，也没有锁文件，复现性较弱。",
+      "followUps": [
+        {
+          "question": "如果浏览器直接加载这个包会怎样？",
+          "answer": "它是 ESM 且依赖 yocto-queue，通常需要打包器或支持裸模块解析的运行时；源码没有提供浏览器构建产物，README 的浏览器支持不能由当前文件证明。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 exports 把 types 放前面？",
+          "answer": "TypeScript 解析条件导出时优先匹配 types，确保声明文件被选中；这是常见条件导出顺序。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ee2b75f07f138c992f52b86641bf7e2e3ce217d990d905debeb66c58162071f8",
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "README 声称支持 Node.js 和浏览器，并描述了 clearQueue、rejectOnClear、map 等行为。根据当前源码与测试，哪些有实现证据，哪些无法确认？",
+      "answer": "有实现证据的包括：`clearQueue` 非 reject 模式调用 `queue.clear()`；reject 模式用 `AbortSignal.abort().reason` 拒绝 pending；`map` 用 `Array.from` + `Promise.all` 并在迭代器抛错时挂 catch；`limitFunction` 转发 `clearQueue`；这些都有 `index.js` 和部分 `test.js` 覆盖。浏览器支持没有浏览器测试或构建配置，只能确认源码使用标准 [[Promise]]、queueMicrotask、[[AbortSignal]] 等 API；具体浏览器范围无法从当前上下文确认。Node >=20 由 engines 声明，CI 覆盖 20/22/24，但 benchmark 不在 CI。",
+      "followUps": [
+        {
+          "question": "README 说 pending 任务会以 AbortError 拒绝，源码如何得到这个错误？",
+          "answer": "使用 AbortSignal.abort().reason；在支持的 Node 中通常是 [[DOMException]]，name 为 AbortError。具体错误类型依赖运行时，测试在 Node 20 还因 AVA 问题被跳过。",
+          "followUps": []
+        },
+        {
+          "question": "如果要证明浏览器兼容，应该补什么？",
+          "answer": "增加浏览器测试运行器或打包产物冒烟测试，覆盖 ESM 导入、queueMicrotask、AbortSignal 和 clearQueue 行为；当前项目没有这些证据。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "326690bd46436fd422f4cd0fd87d2f7164cf86d48852ccd09d0dd6a1faf11f6e",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "模块级 API 是如何组织的？为什么要有 `default_scheduler`？这种设计有什么代价？",
+      "answer": "从可见源码看，模块级函数都是薄转发：`every()` 调 `default_scheduler.every()`，`run_pending()`、`run_all()`、`get_jobs()`、`clear()`、`cancel_job()`、`next_run()`、`idle_seconds()` 也分别委托默认实例（`schedule/__init__.py`）。这相当于 [[Facade]]，让单调度器用户无需实例化；同时 [[Scheduler]] 类支持多个调度器（`docs/multiple-schedulers.rst`）。代价是 [[全局状态]]：所有模块级函数共享 [[default_scheduler]]，测试或多租户场景必须显式 `clear()`，否则任务互相污染。该设计不自动提供进程隔离或线程隔离。",
+      "followUps": [
+        {
+          "question": "多个调度器场景下，模块级函数还能用吗？",
+          "answer": "模块级函数只操作默认实例，不能操作自建 Scheduler。文档示例是分别 `scheduler1 = schedule.Scheduler()`、`scheduler2 = schedule.Scheduler()`，然后各自调用 `run_pending()`。如果混用模块级 `schedule.every()`，任务会进入默认实例，而不是自建实例。",
+          "followUps": []
+        },
+        {
+          "question": "`idle_seconds()` 和 `next_run()` 的委托方式似乎不一致，这算 API 问题吗？",
+          "answer": "可见源码中 `idle_seconds()` 返回 `default_scheduler.idle_seconds` 属性，而 `next_run(tag)` 调用 `default_scheduler.get_next_run(tag)`。二者一个是属性、一个是方法，命名风格确实不统一；是否是历史兼容刻意保留，当前上下文无法确认，但对外可以统一为方法或属性以减少认知负担。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "fac24c6fbb6faf8492053a7c578922b540019b042b63e1aef7cd22eadd51a518",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`Job.tag()` 是怎么实现的？为什么用 set 存标签？这样设计有什么边界问题？",
+      "answer": "`tag()` 先用 `all(isinstance(tag, Hashable) for tag in tags)` 校验，任一不可哈希就抛 `TypeError`；然后 `self.tags.update(tags)`，重复标签自然丢弃；最后返回 `self` 支持 [[链式调用]]。测试 `test_tag_type_enforcement` 验证 dict/list 被拒，`test_get_by_tag` 验证多标签匹配。用 set 适合去重和 O(1) 包含判断，但丢失标签顺序；如果界面需要按注册顺序展示标签，应另存列表。[[Hashable]] 校验只保证可哈希，不保证哈希值稳定。",
+      "followUps": [
+        {
+          "question": "`job.tag()` 不传参数会怎样？",
+          "answer": "`all(...)` 对空序列为真，`update()` 空集合是 no-op，因此会直接返回 `self`。当前可见代码没有禁止空标签，这通常无害，但如果业务要求至少一个标签，需要在 API 层额外校验。",
+          "followUps": []
+        },
+        {
+          "question": "标签用 set 后，`get_jobs('tag')` 的过滤复杂度是多少？",
+          "answer": "如果实现是遍历任务并检查 tag 是否在 `job.tags` 中，单任务判断是 O(1)，整体是 O(n)。当前上下文没有展示 Scheduler 内部索引；若任务量很大，可以额外维护 tag 到 job 的反向索引，但要注意删除和 clear 时同步维护。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "74fcdf4b2f8fdde308df6e2c80b1a0b8dda389642d2ff945e3d0bddd09290dcf",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`@repeat` 装饰器的注册流程是怎样的？为什么 `_schedule_decorator` 返回原函数而不是 wrapper？",
+      "answer": "可见 `_schedule_decorator(decorated_function)` 调用 `job.do(decorated_function, *args, **kwargs)` 后返回原函数，不返回 wrapper。这样 `@repeat(...)` 在定义时完成注册，同时保留函数本身可直接调用、可被其他装饰器包装、保留 `__name__` 等元数据。文档 `docs/examples.rst` 说 `@repeat` 不适用于非静态类方法，因为装饰器阶段拿不到实例 `self`，注册绑定方法会带来实例语义问题。完整的 repeat 实现被截断，不能确认异常和重复注册策略。",
+      "followUps": [
+        {
+          "question": "多个 `@repeat` 叠加时会发生什么？",
+          "answer": "文档示例中一个函数叠加了两个 `@repeat`，说明每个装饰器都会执行一次注册，函数会被多个 Job 引用。具体是否去重、顺序如何，取决于未展示的 repeat 实现；从可见 `_schedule_decorator` 看，每次调用都会 `job.do(...)` 并返回原函数。",
+          "followUps": []
+        },
+        {
+          "question": "装饰器不返回 wrapper 有什么优缺点？",
+          "answer": "优点是函数保持原样，直接调用、类型检查和 introspection 都更自然；缺点是装饰器本身无法包裹每次执行逻辑。若需要耗时日志或异常捕获，应再叠加普通 [[装饰器]]，而不是依赖 `@repeat` 生成 wrapper。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "6feecf2328a057dbe1c83598d6e6cf3733537cbf3f73420f4384ba13800af7d8",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "从测试和文档看，Scheduler 的任务存储与查询接口应该怎么设计？哪些行为当前上下文无法确认？",
+      "answer": "可见测试用 `len(schedule.jobs)`、`schedule.get_jobs()`、`schedule.clear(tag)`，说明模块级暴露了 jobs 容器；但 `Scheduler` 内部容器、顺序、锁都没有在上下文中展示。合理设计是 scheduler 持有任务列表，`do()` 注册，`get_jobs(tag)` 过滤 tags，`clear(tag)` 删除匹配项，`cancel_job(job)` 删除指定对象；`run_pending` 遍历快照避免修改迭代。保留注册顺序利于确定性，但按 tag 过滤可能 O(n)。不能断言当前已使用锁或快照。",
+      "followUps": [
+        {
+          "question": "`clear()` 的返回值是什么？",
+          "answer": "可见源码 `def clear(tag: Optional[Hashable] = None) -> None`，模块级 `clear()` 也返回 None。它只做删除副作用，不返回被删除任务；如果业务需要审计删除结果，要在调用前先 `get_jobs(tag)`。",
+          "followUps": []
+        },
+        {
+          "question": "如果一边 `run_pending()` 一边 `clear()`，会有什么风险？",
+          "answer": "如果遍历和删除共用同一个列表，可能出现迭代器失效或跳过元素。需要 [[线程安全]] 时应在 Scheduler 层加锁或遍历副本。当前文档没有承诺线程安全，因此不能假设并发 clear/run 是安全的。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e8f9a5fe208fa0e5b439e3b746ecb6b61d8c31b0eb9e8fa1bbb7a4ab1f12c5d8",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`should_run()` 和 `run()` 的职责是怎么划分的？直接调用 `run()` 有什么风险？",
+      "answer": "`should_run()` 只做 `datetime.now() >= self.next_run` 的判断，并断言 next_run 非空；`run()` 不调用 should_run，只检查 deadline，然后直接执行 `job_func()`、设置 `last_run`、再 `_schedule_next_run()`。因此执行门控责任在调用方，通常是 `Scheduler.run_pending`，但该完整实现未展示。好处是判断与执行分离、易测试；风险是直接调用 `run()` 会绕过时间判断，且 [[datetime]] 的 now 被多次读取，边界可能漂移。",
+      "followUps": [
+        {
+          "question": "`should_run()` 里用 assert 合适吗？",
+          "answer": "assert 适合表达内部不变量，但 Python `-O` 会移除 assert，生产保护不应依赖它。如果 Job 状态可能被外部破坏，应抛显式异常。当前代码只是说明 next_run 必须先由 `_schedule_next_run` 设置。",
+          "followUps": []
+        },
+        {
+          "question": "`run()` 里 `last_run` 在 job 执行后才赋值，会影响什么？",
+          "answer": "它意味着 last_run 记录的是任务结束后的时间，而不是开始时间；对长任务，下一次调度也会从完成后再推进。这个行为与文档提醒的“不保证稳定节拍”一致，但具体调度间隔计算还要看未展示的 `_schedule_next_run`。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c0243b1eeb713460604d1384b42856faa79327be75295b3b5b328873dfe1926c",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`.until()` 的截止时间语义是什么？任务返回值和截止时间冲突时谁优先？",
+      "answer": "`until()` 会设置 cancel_after；`run()` 开始时若 `_is_overdue(now)` 为真，直接返回 [[CancelJob]]，不执行 job。执行后调用 `_schedule_next_run()`，若新的 [[next_run]] 也超过 deadline，则再次返回 CancelJob。可见源码注释明确说这种情况下 CancelJob 优先于 job 返回值。`_is_overdue` 用严格 `>`，所以等于 deadline 不算过期。若 job_func 抛异常，后续 `last_run` 和 `next_run` 不更新，异常继续传播。",
+      "followUps": [
+        {
+          "question": "如果 job 自己返回 `CancelJob`，是在 `Job.run()` 里取消吗？",
+          "answer": "从可见的 `run()` 代码看，它只把 `ret` 原样返回，并没有检查 `ret == CancelJob`；取消动作应由上层 Scheduler 处理，但该部分未展示。因此不能仅凭 job 返回值断定 Job 自己完成了移除。",
+          "followUps": []
+        },
+        {
+          "question": "deadline 恰好等于当前时间算不算过期？",
+          "answer": "`_is_overdue` 是 `when > cancel_after`，严格大于才算过期，等于时仍允许执行。这个边界语义对测试很重要，尤其是秒级精度和 mock 时间场景。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "712a79d24deb9b5059adb67f1ced3f0ce85db2fd72b884b2e426b4795bcba778",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`_move_to_at_time()` 是如何根据 unit 和 start_day 决定设置哪些时间字段的？",
+      "answer": "该方法先构造 kwargs：`second` 和 `microsecond` 固定设置；只有 `unit == 'days'` 或 `start_day` 非空才设置 hour；只有 `unit in ['days', 'hours']` 或 `start_day` 非空才设置 minute。于是 `.hour.at(':42')` 只改分和秒，`.day.at('10:30')` 改时分秒，`.monday.at('13:15')` 因 start_day 存在也会改时分。随后调用 `_correct_utc_offset(moment, fixate_time=True)` 处理 [[DST]] 跨越导致的 [[UTC偏移]] 变化；该函数体被截断，不能确认具体算法。",
+      "followUps": [
+        {
+          "question": "为什么 `.hour.at()` 不设置 hour 字段？",
+          "answer": "因为小时粒度的 `.at(':42')` 表达的是“每小时第 42 分钟”，不是“某个小时”。保留当前小时、只改分钟和秒，才能保持每小时触发。若设置 hour，就会把任务错误地固定到某个小时。",
+          "followUps": []
+        },
+        {
+          "question": "`microsecond=0` 的作用是什么？",
+          "answer": "它消除当前时间的微秒噪声，让 next_run 落在整秒边界，便于比较和测试。也意味着调度精度是秒级，与文档所说的非 sub-second 精度一致。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "626898d2e1e8b8bd89fb5bcffb00933683c20dd60bcee7835906f0e08a12f8dc",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "星期调度是怎么推进的？非法星期名会怎样？",
+      "answer": "`_move_to_next_weekday` 调 `_weekday_index` 得到 0 到 6，计算 `days_ahead = target - moment.weekday()`；若为负加 7，0 表示当天不移动。`_weekday_index` 对非法字符串抛 [[ScheduleValueError]]。这保证只会向后找最近目标星期。但“当天时间已过”时如何跳到下周，需要结合未展示的 `_schedule_next_run`；测试 `test_run_every_weekday_at_specific_time_past_today` 表明结果会落到下周三。",
+      "followUps": [
+        {
+          "question": "如果今天就是目标星期，但 at 时间已经过了，会当天再跑吗？",
+          "answer": "测试表明不会。2010-01-06 是周三，13:16 注册 `wednesday.at('13:15')` 后当天不跑，下一次是 2010-01-13 的 13:16 才跑。说明时间比较后会把 next_run 推到下周，但具体推进逻辑在未展示代码中。",
+          "followUps": []
+        },
+        {
+          "question": "星期名大小写敏感吗？",
+          "answer": "`_weekday_index` 的元组全是小写，且直接用 `day not in weekdays` 判断，因此 `Monday` 会被判非法并抛 ScheduleValueError。API 文档示例也都用小写。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5ec41663624a7b3771fc43195c898359be90a83f352d030aeca9236acf8ea67f",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "schedule 如何处理长任务和错过执行？调度节拍会漂移吗？",
+      "answer": "可见 `run()` 在 `job_func()` 返回后才设 [[last_run]] 并 `_schedule_next_run()`，所以下次时间基于任务完成后的时刻推进，长任务会整体后移；`docs/index.rst` 也明确说 schedule 不计算执行耗时，不保证稳定节拍。`run_pending()` 不是补跑机制：测试注释说明错过多次只跑一次。要稳定节拍应把任务丢到线程或队列，或自己按计划起点计算下次时间，而不是阻塞调度循环。",
+      "followUps": [
+        {
+          "question": "任务执行时间超过调度间隔时会连续补跑吗？",
+          "answer": "测试 `test_run_pending` 的注释明确说不会补跑，错过多次只执行一次。长任务结束后下一次 next_run 会重新推进，因此不会把之前错过的周期全部补上。",
+          "followUps": []
+        },
+        {
+          "question": "如果业务需要固定节拍，应该怎么改？",
+          "answer": "建议把实际 job 放入 worker，调度器只负责投递；或者根据计划起点计算下一次触发时间，而不是基于完成时间。还要考虑队列 [[背压]]、任务去重和失败重试，这些都不是当前库内置能力。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "88b9271f519fd2dc14ee8f82e27136777c95189ad2faaf7efcd28fa94cb5a3f2",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "时区支持是怎么接入的？为什么 pytz 是可选依赖？",
+      "answer": "`pyproject.toml` 把 [[pytz]] 放在 optional-dependencies，`docs/timezones.rst` 说只有 `.at()` 传时区才需要。文档称内部 datetime 都是 [[naive时间]]，按时区算出本地时间；`_move_to_at_time` 确实调用 `_correct_utc_offset`。但转换细节、pytz 缺失时是延迟导入还是直接报错，在未展示代码中无法确认。跨时区应重点测本地日期、目标时区和 DST 切换日的组合。",
+      "followUps": [
+        {
+          "question": "为什么不让 pytz 成为必装依赖？",
+          "answer": "项目定位是轻量、无外部依赖的进程内调度，大多数用户不传时区，不需要 pytz。可选依赖可以保持安装体积和导入成本。代价是时区功能路径需要额外测试环境，tox 中专门有 pytz 环境。",
+          "followUps": []
+        },
+        {
+          "question": "pytz 没安装但用户传了时区，文档承诺什么？",
+          "answer": "`docs/faq.rst` 说会看到 `ModuleNotFoundError: No module named 'pytz'`，并建议安装 pytz。这是报错而不是自动降级。当前上下文没有展示具体的导入位置，因此不能确认错误发生在调用 `.at()` 时还是第一次执行时。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d44359adcfa7b0be5ebba8ff4bda4b02f0d3a7b9dda26882df6ec664988759ac",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "文档对 DST 的 gap 和 overlap 分别承诺了什么？如何验证这些承诺？",
+      "answer": "文档承诺春季前跳的 gap 中的任务顺延到 gap 后执行，秋季回拨的 overlap 只执行第一次，第二天恢复正常；示例包括 Berlin 和 London。实现上 `_move_to_at_time` 调 `_correct_utc_offset(..., fixate_time=True)`，但该函数体缺失，不能从当前上下文证明承诺已落实。验证应在固定时区、固定日期构造边界时刻，断言 [[next_run]] 的 naive 本地值，并覆盖跨时区 Berlin 到 New_York 的 5 小时差。",
+      "followUps": [
+        {
+          "question": "为什么 overlap 只跑第一次？",
+          "answer": "这是产品语义选择：避免同一个本地墙上时间被执行两次。实现上需要区分第一次和第二次出现，通常依赖时区库的 DST 信息。当前代码未展示这部分，因此只能确认文档意图。",
+          "followUps": []
+        },
+        {
+          "question": "测试 DST 时最大的坑是什么？",
+          "answer": "不能依赖当前真实时间和本机时区，否则测试会随环境漂移。应固定日期、固定 pytz 时区，并 mock 系统时间。还要注意不同 Python 版本和 pytz 数据库版本可能影响历史/未来规则。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c4aebd4b953821a9a1e1fea67baf39f37bd1c659eea8b57a1a4436cf66c2f541",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "所有内部 datetime 都是 naive，这个设计有什么取舍？",
+      "answer": "文档明确所有内部 datetime 是 naive，next_run 和 last_run 以 Python 本地时区呈现。好处是 API 简单、无需处处 aware；代价是跨机器或跨时区部署时“本地”含义随环境变化，且无时区任务不校正 DST。带时区 `.at` 的任务依赖 pytz 转换，但最终仍存 naive，因此展示值可能受运行机器本地时区影响。若需要多节点一致，建议显式存 UTC aware 或带时区元数据，但这属于设计建议，不是当前实现。",
+      "followUps": [
+        {
+          "question": "naive 时间对持久化有什么影响？",
+          "answer": "如果进程重启后运行环境时区变化，持久化的 naive 时间可能被解释成不同绝对时刻。项目本身不提供任务持久化，文档明确不解决重启恢复；业务自建持久化时应额外存时区或 UTC 时间戳。",
+          "followUps": []
+        },
+        {
+          "question": "多节点部署时还能直接用 schedule 吗？",
+          "answer": "schedule 是 in-process 调度器，不是分布式调度器。多节点各自运行会重复触发任务，且各节点本地时钟和时区可能不同。需要分布式锁、中心调度或队列去重，这些都不在库的职责内。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "cc3b17a5ed737d2233225f076a569eb7d8bdebf50ab89e862b2d41570cde3443",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "schedule 的默认执行模型是什么？为什么说 job 阻塞会影响调度精度？",
+      "answer": "README 和文档说这是 in-process、无额外进程、默认串行执行；`docs/parallel-execution.rst` 明确默认所有 job 串行。执行循环是用户写 `while True: run_pending(); sleep(1)`，因此 job 阻塞会拖住后续任务和调度精度。`run_pending()` 的完整实现未展示，不能确认它是否复制列表或捕获异常；但 `docs/exception-handling.rst` 说异常会冒泡并中断 run_xyz。",
+      "followUps": [
+        {
+          "question": "后台线程示例是否意味着调度器是线程安全的？",
+          "answer": "不能这样推断。示例只是另起线程循环调用 `run_pending()`，文档没有承诺 Scheduler 的 [[线程安全]]。如果主线程同时增删任务，仍需要外部锁或只在单线程修改任务集合。",
+          "followUps": []
+        },
+        {
+          "question": "多个调度器能在同一个进程里并行跑吗？",
+          "answer": "可以创建多个 Scheduler，并分别调用各自的 `run_pending()`；文档示例是顺序调用。是否并行取决于用户是否把不同 scheduler 放到不同线程，库本身没有提供调度器级别的并发管理。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a953e96b328cbed3a54969c64d0d21468cc9867fd9b686ccae79bc07e97c746a",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "如果要在 schedule 上做并行执行，文档给了哪些方案？各自的风险是什么？",
+      "answer": "文档给出两种模式：每个 job 起一个线程，或把 job 放入队列由固定 worker 消费。前者简单但线程数可能爆炸；后者有 [[背压]] 和并发上限，适合生产。schedule 只负责触发，不负责线程池、重试、持久化。接入时 wrapper 要捕获异常，否则 worker 线程可能退出；取消和 until 语义不会自动传播到已入队任务，需要业务层处理。",
+      "followUps": [
+        {
+          "question": "队列模式如何支持取消任务？",
+          "answer": "需要在入队时携带 token 或检查 job 是否仍然 active，worker 取到任务时再判断是否执行。不能依赖 `CancelJob` 自动清理队列，因为那只是 job 函数的返回值，队列里的旧任务仍可能存在。",
+          "followUps": []
+        },
+        {
+          "question": "可以用线程池替代手动起线程吗？",
+          "answer": "可以，`concurrent.futures` 的 ThreadPoolExecutor 能限制并发数并提供 Future。但要注意有界队列和拒绝策略，避免任务生产速度超过消费速度导致内存增长。这属于应用层设计，不是 schedule 内建能力。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d1f4c02ce8bef220e6e7982c318431fff197492c4cb5c1746d73aa18bfb9ff5c",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "job 抛异常时会发生什么？文档建议的异常装饰器有什么问题？",
+      "answer": "`docs/exception-handling.rst` 明确 schedule 不捕获 job 异常，异常会中断 `run_pending` 或 `run_all`。可见 `run()` 在 `job_func()` 后更新 last_run 和 next_run，因此抛异常时这两个状态不更新，任务可能保持旧 next_run。文档建议用装饰器捕获并可选返回 [[CancelJob]]；示例用了裸 `except:` 和 print，生产应记录日志、限定异常类型、决定是否取消。是否内置重试或隔离当前没有实现证据。",
+      "followUps": [
+        {
+          "question": "异常后下一次调用会立即重试吗？",
+          "answer": "因为 next_run 没有推进，如果旧 next_run 已经到期，下一次 `should_run()` 仍可能返回真，从而再次触发。但 `run_pending()` 的完整调度逻辑未展示，不能确认它是否会先移除失败任务。",
+          "followUps": []
+        },
+        {
+          "question": "库是否应该内置异常捕获？",
+          "answer": "这是一个权衡：内置捕获能保护调度循环，但会隐藏错误并改变调用方预期。更合理的是提供可配置的 error hook 或文档化装饰器，而不是默认吞异常。当前文档选择让异常冒泡，调用方需自行兜底。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "714e111e22975dc9ffebf0731c9b46cbc0a68d550d3e556a6dcce0f43d9ad53a",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "schedule 的日志是怎么设计的？生产使用要注意什么？",
+      "answer": "源码在 `run()` 的过期和运行路径使用 `logger.debug`，文档 `docs/logging.rst` 说 logger 名为 `schedule`，级别为 DEBUG。默认 DEBUG 不输出，需要 `logging.getLogger('schedule').setLevel(DEBUG)`。日志消息包含 Job 的 repr，文档示例显示 args 和 kwargs，可能泄露敏感参数；生产应评估是否脱敏。`run_all()` 的日志在未展示代码中，文档说会打印 Running all。不要假设日志是结构化或带 job id。",
+      "followUps": [
+        {
+          "question": "为什么日志级别选 DEBUG 而不是 INFO？",
+          "answer": "调度库会被高频调用，INFO 可能造成日志噪音。DEBUG 让用户按需开启，符合库的轻量定位。代价是默认不可见，排查错过执行时需要显式配置 [[日志级别]]。",
+          "followUps": []
+        },
+        {
+          "question": "如何给每个 job 增加耗时日志？",
+          "answer": "文档建议实现一个普通装饰器，在调用前后记录 `time.time()` 并 `print` 或 logger 输出，再套在 job 函数上。不要在调度器内部硬编码业务日志，这样更可组合。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ac86386b88d72349f94c6c8675680ea5cd6b51275da0125f47986e2d2f562dd4",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`test_run_pending` 是如何模拟时间并验证“不补跑”语义的？这种测试有什么局限？",
+      "answer": "`test_run_pending` 通过 `mock_datetime(...)` 替换 datetime，让 `should_run` 看到递增的系统时间；它断言错过多次只执行一次，验证不补跑语义。测试用模块级 scheduler，所以每个用例后必须 clear，否则状态泄漏；`test_misconfigured_job_wont_break_scheduler` 验证半成品链不会永久破坏调度器。局限是 [[mock]] 时间无法覆盖真实线程、时区数据库更新和完整 DST 边界。",
+      "followUps": [
+        {
+          "question": "为什么这类测试要用 mock datetime 而不是 sleep？",
+          "answer": "sleep 会让测试变慢且不稳定，还依赖真实时钟。mock 可以精确控制每次 now 的值，快速覆盖分钟、小时、天和星期边界。但 mock 也要小心 patch 范围，避免影响测试框架自身。",
+          "followUps": []
+        },
+        {
+          "question": "还应该补充哪些测试？",
+          "answer": "可以补充 DST 切换、跨时区 at、until 边界等于 deadline、job 异常后的状态、并发 clear、多个 scheduler 隔离，以及 pytz 缺失时的错误路径。当前上下文只展示了部分 [[pytest]] 用例。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "17ac77b70536f19f5e6cd9cf223e3e48e7755e484b9d79f0abf059d4fab24095",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "标签相关测试覆盖了哪些行为？API 语义是否清晰？",
+      "answer": "`test_get_by_tag` 验证 `get_jobs('tag1')` 返回 1 个、`tag4` 返回 2 个、未知标签返回 0 个；`test_clear_by_tag` 验证按 tag 删除和 clear 全部；`test_tag_type_enforcement` 验证不可哈希抛 TypeError、重复标签去重。API 用 Optional tag：None 表示全部。设计上 tags 是 set，过滤是成员判断；如果多标签要 AND 或 OR 需另设计。当前测试未覆盖标签并发修改。",
+      "followUps": [
+        {
+          "question": "重复 tag 会被保留吗？",
+          "answer": "不会，`self.tags.update(tags)` 使用 set 语义，重复值只保留一个。测试 `test_clear_by_tag` 里传入多个 `tag3`，最终仍按一个标签处理。",
+          "followUps": []
+        },
+        {
+          "question": "`get_jobs()` 返回的是内部列表还是副本？",
+          "answer": "当前上下文没有展示实现，无法确认。如果返回内部列表，调用方修改可能破坏调度器状态；更安全的是返回新列表。面试中应明确这是需要看源码或补测试确认的点。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e0c191c975aaa100ef2570a28fb12e3bbe5c5b91b59549466063bfc86315bca0",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "项目的打包配置是怎么组织的？版本和动态字段有没有不一致风险？",
+      "answer": "`setup.py` 硬编码版本 1.2.2、`packages=['schedule']`、`package_data` 包含 [[py.typed]]；`pyproject.toml` 使用 [[setuptools]] 构建后端，并声明动态 version、classifiers、keywords、authors，但这些动态字段仍由 setup.py 提供。pytz 只作为 optional dependency。潜在不一致是版本只在 setup.py，`docs/conf.py` 也需要同步（`docs/development.rst` 提到）；如果只改 pyproject 不会生效。该结构可用，但迁移到纯 pyproject 时要统一元数据。",
+      "followUps": [
+        {
+          "question": "`py.typed` 文件的作用是什么？",
+          "answer": "它是 PEP 561 的类型标记，告诉 mypy 等类型检查器这个包自带类型信息。`setup.py` 把它放进 package_data，安装后类型检查器才会读取包内注解。",
+          "followUps": []
+        },
+        {
+          "question": "pyproject 里的 build-system 起什么作用？",
+          "answer": "它声明 [[PEP517]] 构建后端和依赖，前端工具据此创建隔离环境并调用 setuptools 构建。项目仍保留 setup.py 提供元数据，因此不是纯 pyproject 配置。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "01cdd1aa8878f08f7c91526307792028714e5fdd0670e0b653a253b629a31b43",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "CI 和 tox 覆盖了哪些质量门禁？还有哪些缺口？",
+      "answer": "`.github/workflows/ci.yml` 跑 Python 3.7 到 3.12 矩阵，[[tox]] 的 envlist 同时覆盖普通与 pytz 环境，另有 docs、format、setuppy 检查；tox 还跑 [[mypy]]。质量门禁较全，但格式工具 [[Black]] 固定在 20.8b1，较旧；没有 Windows 或 macOS runner，也没有显式覆盖率阈值；docs 使用 `-W` 把警告当错误是好的。Python 3.7 已 EOL，是否继续支持是项目策略。",
+      "followUps": [
+        {
+          "question": "tox 和 GitHub Actions 是怎么协作的？",
+          "answer": "CI 安装 tox 和 tox-gh-actions，由 tox 读取 `[gh-actions]` 映射，把每个 Python 版本映射到对应 env，例如 3.11 跑 py311 和 py311-pytz。这样本地和 CI 可以复用同一套环境定义。",
+          "followUps": []
+        },
+        {
+          "question": "mypy 配置在哪里？覆盖范围如何？",
+          "answer": "`setup.cfg` 中 `[mypy] files=schedule`，tox 里执行 `python -m mypy -p schedule`。它主要检查库代码，不检查测试文件；类型严格程度还取决于是否启用额外 flags，当前上下文没有展示更多配置。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "79ddc43f893fcc63b78e85675e259ea78489b4559d4d9f112fec1c918c4eb58e",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "请从 `src/requests/` 的模块划分出发，说明一次 `requests.get()` 会经过哪些模块，各自承担什么职责？",
+      "answer": "按已提供的源码可以梳理出如下分层：\n\n- **入口层** `src/requests/api.py`：`get/options/head/post/put/patch/delete` 都是薄封装，统一转调 `request()`；唯一在入口层改写语义的是 `head()` 中的 `kwargs.setdefault(\"allow_redirects\", False)`。\n- **会话层** `src/requests/sessions.py`：`Session` 持有 `adapters` 字典，提供 `mount`/`close`/`merge_environment_settings`；`post()` 签名显示 `data`、`json` 是显式参数，其余参数走 `**kwargs: Unpack[_t.PostKwargs]`。\n- **模型层** `src/requests/models.py`：`PreparedRequest` 承载最终 URL/headers/body，`Response` 提供 `iter_content`、`links`、`raise_for_status`。\n- **传输层** `src/requests/adapters.py`：`HTTPAdapter.send(request: PreparedRequest, stream, timeout, verify, cert, proxies)` 接收已准备好的请求，交给 [[urllib3]] 的[[连接池]]。\n- **辅助模块**：`cookies.py`（jar 合并与复制）、`auth.py`（认证钩子）、`hooks.py`（response 钩子）、`utils.py`/`_internal_utils.py`（URL 与头部校验）、`compat.py`（字符集探测库探测）、`packages.py`（兼容别名）。\n\n需要明确：`api.request()` 与 `Session.request()` 的函数体在本上下文中被截断，无法确认是否使用 `with Session()` 以及[[重定向]]循环细节，上述职责依据是可见签名与片段。",
+      "followUps": [
+        {
+          "question": "为什么要把 `Request` 和 `PreparedRequest` 拆成两个对象？",
+          "answer": "`Request` 表达用户意图（可反复修改参数），`PreparedRequest` 是序列化结果（URL 编码、header 大小写规整、body 编码、cookie 注入）。adapter 与 auth 只依赖后者，因此[[重定向]]与重试可以复用“已准备”的语义而不必重新编码；`_types.py` 中 `_ValidatedRequest` 的文档字符串也说明了“prepare 完成后 url/method 才有保证”。",
+          "followUps": []
+        },
+        {
+          "question": "`requests.packages` 里的 `sys.modules` 别名在做什么？什么时候可以删掉？",
+          "answer": "`src/requests/packages.py` 把 `requests.packages.urllib3.*` 映射到 `urllib3.*` 的真实模块对象，保证老代码 `import requests.packages.urllib3` 仍拿到同一实例；对 chardet 还额外把模块名前缀改写成 `chardet`。这是纯兼容层，只有在明确宣布不再支持旧导入路径、走完弃用周期后才能移除。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "1b98eadf40cb6b7f3b0fa206ca663f3bc3769b238dbd313e8e3c470d0677ff3b",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Session.mount()` 里为什么要在注册后对 `self.adapters` 做一次重排？如果只写 `self.adapters[prefix] = adapter` 会出什么问题？",
+      "answer": "`src/requests/sessions.py` 的实现是：\n\n```python\nself.adapters[prefix] = adapter\nkeys_to_move = [k for k in self.adapters if len(k) < len(prefix)]\nfor key in keys_to_move:\n    self.adapters[key] = self.adapters.pop(key)\n```\n\n[[dict]] 保持插入顺序，把比新前缀短的键逐个 pop 再插回尾部，效果是让“最长前缀排在最前”。查找时按顺序取第一个命中 `url.startswith(prefix)` 的适配器，于是 `https://` 会命中 `https://` 而不会被先注册的 `http://` 吞掉。若只做赋值，顺序取决于用户的 mount 顺序，`http://` 先注册就会劫持 https 请求。要注意这只是维护既有不变量的局部移动，并非完整排序：如果有人直接改 `self.adapters` 破坏顺序，`mount` 无法纠正。",
+      "followUps": [
+        {
+          "question": "这个实现的时间复杂度是多少？适配器很多时会有性能问题吗？",
+          "answer": "每次 `mount` 是 O(n)，n 为已注册前缀数。默认只有 `http://` 与 `https://` 两个，且 `mount` 通常只在 Session 初始化或装插件（如缓存扩展）时调用，不在请求热路径上，因此不构成性能瓶颈。",
+          "followUps": []
+        },
+        {
+          "question": "连续 mount 多个不同长度的前缀后，顺序一定是长度降序吗？",
+          "answer": "只要始终通过 `mount` 注册就成立：每次插入都会把更短的键移到尾部，长键自然靠前。长度相同的键之间保持插入先后顺序，先注册者在前，因此同长度前缀的语义由注册顺序决定。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "210bae5cd9eb6aa7ee8be06bd1ee1653b45d34ca65b2e28f11d8f93ada6ffd2a",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Session.close()` 和 `HTTPAdapter.close()` 分别做了什么？连接池的释放顺序有什么讲究？",
+      "answer": "`src/requests/sessions.py` 的 `Session.close()` 遍历 `self.adapters.values()` 逐个 `v.close()`；`src/requests/adapters.py` 的 `HTTPAdapter.close()` 执行 `self.poolmanager.clear()`，再对 `self.proxy_manager.values()` 逐个 `clear()`。也就是说关闭动作最终落在 [[urllib3]] 的[[连接池]]上，而不是直接操作 socket。\n\n两个要点：\n\n1. **直连池与代理池是两套**，任一漏清都会留下空闲连接，所以 `close()` 里两处都写了。\n2. **共享风险**：如果多个线程共用一个 `Session`，其中一个线程 `close()` 会让其他线程后续请求重建连接；已借出连接的行为由 urllib3 决定，本上下文未包含其实现，无法确认是否会阻塞等待。\n\n因此通用的资源管理建议是：谁创建谁关闭，使用 `with Session() as s:` 或显式 `close()`，不要在多线程间共享生命周期不一致的 Session。",
+      "followUps": [
+        {
+          "question": "为什么代理要单独维护 `proxy_manager` 字典？",
+          "answer": "每个代理地址需要独立的 PoolManager，否则不同代理（以及直连）的连接、证书与认证配置会互相污染。代价是池数量随代理地址增长，键就是代理 URL，因此代理越多内存与连接占用越高。",
+          "followUps": []
+        },
+        {
+          "question": "想复用 TCP 连接应该怎么写代码？",
+          "answer": "复用同一个 `Session` 实例做多次请求，而不是每次都调模块级 `requests.get()`。模块级 API 每次新建 Session 并关闭（`api.request` 主体在本上下文中被截断，这是基于常见实现的推断），因此模块级调用难以跨请求复用连接池。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "6826f0eef38786effd9878696a975d9a0cce681bf0502ab3a27634c61b16b6e3",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`api.head()` 强制把 `allow_redirects` 默认设为 `False`，而 `request()` 默认跟随重定向。这个差异为什么合理？用户还能覆盖吗？",
+      "answer": "`src/requests/api.py` 用的是 `kwargs.setdefault(\"allow_redirects\", False)`，只在调用方没显式传参时生效，所以 `requests.head(url, allow_redirects=True)` 仍可跟随——这是“默认值”而非“强制值”。\n\n合理性在于 HEAD 的用途是探测资源元信息：很多服务端对 HEAD 返回的 `Location`/`Content-Length` 与 GET 不一致，默认跟随会把一次探测放大成多次往返，也掩盖了“这个 URL 当前返回什么”的事实。对比 `get/options/delete` 都只转调 `request()`，说明这是针对 HEAD 语义的特例，而不是全局策略。\n\n需要说明：真正的[[重定向]]处理位于 Session/Response 层，本上下文未显示该逻辑，因此 HEAD 不跟随时 `Response.history` 的具体表现无法确认。",
+      "followUps": [
+        {
+          "question": "用 `setdefault` 相比直接赋值的好处是什么？",
+          "answer": "保留调用方的显式意图，避免覆盖用户传入的参数；同时把差异收敛在一行、可读性强，是表达“默认行为不同”而不是“禁止某种行为”的惯用写法。",
+          "followUps": []
+        },
+        {
+          "question": "HEAD 不跟随重定向时，如何判断目标是否可访问？",
+          "answer": "检查 `status_code` 是否落在 3xx，并读取 `headers.get('location')` 自行决定下一跳；或显式传 `allow_redirects=True` 交给 Session 处理。注意跨域重定向还可能涉及认证头剥离，那部分逻辑不在本上下文中。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "85fd1232c9118a75e40178fd6388ac30dd7f7808362818c0d5eb3ab748761a2a",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`HTTPAdapter` 同时暴露 `get_connection(url, proxies)` 和 `get_connection_with_tls_context(request, verify, proxies, cert)`，为什么要拆成两个入口？",
+      "answer": "从签名看差异很明确：后者多了 `request`、`verify`、`cert`。这说明连接获取的键不再只是“目标地址 + 代理”，还必须带上 [[TLS]] 配置（是否校验证书、用哪个[[CA证书包]]、是否带客户端证书）。同一个 host:port 在 `verify=True` 和 `verify='/path/ca.pem'` 下必须得到不同的连接池与 [[SSLContext]]，否则会串用证书配置，产生“校验被绕过”这类严重问题。\n\n拆分的好处是老方法 `get_connection` 保持向后兼容（子类可能重写它），新路径承载 TLS 上下文；代价是子类必须同时维护两条路径，只重写其中一个就可能出现行为不一致。\n\n需要明确边界：这两个方法的方法体在本上下文中被截断，连接池 key 的具体构成、是否与 `poolmanager` 复用同一池，无法从当前上下文确认；以上是对签名所反映设计意图的推断。",
+      "followUps": [
+        {
+          "question": "如果子类只重写了 `get_connection`，会有什么后果？",
+          "answer": "若内部主路径已经改走带 TLS 上下文的入口，那么旧重写点可能不再被调用，子类的定制会静默失效。这属于兼容性风险，因此要么两条路径都重写，要么在文档里明确哪条是主路径并加测试断言。",
+          "followUps": []
+        },
+        {
+          "question": "`verify` 参数支持哪些取值？",
+          "answer": "从 `_types.py` 中 `VerifyType` 的使用看，至少支持布尔值与证书路径字符串。是否支持 `'none'` 之类的字符串别名需要看 verify 的归一化逻辑，该部分在本上下文中未提供，无法确认。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "7958130a3411bb78f64922e4eed03f7d6642b554a5026c415a1e367feee4a25a",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`src/requests/certs.py` 只有一行 `from certifi import where`，这种设计对打包者和使用者意味着什么？",
+      "answer": "`certs.py` 把默认信任根的来源收敛成一个可替换点：默认返回 [[certifi]] 提供 pem 路径，同一个文件还支持 `python -m requests.certs` 直接打印该路径，便于排障。模块的文档字符串明确指出，发行版打包时可以改写 `where()` 指向系统自带的 CA 包。\n\n这带来三个推论：\n\n1. 默认信任根由 [[certifi]] 决定，会随依赖升级而变；\n2. 用户自定义 CA 的正确姿势是 `verify=<path>`，而不是改这个模块；\n3. 因为 `verify`/`cert` 的具体处理在 `adapters.py` 中（方法体被截断），无法从当前上下文确认是否存在环境变量覆盖，以及 `verify=False` 是否会产生告警。\n\n用函数而不是模块级常量，是因为路径需要在运行时惰性计算，并且允许下游用同名函数替换实现。",
+      "followUps": [
+        {
+          "question": "企业内网只信任自签 CA，最稳妥的做法是什么？",
+          "answer": "显式传 `verify='/path/to/ca.pem'`，或在统一封装的 Session 上设置，避免修改库内部默认而影响同进程的其他依赖；不要用 `verify=False` 绕过，那会同时关闭主机名校验。",
+          "followUps": []
+        },
+        {
+          "question": "如果同时要求 mTLS，还需要什么？",
+          "answer": "还需要通过 `cert` 传入客户端证书与私钥路径（`HTTPAdapter.send` 签名中有 `cert` 参数）。仓库里 `tests/certs/mtls/` 的证书与 `testserver` 构造函数的 `mutual_tls`/`cacert` 参数就是为这类场景准备的。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "fa09221960f61253278b9922573f9ef589b2858b76ba551f10c023a332733a70",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`__init__.py` 里的 `check_compatibility` 和 `_check_cryptography` 试图解决什么问题？为什么用警告而不是直接抛 ImportError？",
+      "answer": "`check_compatibility(urllib3_version, chardet_version, charset_normalizer_version)` 接收三个依赖版本号；`_check_cryptography` 在 cryptography 版本低于 `[1, 3, 4]` 时 `warnings.warn(..., RequestsDependencyWarning)`。设计目标是在运行期尽早暴露“当前版本组合不在测试矩阵内”，而不是让用户在若干次请求之后才遇到难定位的报错。\n\n选择警告而非异常的理由：requests 位于依赖链底层，硬失败会让整条依赖链不可用；`_check_cryptography` 还用 `try/except ValueError` 直接 return，说明作者宁愿放弃检查也不愿误报。它与 `pyproject.toml` 里 `urllib3>=1.26,<3`、`charset_normalizer>=2,<4` 的安装期约束互补：一个拦截安装，一个提示运行。\n\n注意：`check_compatibility` 的函数体在本上下文中被截断，具体的版本区间判断与消息文本无法确认。",
+      "followUps": [
+        {
+          "question": "安装期约束和运行期检查会冲突吗？",
+          "answer": "会出现。例如受限于系统包管理器的环境可能被装上与 requests 声明区间不符的 urllib3，pip 解冲突后仍能运行；此时运行期检查负责提示。两者不是重复，而是覆盖不同故障面。",
+          "followUps": []
+        },
+        {
+          "question": "`RequestsDependencyWarning` 在异常体系中的位置？",
+          "answer": "`exceptions.py` 中它继承 `RequestsWarning(Warning)`，与 `FileModeWarning(RequestsWarning, DeprecationWarning)` 同族。这意味着可以用 `warnings.simplefilter` 统一过滤，测试里 `tests/__init__.py` 对 `SNIMissingWarning` 设置 always 就是同一机制。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "6ef18a2941d77490972db00931635e01ff632f9688351c8dcafc3e844c192a14",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "请讲讲 `Response.raise_for_status()` 的实现细节：它如何构造错误消息，为什么 reason 要先试 utf-8？",
+      "answer": "`src/requests/models.py` 的关键逻辑：\n\n```python\nif isinstance(self.reason, bytes):\n    try:\n        reason = self.reason.decode(\"utf-8\")\n    except UnicodeDecodeError:\n        reason = self.reason.decode(\"iso-8859-1\")\nif 400 <= self.status_code < 500:\n    http_error_msg = f\"{self.status_code} Client Error: {reason} for url: {self.url}\"\nelif 500 <= self.status_code < 600:\n    ...\nif http_error_msg:\n    raise HTTPError(http_error_msg, response=self)\n```\n\n- reason 可能是 bytes（某些服务端发送本地化 reason phrase），先 utf-8 再回退 iso-8859-1，因为后者对任意字节都能解码，可以避免二次异常掩盖原始错误。\n- 只对 4xx/5xx 抛错，2xx/3xx 返回 None。\n- 异常携带 `response=self`，调用方可以据此读 body 排障。\n- 代价：消息包含完整 URL，若 URL 带 token 之类敏感参数会进入日志，这是可用性与信息泄露之间的权衡。",
+      "followUps": [
+        {
+          "question": "为什么不用 `self.text` 的内容拼消息？",
+          "answer": "对[[流式响应]]，访问 `.text` 会隐式消费内容，导致用户后续无法再 `iter_content`；而且此时 body 可能还没下载。status/reason/url 都是已知元数据，不触发 IO。",
+          "followUps": []
+        },
+        {
+          "question": "调用方如何可靠地区分客户端错误与服务端错误？",
+          "answer": "解析消息前缀不可靠（会随版本变化）。应检查 `response.status_code`，或捕获 `HTTPError` 后读 `e.response.status_code`；也可以直接对 `status_code < 500` 做分支。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ad2073ba1d836640e4d7fa0fdffbe3803b7e92043a9c34184cf2d7772671caca",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Response.links` 是怎么解析 `Link` 头的？如果两个条目拥有相同 rel，会发生什么？",
+      "answer": "实现是取 `self.headers.get(\"link\")`，交给 `parse_header_links` 得到条目列表，再以 `link.get(\"rel\") or link.get(\"url\")` 作为字典键写入 `resolved_links`。\n\n- 以 rel 为键是为了支持 `r.links['next']['url']` 这种分页访问；\n- 没有 rel 时退化为用 url 作键，保证条目不丢；\n- 若两个条目 rel 相同，后写覆盖先写（[[dict]] 语义），信息会丢失。这是“按 rel 检索很方便”与“无法表达重复 rel”之间的取舍。\n\n另外 `parse_header_links` 的解析细节在 `utils.py` 中被省略，无法确认它对引号、逗号、转义的处理是否严格符合 [[RFC8288]]；返回的 url 也可能是相对路径，调用方需要自行 `urljoin`。",
+      "followUps": [
+        {
+          "question": "如果业务确实需要拿到全部 Link 条目，应该怎么做？",
+          "answer": "直接拿原始 header 自己解析，或者遍历 `r.links.values()`（但重复 rel 已经丢了）。更稳妥的是在需要的模块内复用 `parse_header_links` 并对返回列表做处理，而不是走 `links` 属性。",
+          "followUps": []
+        },
+        {
+          "question": "`header` 为空时 `links` 返回什么？",
+          "answer": "返回空字典：代码先判 `if header:` 才解析，随后无条件 `return resolved_links`。这也意味着服务端返回空的 Link 头与不返回该头，结果一致，调用方无需额外判空处理。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "76c2083dcd37a979cb920ad50fcf7d5a8e606b471548d25572be7f7c2bed6cd0",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`CaseInsensitiveDict` 是怎么做到大小写不敏感的？`copy()` 为什么用 `_store.values()` 而不是直接复制 `_store`？",
+      "answer": "`src/requests/structures.py` 中，内部 `_store` 以小写键索引，值保存 `(原始大小写键, value)`；`__delitem__` 用 `key.lower()` 定位，`lower_items()` 以生成器返回小写键值对，避免为一次查找构造中间字典。\n\n`copy()` 写成 `CaseInsensitiveDict(self._store.values())`：`values()` 是 `(原始键, value)` 的迭代器，传入构造函数后由它重新建立小写索引，从而保留原始大小写。这要求 `__init__` 接受“键值对可迭代”（`__init__` 主体在本上下文中被截断，因此这一点是从调用方式反推的必要条件）。\n\n边界行为：大小写不同的同名 header 会互相覆盖，这符合 HTTP 头部大小写不敏感的语义，但也意味着容器无法表达重复同名头（重复 cookie 由 jar 处理）。",
+      "followUps": [
+        {
+          "question": "这个 `copy()` 是深拷贝吗？",
+          "answer": "是浅拷贝，只重建索引结构，`value` 本体没有复制。对字符串 value 足够；如果存放可变对象，调用方需要自行深拷贝，否则两个容器会共享同一对象。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不直接继承 dict 并重写 `__getitem__`？",
+          "answer": "重写 `__getitem__` 无法同时保证 `in`、迭代、`pop`、`update` 都大小写不敏感，容易出现内部不一致；用组合加 `_store` 能把不变式集中在一处维护，行为更可预测。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a741459c604f3fe7b57a9fd60b0b5ccba2c98b3f15efb5d3011b58fc8880a882",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`structures.LookupDict` 的 `__getitem__` 和 `__getattr__` 行为不一致，这样设计有什么利弊？",
+      "answer": "实现要点：`__getitem__` 用 `self.__dict__.get(key, None)`，找不到返回 None；`__getattr__` 在键不存在时抛 `AttributeError`；`get()` 有带 default 的重载。`structures.py` 的注释明确说这是为了 `status_codes.py` 的属性访问能被类型检查器推断。\n\n- 利：`codes.ok` 这类属性访问能拿到状态码，写成 `__getitem__` 时又能宽松兜底，便于构建灵活的状态码表。\n- 弊：写错键名时返回 None 而不报错，None 可能继续流到比较逻辑里产生 False 而不是异常，错误被延迟放大。\n- 另外 `__getattr__` 里 `if key in self.__dict__` 分支实际很少被执行（正常属性查找会先命中实例字典），它主要是为类型收窄服务。",
+      "followUps": [
+        {
+          "question": "为什么 `__getitem__` 需要 `# type: ignore[override]`？",
+          "answer": "[[dict]] 声明的 `__getitem__` 返回 `_VT`，这里可能返回 None，与父类签名不兼容；在 [[pyright]] 的 strict 模式下必须显式忽略，否则类型检查不通过。",
+          "followUps": []
+        },
+        {
+          "question": "换成抛 `KeyError` 会有什么影响？",
+          "answer": "好处是拼写错误立刻暴露，坏处是破坏“未知名状态码返回 None”的既有行为，属于对下游的破坏性变更；如果要改，需要走主版本并同步文档与测试。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ec397a9da6b1351b075f0de0b040bdf3c7548c6e5110955fdf8f9b5347da249a",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`RequestsCookieJar` 为什么要自定义 `__getstate__`/`__setstate__`？`_copy_cookie_jar` 又如何兼容两种 jar？",
+      "answer": "`src/requests/cookies.py` 中：\n\n```python\nstate = self.__dict__.copy()\nstate.pop(\"_cookies_lock\")\n```\n\n因为内部用 `threading.RLock` 保护状态，而 [[RLock]] 不能被 [[pickle]] 序列化；反序列化时 `__setstate__` 会 `if \"_cookies_lock\" not in self.__dict__` 再补一个新的锁，这个判断让旧格式的 pickle 数据也能加载，否则所有加锁路径都会 AttributeError。\n\n`_copy_cookie_jar` 先 `getattr(jar, \"copy\", None)`，有就调用（RequestsCookieJar 走自身 copy）；否则 `copy.copy(jar)` 后 `clear()`，再逐个 `set_cookie(copy.copy(cookie))`，避免与原 jar 共享底层 `_cookies`。此外 `cookiejar_from_dict` 有多个重载，用于把 dict/None/CookieJar 归一化成 jar。\n\n风险点：只看 `copy` 属性是否存在，不校验语义，自定义 CookieJar 若定义了同名但含义不同的方法会被误用。",
+      "followUps": [
+        {
+          "question": "为什么不用 `copy.deepcopy` 一并复制？",
+          "answer": "deepcopy 遇到锁要么失败，要么复制出一个语义未知的新锁；Cookie 内部结构已知，显式控制复制过程更安全，也能保证不共享 `_cookies` 容器。",
+          "followUps": []
+        },
+        {
+          "question": "jar 的锁保护到什么粒度？",
+          "answer": "从 `__getstate__` 移除 `_cookies_lock` 可知内部用可重入锁保护共享状态，但具体在哪些方法内加锁需要看 `set_cookie`/`_find_no_duplicates` 等方法体，本上下文未完整提供，无法确认。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e7989840c1c22b76d59d2072b8e7f1c7c1c5248298eac71501e83b9b7a8f8afe",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`HTTPDigestAuth` 是如何在无状态的 HTTP 之上完成握手并防止无限重试的？为什么用线程本地状态？",
+      "answer": "`src/requests/auth.py` 中 `__call__` 的流程：先 `init_per_thread_state()`；若 `self._thread_local.last_nonce` 存在，直接 `build_digest_header` 预置 `Authorization`，省掉一次 401 往返；随后记录 body 位置、注册 `handle_401` 与 `handle_redirect` 两个[[钩子]]，并把 `num_401_calls` 复位为 1。`handle_redirect` 在 `r.is_redirect` 时把计数重置为 1，避免重定向到新目标后被旧计数误判。\n\n[[nonce]] 与重试计数都是“单次交互内”的状态，同一个 auth 对象可能被多线程共用，因此放进 [[线程本地存储]] 做隔离；否则线程 A 的 [[401]] 计数会干扰线程 B。\n\n需要说明：`handle_401` 的方法体在本上下文中被截断，重试上限的具体判断与抛错类型无法确认。",
+      "followUps": [
+        {
+          "question": "如果服务端一直返回 401，会发生什么？怎么进一步加固？",
+          "answer": "靠 `num_401_calls` 递增做上限控制，超限应停止重试并向上抛错。加固建议是设置明确上限（如 2 次）、在异常消息里带上已尝试次数，并对不同 host 重置计数，避免误伤合法多跳认证。",
+          "followUps": []
+        },
+        {
+          "question": "线程本地状态有什么代价？",
+          "answer": "内存随线程数增长，线程池复用时会残留上次的 `pos`/nonce；因此代码里在 body 没有 `tell` 时显式把 `pos` 置 None。跨线程迁移 auth 对象会丢掉 nonce，退回一次额外的 401 往返。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "4e5460454cbf8333df98f21f6d0a07acb9ff1b58361711fc83dc23bf45d5735d",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "摘要认证里记录 body 位置（`pos`）有什么用？它和 `utils.rewind_body` 是如何配合的？",
+      "answer": "`auth.py` 在 `__call__` 中执行 `tell = getattr(r.body, \"tell\", None)`，有则把 `tell()` 记到 `self._thread_local.pos`，没有则显式置 None（覆盖上一次复用留下的旧值）。因为 401 之后需要重发同一个请求，文件型 body 已经被读过，必须回到起始位置才能重放。\n\n`src/requests/utils.py` 的 `rewind_body` 检查 body 是否有 `seek`、`_body_position` 是否为整数，然后 `body_seek(...)`；`OSError` 与“不可定位”都会转成 `UnrewindableBodyError`。设计意图很清楚：只有可定位的 body 才能安全重放，生成器/一次性流必须尽早失败，而不是发出一个空 body 造成更难排查的错误。该异常继承 `RequestException`，调用方可以统一捕获。",
+      "followUps": [
+        {
+          "question": "如果 body 是 bytes，`rewind_body` 会抛错吗？",
+          "answer": "从实现看，没有 `seek` 的 body 一律抛 `UnrewindableBodyError`。但调用方是否只对文件型 body 调用 `rewind_body`，本上下文未展示 models/adapters 中的调用点，无法确认；如果确实会调用，那 bytes body 理论上也会触发该异常。",
+          "followUps": []
+        },
+        {
+          "question": "上层如何避免这个异常？",
+          "answer": "优先传可重复读取的 bytes 或可 `seek` 的文件对象，不要直接传一次性生成器；如果必须流式上传，可在自定义 adapter 中先把 body 缓冲到内存或临时文件，再交给传输层。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "fa851dc90aa4a503d72a219265494093b40193a41d147ccc805eb9ee66e142e6",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`hooks.dispatch_hook` 的语义是什么？为什么 `default_hooks()` 要写成函数而不能用模块级常量？",
+      "answer": "`src/requests/hooks.py`：`HOOKS = [\"response\"]` 是唯一事件；`default_hooks()` 每次返回新字典 `{event: [] for event in HOOKS}`，避免所有请求共享同一个列表造成跨请求污染（可变默认值陷阱的标准解法）。\n\n`dispatch_hook(key, hooks, hook_data, **kwargs)` 的逻辑：`hooks or {}` 兼容 None；取出的 `hook_list` 可能是单个 Callable，此时包成 `[hook]`；逐个调用，**只有返回值不为 None 才替换** `hook_data`。这带来两点语义：钩子可以“只观察不修改”；链式执行时后一个钩子能看到前一个的输出，`tests/test_hooks.py` 里 `[hook, lambda x: None, hook]` 作用于 `\"Data\"` 得到 `\"ta\"` 正是验证这一点。\n\n局限是只有一个事件、没有优先级，也没有异常隔离——某个钩子抛异常会中断整条链。",
+      "followUps": [
+        {
+          "question": "希望钩子按优先级执行，要怎么改？",
+          "answer": "当前是列表顺序即执行顺序，可先约定“注册顺序就是优先级”。若要真正排序，需要把元素改为 `(priority, hook)` 结构，并同步修改 `_types.HooksInputType` 与 `dispatch_hook`，属于对外破坏性变更，需要主版本。",
+          "followUps": []
+        },
+        {
+          "question": "钩子抛异常时调用方看到什么？",
+          "answer": "异常会从 `dispatch_hook` 直接冒泡到调用它的位置，当前实现没有 try/except 隔离。若希望“钩子失败不影响主流程”，需要在使用方自行包裹 try 并把异常记日志。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ae15cc34153da249b5d614bb377dddea33ae628b655c7ef7cee3074591244c65",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`_types.py` 为什么把 kwargs 拆成 `RequestKwargs`/`GetKwargs`/`PostKwargs`/`DataKwargs` 多个 [[TypedDict]]？",
+      "answer": "`BaseRequestKwargs(total=False)` 放公共项（headers/cookies/files/auth/timeout/allow_redirects/proxies/hooks/stream/verify/cert），其余按 HTTP 动词细分。关键在于**排除显式参数**：\n\n- `GetKwargs` 有 `data`、`json`，但**没有** `params`，因为 `get()` 把 `params` 声明成了显式参数；\n- `PostKwargs` 有 `params`，但**没有** `data`、`json`，因为 `post(url, data=None, json=None, **kwargs)` 已显式声明；\n- `DataKwargs`（put/patch）有 `params`、`json`，因为只有 `data` 是显式参数。\n\n配合 `**kwargs: Unpack[_t.PostKwargs]`（见 `api.py`、`sessions.py` 签名），[[pyright]] 能在编辑期发现重复传参或拼错关键字。`total=False` 是必须的，因为 kwargs 里每个键都是可选的。运行时没有任何开销：[[Unpack]] 只对类型检查器生效，函数在运行期仍是普通的 `**kwargs`。",
+      "followUps": [
+        {
+          "question": "这种拆分带来什么维护成本？",
+          "answer": "新增一个通用参数时需要在 `BaseRequestKwargs` 改一处，但如果新参数在某个动词上是显式参数，还得确认对应的子类是否要排除它，否则会出现“同名参数既显式又在 kwargs 里”的类型冲突。类型检查只能发现部分遗漏。",
+          "followUps": []
+        },
+        {
+          "question": "`TypedDict` 在运行时能做校验吗？",
+          "answer": "不能，`TypedDict` 不产生运行期类型检查，`isinstance` 也不能用。需要运行期校验只能手写检查或引入第三方校验库，这也解释了为什么项目另外用正则做 header 校验。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "65fe8cc6b399937204c63fb884527bbda488988665142c0ac83a1f92c2f30dd3",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`_types.py` 里的 `_ValidatedRequest(PreparedRequest)` 把 `url`/`method` 重声明为 `str`，为什么需要 `# type: ignore[reportIncompatibleVariableOverride]`？这个设计有什么风险？",
+      "answer": "`PreparedRequest` 的 `url`/`method` 在未 prepare 前可能为 None，但 adapter 与 auth 只在准备完成后才应使用。`_ValidatedRequest` 用重声明把它们收窄为 `str`，然而**可变属性是[[不变性|不变的]]**：子类既读又写该属性，收窄类型会禁止写入 None，从而违反[[里氏替换原则]]，[[pyright]] 因此报 `reportIncompatibleVariableOverride`，只能显式 ignore。类文档字符串也说明了“这是 Requests 的显式契约，类型系统没有更好的表达方式”。\n\n风险：窄化只在类型层成立，运行期没有断言；如果有人在 prepare 之前把它当 `_ValidatedRequest` 用，`url` 仍是 None，只能在测试与评审中防住。更严格但成本更高的替代方案是让 `prepare()` 返回该子类型，或用 [[Protocol]] 表达“已准备请求”的结构化契约。",
+      "followUps": [
+        {
+          "question": "为什么属性是不变的，而函数返回值可以协变？",
+          "answer": "属性既可读又可写，收窄读类型会让写入变得不合法，破坏“子类可替换父类”的约束；返回值只有读语义，因此允许协变（子类返回更具体的类型是安全的）。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不用 `cast` 而用子类？",
+          "answer": "`cast` 是局部、零散的，每个调用点都要重复且没有集中契约；子类把“已准备”这一契约写在一处、可被文档化，也能作为函数参数类型统一约束。代价是需要 ignore 注释和额外的类型。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "4482b6af506e89350981de95fc6d64c54e2fe59feda56837967887ee7ee25f89",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`_internal_utils.py` 里头部校验的两条正则分别防住了什么？为什么 str 和 bytes 各要一份？",
+      "answer": "定义是：\n\n```python\n_VALID_HEADER_NAME_RE_BYTE = rb\"^[^:\\s][^:\\r\\n]*\\Z\"\n_VALID_HEADER_VALUE_RE_BYTE = rb\"^\\S[^\\r\\n]*\\Z|^\\Z\"\n```\n\n- 名称首字符不能是 `:` 或空白，杜绝空名与伪起始行；名称内禁止 `:`、CR、LF。\n- 值内禁止 CR/LF，用于防[[HTTP头注入]]（响应拆分）；`|^\\Z` 允许空值，因为部分 header 合法为空；`^\\S` 要求值不以空白开头，避免与折行续行混淆。\n- 用 `\\Z` 而不是 `$`，因为 `$` 会匹配结尾换行之前的位置，`\"a\\n\"` 可能被误判合法。\n- `HEADER_VALIDATORS = {bytes: ..., str: ...}` 按类型分派，因为 Python 正则不能跨 str/bytes 匹配，`utils._validate_header_part(header, header_part, index)` 负责选取校验器并（推测）抛 `InvalidHeader`——`exceptions.py` 中确实定义了 `InvalidHeader(RequestException, ValueError)`，但校验函数的函数体被截断，抛错位置无法确认。",
+      "followUps": [
+        {
+          "question": "只有正则校验够安全吗？",
+          "answer": "只覆盖语法层。语义层（如 `Content-Length` 必须是数字）、长度上限、非 ASCII 字符处理都不在这里；真正的安全还需要在序列化处统一拼接，避免绕过校验直接拼 header。",
+          "followUps": []
+        },
+        {
+          "question": "`unicode_is_ascii` 里为什么用 `assert`？",
+          "answer": "它用 `assert isinstance(u_string, str)` 做开发期类型前置断言，再 `encode(\"ascii\")` 试探。`assert` 在 `python -O` 下会被移除，因此它只是开发期保护，不能当作运行期输入校验。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a9f74fbb5650c888c4aac028503946a1c8e182e2fd1c4a20c432bea2b0336f07",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`tests/testserver/server.py` 自己实现了一个服务器，它的同步原语是怎么设计的？为什么不直接用 httpbin？",
+      "answer": "关键设计：`_accept_connection` 用 `select.select([server_sock], [], [], WAIT_EVENT_TIMEOUT)` 等可读，超时或 `OSError` 返回 None，避免测试线程永久阻塞；`__enter__` 在 `start()` 后 `ready_event.wait(WAIT_EVENT_TIMEOUT)`，超时抛 `RuntimeError`，把“端口已监听”变成可等待条件而不是 `sleep`；`__exit__` 正常退出时等 `stop_event`，异常路径则设置 `wait_to_close_event` 让服务线程不再等超时，然后忽略错误地关闭监听 socket、`join()`，并 `return False` 让异常继续传播。`_create_socket_and_bind` 用 `ssl_context.wrap_socket(sock, server_side=True)` 支持 [[TLS]]，构造函数可传 `cert_chain`/`keyfile`/`mutual_tls`/`cacert`/`requests_to_handle`。\n\n自建服务器的价值在于：需要构造畸形响应、精确控制请求次数、制造 TLS 握手失败或 [[mTLS]] 场景，这些用 [[httpbin]] 很难覆盖。同时 `conftest.py` 仍保留基于 pytest-httpbin 的 `httpbin` fixture，以及用 [[trustme]] 动态签发“只有 CN 没有 SAN”证书的 `nosan_server`，用于 [[SNI]] 与证书校验相关测试。",
+      "followUps": [
+        {
+          "question": "`conftest.py` 里的 `clean_proxy_environ` 为什么必要？",
+          "answer": "它会删除 `http_proxy/https_proxy/no_proxy/ftp_proxy/all_proxy`（含大写形式），否则 CI 或开发者机器上的代理配置会让直连测试走到代理，产生难以复现的失败。这是环境隔离类 fixture 的典型做法，依赖 `monkeypatch` 自动还原。",
+          "followUps": []
+        },
+        {
+          "question": "既有 `tests/certs` 又用 `trustme`，分工是什么？",
+          "answer": "仓库证书用于固定场景，例如 `tests/certs/expired/server/Makefile` 用 `-days 0` 造过期证书，`mtls/` 提供客户端证书；`trustme` 则在临时目录动态签发，避免私钥入库、也避免证书随时间过期需要重新生成。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "858dc9986d91568804602f80af3a6dde1cd352940287af42c38a4bbe788c127c",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "看 `pyproject.toml` 的 pytest / ruff / pyright 与 `setup.py`，你会怎么评价这套工程化配置？有没有实际不生效的隐患？",
+      "answer": "配置要点：pytest 的 `addopts = \"--doctest-modules\"`、`doctest_optionflags = \"NORMALIZE_WHITESPACE ELLIPSIS\"`、`testpaths = [\"tests\"]`；[[pyright]] `include = [\"src/requests\"]`、`typeCheckingMode = \"strict\"`，并关闭 `reportPrivateUsage`/`reportPrivateImportUsage`/`reportUnnecessaryIsInstance`/`reportUnusedImport`（后者注释说明与 [[ruff]] 的 F401 重复）；[[ruff]] 启用 `UP`、`T10` 等规则，`ignore` 掉 `E203/E501/UP031`，并对 `src/requests/__init__.py`、`compat.py`、`tests/compat.py` 做 per-file 豁免；[[pre-commit]] 里 `ruff-format` 排除了 `tests/test_lowlevel.py`。\n\n隐患一：`--doctest-modules` 与 `testpaths = [\"tests\"]` 组合时，pytest 的收集范围限于 `tests/` 目录，`src/requests` 的 docstring 示例默认不会被收集为 [[doctest]]（除非 CI 另外指定路径，`run-tests.yml` 内容未在上下文中提供，无法确认）。隐患二：per-file 豁免范围过宽会让同文件的新代码逃过 lint。隐患三：`setup.py` 里 `sys.version_info < (3, 10)` 就 `sys.exit(1)`，与 `requires-python = \">=3.10\"` 重复，价值在于给源码安装者更友好的错误信息。",
+      "followUps": [
+        {
+          "question": "为什么 `src/requests/__init__.py` 需要豁免 E402 和 F401？",
+          "answer": "该文件在导入子模块前要先做依赖兼容检查（导入有副作用），因此导入语句不在文件顶部，触发 E402；F401 则因为导入本身就是公共 API 的再导出。这属于“导入即副作用/再导出”的典型豁免，应在文件中注释原因以便后续维护。",
+          "followUps": []
+        },
+        {
+          "question": "`py.typed` 加上 pyright strict 对下游用户意味着什么？",
+          "answer": "`src/requests/py.typed` 表示该包自带类型信息，下游无需 types-requests 之类的存根。strict 保证这些注解自身可信；代价是需要在 `_types.py` 里引入 TypedDict、Unpack 与若干 ignore 注释，维护成本上升。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    }
+  ]
+}

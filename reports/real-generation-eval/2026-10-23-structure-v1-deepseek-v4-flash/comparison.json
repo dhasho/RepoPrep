@@ -1,0 +1,504 @@
+{
+  "schemaVersion": "repoprep-real-run-comparison-v1",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "model": "deepseek-v4-flash",
+  "protocol": "openai",
+  "config": {
+    "model": "deepseek-v4-flash",
+    "protocol": "openai",
+    "granularity": "medium",
+    "budget": {
+      "min": 15,
+      "target": 20,
+      "max": 25
+    },
+    "temperature": 0.4
+  },
+  "inputReportHashes": {
+    "baseline": "3279159288ace996a57d8012f6eff6752b21c62866854945dbc41294058639e0",
+    "candidate": "7c45ca6dbf9d9095fbce2a32d73547aee59203398ea8943c81b1ec256e3f4f2c"
+  },
+  "conditions": {
+    "baseline": {
+      "contextWindowTokens": null,
+      "profileMaxOutputTokens": null,
+      "maxOutputTokens": null,
+      "maxOutputTokensPolicy": "provider-default",
+      "applicationInputTokenTarget": null,
+      "applicationInputTokenBudget": null,
+      "reservedOutputTokens": null,
+      "reservedOutputPolicy": null,
+      "inputTokenBudgetPolicy": null,
+      "contextStrategy": null,
+      "tokenEstimateMethod": null
+    },
+    "candidate": {
+      "contextWindowTokens": null,
+      "profileMaxOutputTokens": null,
+      "maxOutputTokens": null,
+      "maxOutputTokensPolicy": "provider-default",
+      "applicationInputTokenTarget": 32000,
+      "applicationInputTokenBudget": 32000,
+      "reservedOutputTokens": 65536,
+      "reservedOutputPolicy": "deepseek-reasoning-reserve-65536",
+      "inputTokenBudgetPolicy": "min(application target, max(0, configured context window - output reserve)); unknown window uses application target",
+      "contextStrategy": "structure-v1",
+      "tokenEstimateMethod": "mixed-text-v1"
+    }
+  },
+  "sourceHashChanges": [
+    {
+      "file": "electron/services/context-budget-integration.test.ts",
+      "baseline": "146ff20ad334536a1f192e77304782b877664b6adf3855d1bb9bf51ba04ead27",
+      "candidate": "f3341c07b07f787e55ae8e701af1571cfa03728ce809d51f274e59dacc5bd07d"
+    },
+    {
+      "file": "electron/services/context-builder.ts",
+      "baseline": "169f86e92e0b47aa11fd83fb851512d77b757bb9a5470bbaa786aae84dde2052",
+      "candidate": "843bf919d08678b25021be43c63d259e2d530035115bf5555d8eba7043815167"
+    },
+    {
+      "file": "electron/services/context-selection.test.ts",
+      "baseline": "b75aed7a60d7838f2b50a354e9363bc25712c3799a4151032e728654322ee4c4",
+      "candidate": "6f03651448ac17f90b13e0fe40b5ff782d17fed0cae84e2dcf02961a60434343"
+    },
+    {
+      "file": "electron/services/file-selection.ts",
+      "baseline": "ebe5c3747a1144731591e98922d6150a330b171e428bd2b1bb0e60ff0a4d6c52",
+      "candidate": "c23785a5e42dafaa4ac80e3b8a949f576f90a305f05121c989b085b0f6a5fa99"
+    },
+    {
+      "file": "electron/services/generator-grounding.test.ts",
+      "baseline": null,
+      "candidate": "6a03cb8ab82873d571edb8a1128128808c2d0b51267164e82be81dc95c48cbb3"
+    },
+    {
+      "file": "electron/services/generator-merge.test.ts",
+      "baseline": "9668b6975c135e1dba967240f6d4abe261eb8698cf6c5559837458470ceff762",
+      "candidate": "26c07ac081d55aa030a1213806fc3b903b023a271ee56bd4e21ee15700cf9684"
+    },
+    {
+      "file": "electron/services/generator.ts",
+      "baseline": "5124a42eb31e755744597e911a71d7a826702b5d8001fad9f8efece119a91d4e",
+      "candidate": "c1e5818b0b241cd59a86a5f3385a136d2621e7393e12dd3dfd9a3c25910b78ac"
+    },
+    {
+      "file": "electron/services/ipc-handler-guards.test.ts",
+      "baseline": "02bad40e3f96c4041a98a01c8b4e2b6556721941cff8bf99e8ecad500448ee68",
+      "candidate": "263a78eff5dda13c0d2cec4ea59a6487e622da84c6bd3ac12147dd2c2cc1f88f"
+    },
+    {
+      "file": "electron/services/ipc-handler-guards.ts",
+      "baseline": "9a4b79942171cb0e7c9b03e3e6e6e0de1dba1566e4dccd134b57de95d7b198f2",
+      "candidate": "f6e3452d1d99f88ec4cc7d91b2caa8ec3b63a4862293b2d97552e2ce33f9128f"
+    },
+    {
+      "file": "electron/services/ipc-validation.test.ts",
+      "baseline": "cd987b06ea9b39fe3fdb3f538e14bd259f42c222996bbc579321e97e54281136",
+      "candidate": "c03aa8d95c4c70f6ed9d6adef29aec79de7e212af25e54de62171dcb30f2f4b3"
+    },
+    {
+      "file": "electron/services/ipc-validation.ts",
+      "baseline": "1027a421f805a2c698d06cf5288cbc77bdb45b8300d56af3733bb45645ecf961",
+      "candidate": "f4a4f38ca50b5bb7e1647ce135da16316b8e6aa3bc0d2243cc36393bf984b2de"
+    },
+    {
+      "file": "electron/services/llm-anthropic.test.ts",
+      "baseline": "3915bec379e6a4899f37e4de2b022231209cea441d604866fb869c9d35c63ad1",
+      "candidate": "5078c635aea30377317a7509248e03380fde1650da8550ba3420f0901e0b60ab"
+    },
+    {
+      "file": "electron/services/llm-safe-results.test.ts",
+      "baseline": "98361e9de2fb101b9a9e3ee64b544107fe4dc5c1c510bc5ad2e49128c9aa5b4a",
+      "candidate": "6c1abe292e56bbbcd5a4d5dc2e5818f33fa5f5d575c5b15d7d859c9a21c11938"
+    },
+    {
+      "file": "electron/services/llm.ts",
+      "baseline": "c2f582b370dc59222063d58234d2f7f8405e07acbcf6d6ddbd5768f630f1e4fb",
+      "candidate": "b6aab97202ec221162101d69af5f4ef5d127d2eeb7ae51e40b1feb7f22671c92"
+    },
+    {
+      "file": "electron/services/markdown-export.ts",
+      "baseline": "75d499fc77adc77252df816fa2d288512167fda4661a591aef8eb953aec2063c",
+      "candidate": "63262c0710a328babf2330ce894dd0100f1739303590a63f403a9313b8303253"
+    },
+    {
+      "file": "electron/services/result-store-contract.test.ts",
+      "baseline": "17ff7e670c87d458df1f6a462af873e1163e05596ed859a7d48e6b6e53b38638",
+      "candidate": "4e370015f0944be80e79ce63b68039eac09f75e5a25a92d7b85fa57cb2ccabfd"
+    },
+    {
+      "file": "electron/services/snippet-selection-integration.test.ts",
+      "baseline": null,
+      "candidate": "e8431428577eb3e061788e158bdad1985b27972d7badddc13cf89ef4f76bc843"
+    },
+    {
+      "file": "electron/services/snippet-selection.test.ts",
+      "baseline": null,
+      "candidate": "b305056ad83183fcf48bf437af6ac2d35385fb561f629d7f233ba5884fb37003"
+    },
+    {
+      "file": "electron/services/snippet-selection.ts",
+      "baseline": null,
+      "candidate": "c67203342c740eb121a1613cc87f7319495c495f200cce68478c9bf3cd11ee50"
+    },
+    {
+      "file": "electron/services/source-analysis.test.ts",
+      "baseline": null,
+      "candidate": "a1af0f084389b1ca630699d423e28460ebfd9e1c02f4d41f0b586a56714c5591"
+    },
+    {
+      "file": "electron/services/source-analysis.ts",
+      "baseline": null,
+      "candidate": "0f30b5952e9f781c8e2b31554f6f0e03eded8cff58f7f246eee532727ab1e192"
+    },
+    {
+      "file": "electron/services/storage-recovery.test.ts",
+      "baseline": "624ca7da17eefc39fad32f0a7732ce4168999a8cbee13bdc2a02e36c17b17b29",
+      "candidate": "301057f8921fe05fd7d3afdcb6c64c342ca6c1092f7e94965006a59467c60b5a"
+    },
+    {
+      "file": "electron/services/store.ts",
+      "baseline": "9452e07c43c67257ed2cbdeb2cf993081c5f0c29fcbad9e964f8ba7a35666fd2",
+      "candidate": "9ca358200c58f8728ab34c490c1150befd8649779c4a61839c97a597d8e0d804"
+    },
+    {
+      "file": "package-lock.json",
+      "baseline": "9c193be42b519d84da85c14e96fff01e33facddef152921c58f002af21c20feb",
+      "candidate": "fe075856ff56d808fb3a144d8f51f22faae1936c5267ea751882d61b2d11d75e"
+    },
+    {
+      "file": "package.json",
+      "baseline": "9f9c16ec44f45cda224b8ee9e1ea915854918ca4a23fe378e41743131ed48060",
+      "candidate": "afcf751730063750d4d57605cc3b6b0ef3c382446799322d6010db239544f9fc"
+    },
+    {
+      "file": "scripts/evaluation/compare-real-runs.mjs",
+      "baseline": null,
+      "candidate": "842727fba5f1744fe6a3508005ce844c4914c50766282b270e433ad9eb0f68b8"
+    },
+    {
+      "file": "scripts/evaluation/compare-real-runs.test.mjs",
+      "baseline": null,
+      "candidate": "213137a0204a96084305681f3d251976bee743a9dceb73cb3f33158810422e49"
+    },
+    {
+      "file": "scripts/evaluation/real-runner.mjs",
+      "baseline": "2ade07f06394b19ff1b4e2450281754792e32f90b539104a2cd06aa20725eec7",
+      "candidate": "c4313b809494441bdc7a976251a3eb6aaf320b401914401faff040860d8b01f9"
+    },
+    {
+      "file": "scripts/evaluation/real-runner.test.mjs",
+      "baseline": "fca55938550e182365c7ab5eb01c8903ad15c2870ec75b0bc69b83c5b8ff42a1",
+      "candidate": "70baa71081b4b2105c60eebad5b596c7bbc0eeebd25c6d75a346424c8914e8db"
+    },
+    {
+      "file": "scripts/evaluation/run-saved-profile-entry.cjs",
+      "baseline": "f85ea3a4dfc246c5151404baf418a8e5e1faee1f55d22eb1578cf45be11dc9b7",
+      "candidate": "09acbf03cd9ea37c24831d90afccd2811f42c71fa25afc9e07d08ffd9d252927"
+    },
+    {
+      "file": "scripts/evaluation/run-saved-profile.cjs",
+      "baseline": "6a9e716c1d333ca5e3463c8053e2f8971b0d9e9b9d9887462ca7d2e6823766f3",
+      "candidate": "6faf1316609d811fcfe93ce740e46474a58cbe2ebd133695436c5835ab32f8c3"
+    },
+    {
+      "file": "scripts/evaluation/run-saved-profile.test.cjs",
+      "baseline": "5141afab8edeff2c2868b22e4ae57634d626b74ede7ce9097cd1bb7cb117387f",
+      "candidate": "9d28b0805d63fb6c912ab0c8fa71ae184c6d832a96d2fab1c06cc3fc2923202c"
+    },
+    {
+      "file": "scripts/evaluation/variant-arguments.cjs",
+      "baseline": null,
+      "candidate": "11119a8af013b0f7f12292352f180d7057f4657955419c0e024bb49dd6ce14e2"
+    },
+    {
+      "file": "shared/result-contract.test.ts",
+      "baseline": "dc9b452355349ef719c5bb6c8159d29fe825a3a9cd3b8582b6118f8882beaa5f",
+      "candidate": "05ef666a349e81cc9499df53eb3ece2f96c1f2d9a4f728d0521cce073865758e"
+    },
+    {
+      "file": "shared/result-contract.ts",
+      "baseline": "be132b3a93ee14415de69273b2fc81ff01228acdf40e747c4482e5bf5c61e71d",
+      "candidate": "4f0df8d91080f2d703e35a66b4b606a5e7aaebb46a3a7a27255fa6ded5613609"
+    },
+    {
+      "file": "shared/token-budget.test.ts",
+      "baseline": null,
+      "candidate": "5a48d8f50a89150ffdfff51c53a673c023dcf70909c400bf2eef593324d4ae13"
+    },
+    {
+      "file": "shared/token-budget.ts",
+      "baseline": null,
+      "candidate": "6e7609e55b8a9e0641afdf22b5e9bfd1f7884afe7292c0775a05b38291c3b138"
+    },
+    {
+      "file": "shared/types.ts",
+      "baseline": "5d6481606d3c8ba0696f2c579ab8a9c9141d719e480e373434a561ae0cdc07f1",
+      "candidate": "296ca0030fe2651d91b8062476d62861a3d268c608b1a284ca1a6ae4b56df79f"
+    }
+  ],
+  "baseline": {
+    "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+    "generatedAt": "2026-10-23T09:14:49.649Z",
+    "summary": {
+      "questions": 80,
+      "requests": 4,
+      "elapsedMs": 576124,
+      "generationMs": null,
+      "actualUsage": {
+        "inputTokens": 146247,
+        "outputTokens": 114186,
+        "totalTokens": 260433
+      },
+      "estimatedInputTokens": null,
+      "repairRequests": 0,
+      "compensationRequests": null,
+      "formatRepairs": 0,
+      "contextBuildMs": null,
+      "modelMs": null,
+      "keywordCoverage": {
+        "covered": 27,
+        "total": 28
+      }
+    }
+  },
+  "candidate": {
+    "runId": "04cc5679-1e4b-4fb5-a724-1e7fe9ff1548",
+    "generatedAt": "2026-10-23T14:29:20.660Z",
+    "summary": {
+      "questions": 80,
+      "requests": 4,
+      "elapsedMs": 560995,
+      "generationMs": 560838,
+      "actualUsage": {
+        "inputTokens": 66604,
+        "outputTokens": 103843,
+        "totalTokens": 170447
+      },
+      "estimatedInputTokens": 104423,
+      "repairRequests": 0,
+      "compensationRequests": 0,
+      "formatRepairs": 0,
+      "contextBuildMs": 934,
+      "modelMs": 559582,
+      "keywordCoverage": {
+        "covered": 25,
+        "total": 28
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "mitt",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 161892,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 9653,
+          "outputTokens": 32241,
+          "totalTokens": 41894
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 6,
+          "total": 6
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 148181,
+        "generationMs": 148147,
+        "actualUsage": {
+          "inputTokens": 9831,
+          "outputTokens": 28707,
+          "totalTokens": 38538
+        },
+        "estimatedInputTokens": 14028,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 102,
+        "modelMs": 148030,
+        "selection": {
+          "selectedFiles": 13,
+          "selectedRegions": 13,
+          "omittedFiles": 0
+        },
+        "keywordCoverage": {
+          "covered": 6,
+          "total": 6
+        }
+      }
+    },
+    {
+      "id": "p-limit",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 133990,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 14342,
+          "outputTokens": 22757,
+          "totalTokens": 37099
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 167408,
+        "generationMs": 167389,
+        "actualUsage": {
+          "inputTokens": 14520,
+          "outputTokens": 30617,
+          "totalTokens": 45137
+        },
+        "estimatedInputTokens": 26471,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 147,
+        "modelMs": 167231,
+        "selection": {
+          "selectedFiles": 15,
+          "selectedRegions": 15,
+          "omittedFiles": 0
+        },
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      }
+    },
+    {
+      "id": "requests",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 136258,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 67460,
+          "outputTokens": 27321,
+          "totalTokens": 94781
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 8
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 147388,
+        "generationMs": 147311,
+        "actualUsage": {
+          "inputTokens": 21331,
+          "outputTokens": 27276,
+          "totalTokens": 48607
+        },
+        "estimatedInputTokens": 31927,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 495,
+        "modelMs": 146679,
+        "selection": {
+          "selectedFiles": 61,
+          "selectedRegions": 137,
+          "omittedFiles": 55
+        },
+        "keywordCoverage": {
+          "covered": 5,
+          "total": 8
+        }
+      }
+    },
+    {
+      "id": "schedule",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 143984,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 54792,
+          "outputTokens": 31867,
+          "totalTokens": 86659
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 98018,
+        "generationMs": 97991,
+        "actualUsage": {
+          "inputTokens": 20922,
+          "outputTokens": 17243,
+          "totalTokens": 38165
+        },
+        "estimatedInputTokens": 31997,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 190,
+        "modelMs": 97642,
+        "selection": {
+          "selectedFiles": 30,
+          "selectedRegions": 58,
+          "omittedFiles": 2
+        },
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "Actual provider token totals are null when complete usage receipts are unavailable.",
+    "Estimated input tokens are application estimates and are reported separately from provider usage.",
+    "Keyword fact coverage counts configured keyword matches; it is not factual accuracy.",
+    "This comparison does not treat assistant review as human review.",
+    "The legacy report digest does not bind generation metadata; the comparator checks canonical output and question cross-links and records hashes of both complete input reports."
+  ]
+}

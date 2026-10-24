@@ -1,0 +1,234 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "04cc5679-1e4b-4fb5-a724-1e7fe9ff1548",
+  "caseId": "p-limit",
+  "reviewer": {
+    "executor": "ZCode",
+    "model": "zcode-coding-plan/GLM-5.3-Flash",
+    "method": "source-grounded assistant review",
+    "blind": false
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "ac3c43a17511a809292a7035b3be35c797fdea868ab72f6f981172f73ef0468a",
+        "1205539fbc7ca20a88a9da8a2d9129a9bc15f2c19f706a7a81370ecfcd747278",
+        "8022912ae6fa5964ae09edbe2797c9a0f23b92f9cdd1c4c523665c271e0b149b",
+        "e04745997ef97155c9a30674766f8d37e066a6ae36cabd5a2b1ce74fe7de6176",
+        "a10364a8eeb38b2d14d7ee896302461af8019ededf4302e9cfe88998adaa663c",
+        "ea239b1db30cfac73fdbf92458fd34eabaa923408e7876e62f498c116e40c896",
+        "d38e9927befed3e553a2aa860446e2a9ef02ab6e07a722736935082861831713",
+        "5f9205bf470515b8480446d5f8caa6a6fd74a8b0ad01b32798eb577b370a1376",
+        "c5430f37f764f125725d3d3b68372bdd9fea3340581c843591b5b274e9f943c3",
+        "de37cf70b333bc66b2cedb312c17b8ebef6971f175270cece984ca1ccc47b33a",
+        "50b41ee48ed807588b11fd569e1986717e17d32c83e9dcb9f0fb1ba1d711da61",
+        "e2f8e771385368ff75c69e3b4b561bb1604f3ec4db292b923a31b094c9c66039",
+        "67b80b60c705d1bb261dce1db135754c49589582ae6e0206885c0d80a6ced5d1",
+        "40dfab522afd5b69ed155313696c0671881909f8713f32489ce2659e588c2efc",
+        "a46a9ae7e6104a2b900411367904f37b182ef0f4dec2c5af7ba1273d158aeae5",
+        "69d95ba2ac4a71f1376ccd235e24a8795dda61369517e24b1d442c43451e6d2d",
+        "e8750f8c667bde49eea698662fbf09f82149f700c404851069c6aa0e502c712f",
+        "c9ce7b29ec802aa78aa30d948049307fa84926e605744d0f2b5bfdf270e60e94",
+        "7d9b94fa557a27519d98477b2609b2245b232c13ec10ec1bc98a657315b6eea5",
+        "ee2b75f07f138c992f52b86641bf7e2e3ce217d990d905debeb66c58162071f8"
+      ],
+      "factReviews": [
+        {
+          "factId": "plimit-validation",
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ],
+          "reason": "第2题完整覆盖：typeof concurrency === 'object' 时解构 concurrency 与 rejectOnClear；validateConcurrency 要求大于零的整数或 Number.POSITIVE_INFINITY；rejectOnClear 非布尔抛 TypeError；null 进入对象分支并因解构 null 抛原生 TypeError 而非自定义错误；数组或空对象因 undefined 校验失败。与 index.js 及测试的非法参数用例一致。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 3,
+              "endLine": 14
+            },
+            {
+              "path": "index.js",
+              "startLine": 144,
+              "endLine": 148
+            },
+            {
+              "path": "test.js",
+              "startLine": 413,
+              "endLine": 441
+            }
+          ]
+        },
+        {
+          "factId": "plimit-active-queue",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            4,
+            5
+          ],
+          "reason": "第1题描述 enqueue 构造 {reject, run} 队列项，activeCount < concurrency 时 resumeNext 先加一再出队执行；第4题精确定义 activeCount（已出队未完成）与 pendingCount（queue.size）的差异，并解释同步返回后 activeCount 已加一而 fn 尚未执行的窗口；第5题说明检查与递增在同一同步段完成、固定并发不超发。FIFO 出队顺序由测试 shared context 用例（并发 1 时执行顺序为 ['first','second']）间接验证。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 16,
+              "endLine": 30
+            },
+            {
+              "path": "index.js",
+              "startLine": 61,
+              "endLine": 63
+            },
+            {
+              "path": "test.js",
+              "startLine": 94,
+              "endLine": 116
+            },
+            {
+              "path": "test.js",
+              "startLine": 155,
+              "endLine": 182
+            }
+          ]
+        },
+        {
+          "factId": "plimit-promise-rejection",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            6
+          ],
+          "reason": "第1题及其追问说明 resolve(result) 先把任务结果 Promise 交给调用方（成功失败都传播）、内部 await 仅为等待完成并递减 activeCount，吞掉内部拒绝以避免 unhandled rejection；第6题准确解释同步抛错被 async IIFE 转为 rejected Promise、thenable 被同化，并解释测试 continues after sync throw 的行为。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            },
+            {
+              "path": "test.js",
+              "startLine": 67,
+              "endLine": 85
+            }
+          ]
+        },
+        {
+          "factId": "plimit-clear",
+          "coverage": "covered",
+          "questionNumbers": [
+            3,
+            8,
+            20
+          ],
+          "reason": "第8题完整覆盖两种模式：默认 queue.clear() 后队列项 run 永不调用、外层 Promise 永不 settle；启用 rejectOnClear 时用 AbortSignal.abort().reason 逐个出队并调用队列项保存的外层 reject；两者都不取消已运行任务、不把 activeCount 归零。第3题追问佐证非 reject 模式的挂起语义（与 README 一致），第20题归纳实现证据。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "test.js",
+              "startLine": 184,
+              "endLine": 227
+            }
+          ]
+        },
+        {
+          "factId": "plimit-concurrency-setter",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            7
+          ],
+          "reason": "第7题说明 setter 先 validateConcurrency 再更新闭包变量并在 queueMicrotask 中循环补位，调大一次补多个、调小不取消已运行任务，并正确解读测试中 [1,2,3,4,2,2,...] 与 [1,2,3,4,4,...] 两个方向的 log 序列；第5题指出调小后 activeCount 可暂时高于新并发、resumeNext 停止出队直至降回阈值以下；第7题追问正确说明微任务执行时读取最终 concurrency。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 104
+            },
+            {
+              "path": "test.js",
+              "startLine": 443,
+              "endLine": 479
+            }
+          ]
+        },
+        {
+          "factId": "plimit-map-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            11,
+            12,
+            13
+          ],
+          "reason": "第10题说明 map 用 Array.from(iterable, (value, index) => ...) 逐个调度并以 Promise.all 返回，结果按输入顺序而非完成顺序，且指出其 eager 调度非流式；第11题准确覆盖 iterable 抛错时先对已调度 Promise 挂空 catch、map Promise 立即拒绝而已调度任务继续运行的细节（含源码注释动机）；第12题给出与 README/index.d.ts 一致的等价表达式；第13题确认解构后 map 仍共享同一 limiter。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 127
+            },
+            {
+              "path": "test.js",
+              "startLine": 256,
+              "endLine": 269
+            },
+            {
+              "path": "test.js",
+              "startLine": 355,
+              "endLine": 379
+            }
+          ]
+        },
+        {
+          "factId": "plimit-wrapper",
+          "coverage": "covered",
+          "questionNumbers": [
+            14,
+            15
+          ],
+          "reason": "第14题说明 limitFunction 以 pLimit(options) 创建独立 limiter、返回把调用包装成限流任务的函数并用 defineProperty 转发 clearQueue，且未暴露 activeCount/pendingCount/concurrency，也未利用参数透传优化；第15题确认 clearQueue 是同一函数引用、rejectOnClear 在构造时确定，并准确指出 index.d.ts 中 limitFunction 的 function_ 只允许返回 PromiseLike 而 pLimit 允许 PromiseLike | ReturnType 的类型差异（index.test-d.ts 第29行 expectError 佐证）。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 133,
+              "endLine": 142
+            },
+            {
+              "path": "test.js",
+              "startLine": 217,
+              "endLine": 227
+            },
+            {
+              "path": "index.d.ts",
+              "startLine": 133,
+              "endLine": 138
+            }
+          ]
+        }
+      ],
+      "findings": [],
+      "notes": [
+        "CI 相关表述（Node 20/22/24 矩阵、npm install 而非 npm ci、无锁文件、CI 不运行 benchmark）已对照 checkout 中实际存在的 .github/workflows/main.yml 核验一致；该文件不在 fixtureHashes 内，但路径与行号真实有效。",
+        "yocto-queue 不在冻结 fixture 内，其内部实现未核验；FIFO 出队顺序通过 test.js 的 shared context 用例（并发 1 时 values 为 ['first','second']）间接验证。",
+        "FU8.1 末句『也无法阻止后续 then 行为』语义含混（若指拒绝内部 Promise 会阻止其 .then 回调执行，则表述反了；若指会产生无法阻止的未处理拒绝，则成立），但该追问核心论断（队列项只保存外层 reject、拒绝内部 Promise 无法让调用方拿到错误）与源码一致，未据此计 finding。"
+      ]
+    }
+  ],
+  "limitations": [
+    "assistant-assisted, non-blind; not human ratings; fact coverage does not equal all-answer accuracy",
+    "humanReview in the main report remains pending; this sidecar neither completes nor alters it"
+  ],
+  "primaryAudit": {
+    "reviewer": "Codex primary agent",
+    "method": "source inspection and conservative adjudication",
+    "originalReviewPath": "zcode-originals/assistant-review-p-limit.json",
+    "originalReviewSha256": "4b2aa72548fda6cbe3d8ff56dab8f55f13f51f4fb3d3c93d450301166625e444",
+    "modelMetadata": "ZCode model identifiers, when present, are executor self-reports; MCP final usage metadata was unavailable after transport timeout.",
+    "delegationStatus": "MCP observation timed out at 300 seconds; both recorded task PIDs exited and requested final artifacts were inspected.",
+    "changes": []
+  }
+}
