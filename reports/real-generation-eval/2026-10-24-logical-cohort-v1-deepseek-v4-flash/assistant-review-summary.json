@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "repoprep-cohort-assistant-review-v1",
+  "cohortCanonicalInput": "cohort.json",
+  "status": "reviewed-by-assistants",
+  "blind": false,
+  "humanReviewStatus": "pending",
+  "method": "Prior ZCode JavaScript source reviews with primary adjudication; fresh Python answers reviewed directly by the primary agent.",
+  "cases": [
+    {
+      "caseId": "schedule",
+      "originRunId": "37bf2ccb-3aa0-473a-9e4a-4b712cdbf1d1",
+      "reviewPath": "../2026-10-24-logical-v1-deepseek-v4-flash/assistant-review-schedule.json"
+    },
+    {
+      "caseId": "requests",
+      "originRunId": "37bf2ccb-3aa0-473a-9e4a-4b712cdbf1d1",
+      "reviewPath": "../2026-10-24-logical-v1-deepseek-v4-flash/assistant-review-requests.json"
+    },
+    {
+      "caseId": "mitt",
+      "originRunId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+      "reviewPath": "../2026-10-24-balanced-v1-deepseek-v4-flash/assistant-review-mitt.json"
+    },
+    {
+      "caseId": "p-limit",
+      "originRunId": "e03c5a43-ad43-4c04-b410-8693f2725ee6",
+      "reviewPath": "../2026-10-24-balanced-v1-deepseek-v4-flash/assistant-review-p-limit.json"
+    }
+  ],
+  "facts": 28,
+  "questions": 80,
+  "measurement": {
+    "caseCount": 4,
+    "freshCases": [
+      "requests",
+      "schedule"
+    ],
+    "reusedCases": [
+      "mitt",
+      "p-limit"
+    ],
+    "selectedMeasurementsRequests": 4,
+    "freshNetworkRequests": 2,
+    "reusedMeasurements": 2
+  },
+  "actualUsage": {
+    "inputTokens": 109897,
+    "outputTokens": 104254,
+    "totalTokens": 214151
+  },
+  "aggregate": {
+    "generation": {
+      "covered": 18,
+      "partial": 5,
+      "missing": 5,
+      "contradicted": 0,
+      "incorrect": 2,
+      "imprecise": 1
+    }
+  },
+  "freshFactSourceHashes": {
+    "schedule/schedule/__init__.py": "b0c93f8ee84cbb8dbb98bcb8284864f4ea04012fdbc216de13f8ad2141d09efa",
+    "schedule/test_schedule.py": "71fa3781959b0dee649acc01e618559792c52c6375b82880945764819d5d5523",
+    "requests/src/requests/models.py": "a3351c3c12a86bf5ed211533875350bc4791e9327a685f8c19ba54343e471e26",
+    "requests/src/requests/sessions.py": "3d2089736ced93b2b405624a943f866d22652b17df06a85eb010f86272fc3e7d",
+    "requests/tests/test_requests.py": "5eacf6341d236e225ce6a37a592f3b410f20e69ec17641f0e2c99b03a79b904d",
+    "requests/pyproject.toml": "345f26b9f691435e39d0eb6f7f4150a390f43175b22f8d61ac95e7f2827f0a77",
+    "requests/src/requests/cookies.py": "05d12b965c76f229803e17aef1c9969d712e4f4d0f6a06c05e0a47212fd5b417",
+    "requests/src/requests/adapters.py": "cc9b1b02694fee0353481fbad84fe3ddbedec4441dba54df7914c63f2aa85937"
+  },
+  "qualityGate": {
+    "status": "failed",
+    "baselineCoveredFacts": 23,
+    "candidateCoveredFacts": 18,
+    "reason": "Core-flow coverage remains below the original baseline despite corrected Python unit boundaries; file budget allocation needs improvement."
+  },
+  "limitations": [
+    "No independent human blind review and no exhaustive correctness percentage.",
+    "Requests is a revealed regression case, not an untouched holdout.",
+    "The cohort combines two fresh Python cases with two explicitly proved unchanged-request JavaScript measurements."
+  ]
+}

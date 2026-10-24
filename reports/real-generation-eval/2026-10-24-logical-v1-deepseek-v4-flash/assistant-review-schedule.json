@@ -1,0 +1,191 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "37bf2ccb-3aa0-473a-9e4a-4b712cdbf1d1",
+  "reportDigest": "sha256:7f74a2227bc6785037cd5eb763614b6ef9ff45a25a8a94fb11807b7dd4ba4838",
+  "caseId": "schedule",
+  "reviewer": {
+    "executor": "Codex primary agent",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen core facts plus concrete source-backed errors; not exhaustive answer correctness"
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "b399a66357c9f029685d3fa3d50c2ee8562667fcf45ec2e924cf4d80ed66b535",
+        "c4cb4fdc7ee000863108ece2e7d7cf95e9b96a366ecdb2d19134fbc8e9410fd1",
+        "1e5cfdb4f43ad9429598b1a249484acd26fb1d9e7e2b8beaddeee92d66f4a43b",
+        "a408128d99b3e2793b939ff5bfab69e969272f99299f7c0b532476f62faf3229",
+        "90f290d5b5cfee19cc22b7ebeda3cf521a49f1bc9c7a224f3e554379286265bc",
+        "d0d2e98947cde5d9f24c4d16b4cb884d22f8b580b8f6645049deb8cdfcad14d9",
+        "c5cf3f1bfe3c4c8f3d2655b506f03d6b9e424e6cfbd0668e773ff848ea5af65c",
+        "51e35e428f983f870923f4d23d83b4e1e3ad8d527d9d181746b36223c2552f90",
+        "7e1e4caa3925c22787283dd5d1335170696bf91602ea781474ef0a0e496df6aa",
+        "ba0a5dfad536256285ed4cda76c752c9c5badaa4756531420dbe658a4a47e9c3",
+        "beb20739d5e9044ff501dca10c781b920d3a8681edfe47ba1773cda661e53a07",
+        "f97b65e3865eeecdbea9c1c40cd1e7acbb96412bde5fd3743e7722716efc3e67",
+        "774554cfcfc14e26710ae503dc3a3151ee75fac52a97a01b6627c9b7a31225cf",
+        "fd2e939b5d4ec971b0c910661bc774a3788e1e2187bfb6025ab084eac4647a17",
+        "ff10925109eafd5e6460d4a4de01d30e0e0d21c36af43e8175feb7c33715e53e",
+        "02207d874282f394e191b3c892a9a9e99db98bd8c5d7cfa0d560218108648f9d",
+        "f090be6b45eba7b979ec2ecb95d7169cc96e270c0872280287aba635eb9a193f",
+        "3a5e8f501bff13dad25ca3176d4d2dfa119dd754065df29ffc8a3bfed9170efa",
+        "d06649b04d0afa58964042fc703b4f1650153590cafc767f7ed7db0c397db0bc",
+        "ab2a2b1f291253613e0c36fd40ae1de3ed5c4441a7f57f50275ab947bebd5c58"
+      ],
+      "factReviews": [
+        {
+          "factId": "schedule-run-pending",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            6
+          ],
+          "reason": "Q2和Q6明确到期筛选、next_run排序与错过多个周期不追赶。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1387,
+              "endLine": 1415
+            }
+          ]
+        },
+        {
+          "factId": "schedule-run-all",
+          "coverage": "partial",
+          "questionNumbers": [
+            6,
+            16
+          ],
+          "reason": "解释立即运行且不筛到期，但明确完整实现不可见，未给出jobs浅拷贝快照和每次sleep细节。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "schedule-tag-management",
+          "coverage": "partial",
+          "questionNumbers": [
+            4,
+            15
+          ],
+          "reason": "Q15覆盖无tag查询副本、有tag筛选及按tag清理；未明确clear()无tag清空全部这一分支。Q4仅以状态隔离场景建议调用clear，不把名称本身当成完整实现说明。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1572,
+              "endLine": 1589
+            }
+          ]
+        },
+        {
+          "factId": "schedule-cancel-return",
+          "coverage": "covered",
+          "questionNumbers": [
+            14
+          ],
+          "reason": "明确返回CancelJob类或实例时，Scheduler._run_job调用cancel_job移除。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 175
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1503,
+              "endLine": 1515
+            }
+          ]
+        },
+        {
+          "factId": "schedule-at",
+          "coverage": "covered",
+          "questionNumbers": [
+            7,
+            10
+          ],
+          "reason": "区分按日/小时/分钟格式和字段，给出hour与minute的:42区别，并明确传tz才在at中import pytz。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 528
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 268,
+              "endLine": 284
+            }
+          ]
+        },
+        {
+          "factId": "schedule-until",
+          "coverage": "covered",
+          "questionNumbers": [
+            8,
+            14
+          ],
+          "reason": "列全datetime/timedelta/time/五种字符串格式及cancel_after换算，说明两次过期检查和严格大于边界。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 620
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 312,
+              "endLine": 339
+            }
+          ]
+        },
+        {
+          "factId": "schedule-jitter-next",
+          "coverage": "covered",
+          "questionNumbers": [
+            5
+          ],
+          "reason": "明确randint闭区间，以及while next_run<=now推进到未来。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 561,
+              "endLine": 574
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 748
+            }
+          ]
+        }
+      ],
+      "findings": []
+    }
+  ],
+  "limitations": [
+    "Assistant source review, not human blind review.",
+    "Material omissions in a compound fact count as partial.",
+    "Budget omissions are not fabricated implementations; factual coverage and incorrect claims are separate measurements."
+  ]
+}

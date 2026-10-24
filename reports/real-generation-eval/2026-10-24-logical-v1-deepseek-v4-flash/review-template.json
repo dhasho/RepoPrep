@@ -1,0 +1,1139 @@
+{
+  "schemaVersion": "repoprep-human-review-v2",
+  "runId": "37bf2ccb-3aa0-473a-9e4a-4b712cdbf1d1",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "configHash": "44d0739b9323b07045257ec1e293b0a3416e1bf14467c4ad4b81d651a56d6fdb",
+  "reportDigest": "sha256:7f74a2227bc6785037cd5eb763614b6ef9ff45a25a8a94fb11807b7dd4ba4838",
+  "rubric": {
+    "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.",
+    "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
+    "semanticDuplication": "1 duplicates another question; 2 near duplicate; 3 partial overlap; 4 distinct with minor overlap; 5 clearly distinct."
+  },
+  "ratings": [
+    {
+      "fingerprint": "b399a66357c9f029685d3fa3d50c2ee8562667fcf45ec2e924cf4d80ed66b535",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "项目由哪些模块/文件组成？`schedule/__init__.py` 承担什么职责？为什么会采用单文件核心设计？",
+      "answer": "从文件树看，核心实现集中在 `schedule/__init__.py`：其中定义异常体系、`CancelJob`、`Job`、`Scheduler`、`default_scheduler`，以及 `every/run_pending/clear` 等模块级 API；`schedule/py.typed` 是类型标记。文档在 `docs/`，测试在 `test_schedule.py`，打包和 CI 在根目录与 `.github/`。单文件让公开 API 和内部状态集中、导入简单，但也带来文件较大、职责混合的维护成本。当前上下文没有其他核心 Python 模块。",
+      "followUps": [
+        {
+          "question": "如果拆成 `scheduler.py` 和 `job.py`，会遇到什么循环依赖？",
+          "answer": "[[Scheduler]] 要创建 [[Job]]，[[Job]] 又持有 [[Scheduler]] 反向引用，容易循环导入。可用类型检查条件导入、前向引用或回调注册解耦；这是设计建议，不是当前实现。",
+          "followUps": []
+        },
+        {
+          "question": "`py.typed` 的作用是什么？",
+          "answer": "它是 PEP 561 的类型标记文件，告诉 [[mypy]] 等工具该包自带类型信息；`setup.py` 中也通过 `package_data` 把它打进包里。",
+          "followUps": []
+        },
+        {
+          "question": "单文件设计对测试有什么影响？",
+          "answer": "测试会直接依赖模块级全局状态，例如默认 [[default_scheduler]] 中的 jobs；用例之间需要用 `schedule.clear()` 隔离，否则任务会串场。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c4cb4fdc7ee000863108ece2e7d7cf95e9b96a366ecdb2d19134fbc8e9410fd1",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "Scheduler 的职责和内部状态是什么？`run_pending()` 是怎样驱动任务的？",
+      "answer": "[[Scheduler]] 是任务注册表和驱动入口：`jobs` 保存 Job 列表；`every()` 创建未配置 Job；`run_pending()` 筛选 `should_run` 的任务、按 `next_run` 排序并逐个执行；`_run_job()` 在返回 [[CancelJob]] 时移除任务；另有 tag 查询、清理、取消、`get_next_run` 和 `idle_seconds`。它不负责线程和持久化。",
+      "followUps": [
+        {
+          "question": "为什么 `run_pending()` 要先 `sorted()` 再执行？",
+          "answer": "`Job.__lt__` 只比较 `next_run`，排序后按最早到期顺序执行，行为更可预测，也方便 `get_next_run()` 取最小任务。",
+          "followUps": []
+        },
+        {
+          "question": "任务执行期间修改 jobs 列表会怎样？",
+          "answer": "`run_pending()` 先用生成器筛选，再 `sorted(...)` 一次性物化待执行列表，然后才逐个执行。因此执行期间新增任务不会进入本轮；若任务 A 取消了已在待执行列表里的任务 B，B 仍可能在本轮被执行一次，因为执行前没有再次检查列表成员。",
+          "followUps": []
+        },
+        {
+          "question": "`get_next_run()` 和 `idle_seconds` 的时间基准是什么？",
+          "answer": "`get_next_run()` 对过滤后的任务取 `min(...).next_run`；`idle_seconds` 用 `next_run - datetime.now()` 计算秒数，没有任务或 `next_run` 为空时返回 `None`，负数表示已过期。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "1e5cfdb4f43ad9429598b1a249484acd26fb1d9e7e2b8beaddeee92d66f4a43b",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`every().day.at().do()` 这条链式调用中，配置和注册的数据流是怎样的？",
+      "answer": "链式调用先把配置写到 [[Job]]：`every(interval)` 设置 `interval` 和所属 [[Scheduler]]；`.seconds/.minutes/...` 设置 `unit`；`.at()` 设置 `at_time` 和可选 `at_time_zone`；`.to()` 设置随机上限；`.do()` 用 [[functools.partial]] 绑定函数与参数，调用 `_schedule_next_run()` 计算首次运行，再 append 到 `scheduler.jobs`。因此只有完成 `do()` 的任务才会注册。",
+      "followUps": [
+        {
+          "question": "为什么注册发生在 `do()` 而不是 `every()`？",
+          "answer": "`every()` 只创建未配置对象，用户可能中断链式调用；在 `do()` 时注册可避免半成品进入 jobs，测试 `test_misconfigured_job_wont_break_scheduler` 也体现了这一点。",
+          "followUps": []
+        },
+        {
+          "question": "`functools.partial` 和 `update_wrapper` 在这里起什么作用？",
+          "answer": "[[functools.partial]] 保存任务函数和预设参数，调用时不需要调度器再拆参数；`update_wrapper` 把原函数元数据复制过去，让 `str/repr` 能显示函数名。",
+          "followUps": []
+        },
+        {
+          "question": "如果 `do()` 时 scheduler 为 None 会怎样？",
+          "answer": "代码会先绑定函数并尝试 `_schedule_next_run()`，随后检查 `self.scheduler is None`，抛出 [[ScheduleError]]，不会 append 到任何调度器。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a408128d99b3e2793b939ff5bfab69e969272f99299f7c0b532476f62faf3229",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "模块级 `schedule.every()`、`schedule.run_pending()` 与 Scheduler 实例是什么关系？多调度器如何工作？",
+      "answer": "模块级 `every()`、`run_pending()`、`clear()` 等只是薄封装，统一转发到 [[default_scheduler]]，因此默认全局状态只有一个 [[Scheduler]]。需要隔离时可显式创建多个 Scheduler 实例并分别调用其 `run_pending()`，文档 `docs/multiple-schedulers.rst` 展示了这种用法；不同实例的 jobs 列表彼此独立。",
+      "followUps": [
+        {
+          "question": "模块级 API 的全局状态有什么风险？",
+          "answer": "所有调用方共享同一个 [[default_scheduler]]，测试和库代码容易互相影响；使用前常需 `schedule.clear()`，或在业务中显式创建独立 Scheduler。",
+          "followUps": []
+        },
+        {
+          "question": "多调度器时，`next_run()` 和 `idle_seconds()` 应该看哪个实例？",
+          "answer": "模块级函数只看默认实例；多调度器场景应调用各自实例的 `get_next_run()` 和 `idle_seconds`，否则会漏掉其他实例中的任务。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "90f290d5b5cfee19cc22b7ebeda3cf521a49f1bc9c7a224f3e554379286265bc",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`_schedule_next_run()` 是如何计算下一次运行时间的？",
+      "answer": "`_schedule_next_run()` 先校验 unit，若设置了 `latest` 则在 `[interval, latest]` 内随机取间隔；随后在 `at_time_zone` 上下文中取 now，按 `start_day` 移到目标星期，按 `at_time` 替换时分秒；构造 period，若 interval 不等于 1 先加一个 period；再用 `while next_run <= now` 保证未来时间；最后调用 `_correct_utc_offset()`，必要时转回本地并去掉 tzinfo，写入 `next_run`。",
+      "followUps": [
+        {
+          "question": "为什么 interval 不等于 1 时先加一个 period？",
+          "answer": "例如 `every(2).days.at('11:30')` 在当前时间之后，首次运行应隔两天而不是当天 11:30；先加 period 可避免多日间隔任务首次提前执行。",
+          "followUps": []
+        },
+        {
+          "question": "`while next_run <= now` 解决了什么问题？",
+          "answer": "它保证 `next_run` 一定在未来，能处理 `at_time` 已过、跨周、随机间隔和部分 [[DST]] 偏移修正后的回退情况。",
+          "followUps": []
+        },
+        {
+          "question": "没有设置时区时 `_correct_utc_offset()` 做什么？",
+          "answer": "`at_time_zone is None` 时直接返回原 moment，不做 [[pytz]] 归一化；因此无时区任务只按本地 naive 时间计算。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d0d2e98947cde5d9f24c4d16b4cb884d22f8b580b8f6645049deb8cdfcad14d9",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`run_pending()` 为什么不会补跑错过的任务？如果任务执行很久会怎样？",
+      "answer": "`run_pending()` 只执行 `should_run` 为真的任务，且文档明确说明不会补跑错过的次数：任务执行后 `run()` 会基于当前时间重算 `next_run`，所以即使调用间隔远大于周期，也只补一次。它先排序保证按 `next_run` 顺序执行；某个任务抛异常时，异常会向上冒泡并中断本轮后续任务。",
+      "followUps": [
+        {
+          "question": "如果任务执行很久，下一次调度会漂移吗？",
+          "answer": "会。`last_run` 和 `next_run` 在任务函数返回后才更新，调度基准是当前时间；长任务会推迟后续触发，文档也提示长任务应移出调度线程。",
+          "followUps": []
+        },
+        {
+          "question": "`run_all()` 与 `run_pending()` 的差异是什么？",
+          "answer": "测试显示 [[run_all]] 会立即执行已注册任务而不检查是否到期；`run_pending()` 只执行到期任务。`run_all` 的完整实现未在截断代码中显示，delay 细节只能以文档说明为准。",
+          "followUps": []
+        },
+        {
+          "question": "任务抛异常后，Scheduler 会永久损坏吗？",
+          "answer": "不会主动损坏，但该任务的 `last_run/next_run` 可能停留在旧值，后续 `run_pending()` 可能再次尝试它；调用方需要自己捕获异常或包装任务。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c5cf3f1bfe3c4c8f3d2655b506f03d6b9e424e6cfbd0668e773ff848ea5af65c",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`at()` 如何校验和解析时间字符串？不同 unit 的格式语义有什么差异？",
+      "answer": "`at()` 先限制 unit 为 days/hours/minutes 或已设置 start_day；tz 只接受字符串或 [[pytz]] 的 BaseTzInfo。然后按 unit 用正则校验：daily 为 `HH:MM(:SS)?`，hourly 为 `(MM)?:SS`，minutely 为 `:SS`。解析后会把无关字段置零，例如 hourly 的 hour=0、minutely 的 hour/minute=0，最终构造 `datetime.time` 存到 `at_time`。非法格式抛 [[ScheduleValueError]]，非字符串抛 TypeError。",
+      "followUps": [
+        {
+          "question": "`every().hour.at(':42')` 和 `every().minute.at(':42')` 语义有什么不同？",
+          "answer": "前者表示每小时第 42 分钟执行，`at_time` 是 00:42:00；后者表示每分钟第 42 秒执行，`at_time` 是 00:00:42。",
+          "followUps": []
+        },
+        {
+          "question": "`every(5).hours.at('20:30')` 表示什么？",
+          "answer": "按代码的 hourly 格式，`20:30` 被解释为 MM:SS，即每 5 小时的第 20 分 30 秒执行，而不是 20 点 30 分。",
+          "followUps": []
+        },
+        {
+          "question": "传入无效时区会怎样？",
+          "answer": "字符串时区由 [[pytz]] 解析，未知名称抛 `UnknownTimeZoneError`；传入非字符串且非 BaseTzInfo 时抛 [[ScheduleValueError]]。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "51e35e428f983f870923f4d23d83b4e1e3ad8d527d9d181746b36223c2552f90",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`until()` 的截止机制是怎样实现的？任务开始前和运行后分别如何处理？",
+      "answer": "`until()` 把截止时间统一存到 `cancel_after`：datetime 直接使用；timedelta 用 now 相加；time 与今天组合；字符串按五种格式解析，纯时间再补今天日期。若结果早于 now 抛 [[ScheduleValueError]]。`run()` 执行前若已过期直接返回 [[CancelJob]]；执行并重算 next_run 后若 next_run 过期也返回 CancelJob，后者优先于任务返回值。",
+      "followUps": [
+        {
+          "question": "任务在 deadline 前开始、在 deadline 后结束，会怎样？",
+          "answer": "执行前的检查通过，任务会运行一次；结束后重算的 `next_run` 必然晚于当前时间，也晚于 `cancel_after`，于是返回 [[CancelJob]] 被移除。",
+          "followUps": []
+        },
+        {
+          "question": "`cancel_after` 比较使用的是 `>` 还是 `>=`？",
+          "answer": "`_is_overdue()` 使用 `when > cancel_after`，等于截止时刻不算过期；边界语义比较严格。",
+          "followUps": []
+        },
+        {
+          "question": "`until('18:30')` 在 18:31 调用会怎样？",
+          "answer": "纯时间会补上今天日期，得到今天 18:30，早于当前时间，因此抛 [[ScheduleValueError]]，不会注册任务。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "7e1e4caa3925c22787283dd5d1335170696bf91602ea781474ef0a0e496df6aa",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "Job 为什么可排序？`get_next_run()` 和 `idle_seconds` 如何依赖排序和时间差？",
+      "answer": "`Job.__lt__` 只比较 `next_run`，所以 `run_pending()` 可排序，`get_next_run()` 可用 `min(jobs_filtered).next_run` 取最早任务。`idle_seconds` 用 `next_run - now` 的秒数；没有任务或 next_run 为 None 返回 None；为负数表示已过期。`get_next_run(tag)` 先按 tag 过滤，无匹配也返回 None。",
+      "followUps": [
+        {
+          "question": "如果按 tag 过滤后没有任务，`get_next_run()` 返回什么？",
+          "answer": "先判断 `not self.jobs`，再判断过滤结果 `not jobs_filtered`，两种情况都返回 `None`，不会抛异常。",
+          "followUps": []
+        },
+        {
+          "question": "`idle_seconds` 返回负数说明什么？",
+          "answer": "说明最早任务的 `next_run` 已经过去，任务处于待执行或过期状态；调用方可以据此立即 `run_pending()`。",
+          "followUps": []
+        },
+        {
+          "question": "部分配置的 Job 会进入排序吗？",
+          "answer": "入口 `do()` 才 append 到 jobs；未完成 `do()` 的对象不在列表里。`should_run` 还会断言 `next_run` 非空，避免未调度对象参与运行判断。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ba0a5dfad536256285ed4cda76c752c9c5badaa4756531420dbe658a4a47e9c3",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "时区支持是如何接入 `.at()` 和 `_schedule_next_run()` 的？为什么最终对外仍是 naive 本地时间？",
+      "answer": "时区只在 `at(time_str, tz)` 中启用：字符串用 `pytz.timezone()` 解析，或传入 BaseTzInfo；存入 `at_time_zone`。`_schedule_next_run()` 用 `datetime.now(self.at_time_zone)` 在目标时区计算，再通过 [[normalize]]/偏移修正处理 [[DST]]，最后 `astimezone()` 到本地并 `replace(tzinfo=None)`，保持对外仍是 [[naive-datetime]] 本地时间。",
+      "followUps": [
+        {
+          "question": "为什么最终要转回 naive 本地时间？",
+          "answer": "文档说明这是为了保持旧版 API 兼容：`next_run` 和 `last_run` 始终表现为 Python 本地时区的 naive 时间，调用方不需要处理 aware datetime。",
+          "followUps": []
+        },
+        {
+          "question": "没有安装 pytz 时使用 tz 参数会怎样？",
+          "answer": "`at()` 中会 `import pytz`，缺少依赖会抛 ImportError；FAQ 和测试都要求使用 timezone 参数前安装 pytz。",
+          "followUps": []
+        },
+        {
+          "question": "时间计算在哪个时区上下文中进行？",
+          "answer": "核心计算用 `now = datetime.datetime.now(self.at_time_zone)`，因此在目标时区上下文中完成星期、at_time、period 和偏移修正，最后才转回本地。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "beb20739d5e9044ff501dca10c781b920d3a8681edfe47ba1773cda661e53a07",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`_move_to_at_time()` 和 `_correct_utc_offset()` 是怎样处理 DST gap 和 fold 的？",
+      "answer": "`_move_to_at_time()` 先替换时分秒，再调用 `_correct_utc_offset()`。修正逻辑先记录 offset，调用 [[pytz]] 的 [[normalize]]，若 offset 没变直接返回；若变了且 `fixate_time=False` 接受时间漂移；若 `fixate_time=True`，用 offset 差回拨时间，再 normalize 检查是否落入 [[DST]] gap，若是则再加回差值，形成尽力而为的顺延（如 02:30 变成 03:30）。",
+      "followUps": [
+        {
+          "question": "为什么需要调用 `normalize()`？",
+          "answer": "[[pytz]] 的 localize/算术结果可能保留旧偏移；normalize 会按目标时区重算 UTC 偏移，确保日期时间落在合法偏移上。",
+          "followUps": []
+        },
+        {
+          "question": "DST gap 中不存在的 02:30 为什么会被安排到 03:30？",
+          "answer": "代码先回拨 offset 差，再 normalize；若发现仍落入 gap，就加回差值，把时间顺延到 gap 之后，测试 `test_align_utc_offset_with_dst_gap` 断言了 03:30。",
+          "followUps": []
+        },
+        {
+          "question": "fold 重复时间如何处理？",
+          "answer": "如果原时间在 fold 中仍然合法，`fixate_time=True` 会尽量保留原时分秒，不强行搬到第二次出现；测试覆盖了第一、第二次 fold 的保留行为。",
+          "followUps": []
+        },
+        {
+          "question": "`fixate_time=True/False` 的设计取舍是什么？",
+          "answer": "`at_time` 场景希望保持墙上时钟，所以用 True；普通间隔调度更关注经过时间，用 False 接受偏移漂移。这是代码中可观察到的两类策略。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "f97b65e3865eeecdbea9c1c40cd1e7acbb96412bde5fd3743e7722716efc3e67",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "测试中大量跨时区、DST 场景验证了什么业务流程？",
+      "answer": "测试用 `mock_datetime` 固定本地时区和当前时刻，覆盖 issue 608、Chatham/Newfoundland 跨时区、Berlin 进入/退出 DST、gap/fold 等。断言的是转换回本地后的 `next_run`。例如每天在 UTC 23:00 执行，在 Auckland 本地会随 DST 在 11:00 或 12:00 变化；这类测试验证目标时区计算后再转本地这一流程。",
+      "followUps": [
+        {
+          "question": "这些测试为什么用 `mock_datetime` 指定时区？",
+          "answer": "为了让当前时刻、系统本地时区和 DST 阶段可重复，避免依赖真实日期和运行机器时区，否则断言会随环境漂移。",
+          "followUps": []
+        },
+        {
+          "question": "跨时区调度最关键的边界风险是什么？",
+          "answer": "目标时区与本地时区的 UTC-offset 差、目标时区进入/退出 [[DST]]、以及本地和远端同时发生时钟变化；测试覆盖了 offset 差和 [[fold]]/gap。",
+          "followUps": []
+        },
+        {
+          "question": "如果运行机器的本地时区与测试预期不同，测试还能稳定吗？",
+          "answer": "从测试代码看，`mock_datetime` 接收了时区参数，显然是在控制本地时区上下文；但 mock 实现未完整展示，无法进一步确认其内部如何替换系统时区。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "774554cfcfc14e26710ae503dc3a3151ee75fac52a97a01b6627c9b7a31225cf",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "未指定时区的任务在 DST 切换时会怎样？为什么文档说可能只经过 3 小时？",
+      "answer": "文档说明未指定时区的任务不处理时钟变化；代码中 `_correct_utc_offset()` 在 `at_time_zone is None` 时直接返回 moment。因此这类任务按 [[naive-datetime]] 本地时间做加减，[[DST]] 切换时可能实际间隔变成 3 或 5 小时。需要按时钟时间执行时应使用 `.at(..., tz)`；这不是精确到秒的调度器。",
+      "followUps": [
+        {
+          "question": "`every(4).hours` 在春季 DST 前为什么可能只经过 3 小时？",
+          "answer": "naive 本地时间加 4 小时会跨过时钟前拨，墙上显示经过了 4 小时，但真实经过时间少了 1 小时；代码没有时区修正就无法感知。",
+          "followUps": []
+        },
+        {
+          "question": "是否所有调度方式都支持 tz 参数？",
+          "answer": "从代码看只有 `at()` 接收 tz；秒、分钟、小时等普通链式单位没有时区参数，仍按本地 naive 时间计算。",
+          "followUps": []
+        },
+        {
+          "question": "如果需要严格的 UTC 间隔，应该怎么做？",
+          "answer": "该库设计目标不是精确 UTC 间隔；可在任务内部用 aware datetime 自行判断，或选用更专业的调度系统。通用建议，不是当前实现承诺。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "fd2e939b5d4ec971b0c910661bc774a3788e1e2187bfb6025ab084eac4647a17",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`Job.run()` 的执行顺序是什么？Scheduler 如何根据 CancelJob 移除任务？",
+      "answer": "`Job.run()` 的顺序是：先检查 `cancel_after`，已过期则返回 [[CancelJob]]；否则调用 `job_func()`，记录 `last_run`，重算 `next_run`；若 `next_run` 过期再返回 CancelJob。[[Scheduler]] 的 `_run_job()` 收到 CancelJob 类或实例后调用 `cancel_job()` 从 jobs 移除。任务函数抛异常时，`last_run` 和 `next_run` 不会更新，异常继续冒泡。",
+      "followUps": [
+        {
+          "question": "为什么 CancelJob 同时判断类和实例？",
+          "answer": "用户既可以 `return schedule.CancelJob` 也可以返回实例；`_run_job()` 用 `isinstance(ret, CancelJob) or ret is CancelJob` 兼容两种写法。",
+          "followUps": []
+        },
+        {
+          "question": "任务抛异常后，该任务还会保留在调度器里吗？",
+          "answer": "会。`run()` 在 `job_func()` 之后才更新状态，异常跳过重排，任务仍留在 jobs 中，后续可能再次被尝试。",
+          "followUps": []
+        },
+        {
+          "question": "任务 A 取消任务 B 时，B 本轮是否一定不执行？",
+          "answer": "不一定。`run_pending()` 已经把待执行列表排序物化，A 取消 B 只是从 `scheduler.jobs` 移除；B 若已在当前列表中，仍可能被 `_run_job` 执行一次。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ff10925109eafd5e6460d4a4de01d30e0e0d21c36af43e8175feb7c33715e53e",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "tag 系统是如何做校验、查询和清理的？`cancel_job()` 对不存在的任务如何处理？",
+      "answer": "`tag()` 要求每个 tag 都是 [[Hashable]]，否则 TypeError；用 set 去重。`get_jobs(tag)` 在 tag 为 None 时返回 jobs 副本，否则过滤 `tag in job.tags`。`clear(tag)` 用切片赋值重建列表；`cancel_job()` 用 `list.remove()`，不存在时捕获 ValueError 并只记 debug 日志，不抛错。",
+      "followUps": [
+        {
+          "question": "为什么 tag 要求 Hashable？",
+          "answer": "任务用 set 保存 tags，set 成员必须可哈希；传入 list 或 dict 会失败。字符串、数字、元组等才适合做 tag。",
+          "followUps": []
+        },
+        {
+          "question": "`clear(tag)` 的切片赋值有什么效果？",
+          "answer": "`self.jobs[:] = (job for job in self.jobs if tag not in job.tags)` 原地替换列表内容，保留 Scheduler 对象和外部列表引用，同时过滤掉匹配 tag 的任务。",
+          "followUps": []
+        },
+        {
+          "question": "取消一个不存在的 job 为什么静默处理？",
+          "answer": "`cancel_job()` 捕获 `ValueError` 并只写 debug 日志，这使重复取消或取消其他调度器中的任务不会中断业务流程。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "02207d874282f394e191b3c892a9a9e99db98bd8c5d7cfa0d560218108648f9d",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`run_all()` 和 `@repeat` 装饰器分别承担什么职责？当前上下文能确认到什么程度？",
+      "answer": "`run_all(delay_seconds)` 的模块级函数转发到 `default_scheduler.run_all()`；测试显示它会把已注册任务都执行一次，而不检查是否到期。`@repeat` 的可见片段在 `_schedule_decorator` 中调用 `job.do(decorated_function, *args, **kwargs)` 并返回原函数，因此支持装饰器参数；`repeat` 的完整定义在截断内容中未显示，不能确认更多细节。",
+      "followUps": [
+        {
+          "question": "`run_all()` 与 `run_pending()` 的行为差异对测试有什么意义？",
+          "answer": "测试可以用 [[run_all]] 一次性触发所有任务，不必等真实时间；而 `run_pending()` 只跑到期任务，适合验证时间推进。",
+          "followUps": []
+        },
+        {
+          "question": "`@repeat` 的装饰器参数是如何传给任务的？",
+          "answer": "可见代码把 `*args, **kwargs` 继续传给 `job.do()`，`do()` 再用 [[functools.partial]] 绑定，任务执行时收到这些参数。",
+          "followUps": []
+        },
+        {
+          "question": "文档说 `@repeat` 不能用于非静态类方法，原因是什么？",
+          "answer": "文档只给出限制，没有展开实现；通常是因为装饰器在类定义阶段拿不到实例绑定，`self` 语义会不符合预期。这是解释性推断，不是源码断言。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "f090be6b45eba7b979ec2ecb95d7169cc96e270c0872280287aba635eb9a193f",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "项目为什么不在调度器内部捕获任务异常？文档推荐怎样处理？",
+      "answer": "当前实现不在 `run()` 或 `run_pending()` 内捕获任务异常，文档 `docs/exception-handling.rst` 也明确说明异常会冒泡并中断 run 系列函数。推荐做法是写装饰器包住任务函数，捕获异常并可选返回 [[CancelJob]]；这不会改变调度器本身的行为，只是把异常转成普通返回值。",
+      "followUps": [
+        {
+          "question": "`catch_exceptions` 装饰器为什么能取消任务？",
+          "answer": "装饰器捕获异常后返回 [[CancelJob]]，`Scheduler._run_job()` 会把它当作取消信号并移除任务；若不返回，任务继续保留。",
+          "followUps": []
+        },
+        {
+          "question": "未捕获异常会只影响当前任务吗？",
+          "answer": "不是。异常从 `run_pending()` 的 for 循环中冒泡，本轮尚未执行的其他任务不会继续跑；调用方需要自行处理。",
+          "followUps": []
+        },
+        {
+          "question": "是否应该在 Scheduler 内统一 try/except？",
+          "answer": "这是设计取舍：统一捕获可提高调度器存活率，但会掩盖错误并改变调用方预期。当前项目选择不捕获，把策略交给用户。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "3a5e8f501bff13dad25ca3176d4d2dfa119dd754065df29ffc8a3bfed9170efa",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "schedule 是否内置线程安全或并行执行？文档中的后台/并行方案是什么关系？",
+      "answer": "从提供的核心代码看不到锁、线程池或队列；[[Scheduler]] 的 jobs 是普通 list。文档只在 `background-execution.rst` 和 `parallel-execution.rst` 给出外部线程示例。因此不能把该库当作内置线程安全或并行调度器；多线程同时调用 [[run_pending]] 需要调用方自己加锁或串行化。",
+      "followUps": [
+        {
+          "question": "后台执行示例如何停止循环？",
+          "answer": "文档使用 [[threading.Event]] 作为停止信号，循环中检查 `is_set()`；主线程调用 `set()` 后线程退出。",
+          "followUps": []
+        },
+        {
+          "question": "worker 队列模式为什么更可控？",
+          "answer": "文档用 [[queue.Queue]] 把任务放入队列，由固定数量 worker 消费，可限制并发度；但队列和 worker 都是示例代码，不是库内置能力。",
+          "followUps": []
+        },
+        {
+          "question": "GIL 能否保证多线程调用 run_pending 安全？",
+          "answer": "不能。[[GIL]] 只保证单条字节码切换粒度，jobs 的筛选、排序、执行和移除是复合操作，仍可能竞态，需要显式锁。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d06649b04d0afa58964042fc703b4f1650153590cafc767f7ed7db0c397db0bc",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`test_schedule.py` 是怎样保证时间相关逻辑可测试的？覆盖了哪些关键场景？",
+      "answer": "`test_schedule.py` 用 [[pytest]] 风格测试（也可见 unittest 断言），通过 `mock_datetime` 固定时间相关行为，用 `make_mock_job` 记录调用；涉及 [[pytz]] 的用例在缺少依赖时 `skipTest`。测试覆盖 at 解析、run_pending 不补跑、tag、until、以及大量 DST/跨时区场景。`tox.ini` 还会运行 [[mypy]] 和覆盖率。",
+      "followUps": [
+        {
+          "question": "为什么测试要 mock 时间而不是 sleep？",
+          "answer": "真实 sleep 会让测试慢且不稳定；[[mock]] 时间可以瞬间推进到边界时刻，精确验证 `next_run` 和 `run_pending` 的行为。",
+          "followUps": []
+        },
+        {
+          "question": "pytz 缺失时测试如何处理？",
+          "answer": "相关用例捕获 `ModuleNotFoundError` 并调用 `self.skipTest(...)`，避免可选依赖缺失导致整个测试套失败。",
+          "followUps": []
+        },
+        {
+          "question": "测试覆盖了哪些 DST 边界？",
+          "answer": "可见用例覆盖春季 gap、秋季 [[fold]]、跨时区 offset 差、长时间跨 DST 的每周/每日任务，以及柏林和奇异时区的同时钟表变化。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ab2a2b1f291253613e0c36fd40ae1de3ed5c4441a7f57f50275ab947bebd5c58",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "项目的打包和 CI 配置是怎样的？有哪些工程风险？",
+      "answer": "打包以 `pyproject.toml` 声明 [[setuptools]] 构建后端，版本/分类器等为 dynamic，但 `setup.py` 仍写死 1.2.2，`docs/conf.py` 也写 1.2.2，存在多处版本源。CI 用 [[tox]] 跑 3.7–3.12 及带/不带 [[pytz]] 的环境，并检查文档、格式和 setup.py；文档用 [[Sphinx]] 构建 [[reStructuredText]]，格式检查用 [[black]]，类型检查用 [[mypy]]。",
+      "followUps": [
+        {
+          "question": "版本号在多个文件中重复有什么风险？",
+          "answer": "发布时容易漏改某一处，导致包元数据、文档和实际代码版本不一致；可改为单一版本源并让 [[setuptools]] 动态读取，但这是改进建议。",
+          "followUps": []
+        },
+        {
+          "question": "tox 为什么要跑带 pytz 和不带 pytz 的环境？",
+          "answer": "[[pytz]] 是可选依赖，[[tox]] 矩阵同时验证无时区功能正常和不安装 pytz 时的行为，并保证相关测试可跳过。",
+          "followUps": []
+        },
+        {
+          "question": "CI 中除了测试还有哪些质量门禁？",
+          "answer": "可见 [[CI]] 包含 test、coveralls、docs、formatting、setuppy 等 job；分别验证测试与覆盖率、Sphinx 文档、black 格式和 setup.py 元数据。",
+          "followUps": []
+        },
+        {
+          "question": "固定 black 版本 20.8b1 有什么利弊？",
+          "answer": "固定版本可避免格式漂移，但版本较旧，可能与新 Python 语法兼容性不足；这是工程取舍，当前配置确实固定在 requirements-dev.txt 中。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "260218205ce11171016d9c039124f68fee06cdd3fc70676288284d02a894dfcc",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "从顶层 api.get/post 到 Session.request，再到 HTTPAdapter.send，这个项目的分层职责是什么？请结合可见代码说明数据如何流转。",
+      "answer": "可见的调用链分三层：`src/requests/api.py` 的 `get` 等函数只做参数封装并调用统一 `request()`；`src/requests/sessions.py` 的 `Session.post/put/delete` 再委托 `self.request()`；最终 `HTTPAdapter.send` 接收已准备好的 [[PreparedRequest]]，解析连接、证书、URL 和超时，调用 [[urllib3]] 的 `conn.urlopen`，再通过 `build_response` 返回 [[Response]]。这样顶层便捷 API、会话状态与配置、传输细节解耦。注意 `api.request()` 与 `Session.request()` 的完整实现未在上下文中展示，因此参数准备、设置合并、重定向等内部顺序无法确认。",
+      "followUps": [
+        {
+          "question": "为什么顶层函数不直接调用 HTTPAdapter？",
+          "answer": "需要 [[Session]] 承载连接池、默认头、Cookie、代理、认证等会话级状态；[[HTTPAdapter]] 只负责单次传输。直接调用会丢失会话配置和连接复用能力。",
+          "followUps": []
+        },
+        {
+          "question": "Session.request 未展示，你能仅凭函数名断言它一定创建 PreparedRequest 吗？",
+          "answer": "不能。只能从 `HTTPAdapter.send` 的参数类型和调用约定推断上游需要提供 [[PreparedRequest]]；具体创建位置和时机需看未截断的 sessions.py。",
+          "followUps": []
+        },
+        {
+          "question": "这种分层有什么代价？",
+          "answer": "调用层次多、调试链路长，但换来可替换适配器、集中会话配置和统一异常映射，适合库的长期演进。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "9501408b6f121c399ff28e221904b81504232cf755b56821f830fe7b194253d3",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "Session.mount 和 get_adapter 是如何实现适配器前缀匹配和优先级的？相同前缀重复挂载会怎样？",
+      "answer": "`Session.mount` 先写入 `self.adapters[prefix] = adapter`，然后把所有长度小于新 prefix 的键取出再重新插入到末尾，因此字典迭代时更长前缀排在更前。`get_adapter` 按插入顺序遍历，用 `url.lower().startswith(prefix.lower())` 匹配，返回第一个命中的 [[BaseAdapter]]；无命中抛 `InvalidSchema`。这样 `http://` 与 `http://host/` 可挂不同适配器，且更具体前缀优先。相同长度前缀的先后由插入顺序决定；相同 prefix 再次挂载会覆盖值，但键位置不变。",
+      "followUps": [
+        {
+          "question": "为什么匹配时要调用 lower？",
+          "answer": "协议和主机名在 HTTP 语义中通常大小写不敏感，统一小写可避免用户传入 `HTTP://` 时匹配失败。",
+          "followUps": []
+        },
+        {
+          "question": "如果要替换默认适配器，应该挂什么前缀？",
+          "answer": "通常挂 `http://` 和 `https://` 覆盖默认值；若要只覆盖某主机，可挂更长的 `https://host/`，利用更长前缀优先。",
+          "followUps": []
+        },
+        {
+          "question": "Session.close 与适配器是什么关系？",
+          "answer": "可见代码中 `Session.close` 遍历 `self.adapters.values()` 并逐个调用 `close()`，因此释放连接池责任下放给各适配器。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "fcaa03c2092a86363f29d199b24d859b3b8f26398086cd7d6c9103492224882d",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "merge_environment_settings 中环境代理、显式 proxies、CA 环境变量和 Session 默认值之间的优先级是怎样的？",
+      "answer": "`merge_environment_settings` 在 `trust_env` 为真时读取环境代理：先从显式 proxies 取 `no_proxy`，再调用 `get_environ_proxies`；只有 proxies 不是 None 才用 `setdefault` 把环境代理补进去，因此显式键优先。`verify` 为 True 或 None 时才读取 `REQUESTS_CA_BUNDLE`/`CURL_CA_BUNDLE`。最后用 `merge_setting` 把参数与 Session 默认值合并，返回 proxies、stream、verify、cert。注意片段中若 proxies 传入 None，`env_proxies` 算出来后没有赋回局部变量；真实行为取决于调用方是否先传 `{}`，当前上下文无法确认。",
+      "followUps": [
+        {
+          "question": "为什么环境代理用 setdefault 而不是直接 update？",
+          "answer": "`setdefault` 保留调用方显式传入的代理键，只补充环境里缺失的键，符合“显式配置优先于环境”的常见原则。",
+          "followUps": []
+        },
+        {
+          "question": "verify=False 时还会读取 REQUESTS_CA_BUNDLE 吗？",
+          "answer": "不会。代码条件是 `if verify is True or verify is None`，False 会跳过环境 [[CA]] 路径读取。",
+          "followUps": []
+        },
+        {
+          "question": "trust_env=False 时这个方法做什么？",
+          "answer": "跳过整个环境探测分支，只执行后面的 `merge_setting`，把参数与 Session 自身的 proxies、stream、verify、cert 合并。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "75ba9d5a7bdea1d945d1c58990b9a572fbc1145bcd0ba4831cdcb758ff695ad1",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "api.head 为什么单独把 allow_redirects 默认设为 False？用户还能覆盖吗？",
+      "answer": "`src/requests/api.py` 的 `head` 在调用统一 request 前执行 `kwargs.setdefault('allow_redirects', False)`，因此用户显式传值仍可覆盖；其他便捷函数没有这个默认。HEAD 通常只取响应头，自动跟随重定向会带来额外请求和语义差异，所以默认关闭。`Session.head` 的实现未出现在可见片段，不能据此断言它也相同。",
+      "followUps": [
+        {
+          "question": "如果用户显式传 allow_redirects=True，setdefault 会覆盖吗？",
+          "answer": "不会。`setdefault` 只在键不存在时写入，用户传入 True 会保留。",
+          "followUps": []
+        },
+        {
+          "question": "3xx 响应会触发 raise_for_status 异常吗？",
+          "answer": "可见的 `raise_for_status` 只处理 400-499 和 500-599，1xx/3xx 不抛 [[HTTPError]]。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不在全局 request 上默认关闭重定向？",
+          "answer": "GET 等请求通常需要自动跟随重定向；HEAD 的特殊性更适合在具体便捷函数上局部处理，避免改变其他方法的行为。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "0065d98f675a8a62570788878480ceb1e71915cfa56be2680957606d96db732e",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "HTTPAdapter.send 如何归一化 timeout 参数？传入 tuple、TimeoutSauce 或单值分别会怎样？",
+      "answer": "`HTTPAdapter.send` 对 timeout 做三路归一化：tuple 时解包为 connect/read 并构造 [[TimeoutSauce]]，解包失败抛带说明的 ValueError；已经是 TimeoutSauce 则直接复用；其他值（含 None、float）构造 `TimeoutSauce(connect=timeout, read=timeout)`。这样单值同时作用于连接和读取超时，tuple 可分别控制。随后把 resolved_timeout 传给 [[urllib3]] 的 `urlopen`。负数、None 的底层语义在本片段中未校验，需要看 urllib3 的行为。",
+      "followUps": [
+        {
+          "question": "如果 tuple 长度不是 2 会怎样？",
+          "answer": "`connect, read = timeout` 会抛 ValueError，被 except 捕获后重新抛出带说明的 ValueError，提示传 `(connect, read)` 或单值。",
+          "followUps": []
+        },
+        {
+          "question": "为什么允许直接传 TimeoutSauce？",
+          "answer": "给高级用户复用或精细配置底层超时对象的能力，避免 Requests 再包装一层。",
+          "followUps": []
+        },
+        {
+          "question": "单值 timeout 会同时设置连接和读取超时吗？",
+          "answer": "可见代码是 `TimeoutSauce(connect=timeout, read=timeout)`，意图是两者相同；但底层解释仍由 urllib3 决定。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "2e38ea6dc8181ef5a98ddb32d71a8d3fedd94b255e4ef5d41b1d48cf9bb6b1d5",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "HTTPAdapter.send 调用 urlopen 时设置 redirect=False、preload_content=False、decode_content=False，各自意味着什么？",
+      "answer": "`send` 调用 `conn.urlopen` 时设置 `redirect=False`、`assert_same_host=False`、`preload_content=False`、`decode_content=False`。`redirect=False` 让适配器不自行跟随重定向，把策略留给上层 [[Session]]；`preload_content=False` 让响应体不被立即读入，配合 [[Response]].content 的懒加载和 `iter_content` 实现流式读取；`decode_content=False` 表示不在 urllib3 层解压，由 Requests 后续处理。重定向的真正跟随逻辑在 Session 层，片段未展示，不能断言细节。",
+      "followUps": [
+        {
+          "question": "如果用户拿到响应后不消费内容也不 close，会怎样？",
+          "answer": "响应体未读完时底层连接可能被占用，无法归还连接池；应使用 `Response.close()` 或消费完内容。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 decode_content=False？",
+          "answer": "把内容解码/解压策略集中在 Requests 层，便于和 `iter_content`、编码推断等逻辑统一；具体实现未在片段中展示。",
+          "followUps": []
+        },
+        {
+          "question": "assert_same_host=False 有什么影响？",
+          "answer": "允许连接对象处理不同主机的绝对 URL，配合代理等场景；但也意味着上层必须保证 URL 和连接复用逻辑正确。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "bf2349a03e647657500b6d436205f640a43a5df94c914cfd87ed93120bc1c286",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "HTTPAdapter.send 如何把 urllib3 的异常翻译成 Requests 公共异常？为什么有些异常不包装？",
+      "answer": "`send` 把传输层异常翻译成 [[Requests]] 公共异常：ProtocolError/OSError 转为 ConnectionError；[[MaxRetryError]] 按 reason 细分，ConnectTimeoutError 且非 NewConnectionError 转为 [[ConnectTimeout]]（注释计划 3.0 移除），ResponseError 转为 [[RetryError]]，代理错误转为 [[ProxyError]]，SSL 错误转为 [[SSLError]]，否则 ConnectionError；ClosedPoolError 转为 ConnectionError；直接代理错误转为 ProxyError；`_SSLError/_HTTPError` 分支再区分 SSLError、[[ReadTimeout]]、InvalidHeader，未知则重新抛出。异常通常带 `request=request`，便于定位。",
+      "followUps": [
+        {
+          "question": "为什么 NewConnectionError 被排除在 ConnectTimeout 之外？",
+          "answer": "代码注释指向 TODO #2811，说明这是历史兼容/待调整逻辑；当前片段不足以解释完整原因。",
+          "followUps": []
+        },
+        {
+          "question": "调用方应该捕获哪个基类？",
+          "answer": "通常捕获 `RequestException` 覆盖大多数 Requests 异常；要细分可捕获 `ConnectionError` 或 `Timeout` 等子类。",
+          "followUps": []
+        },
+        {
+          "question": "未知的 _HTTPError 为什么不统一包装？",
+          "answer": "分支末尾直接 `raise`，避免掩盖未预期的传输层错误，让调用方看到原始异常。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "3c39c62f24e8cd9134034a402543a1d08839f6554f329734b12d5947aeedf9d9",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "send 中 chunked 判断只看 body 和 Content-Length，这样设计有什么边界？add_headers 在其中的作用是什么？",
+      "answer": "`send` 先调用 `add_headers`（默认空实现，供子类扩展），再计算 `chunked = not (request.body is None or 'Content-Length' in request.headers)`。因此有 body 且没有 `Content-Length` 时按 [[chunked]] 传给 `urlopen`；子类可在 `add_headers` 中补 Content-Length，从而影响该判断。`add_headers` 收到 stream、timeout、verify、cert、proxies，适合加自定义头。若 body 是空 bytes 或生成器，代码仍可能判定 chunked，具体发送行为由 [[urllib3]] 决定。",
+      "followUps": [
+        {
+          "question": "为什么 add_headers 默认是空实现？",
+          "answer": "它是给 [[HTTPAdapter]] 子类的扩展点，默认不改变行为，避免内置逻辑产生额外副作用。",
+          "followUps": []
+        },
+        {
+          "question": "生成器 body 为什么容易走 chunked？",
+          "answer": "生成器通常无法预先知道长度，调用方也不会设置 Content-Length，因此代码会判定为 chunked。",
+          "followUps": []
+        },
+        {
+          "question": "如果已经设置了 Transfer-Encoding，这段代码会检查吗？",
+          "answer": "不会。当前判断只检查 Content-Length，不检查 Transfer-Encoding，可能产生重复或冲突的传输头，需调用方保证一致。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "2c5d8377b74e13109e1d58b765928c656cc20bf104cc0319515a52d24117e991",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "Response.content 是如何实现懒加载和消费状态管理的？为什么用 False 作为哨兵？",
+      "answer": "`Response.content` 用 `_content is False` 作为未读取哨兵；若已消费且仍为 False 抛 RuntimeError。`status_code` 为 0 或 `raw` 为 None 时把 `_content` 设为 None，否则用 `b''.join(iter_content(CONTENT_CHUNK_SIZE))` 拼成 bytes，空结果归一为 `b''`。随后置 `_content_consumed=True`，并注释说明连接由 urllib3 在数据耗尽后释放。返回处有 type ignore，说明类型标注与实际 None 分支存在张力。用 False 而不是 None 作哨兵，可以区分“尚未读取”和“读取结果就是 None”的情况。",
+      "followUps": [
+        {
+          "question": "重复访问 content 会再次读取网络吗？",
+          "answer": "不会。第一次读取后缓存到 `_content` 并置消费标记，后续直接返回缓存值。",
+          "followUps": []
+        },
+        {
+          "question": "如果已经消费过但 _content 仍为 False，会怎样？",
+          "answer": "代码会抛 `RuntimeError('The content for this response was already consumed')`，防止重复读取不可重放的数据。",
+          "followUps": []
+        },
+        {
+          "question": "iter_content 的完整实现可见吗？",
+          "answer": "当前上下文只展示了 content 调用和 iter_content 的 overload 片段，完整实现被截断，不能断言其分块读取细节。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "2c850ca98ebfeb977bfa4b4bc999491d33ebd9d8586c17f147a7171afde8cf14",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "Response.iter_lines 是如何跨 chunk 维护残行的？pending 的判断条件为什么这样写？",
+      "answer": "`iter_lines` 通过 pending 维护跨 chunk 的残行：每块来自 `iter_content`，若 pending 存在先拼接；有 delimiter 用 `split(delimiter)`，否则用 `splitlines()`；若最后一段非空、chunk 非空且最后字符等于 chunk 最后字符，说明该段没有以分隔符结束，pop 到 pending，否则 pending=None；然后逐行 yield。循环结束若 pending 仍在再 yield。docstring 明确该方法非可重入安全。判断最后字符是为了识别“最后一行是否完整”，避免把被 chunk 截断的半行提前交给调用方。",
+      "followUps": [
+        {
+          "question": "decode_unicode=True 时 pending 是什么类型？",
+          "answer": "`iter_content` 会产出 str，因此 pending 和 delimiter 也应是 str；代码里的 type ignore 说明存在类型收窄难点。",
+          "followUps": []
+        },
+        {
+          "question": "如果 delimiter 和 decode_unicode 类型不匹配会怎样？",
+          "answer": "可能在 `chunk.split(delimiter)` 处抛 TypeError；当前代码没有运行时类型校验，需要调用方保证一致。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 docstring 说该方法不是可重入安全的？",
+          "answer": "它依赖响应体的消费状态和跨迭代的 pending 局部状态，多个迭代器同时消费同一响应会互相干扰。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c571002525eceaa961758f75fbeff85107d5afe971a64b41bbc18e47cc999afe",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "raise_for_status 如何处理 bytes 类型的 reason？它会对哪些状态码抛异常？",
+      "answer": "`raise_for_status` 先把 bytes 类型的 reason 按 UTF-8 解码，失败回退 iso-8859-1（注释引用 PR #3538），再按状态码生成消息：400-499 为 Client Error，500-599 为 Server Error，消息含状态码、reason 和 url，最后抛 [[HTTPError]] 并带 `response=self`。1xx/3xx 不抛。bytes reason 的回退是兼容服务器本地化 reason 的折中：优先现代 UTF-8，失败时用 HTTP 历史默认的 ISO-8859-1。",
+      "followUps": [
+        {
+          "question": "为什么 UTF-8 解码失败不直接放弃？",
+          "answer": "reason 可能是服务器本地化文本，直接失败会让错误信息不可用；回退 ISO-8859-1 能尽量保留可读内容。",
+          "followUps": []
+        },
+        {
+          "question": "3xx 为什么不抛异常？",
+          "answer": "重定向在 HTTP 中不一定是错误，且 Requests 可能已自动处理；是否失败由调用方决定。",
+          "followUps": []
+        },
+        {
+          "question": "如果 reason 是自定义非字符串对象？",
+          "answer": "代码只特判 bytes，其他类型直接进入 f-string 格式化；是否可读取决于对象的 `__str__`。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "00af2a741e1fcdbd6c5acb348e6f279567445bd36ab3faf6ae8098b540f72248",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "Response.links 如何从 Link 响应头构造字典？重复关系会怎样？",
+      "answer": "`Response.links` 读取 headers 中的 `link`，调用 `parse_header_links` 解析（该函数实现未展示），对每个 link 用 `link.get('rel') or link.get('url')` 作为键，写入 `resolved_links[key]=link`。优先 rel 表示关系语义，没有 rel 才退回 URL。若多个 link 有相同 rel 或 url，后写覆盖前写，信息会丢失。该属性适合按关系快速查找，但不适合保留重复关系的完整列表。",
+      "followUps": [
+        {
+          "question": "parse_header_links 未展示，能断言它支持所有 RFC 格式吗？",
+          "answer": "不能。只能确认调用点；解析器对引号、逗号、扩展参数的支持需看未截断的实现。",
+          "followUps": []
+        },
+        {
+          "question": "为什么优先 rel 而不是 url？",
+          "answer": "调用方通常按 `next`、`prev` 等关系查找，rel 更符合 Link 头的语义；没有 rel 时才用 URL 兜底。",
+          "followUps": []
+        },
+        {
+          "question": "如果要保留重复关系，应该怎么改？",
+          "answer": "可以把值改成列表，或返回解析后的列表；当前直接覆盖是简化的字典接口。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "10eb3393a838583a2addcb6da142c056abdaa54868f008b7d5d8e97d9ecda223",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "RequestsCookieJar 为什么在 __getstate__ 中删除 _cookies_lock？这样就能保证 jar 可序列化吗？",
+      "answer": "`RequestsCookieJar.__getstate__` 复制 `__dict__` 后 pop 掉 `_cookies_lock`，因为 [[RLock]] 不可 [[pickle]]；其余 cookie 状态保留，使 jar 可跨进程或缓存序列化。`__setstate__` 未在片段展示，因此恢复时如何重建锁无法确认。该设计只解决状态序列化问题，不证明所有操作线程安全；锁的存在本身说明实现曾考虑并发访问。",
+      "followUps": [
+        {
+          "question": "为什么 CookieJar 需要锁？",
+          "answer": "[[Session]] 可能被多线程共享，Cookie 的读写需要避免竞态；但具体加锁范围需看未展示的方法实现。",
+          "followUps": []
+        },
+        {
+          "question": "反序列化后锁怎么恢复？",
+          "answer": "通常需要在 `__setstate__` 中重新创建锁；当前上下文没有展示该方法，不能确认实际做法。",
+          "followUps": []
+        },
+        {
+          "question": "所有 Cookie 内容都一定可 pickle 吗？",
+          "answer": "不一定。代码只移除了锁，若 cookie 属性包含自定义不可序列化对象，仍可能失败。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "bd5de832d96a39879c54d66ce0f3564187161153ed6fe9b5003f944000e2cd6f",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "cookiejar_from_dict 和 merge_cookies 的覆盖语义是什么？同名不同域的 Cookie 会怎样？",
+      "answer": "`cookiejar_from_dict` 在 cookiejar 为 None 时新建 [[RequestsCookieJar]]；先收集 jar 中已有 name，再按 overwrite 或 name 不存在时 `set_cookie(create_cookie(name, value))`。`merge_cookies` 先校验目标必须是 [[CookieJar]]，dict 走 `cookiejar_from_dict(overwrite=False)`，CookieJar 则优先调用 update，否则逐个 `set_cookie`。注意覆盖判断只看 cookie name，不看 domain/path，同名不同域的 cookie 可能被粗粒度处理。",
+      "followUps": [
+        {
+          "question": "create_cookie 默认的 domain 是什么？",
+          "answer": "可见代码默认 `domain=''`，并设置 `domain_specified=False`，注释称其为 supercookie，会发送到较广范围。",
+          "followUps": []
+        },
+        {
+          "question": "overwrite=False 时为什么仍可能覆盖不同域的同名 Cookie？",
+          "answer": "因为只比较 name 列表，没有比较 domain/path；这是当前代码的简化语义，调用方需注意。",
+          "followUps": []
+        },
+        {
+          "question": "merge_cookies 对普通 CookieJar 如何合并？",
+          "answer": "若目标有 `update` 方法就调用，否则遍历来源并逐个 `set_cookie`，避免依赖 RequestsCookieJar 专有接口。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "2104116931cd3713e2a6bddb42eeb6c85b7c4beb2f11584ee67d5d5a7dbe6e55",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "HTTPDigestAuth 的 401 重试流程是怎样的？为什么使用 thread-local 并要回退 body 位置？",
+      "answer": "`HTTPDigestAuth.__call__` 初始化线程本地状态；若已有 last_nonce 先构建 Authorization；记录 `body.tell()` 位置；注册 `handle_401` 和 `handle_redirect` 两个响应钩子。`handle_401` 只处理 4xx：有保存位置且 body 可 seek 就回退；解析 WWW-Authenticate 中 digest，且 `num_401_calls<2` 时递增、消费并关闭原响应以释放连接、复制请求、提取/准备 cookie、构建摘要头，再通过 `r.connection.send` 重发并把旧响应加入 history。使用 thread-local 是因为认证对象可能被多线程共享，nonce 和计数不能串线。",
+      "followUps": [
+        {
+          "question": "为什么重发前要先 r.content 和 r.close？",
+          "answer": "消费并关闭原响应可以释放底层连接，让新请求有机会复用同一连接；否则连接可能一直被旧响应占用。",
+          "followUps": []
+        },
+        {
+          "question": "body 不可 seek 时会怎样？",
+          "answer": "`tell` 不存在时 pos 为 None，不回退；重发可能从当前读取位置继续，导致 body 不完整，代码没有进一步保护。",
+          "followUps": []
+        },
+        {
+          "question": "num_401_calls 的作用是什么？",
+          "answer": "限制 Digest 重试次数，避免服务器持续返回 401 时无限循环；handle_redirect 会重置该计数。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "6b6aafcb0d5c8c031fbe26bbb5dde550c75700f58a10f727b6c90f59d2f662bc",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "CaseInsensitiveDict 是如何做到查询不敏感但迭代保留原始大小写的？它的相等比较有什么前提？",
+      "answer": "`CaseInsensitiveDict` 内部是 OrderedDict，键为 `key.lower()`，值为 `(原始大小写 key, value)`。`__getitem__`/`__delitem__` 用 lower 查找，`__iter__` 返回原始 key，`lower_items` 返回全小写键值，因此查询大小写不敏感而迭代保留最后设置的大小写。`__eq__` 把任意 Mapping 转成 [[CaseInsensitiveDict]] 后比较 lower_items；copy 用 `_store.values()` 保留原键。文档明确：若传入的键 lower 后相等，行为未定义。",
+      "followUps": [
+        {
+          "question": "为什么值要存成 tuple？",
+          "answer": "lower 键用于查找，tuple 中的原始 key 用于迭代和展示，避免丢失用户设置的 header 大小写。",
+          "followUps": []
+        },
+        {
+          "question": "这个结构线程安全吗？",
+          "answer": "可见代码没有锁；多线程同时写同一个实例可能产生竞态，需要外部同步。",
+          "followUps": []
+        },
+        {
+          "question": "如果传入的 Mapping 有非字符串键会怎样？",
+          "answer": "构造时会对键调用 lower；非字符串键可能抛 AttributeError，类型标注也要求 str。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "4bd61026a482edf47374daf02b598d11cffb7ed97a2da49750a819a6630e6a3b",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "LookupDict 与 status_codes 是如何支持 codes.ok、codes.OK 和 codes['ok'] 的？未知键为什么返回 None？",
+      "answer": "`LookupDict` 虽继承 dict，但状态码实际通过 `setattr` 写进实例 `__dict__`；`__getitem__` 返回 `__dict__.get(key, None)`，因此未知键返回 None 而不是 KeyError；`__getattr__` 只在 `__dict__` 有键时返回，否则抛 AttributeError；`get` 支持默认值。`status_codes._init` 遍历 `_codes`，为每个别名 setattr 小写名，并对不以反斜杠/斜杠开头的别名再设大写名，所以 `codes.ok` 与 `codes.OK` 都可用，最后还把状态码表追加进模块 `__doc__`。",
+      "followUps": [
+        {
+          "question": "为什么继承 dict 却不用字典存储？",
+          "answer": "主要是历史兼容和属性访问接口；实际查找走 `__dict__`，dict 基类更多是保留旧类型关系。",
+          "followUps": []
+        },
+        {
+          "question": "未知属性为什么抛 AttributeError 而未知键返回 None？",
+          "answer": "属性访问遵循 Python 对象语义，未知属性应报错；字典式访问被设计成宽松查找，便于状态码兜底。",
+          "followUps": []
+        },
+        {
+          "question": "为什么跳过以反斜杠或斜杠开头的别名的大写版本？",
+          "answer": "例如 `\\o/` 这类别名不适合生成合法属性名；跳过可避免创建奇怪的大写属性。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "97db815a764e54d946c7ea3e8dafebd14ab31521b408dcbb1b35ac3466fd042b",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "compat.py 和 packages.py 是如何处理字符检测库与 urllib3 版本兼容的？packages 别名解决什么问题？",
+      "answer": "`compat._resolve_char_detection` 按 `('chardet','charset_normalizer')` 顺序尝试 import，返回第一个成功的模块，否则 None；TYPE_CHECKING 下固定导入 [[chardet]] 供类型检查。`is_urllib3_1` 解析 [[urllib3]] 版本主号，解析失败时保守地当作 1.x。`packages.py` 则把 `requests.packages.urllib3`、`requests.packages.idna` 以及 [[chardet]]/[[charset_normalizer]] 的已加载模块注册到 `sys.modules`，维持旧导入路径的对象身份一致，避免同一底层模块被重复导入成不同对象。",
+      "followUps": [
+        {
+          "question": "为什么优先尝试 chardet 而不是 charset_normalizer？",
+          "answer": "代码顺序如此，可能是为了兼容旧环境或历史行为；具体取舍原因在当前片段中没有说明。",
+          "followUps": []
+        },
+        {
+          "question": "如果两个字符检测库都不存在会怎样？",
+          "answer": "`chardet` 为 None，`__init__.py` 的兼容检查会发出 `RequestsDependencyWarning`；实际解码行为需看调用处。",
+          "followUps": []
+        },
+        {
+          "question": "packages 别名有什么风险？",
+          "answer": "直接改 `sys.modules` 可能造成导入缓存污染或身份混淆；它主要用于向后兼容，不应作为新代码的导入方式。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "bcf4059c849089b4917363e043632a80527c7a61a4ab833a8f9f53f7deab8da1",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "_types.py 和 api/sessions 的 TypedDict、TypeIs、overload 是如何提升 API 类型精度的？运行时真的会校验吗？",
+      "answer": "`_types.py` 用 `total=False` 的 [[TypedDict]] 按 HTTP 方法拆分 kwargs：BaseRequestKwargs 含 headers/cookies/files/auth/timeout/allow_redirects/proxies/hooks/stream/verify/cert，RequestKwargs 加 params/data/json，GetKwargs 只加 data/json，PostKwargs 只加 params，DataKwargs 加 params/json。`api.py`/`sessions.py` 用 `Unpack[...]` 暴露更精确签名。`is_prepared` 用 [[TypeIs]] 在类型检查时把 [[PreparedRequest]] 收窄为 url/method 非空，运行时直接返回 True 以避免断言。pyproject 对 src/requests 开 [[pyright]] strict，并关闭若干无关规则。",
+      "followUps": [
+        {
+          "question": "is_prepared 运行时直接返回 True 有什么风险？",
+          "answer": "它只是类型层假设；若上游真的传入未准备好的请求，这里不会拦截，错误会推迟到后续使用 url/method 时暴露。",
+          "followUps": []
+        },
+        {
+          "question": "为什么按 HTTP 方法拆分 TypedDict？",
+          "answer": "不同方法支持的参数不同，例如 GET 的 data/json 与 POST 的 params 语义不同；拆分能在 IDE 和类型检查阶段减少误用。",
+          "followUps": []
+        },
+        {
+          "question": "类型标注能替代运行时参数校验吗？",
+          "answer": "不能。TypedDict 和 TypeIs 主要服务静态检查，Python 运行时不会自动校验这些结构。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a6c5efa224cfaec4410f40935c0ac4ac3056a808badaa02f29973c44d799e5f4",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "测试工程如何隔离环境代理并覆盖 TLS/mTLS 场景？这些设施能证明所有平台行为一致吗？",
+      "answer": "`tests/conftest.py` 提供 autouse 的 `clean_proxy_environ`，逐个大写/小写删除 http_proxy、https_proxy、no_proxy 等环境变量，避免开发机代理污染 [[pytest]] 测试；httpbin fixture 统一补尾部斜杠。`nosan_server` 用 [[trustme]] 生成只有 CN、无 SAN 的证书来测主机名不匹配。`tests/testserver/server.py` 支持普通 HTTP 和 [[TLS]]，[[mTLS]] 模式设置 CERT_OPTIONAL 并加载 [[CA]]；certs 下的 Makefile 用 openssl 生成过期（-days 0）、有效和客户端证书。这些设施只能证明被测代码在对应测试环境下的行为，不能证明所有平台一致。",
+      "followUps": [
+        {
+          "question": "为什么 clean_proxy_environ 要设为 autouse？",
+          "answer": "任何测试都可能受环境代理影响，自动清理能保证测试确定性，避免 CI 与本地环境差异导致偶发失败。",
+          "followUps": []
+        },
+        {
+          "question": "mTLS 测试为什么用 CERT_OPTIONAL 而不是 CERT_REQUIRED？",
+          "answer": "可见代码使用 CERT_OPTIONAL，允许客户端证书可选；这适合测试可选验证场景，但若想强制双向认证，CERT_REQUIRED 更严格。",
+          "followUps": []
+        },
+        {
+          "question": "过期证书是如何生成的？",
+          "answer": "`tests/certs/expired/server/Makefile` 中签发命令使用 `-days 0`，使服务器证书过期，用于测试过期证书错误。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    }
+  ]
+}
