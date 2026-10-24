@@ -35,6 +35,8 @@
 
 ## 模型编排的选择
 
+上下文只消费经过授权读取与脱敏的项目文本。JS/TS 使用已安装的 TypeScript 语法 API；Python 使用逻辑行、字符串和缩进启发式，不宣称完整 AST 分析。解析器不能创建会自动发现项目文件的编译器 host，也不能执行项目代码。受限预算按入口和本地引用信号分配给已选文件，并为文档、小模块保留份额；全量能容纳时保持原文件。最后的请求拟合继续保留代码单元边界，并如实标明省略。输入 token 是估算，实际 provider usage 独立记录，二者不能互换。
+
 当前生成使用主进程内的服务模块和显式异步流程，共用上下文选择、题量规划、JSON 修复、补偿、取消及用量诊断。评估 LangChain 或 LangGraph 时，应先指出现有流程无法满足的用户需求和可测量收益。
 
 LangGraph 可独立组织现有模型客户端，适合后续需要跨重启恢复、人工检查点或按证据缺口进行条件补取的流程；这些能力目前尚未实现。LangChain 的模型或检索组件按实际需要选择，迁移时必须保留现有授权读取、脱敏、响应预算、凭据隔离与取消行为。功能边界参考 [LangGraph 官方说明](https://docs.langchain.com/oss/javascript/langgraph/overview)和[持久化说明](https://docs.langchain.com/oss/javascript/langgraph/persistence)。

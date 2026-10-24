@@ -41,4 +41,14 @@ node --test scripts/evaluation/compare-real-runs.test.mjs
 
 模型生成的问题/答案须逐项核对源码；`pending` 人工评价不等于通过。关键词覆盖只能表示字符串命中，不能用于宣称事实正确率。即使 HTTP 请求成功或结果通过结构契约，也不能单独证明模型回答准确。
 
+只重新生成受影响的项目时，可把完成的子集运行与先前测量组成显式 cohort。来源报告都必须完整结束；中断运行和未完成 case 会被拒绝。旧结果仅在当前生产扫描、上下文、提示与客户端构造出的请求体 SHA-256 和原请求完全相同，且模型配置、项目 revision、fixture hashes 及当前源码哈希均绑定后复用。还应审查生成后的解析与归一化代码没有改变旧输出的解释。证明须来自实际的合成传输捕获，不能只把旧哈希填入 JSON。
+
+```powershell
+npm run eval:real:cohort -- <baseline-report.json> <current-subset-report.json> <prior-report.json> <current-request-proof.json> <new-output-directory>
+```
+
+该命令生成 `repoprep-real-eval-cohort-v1` 格式的 `cohort.json` 和 `report.md`，保留各 case 的来源 run、报告引用、请求回执与问题指纹。proof 的 `cases` 是以 case id 为键的对象，每项包含 `identical`、`originalPromptHash` 和 `currentPromptHash`，并须提供完整的 `currentSourceHashes` 与 `configuration`。工具校验哈希绑定和输出对应关系；它不会替调用者生成或证明未执行过的观测。
+
+`selectedMeasurementsRequests` 是选中 generation 测量所含的调用总数，可能包含历史调用；`freshNetworkRequests` 是 current 来源运行全部捕获的 HTTP 次数，包含其 README 对照等额外调用。缺少总回执且无法确定范围时保留未知。token 汇总仍只对应选中的 generation 测量，不能作为本次研究全部账单。复用结果不重新标成新生成，代理复核也不重新标成人工盲审。
+
 `test:eval:real` 同时包含合成 HTTP 回归和两个真实 Electron 进程间的合成凭据往返。后者验证当前平台的 OS 加密快照链路，不读取真实用户凭据，也不代表真实 API 验收；正式模型调用必须以实际报告为证。
