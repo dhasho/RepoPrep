@@ -55,6 +55,31 @@ function regionForSymbol(content: string, symbol: CodeSymbol, priority: number):
   return { start, end, text: content.slice(start, end), label: symbol.name || symbol.kind, complete: true, priority }
 }
 
+const PYTHON_IDENT_CHAR = /[A-Za-z0-9_]/
+// Each string opening leaves one `"` marker in the code projection. A body
+// statement reduced to optional non-interpolating prefixes plus that marker is
+// a plain string literal expression (docstring) and carries no logic; an
+// f-prefix is excluded because f-string interpolation can execute calls.
+const PYTHON_STRING_ONLY_STATEMENT = /^[rRbBuU]{0,3}"$/
+const PYTHON_OVERLOAD_DECORATOR = /^@\s*(?:[A-Za-z_]\w*\.)?overload\b/
+
+interface PythonDeclaration {
+  index: number
+  startLine: number
+  indent: number
+  name: string
+  kind: string
+  colonSeen: boolean
+  // Hierarchy and stub metadata only feed candidate priority; region
+  // boundaries and labels stay exactly as the conservative parser finds them.
+  overload: boolean
+  defDepth: number
+  ownerClasses: string // File-local class declaration identities, not display names.
+  parentSlot: number
+  callees: Set<string> | undefined
+  inlineStubBody: boolean
+}
+
 function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySet<string> = new Set()): SourceRegion[] {
   // Deliberately conservative indentation parser. Track string delimiters so a
   // docstring's apparent `def`/`class` cannot become a fake declaration, plus
@@ -65,6 +90,13 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
   // of consecutive same-indent `@` statements (with multi-line calls) above a
   // def/class becomes the region start, and the sibling-end scan stops at the
   // first `@` line so a declaration never swallows the next one's decorators.
+  //
+  // The same single pass also collects bounded ranking metadata: a scope stack
+  // gives every declaration its enclosing defs/classes, and the lexical
+  // projection (strings/comments blanked) records self/cls member uses and
+  // local-name calls attributed to the enclosing declaration. Pseudo calls in
+  // docstrings or comments can never reach those counters because the lexer is
+  // already inside the string or past the comment when it sees them.
   const lines = content.split(/(?<=\n)/)
   const offsets: number[] = []
   let offset = 0
@@ -74,73 +106,204 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
   let depth = 0
   let continuation = false
   const statementStarts: boolean[] = []
-  const declarations: Array<{ index: number; startLine: number; indent: number; name: string; kind: string; colonSeen: boolean }> = []
-  let pendingHeader: (typeof declarations)[number] | undefined
-  let pendingDecor: { startLine: number; indent: number } | undefined
+  const lineCode: string[] = []
+  const declarations: PythonDeclaration[] = []
+  const scopes: Array<{ indent: number; name: string; kind: string; decl: PythonDeclaration; slot: number }> = []
+  const memberUses = new Map<string, number>()
+  let pendingHeader: PythonDeclaration | undefined
+  let pendingDecor: { startLine: number; indent: number; overload: boolean } | undefined
+  let inlineCapture: { decl: PythonDeclaration; parts: string[] } | undefined
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     const stripped = line.trimStart()
     const beginsStatement = !quote && depth === 0 && !continuation
     statementStarts.push(beginsStatement)
     continuation = false
+    let countsUsage = true
     if (beginsStatement) {
       // A new logical statement retires a header that never reached its colon.
       if (pendingHeader && i > pendingHeader.index) pendingHeader = undefined
       if (!stripped || stripped.startsWith('#')) {
         // Blank and comment-only lines neither break nor extend a decorator block.
-      } else if (stripped.startsWith('@')) {
-        const indent = line.length - stripped.length
-        if (!pendingDecor || pendingDecor.indent !== indent) pendingDecor = { startLine: i, indent }
       } else {
-        const attached = pendingDecor
-        pendingDecor = undefined
-        const match = stripped.match(/^(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)\b/)
-        if (match) {
-          const indent = line.length - stripped.length
-          const startLine = attached && attached.indent === indent ? attached.startLine : i
-          pendingHeader = { index: i, startLine, indent, name: match[2], kind: match[1], colonSeen: false }
-          declarations.push(pendingHeader)
+        // Every real logical statement line retires deeper scopes, mirroring
+        // exactly how the region-end scan bounds a declaration: an ordinary
+        // dedented `if`/assignment after a class body must not keep borrowing
+        // that class as its owner. Blank and comment lines retire nothing.
+        const indent = line.length - stripped.length
+        while (scopes.length && scopes[scopes.length - 1].indent >= indent) scopes.pop()
+        if (stripped.startsWith('@')) {
+          countsUsage = false
+          const overload = PYTHON_OVERLOAD_DECORATOR.test(stripped)
+          if (!pendingDecor || pendingDecor.indent !== indent) pendingDecor = { startLine: i, indent, overload }
+          else if (overload) pendingDecor.overload = true
+        } else {
+          const attached = pendingDecor
+          pendingDecor = undefined
+          const match = stripped.match(/^(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)\b/)
+          if (match) {
+            countsUsage = false
+            const startLine = attached && attached.indent === indent ? attached.startLine : i
+            const overload = Boolean(attached && attached.indent === indent && attached.overload)
+            let defDepth = 0
+            let parentSlot = -1
+            const classChain: string[] = []
+            for (const scope of scopes) {
+              if (scope.kind === 'def') {
+                defDepth += 1
+                parentSlot = scope.slot
+              } else classChain.push(String(scope.slot))
+            }
+            const slot = declarations.length
+            pendingHeader = { index: i, startLine, indent, name: match[2], kind: match[1], colonSeen: false, overload, defDepth, ownerClasses: classChain.join('.'), parentSlot, callees: undefined, inlineStubBody: false }
+            declarations.push(pendingHeader)
+            scopes.push({ indent, name: match[2], kind: match[1], decl: pendingHeader, slot })
+          }
         }
       }
     }
+    // Attribute body statements to the innermost enclosing def and the full
+    // lexical class identity chain so member-use and local-call counters stay
+    // owner-aware: even repeated class names inside factories never share counts,
+    // and a same-name method of another class can never borrow these signals.
+    let lineDecl: PythonDeclaration | undefined
+    let lineOwnerClasses = ''
+    if (countsUsage) {
+      const lineIndent = line.length - stripped.length
+      const chain: string[] = []
+      for (let s = 0; s < scopes.length; s++) {
+        const scope = scopes[s]
+        if (scope.indent >= lineIndent) continue
+        if (scope.kind === 'class') chain.push(String(scope.slot))
+        // Keep overwriting so the innermost enclosing def wins.
+        else lineDecl = scope.decl
+      }
+      lineOwnerClasses = chain.join('.')
+    }
     // Small lexer sufficient for Python single/triple quoted strings, escapes,
-    // bracket nesting, comments, and backslash line joins.
+    // bracket nesting, comments, and backslash line joins. Identifier tokens
+    // are flushed at their boundary character so `self.member`/`cls.member`
+    // reads and `name(`/`self.name(` calls land in the bounded counters, and a
+    // code-only projection of each line feeds the signature-only body check.
+    let ident = ''
+    let pendingDot = false
+    let receiver = ''
+    const codeParts: string[] = []
     for (let j = 0; j < line.length; j++) {
       const ch = line[j]
       if (quote) {
         if (ch === '\\') { j++; continue }
         if (triple && line.slice(j, j + 3) === quote.repeat(3)) { quote = undefined; triple = false; j += 2 }
         else if (!triple && ch === quote) quote = undefined
-      } else if (ch === '"' || ch === "'") {
-        triple = line.slice(j, j + 3) === ch.repeat(3)
-        quote = ch
-        if (triple) j += 2
-      } else if (ch === '#') break
-      else if (ch === '(' || ch === '[' || ch === '{') depth += 1
-      else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1)
-      else if (ch === ':' && depth === 0 && pendingHeader && (i === pendingHeader.index || !beginsStatement)) {
-        pendingHeader.colonSeen = true
-        pendingHeader = undefined
-      } else if (ch === '\\' && (j + 1 >= line.length || line[j + 1] === '\n' || line[j + 1] === '\r')) continuation = true
+      } else if (PYTHON_IDENT_CHAR.test(ch)) {
+        ident += ch
+        codeParts.push(ch)
+        if (inlineCapture) inlineCapture.parts.push(ch)
+      } else {
+        if (ident) {
+          if (pendingDot) {
+            if ((receiver === 'self' || receiver === 'cls') && lineOwnerClasses) {
+              const key = `${lineOwnerClasses}.${ident}`
+              memberUses.set(key, (memberUses.get(key) ?? 0) + 1)
+              if (countsUsage && ch === '(' && lineDecl) (lineDecl.callees ??= new Set<string>()).add(ident)
+            }
+            pendingDot = false
+          } else if (countsUsage && ch === '(' && lineDecl) {
+            (lineDecl.callees ??= new Set<string>()).add(ident)
+          }
+          receiver = ident
+          ident = ''
+        }
+        if (ch === '"' || ch === "'") {
+          triple = line.slice(j, j + 3) === ch.repeat(3)
+          quote = ch
+          if (triple) j += 2
+          // One marker per string opening keeps the code projection honest:
+          // `x = "a"` still shows an assignment while a docstring statement
+          // reduces to prefixes plus the marker alone.
+          codeParts.push('"')
+        } else if (ch === '#') break
+        else {
+          if (inlineCapture) inlineCapture.parts.push(ch)
+          codeParts.push(ch)
+          if (ch === '.') pendingDot = true
+          else if (ch === '(' || ch === '[' || ch === '{') depth += 1
+          else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1)
+          else if (ch === ':' && depth === 0 && pendingHeader && (i === pendingHeader.index || !beginsStatement)) {
+            pendingHeader.colonSeen = true
+            inlineCapture = { decl: pendingHeader, parts: [] }
+            pendingHeader = undefined
+          } else if (ch === '\\' && (j + 1 >= line.length || line[j + 1] === '\n' || line[j + 1] === '\r')) continuation = true
+        }
+      }
+    }
+    // An attribute read can end the line without a trailing boundary character.
+    if (ident && pendingDot && (receiver === 'self' || receiver === 'cls') && lineOwnerClasses) {
+      const key = `${lineOwnerClasses}.${ident}`
+      memberUses.set(key, (memberUses.get(key) ?? 0) + 1)
+    }
+    lineCode.push(codeParts.join(''))
+    // The inline body capture ends with its logical statement; `...`/`pass`
+    // right after the header colon marks a signature-only declaration.
+    if (inlineCapture && !(continuation || depth > 0)) {
+      inlineCapture.decl.inlineStubBody = /^(?:\.\.\.|pass)$/.test(inlineCapture.parts.join('').trim())
+      inlineCapture = undefined
     }
   }
   const fileEndsOpen = Boolean(quote) || depth > 0 || continuation
-  return declarations.map((decl, position) => {
+  const declaredNames = new Set(declarations.map((decl) => decl.name))
+  // Score first, then structurally demote closures below their ancestor
+  // function: a candidate nested inside another def can never outrank it, so a
+  // fitting parent wins the overlap contest (ties resolve to the earlier
+  // start, which is always the parent). Declarations are in source order, so
+  // each parent's own clamped priority is already final when its children are
+  // clamped, and an unaffordable parent still lets the nested fallback through
+  // because the selection loop skips regions that do not fit.
+  const priorities = declarations.map((decl, position) => {
     let endIndex = lines.length
+    let stubMarkers = 0
+    let realStatements = 0
     for (let i = decl.index + 1; i < lines.length; i++) {
       const text = lines[i].trim()
       if (!text || text.startsWith('#') || !statementStarts[i]) continue
       const indent = lines[i].length - lines[i].trimStart().length
       if (indent <= decl.indent) { endIndex = i; break }
+      const code = (lineCode[i] ?? '').trim()
+      if (!code || PYTHON_STRING_ONLY_STATEMENT.test(code)) continue
+      if (code === '...' || code === 'pass') stubMarkers += 1
+      else realStatements += 1
     }
-    const start = offsets[decl.startLine]
-    const end = offsets[endIndex] ?? content.length
+    const signatureOnly = decl.colonSeen && realStatements === 0 && (decl.inlineStubBody || stubMarkers > 0)
     const tail = position / Math.max(1, declarations.length - 1)
     const roleBonus = role === 'backend' && /service|handler|route|api/i.test(decl.name) ? 12 : 0
+    // Generic ranking by declaration shape and file-local usage: an @overload
+    // or `...`/`pass` signature never outranks the real implementation of the
+    // same member, and widely used public members plus methods coordinating
+    // several local steps outrank unreferenced helpers regardless of position.
+    let priority = 20 + Math.round(tail * 12) + roleBonus + (referenced.has(decl.name) ? 45 : 0)
+    if (decl.overload || signatureOnly) priority -= 18
+    if (decl.kind === 'def') {
+      if (decl.defDepth > 0) priority -= 10 * decl.defDepth
+      const uses = decl.ownerClasses && !decl.name.startsWith('_') ? memberUses.get(`${decl.ownerClasses}.${decl.name}`) ?? 0 : 0
+      priority += uses >= 3 ? 12 : uses === 2 ? 8 : uses === 1 ? 4 : 0
+      let localCallees = 0
+      for (const callee of decl.callees ?? []) if (declaredNames.has(callee)) localCallees += 1
+      priority += localCallees >= 4 ? 16 : localCallees === 3 ? 12 : localCallees === 2 ? 8 : localCallees === 1 ? 4 : 0
+    }
+    return { endIndex, signatureOnly, priority }
+  })
+  for (let position = 0; position < declarations.length; position++) {
+    const parentSlot = declarations[position].parentSlot
+    if (parentSlot >= 0) priorities[position].priority = Math.min(priorities[position].priority, priorities[parentSlot].priority)
+  }
+  return declarations.map((decl, position) => {
+    const { endIndex, priority } = priorities[position]
+    const start = offsets[decl.startLine]
+    const end = offsets[endIndex] ?? content.length
     // Without a confirmed depth-0 colon (or with the file ending mid-logical-line)
     // the header cannot be trusted as a complete body.
     const complete = decl.colonSeen && !(endIndex === lines.length && fileEndsOpen)
-    return { start, end, text: content.slice(start, end), label: decl.name, complete, priority: 20 + Math.round(tail * 12) + roleBonus + (referenced.has(decl.name) ? 45 : 0) }
+    return { start, end, text: content.slice(start, end), label: decl.name, complete, priority }
   })
 }
 

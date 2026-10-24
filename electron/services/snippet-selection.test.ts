@@ -180,6 +180,228 @@ test('Python unclosed bracket bodies at EOF leave the trailing region partial', 
   assert.equal(last.complete, false)
 })
 
+test('Python real implementation outranks overload stubs and inner closures under a fitting budget', () => {
+  const content = `class Streamer:
+    @overload
+    def iter_chunks(self, size: int) -> bytes: ...
+    @overload
+    def iter_chunks(self, size: str) -> str: ...
+    def iter_chunks(self, size=None):
+        def inner_closure():
+            return 'CLOSURE_MARKER'
+        value = inner_closure()
+        self.iter_chunks(size)
+        return 'REAL_ITER_CHUNKS_BODY'
+    def late_tiny_a(self):
+        return 1
+    def late_tiny_b(self):
+        return 2
+    def late_tiny_c(self):
+        return 3
+`
+  const candidates = sourceRegionCandidates(content, null, { extension: 'py' })
+  const real = candidates.find((region) => region.label === 'iter_chunks' && region.text.includes('REAL_ITER_CHUNKS_BODY'))
+  const stub = candidates.find((region) => region.label === 'iter_chunks' && !region.text.includes('REAL_ITER_CHUNKS_BODY'))
+  const closure = candidates.find((region) => region.label === 'inner_closure')
+  const lateTiny = candidates.find((region) => region.label === 'late_tiny_c')
+  assert.ok(real && stub && closure && lateTiny)
+  assert.ok(real.complete)
+  assert.ok(stub.complete, 'a signature-only region is still textually complete, just ranked lower')
+  assert.ok(real.priority > stub.priority, 'the real implementation outranks its @overload signature stubs')
+  assert.ok(real.priority > closure.priority, 'the parent method outranks its inner closure')
+  const picked = selectSourceRegions(content, null, real.text.length + 30, { extension: 'py' })
+  const pickedReal = picked.regions.find((region) => region.label === 'iter_chunks')
+  assert.ok(pickedReal?.complete)
+  assert.ok(pickedReal.text.includes('REAL_ITER_CHUNKS_BODY'))
+  assert.ok(!picked.regions.some((region) => region.label === 'inner_closure'), 'a fitting parent keeps its closure out via overlap')
+})
+
+test('Python oversized parents keep a bounded nested fallback instead of nothing', () => {
+  const filler = `${'    # deliberate filler so the parent cannot fit\n'.repeat(40)}`
+  const content = `def giant_parent():\n${filler}    def useful_nested():\n        return 'NESTED_FALLBACK_MARKER'\n${filler}    return 'GIANT_PARENT_MARKER'\n`
+  const candidates = sourceRegionCandidates(content, null, { extension: 'py' })
+  const nested = candidates.find((region) => region.label === 'useful_nested')
+  const giant = candidates.find((region) => region.label === 'giant_parent')
+  assert.ok(nested && giant)
+  assert.ok(giant.priority < nested.priority + 10, 'the fallback stays explainable: the parent is not buried infinitely far below')
+  const picked = selectSourceRegions(content, null, nested.text.length + 10, { extension: 'py' })
+  assert.ok(picked.truncated)
+  assert.equal(picked.regions.length, 1)
+  assert.equal(picked.regions[0].label, 'useful_nested')
+  assert.ok(picked.regions[0].complete)
+  assert.ok(picked.regions[0].text.includes('NESTED_FALLBACK_MARKER'))
+})
+
+test('Python early orchestration methods survive via real calls while docstring and comment pseudo calls do not count', () => {
+  const content = `def format_report(value):
+    return value
+
+class Pipeline:
+    def run(self):
+        first = self.load()
+        second = self.transform(first)
+        report = format_report(second)
+        return 'RUN_BODY' + self.save(report)
+
+    def load(self):
+        return 'LOAD_BODY'
+
+    def transform(self, value):
+        return 'TRANSFORM_BODY'
+
+    def save(self, report):
+        return 'SAVE_BODY'
+
+    def late_unused(self):
+        """
+        self.load()
+        self.save(None)
+        """
+        # self.transform(None)
+        return 'UNUSED_BODY'
+`
+  const candidates = sourceRegionCandidates(content, null, { extension: 'py' })
+  const run = candidates.find((region) => region.label === 'run')
+  const lateUnused = candidates.find((region) => region.label === 'late_unused')
+  assert.ok(run && lateUnused)
+  assert.ok(run.priority > lateUnused.priority, 'real local calls beat file position for unreferenced helpers')
+  const picked = selectSourceRegions(content, null, run.text.length + 50, { extension: 'py' })
+  const pickedRun = picked.regions.find((region) => region.label === 'run')
+  assert.ok(pickedRun?.complete)
+  assert.ok(pickedRun.text.includes('RUN_BODY'))
+  assert.ok(!picked.regions.some((region) => region.text.includes('UNUSED_BODY')), 'docstring and comment pseudo references must not earn selection')
+})
+
+test('Python same-name methods in different classes keep owner-aware ranking', () => {
+  const padding = '# module level background that keeps the fixture oversized\n'.repeat(8)
+  const content = `${padding}class Alpha:
+    def encode(self):
+        return 'A_ENC_BODY'
+
+class Beta:
+    def go(self):
+        return self.encode()
+
+    def encode(self):
+        return 'B_ENC_BODY'
+`
+  const candidates = sourceRegionCandidates(content, null, { extension: 'py' })
+  const encodes = candidates.filter((region) => region.label === 'encode')
+  assert.equal(encodes.length, 2)
+  const betaEncode = encodes.find((region) => region.text.includes('B_ENC_BODY'))
+  const alphaEncode = encodes.find((region) => region.text.includes('A_ENC_BODY'))
+  assert.ok(betaEncode && alphaEncode)
+  assert.ok(betaEncode.complete && alphaEncode.complete)
+  assert.ok(betaEncode.priority > alphaEncode.priority, 'only the class whose code really calls encode gets the member-use signal')
+  const budget = Math.min(
+    candidates.reduce((sum, region) => sum + region.text.length, 0) + candidates.length * 20,
+    content.length - 1
+  )
+  const picked = selectSourceRegions(content, null, budget, { extension: 'py' })
+  const pickedEncodes = picked.regions.filter((region) => region.label === 'encode')
+  assert.equal(pickedEncodes.length, 2)
+  assert.ok(picked.regions.some((region) => region.text.includes('A_ENC_BODY')))
+  assert.ok(picked.regions.some((region) => region.text.includes('B_ENC_BODY')))
+})
+
+test('Python ancestors structurally outrank closures with stronger local coupling', () => {
+  const source = `def one():
+  return 1
+def two():
+  return 2
+def three():
+  return 3
+def combine(a, b, c):
+  return a + b + c
+def public_api():
+  def inner():
+    return combine(one(), two(), three())
+  return inner()
+`
+  const candidates = sourceRegionCandidates(source, null, { extension: 'py' })
+  const parent = candidates.find((region) => region.label === 'public_api')
+  const inner = candidates.find((region) => region.label === 'inner')
+  assert.ok(parent && inner)
+  assert.ok(inner.priority <= parent.priority, 'a closure can never outrank its ancestor function regardless of coupling bonuses')
+  const chosen = selectSourceRegions(source, null, parent.text.length, { extension: 'py' })
+  assert.ok(chosen.regions.some((region) => region.label === 'public_api'), 'the complete fitting parent must survive a higher-coupling closure')
+  assert.ok(!chosen.regions.some((region) => region.label === 'inner'))
+})
+
+test('Python ordinary dedented statements retire class scopes instead of borrowing them', () => {
+  const base = `class First:
+  def target(self):
+    return 'TARGET'
+`
+  const before = sourceRegionCandidates(base, null, { extension: 'py' }).find((region) => region.label === 'target')?.priority
+  const after = sourceRegionCandidates(`${base}if enabled:
+  self.target()
+`, null, { extension: 'py' }).find((region) => region.label === 'target')?.priority
+  assert.ok(before !== undefined && after !== undefined)
+  assert.equal(after, before, 'a module conditional must not count self usage for the retired class')
+})
+
+test('Python nested classes with the same simple name keep separate lexical identities', () => {
+  const build = (use: string) => `class Alpha:
+  class Node:
+    def exposed(self):
+      return 'A_SOURCE'
+    def use(self):
+      ${use}
+class Beta:
+  class Node:
+    def exposed(self):
+      return 'B_SOURCE'
+`
+  const priority = (text: string) =>
+    sourceRegionCandidates(text, null, { extension: 'py' }).find((region) => region.label === 'exposed' && region.text.includes('B_SOURCE'))?.priority
+  const withCall = priority(build('return self.exposed()'))
+  const withoutCall = priority(build('return None'))
+  assert.ok(withCall !== undefined && withoutCall !== undefined)
+  assert.equal(withCall, withoutCall, 'member-use keys must include the full lexical class chain, not the bare class name')
+})
+
+test('Python f-string statements are executable bodies while plain docstrings stay inert', () => {
+  const source = `def action():
+  f"effect {external()}"
+  pass
+def docstring_only():
+  """
+  notes that carry no logic
+  """
+def signature():
+  ...
+`
+  const candidates = sourceRegionCandidates(source, null, { extension: 'py' })
+  const action = candidates.find((region) => region.label === 'action')
+  const docstringOnly = candidates.find((region) => region.label === 'docstring_only')
+  const signature = candidates.find((region) => region.label === 'signature')
+  assert.ok(action && docstringOnly && signature)
+  assert.ok(action.priority > signature.priority, 'an f-string statement can execute calls and must not be treated as a signature-only stub')
+  assert.ok(docstringOnly.priority > signature.priority, 'a docstring without pass/ellipsis markers is not demoted either')
+  const chosen = selectSourceRegions(source, null, action.text.length, { extension: 'py' })
+  assert.ok(chosen.regions.some((region) => region.label === 'action'))
+})
+
+test('Python fallback prefers the nearest fitting parent over a deeper coupled closure', () => {
+  const source = `def one(): ...\ndef two(): ...\ndef three(): ...\ndef combine(a,b,c): ...\ndef public_api():\n${'  # outer-only background\n'.repeat(60)}  def middle():\n    def leaf():\n      return combine(one(), two(), three())\n    return leaf()\n  return middle()\n`
+  const middle = sourceRegionCandidates(source, null, { extension: 'py' }).find(region => region.label === 'middle')
+  assert.ok(middle)
+  const selected = selectSourceRegions(source, null, middle.text.length, { extension: 'py' })
+  assert.ok(selected.regions.some(region => region.label === 'middle' && region.text === middle.text))
+  assert.ok(!selected.regions.some(region => region.label === 'public_api'), 'the outer ancestor genuinely exceeds the budget')
+})
+
+test('Python same-named factory classes do not borrow member-use scores', () => {
+  const source = (use: string): string => `def factory_alpha():\n  class Node:\n    def exposed(self):\n      return 'A_SOURCE'\n    def use(self):\n      ${use}\n  return Node\ndef factory_beta():\n  class Node:\n    def exposed(self):\n      return 'B_SOURCE'\n  return Node\n`
+  const beta = (text: string) => sourceRegionCandidates(text, null, { extension: 'py' })
+    .find(region => region.label === 'exposed' && region.text.includes('B_SOURCE'))
+  const withoutForeignUse = beta(source('return None'))
+  const withForeignUse = beta(source('return self.exposed()'))
+  assert.ok(withoutForeignUse && withForeignUse)
+  assert.equal(withForeignUse.priority, withoutForeignUse.priority)
+})
+
 test('tiny budgets remain bounded even when the fallback marker is longer than the budget', () => {
   const source = '😀'.repeat(60)
   for (const budget of [0, 1, 8, 12]) {

@@ -111,6 +111,58 @@ test('real Python scan keeps decorated multi-line headers whole through build an
   }
 })
 
+test('real Python build prefers the complete implementation over overload stubs, closures and late helpers', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const padding = `${'# module background notes that force structural selection\n'.repeat(2600)}`
+    const source = `${padding}class Downloader:
+    @overload
+    def fetch(self, url: str) -> bytes: ...
+    def fetch(self, url=None):
+        def retry_once():
+            return 'NESTED_RETRY_BODY'
+        value = retry_once()
+        self.adapter(url)
+        self.validate(value)
+        return 'REAL_FETCH_IMPLEMENTATION_BODY'
+    def adapter(self, url):
+        return 'ADAPTER_BODY'
+    def validate(self, value):
+        return 'VALIDATE_BODY'
+    def late_helper_a(self):
+        return 1
+    def late_helper_b(self):
+        return 2
+    def late_helper_c(self):
+        return 3
+    def late_helper_d(self):
+        return 4
+`
+    await fs.writeFile(path.join(root, 'service.py'), source)
+    const scan = await scanProject(root)
+    const built = await buildContext(scan, 'medium', { maxChars: 8_000 })
+    const rendered = built.batches.flatMap((batch) => batch.files).find((file) => file.relPath === 'service.py')
+    assert.ok(rendered?.truncated)
+    assert.ok(rendered.content.includes('def fetch(self, url=None):'))
+    assert.ok(rendered.content.includes('REAL_FETCH_IMPLEMENTATION_BODY'))
+    const fetchRegions = (rendered.selectionRegions ?? []).filter((region) => region.label === 'fetch' && region.text.includes('REAL_FETCH_IMPLEMENTATION_BODY'))
+    assert.ok(fetchRegions.length >= 1 && fetchRegions.every((region) => region.complete), 'the real implementation survives the build as a complete unit')
+    assert.ok(!(rendered.selectionRegions ?? []).some((region) => region.label === 'retry_once'), 'a fitting parent keeps its closure out via overlap')
+    const base = renderBatchWithinBudget(built.headerText, built.treeText, { ...built.batches[0], files: [] }, 100_000).text
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, built.batches[0], base.length + 320)
+    assert.ok(final.truncated)
+    assert.ok(final.text.includes('REAL_FETCH_IMPLEMENTATION_BODY'), 'final fitting keeps the complete parent implementation')
+    assert.ok(!final.text.includes('ADAPTER_BODY'), 'under scarcity the orchestrating implementation outranks single-step helpers')
+    assert.ok(final.selection?.filePaths.includes('service.py'))
+    assert.equal(final.selection?.selectedRegions, 1)
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('real README survives final second-fit through a budgeted head and tail excerpt', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {
