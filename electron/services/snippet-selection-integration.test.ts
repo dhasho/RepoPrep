@@ -67,6 +67,50 @@ test('real Python scan uses indentation regions and ignores fake methods inside 
   }
 })
 
+test('real Python scan keeps decorated multi-line headers whole through build and final fitting', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const padding = `${'# module background notes that should not dominate context\n'.repeat(2600)}`
+    const source = `${padding}def plain_helper():\n${'    # plain helper detail\n'.repeat(48)}    return 'PLAIN_BODY'\n\n@retry(times=3)\n@app.route(\n    '/late',\n    methods=['GET'],\n)\nasync def late_handler():\n    return 'LATE_DECORATED_BODY'\n\ndef tail_sibling():\n${'    # tail sibling detail\n'.repeat(48)}    return 'TAIL_BODY'\n`
+    await fs.writeFile(path.join(root, 'service.py'), source)
+    const scan = await scanProject(root)
+    const built = await buildContext(scan, 'medium', { maxChars: 14_000, roleFocus: 'backend' })
+    const rendered = built.batches.flatMap((batch) => batch.files).find((file) => file.relPath === 'service.py')
+    assert.ok(rendered?.truncated)
+    const regions = rendered?.selectionRegions ?? []
+    const plain = regions.find((region) => region.label === 'plain_helper')
+    const handler = regions.find((region) => region.label === 'late_handler')
+    const tail = regions.find((region) => region.label === 'tail_sibling')
+    assert.ok(plain && handler && tail, 'every Python declaration survives as a selection region')
+    assert.ok(handler.complete)
+    assert.ok(handler.text.includes('@retry(times=3)'))
+    assert.ok(handler.text.includes("methods=['GET']"))
+    assert.ok(handler.text.includes('async def late_handler'))
+    assert.ok(handler.text.includes('LATE_DECORATED_BODY'))
+    assert.ok(!handler.text.includes('PLAIN_BODY'))
+    assert.ok(!handler.text.includes('tail_sibling'))
+    assert.ok(plain.complete)
+    assert.ok(plain.text.includes('PLAIN_BODY'))
+    assert.ok(!plain.text.includes('@retry'), 'the previous sibling must not swallow the next decorator block')
+    assert.ok(tail.complete)
+    assert.ok(tail.text.includes('TAIL_BODY'))
+    assert.ok(!tail.text.includes('@'))
+    const base = renderBatchWithinBudget(built.headerText, built.treeText, { ...built.batches[0], files: [] }, 100_000).text
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, built.batches[0], base.length + 420)
+    assert.ok(final.text.includes('@retry(times=3)'))
+    assert.ok(final.text.includes('async def late_handler'))
+    assert.ok(final.text.includes('LATE_DECORATED_BODY'))
+    assert.ok(!final.text.includes('PLAIN_BODY'), 'final fitting keeps the decorated handler over the larger plain sibling')
+    assert.ok(final.selection?.filePaths.includes('service.py'))
+    assert.equal(final.selection?.selectedRegions, 1)
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('real README survives final second-fit through a budgeted head and tail excerpt', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {

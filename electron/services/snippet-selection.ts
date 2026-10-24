@@ -57,24 +57,54 @@ function regionForSymbol(content: string, symbol: CodeSymbol, priority: number):
 
 function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySet<string> = new Set()): SourceRegion[] {
   // Deliberately conservative indentation parser. Track string delimiters so a
-  // docstring's apparent `def`/`class` cannot become a fake declaration.
+  // docstring's apparent `def`/`class` cannot become a fake declaration, plus
+  // bracket depth and explicit backslash joins so a wrapped signature or a
+  // low-indent closing bracket stays part of one logical statement. Region-end
+  // decisions only trust the state at the START of a line, never the state
+  // after that line's closing bracket. Decorators attach the same way: a block
+  // of consecutive same-indent `@` statements (with multi-line calls) above a
+  // def/class becomes the region start, and the sibling-end scan stops at the
+  // first `@` line so a declaration never swallows the next one's decorators.
   const lines = content.split(/(?<=\n)/)
   const offsets: number[] = []
   let offset = 0
   for (const line of lines) { offsets.push(offset); offset += line.length }
   let quote: string | undefined
   let triple = false
-  const codeLine: boolean[] = []
-  const declarations: Array<{ index: number; indent: number; name: string; kind: string }> = []
+  let depth = 0
+  let continuation = false
+  const statementStarts: boolean[] = []
+  const declarations: Array<{ index: number; startLine: number; indent: number; name: string; kind: string; colonSeen: boolean }> = []
+  let pendingHeader: (typeof declarations)[number] | undefined
+  let pendingDecor: { startLine: number; indent: number } | undefined
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     const stripped = line.trimStart()
-    const beginsInsideString = Boolean(quote)
-    if (!quote) {
-      const match = stripped.match(/^(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)\b/)
-      if (match) declarations.push({ index: i, indent: line.length - stripped.length, name: match[2], kind: match[1] })
+    const beginsStatement = !quote && depth === 0 && !continuation
+    statementStarts.push(beginsStatement)
+    continuation = false
+    if (beginsStatement) {
+      // A new logical statement retires a header that never reached its colon.
+      if (pendingHeader && i > pendingHeader.index) pendingHeader = undefined
+      if (!stripped || stripped.startsWith('#')) {
+        // Blank and comment-only lines neither break nor extend a decorator block.
+      } else if (stripped.startsWith('@')) {
+        const indent = line.length - stripped.length
+        if (!pendingDecor || pendingDecor.indent !== indent) pendingDecor = { startLine: i, indent }
+      } else {
+        const attached = pendingDecor
+        pendingDecor = undefined
+        const match = stripped.match(/^(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)\b/)
+        if (match) {
+          const indent = line.length - stripped.length
+          const startLine = attached && attached.indent === indent ? attached.startLine : i
+          pendingHeader = { index: i, startLine, indent, name: match[2], kind: match[1], colonSeen: false }
+          declarations.push(pendingHeader)
+        }
+      }
     }
-    // Small lexer sufficient for Python single/triple quoted strings and escapes.
+    // Small lexer sufficient for Python single/triple quoted strings, escapes,
+    // bracket nesting, comments, and backslash line joins.
     for (let j = 0; j < line.length; j++) {
       const ch = line[j]
       if (quote) {
@@ -86,22 +116,31 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
         quote = ch
         if (triple) j += 2
       } else if (ch === '#') break
+      else if (ch === '(' || ch === '[' || ch === '{') depth += 1
+      else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1)
+      else if (ch === ':' && depth === 0 && pendingHeader && (i === pendingHeader.index || !beginsStatement)) {
+        pendingHeader.colonSeen = true
+        pendingHeader = undefined
+      } else if (ch === '\\' && (j + 1 >= line.length || line[j + 1] === '\n' || line[j + 1] === '\r')) continuation = true
     }
-    codeLine.push(!beginsInsideString && (!quote || !triple))
   }
+  const fileEndsOpen = Boolean(quote) || depth > 0 || continuation
   return declarations.map((decl, position) => {
     let endIndex = lines.length
     for (let i = decl.index + 1; i < lines.length; i++) {
       const text = lines[i].trim()
-      if (!text || text.startsWith('#') || !codeLine[i]) continue
+      if (!text || text.startsWith('#') || !statementStarts[i]) continue
       const indent = lines[i].length - lines[i].trimStart().length
       if (indent <= decl.indent) { endIndex = i; break }
     }
-    const start = offsets[decl.index]
+    const start = offsets[decl.startLine]
     const end = offsets[endIndex] ?? content.length
     const tail = position / Math.max(1, declarations.length - 1)
     const roleBonus = role === 'backend' && /service|handler|route|api/i.test(decl.name) ? 12 : 0
-    return { start, end, text: content.slice(start, end), label: decl.name, complete: true, priority: 20 + Math.round(tail * 12) + roleBonus + (referenced.has(decl.name) ? 45 : 0) }
+    // Without a confirmed depth-0 colon (or with the file ending mid-logical-line)
+    // the header cannot be trusted as a complete body.
+    const complete = decl.colonSeen && !(endIndex === lines.length && fileEndsOpen)
+    return { start, end, text: content.slice(start, end), label: decl.name, complete, priority: 20 + Math.round(tail * 12) + roleBonus + (referenced.has(decl.name) ? 45 : 0) }
   })
 }
 
