@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+  "reportDigest": "sha256:040c1a54b82c49c4abc6788c927b221657ddaea0886545b9a1ad50051e04684a",
+  "caseId": "requests",
+  "reviewer": {
+    "executor": "Codex primary agent",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy"
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "a5755a4847a2e289451811f2d0104c236769392f58f1943a9e9b9422a7113011",
+        "a25b3fd348b55949887165616ca1092f47f9d9dda4d2dfe69fc0a58eadb467b6",
+        "020de94946e3322b7c1ceced501143edefadd9a5217fb4f2448b046cab48ddf9",
+        "016e0a43723139da8584928fc6654941a9fe8b468e59f60171272a89835de43e",
+        "e36b1833f370dde62a3407cab4e2be596c2138b98ada4227af347551ad964203",
+        "ccf05aee7b86eba646ca4fab29eb660e4b6f241e92692c31b22aadb64659038d",
+        "b544e9c84212255844acd0e9702a60a0d85f6ac6050da76a5ddd82d1765b3054",
+        "b572e3ee012d85a6f13f2ea57ab8834a1c3ab37994e2be946f98552d8648304a",
+        "45c56c7dd86f71c54265e38e1509a0200b40f16c5c6e08e7e2a00b1cfa681abc",
+        "1d3c79763735f94e431b87c102b2e4a86b531074330cb30f685d382c3f427da7",
+        "a341609444f1d5cd931ecdec3e08b53d5436acac8925ded4b7cf3c683ceb783e",
+        "cf8576beec710b9b2a786cd281098f2adc289c4b8aba630607427e9bbe63d145",
+        "9bde59b42dddcd36b4f4a60244ed5f59cdad667f1f344a4aec5cec5e6736995a",
+        "857926afdf4525c30dfe6c7f1083e6a0a6ae68a15592536076b8c585c64240b5",
+        "ab85db9707d6e8959113d64cf8ed35c5126c9e9a125b9fc1b13676db82f1ad94",
+        "50382b11bfdd349204e0fba0dcb4f250a87797658f456b21581d0ebd7fe437bd",
+        "7b4185a0578fc0626a1573bb80a2b30601094d61dbdffbbfa5d9bf585b35ab83",
+        "4823100e819ca916312d11cc21b7aff51200d5d89a9433fc4618dad2c718ef80",
+        "d01acb3a43d4dcaeb4002e38a8963ae3cf0f44cb5da298cd5476bc4410fccdf2",
+        "484faf613385bf37480485ee0e5034c6673418bf5b11976b2e709c224c78ede7"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ],
+          "reason": "给出准确字段顺序与OAuth所需auth后置；对交换hooks顺序的额外因果解释另记错误。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "Q1仅说prepare_request生成请求，Cookie辅助函数并未连接到Session.prepare_request合并会话与请求状态。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            3
+          ],
+          "reason": "覆盖选adapter发送、elapsed、hooks、Cookie、redirect/history及stream=False读取。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "partial",
+          "questionNumbers": [
+            1,
+            20
+          ],
+          "reason": "说明环境代理与trust_env/no_proxy，缺少CA变量和Session.merge_environment_settings四项合并的实现细节。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 488,
+              "endLine": 492
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "没有max_redirects/history达到上限抛TooManyRedirects。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "20题没有解释Response.ok/布尔与<400关系。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 930,
+              "endLine": 940
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "covered",
+          "questionNumbers": [
+            10
+          ],
+          "reason": "明确raw.stream/read、已缓存iter_slices重放与bool哨兵的StreamConsumedError。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "partial",
+          "questionNumbers": [
+            7,
+            15,
+            17
+          ],
+          "reason": "讨论部分声明运行依赖与SOCKS可选组，但未列出四项直接依赖并区分可选chardet；不把兼容导入等同安装声明。",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 2,
+          "questionPart": "followUps[0]",
+          "kind": "incorrect",
+          "claim": "交换prepare_hooks与prepare_auth会使认证hook不被保留、401重放失效。",
+          "reason": "prepare_hooks调用register_hook追加，register_hook使用append/extend；交换顺序不因此删除认证hooks，而会影响先后顺序。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 257,
+              "endLine": 270
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 722,
+              "endLine": 729
+            }
+          ],
+          "questionFingerprint": "a25b3fd348b55949887165616ca1092f47f9d9dda4d2dfe69fc0a58eadb467b6"
+        },
+        {
+          "questionNumber": 1,
+          "questionPart": "followUps[0]",
+          "kind": "imprecise",
+          "claim": "r._next供Response.next()使用。",
+          "reason": "next是返回PreparedRequest或None的property，不是可调用方法。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 891,
+              "endLine": 894
+            }
+          ],
+          "questionFingerprint": "a5755a4847a2e289451811f2d0104c236769392f58f1943a9e9b9422a7113011"
+        },
+        {
+          "questionNumber": 11,
+          "kind": "imprecise",
+          "claim": "raw为空就会抛AttributeError。",
+          "reason": "raw.close只在未消费时调用；已消费且raw=None时getattr(None,release_conn,None)安全返回None，不能忽略条件。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1173,
+              "endLine": 1184
+            }
+          ],
+          "questionFingerprint": "a341609444f1d5cd931ecdec3e08b53d5436acac8925ded4b7cf3c683ceb783e"
+        },
+        {
+          "questionNumber": 12,
+          "kind": "imprecise",
+          "claim": "items()/iteritems()都返回name-value列表。",
+          "reason": "items返回list，iteritems通过yield返回迭代器，应区分接口的惰性与返回类型。",
+          "sourceRefs": [
+            {
+              "path": "src/requests/cookies.py",
+              "startLine": 284,
+              "endLine": 300
+            }
+          ],
+          "questionFingerprint": "cf8576beec710b9b2a786cd281098f2adc289c4b8aba630607427e9bbe63d145"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "Current cases have all been used in diagnosis; Requests is a regression case.",
+    "Local TypeScript language probes use5.9.3, not the upstream4.9 environment; upstream projects were not executed."
+  ]
+}

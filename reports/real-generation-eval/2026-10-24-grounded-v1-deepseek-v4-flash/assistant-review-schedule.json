@@ -1,0 +1,205 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+  "reportDigest": "sha256:040c1a54b82c49c4abc6788c927b221657ddaea0886545b9a1ad50051e04684a",
+  "caseId": "schedule",
+  "reviewer": {
+    "executor": "Codex primary agent",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy"
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "491757d9f68216058ec2ffea9e187b6def607cd07c9c9beef99d6212ae389e79",
+        "1d029cda2f6b2415b3e4467a7cb69f35682a00a0e3064f68a9351bc47fb806d5",
+        "b4a295c06cc4b9267ad2cd3b3d986e4f832165e7d3acd98ec6822f13731c000d",
+        "baea9a4cc39bf2b85ae8384602ad43442ea2bf7aead0c80a40b591c4cf55c1dd",
+        "3eebb4077728e6193b48a938d599d0d66bce0ff23fbc08ab1ade42a25c3f884e",
+        "5f368bfd6bcf12fc85d72ad8afa44d96924fdcfff51c20b3afc2229732425eb6",
+        "b3b2bb3f264dff7f4c71510d10c53fca93ddd32172dc74032d7d86660db0a9af",
+        "1a7c575e1fd0fca46e81d5ce3b6e72439c6034c05e46f8c51d6f0d0a24f4f446",
+        "40f62c9ff652274a4c49b566580ea6ec6f4aafc3947856e98afaff3ec4e1e607",
+        "f963163afcb2d19606b29636c232cb4e7b03e8a690efe337bc3e017d4e615841",
+        "abd5f3ff066dfb1c86c03224f71a968f0de62757b3f2708f12791a9602fed987",
+        "40be90883d64c1a3d3b8f8f9421d7048f372b06e48e6c45c4c5c7a8fd4256934",
+        "3b2ee0b1cf647efaf0040a0e3256be060ea5b1bc0e347477480fd5aa0ef09fd8",
+        "00ff9672725fc28e8ef10e325c29feb8025f600c8ec98becf191806a6d642d11",
+        "6ffe2d236f6742e84a2f433ee34bcf314d56846c37dc7b562c7165641e1f93ba",
+        "83cc3336c46919c795e295a1ee1cce009741ce1b7380b843aac35b8d8af25b56",
+        "6e4a8e33e0012906628eb6f8e53263b17133694f426eda5f1eff14695b850136",
+        "92e0848c5bad9043cfb9ee40ef0825cf9fa05b964386a8d4546af8fcd68417b7",
+        "bd37e218aba11c9f33e8e482496f56839c8edb4c624fd5721d1e83439ffe404b",
+        "1cce3c1db84bcee102c9cddfd86109e8e452887dd2c8437c4f3e28a9e1721600"
+      ],
+      "factReviews": [
+        {
+          "factId": "schedule-run-pending",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            20
+          ],
+          "reason": "筛到期、排序及不追赶遗漏周期均明确。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1387,
+              "endLine": 1415
+            }
+          ]
+        },
+        {
+          "factId": "schedule-run-all",
+          "coverage": "covered",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "说明jobs副本、无到期筛选及每次后sleep。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "schedule-tag-management",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            4
+          ],
+          "reason": "说明无tag副本、有tag筛选及clear全清/按tag。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1572,
+              "endLine": 1589
+            }
+          ]
+        },
+        {
+          "factId": "schedule-cancel-return",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "明确CancelJob类或实例由Scheduler移除。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 150,
+              "endLine": 175
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 1503,
+              "endLine": 1515
+            }
+          ]
+        },
+        {
+          "factId": "schedule-at",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            16
+          ],
+          "reason": "按日/小时/分钟区分格式，并明确仅tz非空分支import pytz及可选安装路径。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 528
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 268,
+              "endLine": 284
+            }
+          ]
+        },
+        {
+          "factId": "schedule-until",
+          "coverage": "covered",
+          "questionNumbers": [
+            15
+          ],
+          "reason": "列全四类输入、转换到cancel_after及配置和运行边界。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 620
+            },
+            {
+              "path": "test_schedule.py",
+              "startLine": 312,
+              "endLine": 339
+            }
+          ]
+        },
+        {
+          "factId": "schedule-jitter-next",
+          "coverage": "covered",
+          "questionNumbers": [
+            11
+          ],
+          "reason": "明确闭区间随机及while<=now推进。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 561,
+              "endLine": 574
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 748
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 11,
+          "questionPart": "followUps[0]",
+          "kind": "incorrect",
+          "claim": "every(2).seconds先加period才在2秒后，否则会在1秒后。",
+          "reason": "period本身就是2秒；无at_time时即使不预加，while<=now也会加同一个2秒period。预加分支的重要区别可出现在未来at_time等情形，不能用1秒反事实解释。",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 739
+            }
+          ],
+          "questionFingerprint": "abd5f3ff066dfb1c86c03224f71a968f0de62757b3f2708f12791a9602fed987"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "Current cases have all been used in diagnosis; Requests is a regression case.",
+    "Local TypeScript language probes use5.9.3, not the upstream4.9 environment; upstream projects were not executed."
+  ]
+}

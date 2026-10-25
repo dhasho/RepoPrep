@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+  "reportDigest": "sha256:040c1a54b82c49c4abc6788c927b221657ddaea0886545b9a1ad50051e04684a",
+  "caseId": "mitt",
+  "reviewer": {
+    "executor": "Codex primary agent",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy"
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "5e1cf4a7cd44783640a73f30074d12fbc9f4ea95904f8e397e13f9008a179a45",
+        "6309abdb794c7761d3e436b5ddb0e1d1d6690a11c5a78d18e85af014bb6df232",
+        "576263140b34d5ba100d9fd02f29fbf1018032b5e4dce90f3640e198bfb69691",
+        "cdec260d4ea9cebdafe9501227918975ca9b05065de9aee305a99dd113fb6e72",
+        "06f0783dc2f9594361b2f7f172b58a048fa946a5f2596c04471e634e2994e502",
+        "6baa80f28900d52433db59b62c6457bb7884936802333bcbe581c669537e6bfa",
+        "7578b21f08165f3caa226d9b437e04d7d7aff7db90a3644f66e2d6cf5f8b28c5",
+        "b7974d8f86f5303b8eba074b1432a686896f221343bccb095f95050aab09151f",
+        "92f40b3b462c5b6528be3484e5b3821a2a5f099630e8abcce2c8a1de0dc1efc0",
+        "c1f68d10caecf7ed546487b80cd68be17a73aff9235d0a7e086c201d57d9dd6f",
+        "e70a970692ea25b022d5300bb5a2b8b640976303af6c120465c3c87664554a2d",
+        "c7683f84caa4ca5c37b16a22331446ad6c8950691b54995f29a236911f3aa17c",
+        "24c0add88b3c4a84cbdef9bfab73c0e09db3209f01b12bc973e2111339b628e0",
+        "2f6f42a2d3cfd975c9c5e2d09b53ceed356099de15d725a5e1c0d307bb8adb65",
+        "ff31a79d736af06854a0a1392467d5ff68eba23d0e066552e0ff7ebdefe7826a",
+        "7926325091f8536a98e7561421dcf4ee6536f37a7d9c2fac0f68f5ee4dd0ec26",
+        "6ef4350896d1ac34449c68af6efed5d6a1fa1c9c28d5d8e4d626a1df877461eb",
+        "268dade679a9cd2c755a0355904680ce2110b850d7a7ad01de754f1d9e18f0e5",
+        "e002a8acb43c11d0abbc9e842a185b971387c07105bf7411bf7107831f946863",
+        "619380b5c79df80395ad0fcc34f34e59c4d9a846acba92667de8018c4b737c50"
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            3
+          ],
+          "reason": "明确Map映射与string/symbol事件键。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 21
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            3
+          ],
+          "reason": "说明push追加且允许重复。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            4
+          ],
+          "reason": "说明第一个匹配项splice、省略handler映射空数组。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            12,
+            14
+          ],
+          "reason": "说明具体事件先快照、通配符后快照及两种参数签名；变更例子限于正在分发的同类列表，不扩大成两个阶段的全局预快照。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 93,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "说明undefined条件重载与必需/可选payload。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 23,
+              "endLine": 39
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            2
+          ],
+          "reason": "说明可注入同一Map并直接暴露all。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 8,
+          "questionPart": "followUps[0]",
+          "kind": "incorrect",
+          "claim": "把泛型约束放宽成Record<string,unknown>会禁止symbol事件键。",
+          "reason": "约束不删除实际Events的额外symbol键，emit仍使用keyof Events。本机TypeScript5.9.3纯内存正/负控示例确认symbol可用；未执行上游项目或其4.9环境。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 39
+            }
+          ],
+          "validationNote": "validation-js-language-probes.json",
+          "questionFingerprint": "b7974d8f86f5303b8eba074b1432a686896f221343bccb095f95050aab09151f"
+        },
+        {
+          "questionNumber": 9,
+          "kind": "imprecise",
+          "claim": "事件表已有*时仍无条件说类型禁止off('*')。",
+          "reason": "当keyof Events包含*时，普通事件重载handler可选，可以接受该调用；需限定到事件表不含*的通常情况。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 23,
+              "endLine": 39
+            }
+          ],
+          "validationNote": "validation-js-language-probes.json",
+          "questionFingerprint": "92f40b3b462c5b6528be3484e5b3821a2a5f099630e8abcce2c8a1de0dc1efc0"
+        },
+        {
+          "questionNumber": 11,
+          "questionPart": "followUps[1]",
+          "kind": "imprecise",
+          "claim": "在finally里运行通配符会掩盖原异常。",
+          "reason": "finally正常结束会继续传播原异常；只有finally自身抛错或覆盖完成状态等才会取代。Node最小控制例保留了original异常。",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 93,
+              "endLine": 120
+            }
+          ],
+          "validationNote": "validation-js-language-probes.json",
+          "questionFingerprint": "e70a970692ea25b022d5300bb5a2b8b640976303af6c120465c3c87664554a2d"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "Current cases have all been used in diagnosis; Requests is a regression case.",
+    "Local TypeScript language probes use5.9.3, not the upstream4.9 environment; upstream projects were not executed."
+  ]
+}

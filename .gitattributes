@@ -1,0 +1,2 @@
+# Keep byte-bound evaluation receipts stable across Windows checkouts.
+reports/real-generation-eval/2026-10-24-grounded-v1-deepseek-v4-flash/* text eol=lf

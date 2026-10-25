@@ -9,7 +9,7 @@ RepoPrep 是一款桌面应用：读取本地项目代码与文档，生成面�
 - 可按 OpenAI 或 Claude（Anthropic Messages）接口规范配置模型服务。
 - 在项目侧栏中按时间和问题深度保留多份分析，支持导出 Markdown。
 - 支持后台生成，完成后再查看结果。
-- 上下文结合项目入口、本地引用和模块覆盖选择文件；JS/TS 按语法结构选取函数与方法，Python 使用缩进和声明启发式，预算不足时提示省略范围。
+- 上下文按项目入口、本地引用、配置与模块覆盖分配预算；JS/TS 按语法结构选取函数与方法，Python 使用逻辑行和缩进启发式，预算不足时提示省略范围。
 - 支持配置上下文窗口与输出 token 上限；结果页和 Markdown 导出分别显示输入估算、服务商用量回执及实际提供的文件范围。
 
 可选择问题深度：
@@ -44,4 +44,4 @@ npm run dev
 
 开发环境与常见问题见[开发指南](docs/development.md)。项目规范、验证命令和版本策略见[项目规范](docs/project-standards.md)、[验证指南](docs/validation.md)和[版本策略](docs/VERSIONING.md)。
 
-生成评测见[评测指南](docs/generation-evaluation.md)，已提供[公开项目真实基线报告](reports/real-generation-eval/2026-10-23-deepseek-v4-flash/report.md)。离线合成评测的用途与限制见指南。
+生成评测见[评测指南](docs/generation-evaluation.md)。已保留[首版真实基线](reports/real-generation-eval/2026-10-23-deepseek-v4-flash/report.md)和[当前版本实测对比](reports/real-generation-eval/2026-10-24-grounded-v1-deepseek-v4-flash/report.md)：四个固定项目共 80 题、4 次调用，完整核心事实覆盖保持 23/28，输入 token 少约 25.1%、合计 token 少约 18.0%。这些是小样本、代理辅助的源码复核，仍有答案错误，不能视为答案正确率或人工盲审。离线合成评测的用途与限制见指南。

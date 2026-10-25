@@ -1,0 +1,181 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+  "reportDigest": "sha256:040c1a54b82c49c4abc6788c927b221657ddaea0886545b9a1ad50051e04684a",
+  "caseId": "p-limit",
+  "reviewer": {
+    "executor": "Codex primary agent",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy"
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "1abab79a4488a834e99596434c7590cfd0c5e1abeb68430ba67187dcb17cc8ed",
+        "8e91e729df7d68f6954fd340b4c38902fcb6fcbd67adf6761093763747692c29",
+        "11a41d9d97829f13c614f09187774ddd84f57d002b7950437c04c432d4170539",
+        "73b72812aa7b2128e80ed10b7da964226fc236c6f550a0a38b1e7aab7ae2258a",
+        "ebd9f3dffd2718086a303b00cf50027eeb95c281dddfbc324f5e7997447150fc",
+        "1524fa40b188d93e1c0b483abbf3f0b607d73ee7d3f49958f722c69baf54a53e",
+        "a76576d623ae275f10ba47e6833376c19a9f33c71c899eb891b50621d6b65201",
+        "ae39471b5bf241c401c163a7a426ad2c7fbde5b99e9918708e42d8ce4001b2e3",
+        "8467bc3a4d00cc911e7e20f2194198eed0483025e9f0cff00b1bd0a7a2122210",
+        "f9869c1ac3c14044370599fc6e448da18e2bee4964f8f338207233be208f4edb",
+        "82a112644e6524e00f88eaf88bc8704d8d3ca3fea1965c35d632602779b84d11",
+        "121f25593852423c937fc25c025fb41676906bd7dd8d44813472b383e3b313d3",
+        "1c9f401a618ff281809b2d0bdfe248e7057ad287a45f507f91f79ba47a3e5817",
+        "beff7771d3e795d7b8d7c4301f24c404ca9041a55d28c30ded290e5563c6fd41",
+        "caadd65aa90dad5b4a7792f843337548194fa2efdb352aa090f011d68305a317",
+        "430c59ae627e141c030d73d6a202d753a2c0e4bfeada6872f3c95b75d00fd993",
+        "4b66d944819fa54191b3af443ccb1991747776020e5659f6c6f85902ca78b0e4",
+        "c3b76422b3cb68aa7273129e89640c81d34852349dbb22416b6d91554b316a24",
+        "e445d4bf45b42dafc3e9b5572824808f72aaebbb3269441f3c897e4076bb10c5",
+        "31cf4a28811ec558cf2deb99191761cf310d5c9153c8dbf559d1d6e7546dbccb"
+      ],
+      "factReviews": [
+        {
+          "factId": "plimit-validation",
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ],
+          "reason": "正整数/Infinity及含concurrency和rejectOnClear的options均解释。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 3,
+              "endLine": 15
+            },
+            {
+              "path": "index.js",
+              "startLine": 144,
+              "endLine": 148
+            }
+          ]
+        },
+        {
+          "factId": "plimit-active-queue",
+          "coverage": "covered",
+          "questionNumbers": [
+            3,
+            5,
+            6
+          ],
+          "reason": "说明队列出入、计数和容量条件，区分槽位占用与函数开始。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 16,
+              "endLine": 30
+            }
+          ]
+        },
+        {
+          "factId": "plimit-promise-rejection",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "reason": "说明先resolve(result)、内部await/catch并在成败后next。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            }
+          ]
+        },
+        {
+          "factId": "plimit-clear",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            11
+          ],
+          "reason": "默认清队列不settle、启用选项用abort.reason拒绝pending。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "test.js",
+              "startLine": 184,
+              "endLine": 215
+            }
+          ]
+        },
+        {
+          "factId": "plimit-concurrency-setter",
+          "coverage": "covered",
+          "questionNumbers": [
+            8
+          ],
+          "reason": "说明setter校验和queueMicrotask补位、调小不取消运行任务。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "plimit-map-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            13,
+            14
+          ],
+          "reason": "说明受限任务、Promise.all保输入顺序及迭代失败处理。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 126
+            },
+            {
+              "path": "test.js",
+              "startLine": 256,
+              "endLine": 269
+            }
+          ]
+        },
+        {
+          "factId": "plimit-wrapper",
+          "coverage": "covered",
+          "questionNumbers": [
+            16,
+            17
+          ],
+          "reason": "说明独立limiter包装及clearQueue透传。",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 133,
+              "endLine": 142
+            },
+            {
+              "path": "test.js",
+              "startLine": 217,
+              "endLine": 227
+            }
+          ]
+        }
+      ],
+      "findings": []
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "Current cases have all been used in diagnosis; Requests is a regression case.",
+    "Local TypeScript language probes use5.9.3, not the upstream4.9 environment; upstream projects were not executed."
+  ]
+}

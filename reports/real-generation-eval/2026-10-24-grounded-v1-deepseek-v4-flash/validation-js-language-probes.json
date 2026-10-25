@@ -1,0 +1,16 @@
+{
+  "typescriptVersion": "5.9.3",
+  "scope": "Isolated in-memory types, not an upstream project build; target repository declares TypeScript4.9 while local validation uses5.9",
+  "symbolAcceptedUnderStringRecordConstraint": true,
+  "offWildcardAcceptedWhenEventTableIncludesWildcard": true,
+  "negativeTypeControl": [
+    {
+      "code": 2345,
+      "message": "Argument of type 'string' is not assignable to parameter of type 'number'."
+    }
+  ],
+  "finallyPreservesOriginalError": true,
+  "actions": [
+    "wildcard"
+  ]
+}

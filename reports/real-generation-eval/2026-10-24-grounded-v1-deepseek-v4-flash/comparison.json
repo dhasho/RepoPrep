@@ -1,0 +1,514 @@
+{
+  "schemaVersion": "repoprep-real-run-comparison-v1",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "model": "deepseek-v4-flash",
+  "protocol": "openai",
+  "config": {
+    "model": "deepseek-v4-flash",
+    "protocol": "openai",
+    "granularity": "medium",
+    "budget": {
+      "min": 15,
+      "target": 20,
+      "max": 25
+    },
+    "temperature": 0.4
+  },
+  "inputReportHashes": {
+    "baseline": "3279159288ace996a57d8012f6eff6752b21c62866854945dbc41294058639e0",
+    "candidate": "b43f6285748390fa108b66bdc781e93229b27d56be6cf896300886dfb7243c0e"
+  },
+  "conditions": {
+    "baseline": {
+      "contextWindowTokens": null,
+      "profileMaxOutputTokens": null,
+      "maxOutputTokens": null,
+      "maxOutputTokensPolicy": "provider-default",
+      "applicationInputTokenTarget": null,
+      "applicationInputTokenBudget": null,
+      "reservedOutputTokens": null,
+      "reservedOutputPolicy": null,
+      "inputTokenBudgetPolicy": null,
+      "contextStrategy": null,
+      "tokenEstimateMethod": null
+    },
+    "candidate": {
+      "contextWindowTokens": null,
+      "profileMaxOutputTokens": null,
+      "maxOutputTokens": null,
+      "maxOutputTokensPolicy": "provider-default",
+      "applicationInputTokenTarget": 64000,
+      "applicationInputTokenBudget": 64000,
+      "reservedOutputTokens": 65536,
+      "reservedOutputPolicy": "deepseek-reasoning-reserve-65536",
+      "inputTokenBudgetPolicy": "min(application target, max(0, configured context window - output reserve)); unknown window uses application target",
+      "contextStrategy": "structure-v1",
+      "tokenEstimateMethod": "mixed-text-v1"
+    }
+  },
+  "sourceHashChanges": [
+    {
+      "file": "electron/services/context-budget-integration.test.ts",
+      "baseline": "146ff20ad334536a1f192e77304782b877664b6adf3855d1bb9bf51ba04ead27",
+      "candidate": "1e277075641be48285c23f61d10b03150396bf0fd9ac7d5bf045ae2f787c35b8"
+    },
+    {
+      "file": "electron/services/context-builder.ts",
+      "baseline": "169f86e92e0b47aa11fd83fb851512d77b757bb9a5470bbaa786aae84dde2052",
+      "candidate": "3b52015502b965708b5b22a2f90fe676a1917d8e71a7b85ace879de0fbc6eb99"
+    },
+    {
+      "file": "electron/services/context-selection.test.ts",
+      "baseline": "b75aed7a60d7838f2b50a354e9363bc25712c3799a4151032e728654322ee4c4",
+      "candidate": "6ca385578a14d8c67e2bdbe7ba8053e39897d13f417a2e29f8269ef9ad54add4"
+    },
+    {
+      "file": "electron/services/file-selection.ts",
+      "baseline": "ebe5c3747a1144731591e98922d6150a330b171e428bd2b1bb0e60ff0a4d6c52",
+      "candidate": "c23785a5e42dafaa4ac80e3b8a949f576f90a305f05121c989b085b0f6a5fa99"
+    },
+    {
+      "file": "electron/services/generator-grounding.test.ts",
+      "baseline": null,
+      "candidate": "6a03cb8ab82873d571edb8a1128128808c2d0b51267164e82be81dc95c48cbb3"
+    },
+    {
+      "file": "electron/services/generator-merge.test.ts",
+      "baseline": "9668b6975c135e1dba967240f6d4abe261eb8698cf6c5559837458470ceff762",
+      "candidate": "26c07ac081d55aa030a1213806fc3b903b023a271ee56bd4e21ee15700cf9684"
+    },
+    {
+      "file": "electron/services/generator.ts",
+      "baseline": "5124a42eb31e755744597e911a71d7a826702b5d8001fad9f8efece119a91d4e",
+      "candidate": "9072e8736d3edca5fce917f67774ca84c1c9193a6b299d44565cefad6a06614a"
+    },
+    {
+      "file": "electron/services/ipc-handler-guards.test.ts",
+      "baseline": "02bad40e3f96c4041a98a01c8b4e2b6556721941cff8bf99e8ecad500448ee68",
+      "candidate": "263a78eff5dda13c0d2cec4ea59a6487e622da84c6bd3ac12147dd2c2cc1f88f"
+    },
+    {
+      "file": "electron/services/ipc-handler-guards.ts",
+      "baseline": "9a4b79942171cb0e7c9b03e3e6e6e0de1dba1566e4dccd134b57de95d7b198f2",
+      "candidate": "f6e3452d1d99f88ec4cc7d91b2caa8ec3b63a4862293b2d97552e2ce33f9128f"
+    },
+    {
+      "file": "electron/services/ipc-validation.test.ts",
+      "baseline": "cd987b06ea9b39fe3fdb3f538e14bd259f42c222996bbc579321e97e54281136",
+      "candidate": "c03aa8d95c4c70f6ed9d6adef29aec79de7e212af25e54de62171dcb30f2f4b3"
+    },
+    {
+      "file": "electron/services/ipc-validation.ts",
+      "baseline": "1027a421f805a2c698d06cf5288cbc77bdb45b8300d56af3733bb45645ecf961",
+      "candidate": "f4a4f38ca50b5bb7e1647ce135da16316b8e6aa3bc0d2243cc36393bf984b2de"
+    },
+    {
+      "file": "electron/services/llm-anthropic.test.ts",
+      "baseline": "3915bec379e6a4899f37e4de2b022231209cea441d604866fb869c9d35c63ad1",
+      "candidate": "5078c635aea30377317a7509248e03380fde1650da8550ba3420f0901e0b60ab"
+    },
+    {
+      "file": "electron/services/llm-safe-results.test.ts",
+      "baseline": "98361e9de2fb101b9a9e3ee64b544107fe4dc5c1c510bc5ad2e49128c9aa5b4a",
+      "candidate": "6c1abe292e56bbbcd5a4d5dc2e5818f33fa5f5d575c5b15d7d859c9a21c11938"
+    },
+    {
+      "file": "electron/services/llm.ts",
+      "baseline": "c2f582b370dc59222063d58234d2f7f8405e07acbcf6d6ddbd5768f630f1e4fb",
+      "candidate": "b6aab97202ec221162101d69af5f4ef5d127d2eeb7ae51e40b1feb7f22671c92"
+    },
+    {
+      "file": "electron/services/markdown-export.ts",
+      "baseline": "75d499fc77adc77252df816fa2d288512167fda4661a591aef8eb953aec2063c",
+      "candidate": "63262c0710a328babf2330ce894dd0100f1739303590a63f403a9313b8303253"
+    },
+    {
+      "file": "electron/services/result-store-contract.test.ts",
+      "baseline": "17ff7e670c87d458df1f6a462af873e1163e05596ed859a7d48e6b6e53b38638",
+      "candidate": "4e370015f0944be80e79ce63b68039eac09f75e5a25a92d7b85fa57cb2ccabfd"
+    },
+    {
+      "file": "electron/services/snippet-selection-integration.test.ts",
+      "baseline": null,
+      "candidate": "e81333c5d17e763dbac3092c08c0a34df899a5d8f854e00aab80db0c0620713b"
+    },
+    {
+      "file": "electron/services/snippet-selection.test.ts",
+      "baseline": null,
+      "candidate": "27a56ddf83431e132670cf670306aeeb656020aad3a07f1da6cd67098911069d"
+    },
+    {
+      "file": "electron/services/snippet-selection.ts",
+      "baseline": null,
+      "candidate": "12e387b25b5dabf9a327f6552b99b5f502a070c2302275e05dd23306c1e5a48c"
+    },
+    {
+      "file": "electron/services/source-analysis.test.ts",
+      "baseline": null,
+      "candidate": "a1af0f084389b1ca630699d423e28460ebfd9e1c02f4d41f0b586a56714c5591"
+    },
+    {
+      "file": "electron/services/source-analysis.ts",
+      "baseline": null,
+      "candidate": "0f30b5952e9f781c8e2b31554f6f0e03eded8cff58f7f246eee532727ab1e192"
+    },
+    {
+      "file": "electron/services/storage-recovery.test.ts",
+      "baseline": "624ca7da17eefc39fad32f0a7732ce4168999a8cbee13bdc2a02e36c17b17b29",
+      "candidate": "301057f8921fe05fd7d3afdcb6c64c342ca6c1092f7e94965006a59467c60b5a"
+    },
+    {
+      "file": "electron/services/store.ts",
+      "baseline": "9452e07c43c67257ed2cbdeb2cf993081c5f0c29fcbad9e964f8ba7a35666fd2",
+      "candidate": "9ca358200c58f8728ab34c490c1150befd8649779c4a61839c97a597d8e0d804"
+    },
+    {
+      "file": "package-lock.json",
+      "baseline": "9c193be42b519d84da85c14e96fff01e33facddef152921c58f002af21c20feb",
+      "candidate": "fe075856ff56d808fb3a144d8f51f22faae1936c5267ea751882d61b2d11d75e"
+    },
+    {
+      "file": "package.json",
+      "baseline": "9f9c16ec44f45cda224b8ee9e1ea915854918ca4a23fe378e41743131ed48060",
+      "candidate": "8b844578f329ccf9957cd60d797a96b4ead0299d2c622367c80072fd60132525"
+    },
+    {
+      "file": "scripts/evaluation/compare-real-runs.mjs",
+      "baseline": null,
+      "candidate": "842727fba5f1744fe6a3508005ce844c4914c50766282b270e433ad9eb0f68b8"
+    },
+    {
+      "file": "scripts/evaluation/compare-real-runs.test.mjs",
+      "baseline": null,
+      "candidate": "213137a0204a96084305681f3d251976bee743a9dceb73cb3f33158810422e49"
+    },
+    {
+      "file": "scripts/evaluation/compose-real-cohort.mjs",
+      "baseline": null,
+      "candidate": "6b081369986fc9d0813aa06d891693147afaf46bb6e28a88392d9a1d9392f0e1"
+    },
+    {
+      "file": "scripts/evaluation/compose-real-cohort.test.mjs",
+      "baseline": null,
+      "candidate": "4fb2283cc4acc86f96a44a13528111baf6d0f3e823b54bda3e3dc40df4696bcc"
+    },
+    {
+      "file": "scripts/evaluation/real-runner.mjs",
+      "baseline": "2ade07f06394b19ff1b4e2450281754792e32f90b539104a2cd06aa20725eec7",
+      "candidate": "c4313b809494441bdc7a976251a3eb6aaf320b401914401faff040860d8b01f9"
+    },
+    {
+      "file": "scripts/evaluation/real-runner.test.mjs",
+      "baseline": "fca55938550e182365c7ab5eb01c8903ad15c2870ec75b0bc69b83c5b8ff42a1",
+      "candidate": "70baa71081b4b2105c60eebad5b596c7bbc0eeebd25c6d75a346424c8914e8db"
+    },
+    {
+      "file": "scripts/evaluation/run-saved-profile-entry.cjs",
+      "baseline": "f85ea3a4dfc246c5151404baf418a8e5e1faee1f55d22eb1578cf45be11dc9b7",
+      "candidate": "09acbf03cd9ea37c24831d90afccd2811f42c71fa25afc9e07d08ffd9d252927"
+    },
+    {
+      "file": "scripts/evaluation/run-saved-profile.cjs",
+      "baseline": "6a9e716c1d333ca5e3463c8053e2f8971b0d9e9b9d9887462ca7d2e6823766f3",
+      "candidate": "6faf1316609d811fcfe93ce740e46474a58cbe2ebd133695436c5835ab32f8c3"
+    },
+    {
+      "file": "scripts/evaluation/run-saved-profile.test.cjs",
+      "baseline": "5141afab8edeff2c2868b22e4ae57634d626b74ede7ce9097cd1bb7cb117387f",
+      "candidate": "9d28b0805d63fb6c912ab0c8fa71ae184c6d832a96d2fab1c06cc3fc2923202c"
+    },
+    {
+      "file": "scripts/evaluation/variant-arguments.cjs",
+      "baseline": null,
+      "candidate": "11119a8af013b0f7f12292352f180d7057f4657955419c0e024bb49dd6ce14e2"
+    },
+    {
+      "file": "shared/result-contract.test.ts",
+      "baseline": "dc9b452355349ef719c5bb6c8159d29fe825a3a9cd3b8582b6118f8882beaa5f",
+      "candidate": "05ef666a349e81cc9499df53eb3ece2f96c1f2d9a4f728d0521cce073865758e"
+    },
+    {
+      "file": "shared/result-contract.ts",
+      "baseline": "be132b3a93ee14415de69273b2fc81ff01228acdf40e747c4482e5bf5c61e71d",
+      "candidate": "4f0df8d91080f2d703e35a66b4b606a5e7aaebb46a3a7a27255fa6ded5613609"
+    },
+    {
+      "file": "shared/token-budget.test.ts",
+      "baseline": null,
+      "candidate": "f3b2b1e207208ccadda123d971be297eee5cff66c21edd98978e128e1189b184"
+    },
+    {
+      "file": "shared/token-budget.ts",
+      "baseline": null,
+      "candidate": "9b8e64db0405745d47452a66790a99fa5c264d9463a9a2357c1651dd786886d4"
+    },
+    {
+      "file": "shared/types.ts",
+      "baseline": "5d6481606d3c8ba0696f2c579ab8a9c9141d719e480e373434a561ae0cdc07f1",
+      "candidate": "296ca0030fe2651d91b8062476d62861a3d268c608b1a284ca1a6ae4b56df79f"
+    }
+  ],
+  "baseline": {
+    "runId": "86f91465-5ac3-4a70-8e5a-9b076bbbf1ab",
+    "generatedAt": "2026-10-23T09:14:49.649Z",
+    "summary": {
+      "questions": 80,
+      "requests": 4,
+      "elapsedMs": 576124,
+      "generationMs": null,
+      "actualUsage": {
+        "inputTokens": 146247,
+        "outputTokens": 114186,
+        "totalTokens": 260433
+      },
+      "estimatedInputTokens": null,
+      "repairRequests": 0,
+      "compensationRequests": null,
+      "formatRepairs": 0,
+      "contextBuildMs": null,
+      "modelMs": null,
+      "keywordCoverage": {
+        "covered": 27,
+        "total": 28
+      }
+    }
+  },
+  "candidate": {
+    "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+    "generatedAt": "2026-10-24T15:37:20.401Z",
+    "summary": {
+      "questions": 80,
+      "requests": 4,
+      "elapsedMs": 557201,
+      "generationMs": 557105,
+      "actualUsage": {
+        "inputTokens": 109577,
+        "outputTokens": 103959,
+        "totalTokens": 213536
+      },
+      "estimatedInputTokens": 168526,
+      "repairRequests": 0,
+      "compensationRequests": 0,
+      "formatRepairs": 0,
+      "contextBuildMs": 727,
+      "modelMs": 555980,
+      "keywordCoverage": {
+        "covered": 27,
+        "total": 28
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "mitt",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 161892,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 9653,
+          "outputTokens": 32241,
+          "totalTokens": 41894
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 6,
+          "total": 6
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 179983,
+        "generationMs": 179960,
+        "actualUsage": {
+          "inputTokens": 9841,
+          "outputTokens": 34309,
+          "totalTokens": 44150
+        },
+        "estimatedInputTokens": 14045,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 86,
+        "modelMs": 179863,
+        "selection": {
+          "selectedFiles": 13,
+          "selectedRegions": 13,
+          "omittedFiles": 0
+        },
+        "keywordCoverage": {
+          "covered": 6,
+          "total": 6
+        }
+      }
+    },
+    {
+      "id": "p-limit",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 133990,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 14342,
+          "outputTokens": 22757,
+          "totalTokens": 37099
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 121986,
+        "generationMs": 121974,
+        "actualUsage": {
+          "inputTokens": 14530,
+          "outputTokens": 20711,
+          "totalTokens": 35241
+        },
+        "estimatedInputTokens": 26488,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 89,
+        "modelMs": 121878,
+        "selection": {
+          "selectedFiles": 15,
+          "selectedRegions": 15,
+          "omittedFiles": 0
+        },
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      }
+    },
+    {
+      "id": "requests",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 136258,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 67460,
+          "outputTokens": 27321,
+          "totalTokens": 94781
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 8
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 93818,
+        "generationMs": 93773,
+        "actualUsage": {
+          "inputTokens": 42508,
+          "outputTokens": 18346,
+          "totalTokens": 60854
+        },
+        "estimatedInputTokens": 64000,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 429,
+        "modelMs": 93143,
+        "selection": {
+          "selectedFiles": 61,
+          "selectedRegions": 144,
+          "omittedFiles": 55
+        },
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 8
+        }
+      }
+    },
+    {
+      "id": "schedule",
+      "baseline": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 143984,
+        "generationMs": null,
+        "actualUsage": {
+          "inputTokens": 54792,
+          "outputTokens": 31867,
+          "totalTokens": 86659
+        },
+        "estimatedInputTokens": null,
+        "repairRequests": 0,
+        "compensationRequests": null,
+        "formatRepairs": 0,
+        "contextBuildMs": null,
+        "modelMs": null,
+        "selection": null,
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      },
+      "candidate": {
+        "questions": 20,
+        "requestCount": 1,
+        "elapsedMs": 161414,
+        "generationMs": 161398,
+        "actualUsage": {
+          "inputTokens": 42698,
+          "outputTokens": 30593,
+          "totalTokens": 73291
+        },
+        "estimatedInputTokens": 63993,
+        "repairRequests": 0,
+        "compensationRequests": 0,
+        "formatRepairs": 0,
+        "contextBuildMs": 123,
+        "modelMs": 161096,
+        "selection": {
+          "selectedFiles": 32,
+          "selectedRegions": 64,
+          "omittedFiles": 0
+        },
+        "keywordCoverage": {
+          "covered": 7,
+          "total": 7
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "Actual provider token totals are null when complete usage receipts are unavailable.",
+    "Estimated input tokens are application estimates and are reported separately from provider usage.",
+    "Keyword fact coverage counts configured keyword matches; it is not factual accuracy.",
+    "This comparison does not treat assistant review as human review.",
+    "The legacy report digest does not bind generation metadata; the comparator checks canonical output and question cross-links and records hashes of both complete input reports."
+  ]
+}
