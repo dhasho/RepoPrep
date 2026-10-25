@@ -1,14 +1,18 @@
 # 版本管理
 
-RepoPrep 是单个 npm 包，使用 SemVer `MAJOR.MINOR.PATCH`。根目录 `package.json` 的 `version` 是产品版本的权威来源；`package-lock.json` 顶层 `version` 与 `packages[""].version` 必须同步。
+RepoPrep 是单个 npm 包，使用 SemVer `MAJOR.MINOR.PATCH`。根目录 `package.json` 的 `version` 是产品版本的唯一来源；`package-lock.json` 顶层 `version` 与 `packages[""].version` 必须与它同步。
 
-协作流程按 [AGENTS.md](../AGENTS.md) 执行：重大改动使用 PR，普通小改动可直接 commit、push。下文合并版本政策适用于 PR；直接提交的纯文档、协作规则等小改动不要求为每个 commit 单独升级产品版本。
+## 何时确定版本
 
-## 合并前的版本政策
+版本在准备发布时确定，不是每次变更合入 `main` 都要 bump：
 
-每个准备合并到 `main` 的 PR 都提升一次版本，包括文档、修复和重构（`patch`）。新增向后兼容功能使用 `minor`；破坏兼容契约或数据格式的变化使用 `major`。项目处于 `0.x` 时也按此政策区分变更级别；破坏性变化须在 PR 中说明升级影响和迁移步骤。
+- 同一个待发布迭代内的多次代码提交、修复或随附文档变更，可以保持相同版本；不必因每个 commit 或 PR 机械升级。
+- 准备发布时按自上一发布以来的整体变化选择级别：新增向后兼容功能用 `minor`，破坏兼容契约或数据格式的变化用 `major`，其余用 `patch`。
+- 发布版本必须是合法 SemVer，且高于上一个已发布版本（比较数值段 MAJOR→MINOR→PATCH，不用字符串字典序；`0.10.0` 高于 `0.9.0`，含预发布时按 SemVer 规则核对）。纯文档、协作规则、模板等不影响产品的改动不触发版本变化，也不要求与目标分支比较版本。
 
-使用 npm 内建命令在仓库根目录更新版本，不增加专用脚本、不运行生命周期脚本、不创建 Git tag：
+## 操作与复核
+
+在仓库根目录用 npm 内建命令更新版本（不增加专用脚本、不运行生命周期脚本、不创建 tag），只运行与本次发布级别相符的一条：
 
 ```powershell
 npm version patch --no-git-tag-version --ignore-scripts
@@ -16,24 +20,10 @@ npm version minor --no-git-tag-version --ignore-scripts
 npm version major --no-git-tag-version --ignore-scripts
 ```
 
-只运行与本次改动相符的一条命令。npm 会更新 `package.json` 和 `package-lock.json`；完成后检查三处版本都相同。不要复用已被目标分支使用的版本，不要降低版本，也不要只改其中一处。
-
-## 人工复核
-
-当前仓库没有自动版本检查脚本或已提交的 CI 定义，版本规则由人工复核。先查看三处版本是否一致：
+npm 会同时更新 `package.json` 和 `package-lock.json`。完成后确认三处版本一致：
 
 ```powershell
 node -e 'const p=require("./package.json"), l=require("./package-lock.json"); console.log(JSON.stringify({package:p.version, lock:l.version, lockRoot:l.packages[""].version}, null, 2)); if (p.version !== l.version || p.version !== l.packages[""].version) process.exitCode=1'
 ```
 
-查看目标基准版本：
-
-```powershell
-git show origin/main:package.json
-```
-
-人工确认当前版本是合法 SemVer，三处值完全一致，并且严格高于目标基准版本。比较数值段（先 MAJOR，再 MINOR，再 PATCH），不要用字符串字典序比较；例如 `0.10.0` 高于 `0.9.0`。如目标分支包含预发布版本，也应按 SemVer 规则核对。
-
-并行 PR 可能基于相同旧版本。合并前刷新目标分支和基准版本，再选择一个严格高于最新基准的版本并更新 PR；最终 review 应绑定实际待合并的 head commit。当前仓库没有统一版本检查脚本或已提交的 CI workflow，版本规则按本文的人工步骤落实；远端分支保护和版本门禁以平台设置为准。
-
-本地草稿阶段可以暂不 bump。准备合并 PR 时，按本文件的级别选择和复核步骤提升版本。小改动的 commit、push 已按协作约定获得授权，无需逐次确认；创建 tag 和发布仍需获得对应授权。版本更新本身不自动执行这些操作。
+当前没有自动版本检查脚本或已提交的 CI 门禁，以上规则由人工在发布检查中复核；远端分支保护以平台设置为准。

@@ -1,92 +1,55 @@
 # 项目规范
 
-本文定义 RepoPrep 当前架构下的共享实现约束。它是模块边界和技术规范的权威来源；协作流程由根目录 `AGENTS.md` 管理，审查、验证和版本规则分别见 `docs/review.md`、`docs/validation.md`、`docs/VERSIONING.md`。
+RepoPrep 是 Electron 桌面应用：renderer（React）负责交互展示，主进程及 `electron/services/` 负责扫描、上下文构建、生成、模型访问、导出与持久化，双方通过受守卫的 IPC 通信。本文记录跨模块共享的架构事实与技术约束；协作流程、审查、验证和版本规则见根目录 `AGENTS.md` 及 `docs/` 下对应文档。
 
-## 变更与职责
+## 架构
 
-重大变更应写清以下五项内容；普通小改动在提交说明中交代目的、范围与实际验证即可，无需为此新建 Issue 或单独计划文档：
+RepoPrep 是 Electron 桌面应用，调用方向为 renderer → `window.api` → preload → 主进程 guard → service：
 
-1. **Why**：要解决的用户或工程问题。
-2. **Scope**：涉及和明确不涉及的范围。
-3. **Constraints**：兼容性、安全、资源或实现限制。
-4. **Acceptance criteria**：可观察、可判定的完成条件。
-5. **Test plan**：要运行的检查及预期结果；文档变更说明适用的轻量校验。
+- `shared/types.ts` 定义主、渲染进程共享的数据类型，`shared/ipc.ts` 定义 IPC 通道和 `window.api` 契约。跨进程变更需同时更新调用方、preload、主进程处理器及 `electron/services/ipc-validation.ts` 的运行时校验，并复用 `electron/services/ipc-handler-guards.ts` 统一守卫。
+- `electron/main.ts` 负责窗口生命周期和业务编排；Electron 能力、文件系统、模型网络请求和持久化留在主进程及 `electron/services/`。preload 只映射经过审查的 IPC 接口，renderer 不直接获得 Node 或 Electron 通用 API。
+- `electron/services/` 按扫描、上下文构建、生成、模型访问、导出、存储、安全与授权等职责组织；业务策略不塞入 preload，UI 不承担文件访问、授权或模型调用。
+- renderer 页面与组件负责交互与展示，共享数据形状以 shared 类型为准；状态订阅在组件卸载时解除监听。
+- `shared/` 可包含类型、共享常量和纯函数，不依赖 Electron 或 `src/`。
+- 项目扫描以实际文件为输入事实（`scanner.ts`），`project-snapshot.ts` 判断变化，`scan-cache.ts` 只提供可失效的复用；已保存设置与结果由 `electron/services/store.ts` 管理的 userData 文件持久化，UI 不把临时状态当作持久化成功的证据。
 
-先按职责、接口和可独立验收结果拆模块，再根据依赖关系决定串行或并行；共享接口、持久化格式或安全边界的改动要先确定契约。主代理维护计划与模块依赖，审阅集成结果并对照验收条件复核。
+## 关键约束
 
-## 架构边界
+### 题量与结果协议
 
-| 主题 | 权威来源 | 责任与检查 |
-| --- | --- | --- |
-| 跨进程数据与能力 | `shared/types.ts`、`shared/ipc.ts` | 两端、preload 和运行时 schema 同步；不在各层另造一套契约。 |
-| 环境、命令与产品版本 | `package.json` 的 `engines`、`scripts`、`version` | 文档与实际清单一致；版本同步规则见 `docs/VERSIONING.md`。 |
-| 依赖解析 | `package-lock.json` | 锁文件随依赖变更提交，验证环境用 `npm ci`。 |
-| 项目扫描 | 实际文件、`project-snapshot.ts` | 文件是输入事实，快照判断变化，缓存只提供可失效的复用。 |
-| 已保存设置与结果 | `electron/services/store.ts` 管理的 userData 文件 | UI 表达当前交互与展示，不把临时状态当作已持久化成功的证据。 |
+- 题量唯一来源是 `shared/types.ts` 的 `GRANULARITY_QUESTION_BUDGET`（coarse 8/10/12、medium 15/20/25、fine 25/32/40，单位 min/target/max）；`electron/services/question-budget.ts` 负责批次配额规划，生成器负责合并与裁剪。改动预算时同步检查 `GRANULARITY_META`、README 和 UI 承诺，并运行 `npm run test:question-budget`。
+- `[[术语]]` 标记、`glossary` 键和值、渲染展示与 Markdown 导出构成结果协议；调整任一部分时审查生成归一化、结果持久化、renderer 展示、导出和旧结果兼容。
 
-调用方向为 UI → `window.api` → preload → 主进程 guard → service。`shared/` 可包含类型、共享常量和纯函数，但不得依赖 Electron 或 `src/`；renderer 不导入主进程模块，preload 只映射经过审查的能力。
+### IPC 与安全
 
-- 题量唯一来源是 `shared/types.ts` 中的 `GRANULARITY_QUESTION_BUDGET`；`electron/services/question-budget.ts` 负责批次配额规划，生成器负责合并与裁剪。改动预算时同步检查 `GRANULARITY_META`、README 和 UI 承诺，并运行相关题量检查。`[[术语]]` 标记、`glossary` 键和值、渲染展示与 Markdown 导出构成结果协议；调整任一部分时审查生成归一化、结果持久化、renderer 展示、导出和旧结果兼容。
-- `shared/types.ts` 定义主、渲染进程共享数据类型；`shared/ipc.ts` 定义 IPC 通道和 `window.api` 契约。跨进程变更应同时检查调用、桥接、校验和两端类型。
-- `electron/main.ts` 负责窗口生命周期和业务编排。Electron 能力、文件系统、模型网络请求和持久化留在主进程及 `electron/services/`；renderer 通过 `electron/preload.ts` 暴露的窄接口请求能力，不直接获得 Node 或 Electron 通用 API。
-- preload 只映射经过审查的 IPC 接口。新增通道需在共享契约、preload、主进程处理器及 `electron/services/ipc-validation.ts` 的运行时校验中保持一致，并复用 `electron/services/ipc-handler-guards.ts` 统一守卫。
-- `electron/services/` 按扫描、上下文构建、生成、模型访问、导出、存储、安全与授权等职责组织。避免把业务策略塞入 preload，也避免让 UI 承担文件访问、授权或模型调用。
-- renderer 的页面和组件负责交互与展示；共享数据形状以 shared 类型为准。新增状态订阅应在组件卸载时解除监听。
+- renderer 输入、项目文件、配置内容和模型输出都视作不可信；IPC 边界做发送方、参数 schema 与项目授权校验，TypeScript 类型不能替代运行时校验。
+- 返回 renderer 的错误只暴露安全的静态业务提示；外部错误、文件系统细节及上游响应不得原样回显。
+- 保持 BrowserWindow 的 `sandbox`、`contextIsolation` 开启，`nodeIntegration` 与 `webviewTag` 关闭；窗口导航、权限请求和加载入口受 `electron/window-security.ts` 约束。
+- API Key 只在主进程私有配置和模型请求中解密；公开设置只返回模型配置元数据、密钥是否存在及凭据状态，保存使用 keep/replace/clear 意图。密钥不得进入 IPC 返回、日志、错误消息、生成结果或导出。持久化密钥使用 Electron `safeStorage` 的异步 OS 加密，不可用时拒绝新密钥写入或解密，不回退明文；细节见 [`credential-security.md`](credential-security.md)。
+- 扫描遵守授权和排除规则并过滤敏感信息；未授权路径或被过滤数据不进入缓存、日志、模型请求、结果或导出；缓存复用前确认快照仍有效。
+- 上下文只消费经过授权读取与脱敏的项目文本；解析器不创建会自动发现项目文件的编译器 host，也不执行项目代码。输入 token 是估算（`shared/token-budget.ts`），实际 provider usage 独立记录，二者不能互换。
+- 长任务与流式请求有明确的运行、成功、失败、取消状态生命周期；结束或取消时释放 abort/controller、监听器和临时资源，旧任务不能覆盖新任务或重复响应。
+- 模型输出经有界请求与结果预算校验、归一化后再展示、保存或导出；生成内容不作为指令执行。自动格式修复与补偿是有限次数的兜底，格式正确不代表事实正确。
 
-## 模型编排的选择
+### 持久化
 
-上下文只消费经过授权读取与脱敏的项目文本。JS/TS 使用已安装的 TypeScript 语法 API；Python 使用逻辑行、字符串和缩进启发式，不宣称完整 AST 分析。解析器不能创建会自动发现项目文件的编译器 host，也不能执行项目代码。受限预算按入口和本地引用信号分配给已选文件，并为文档、小模块保留份额；全量能容纳时保持原文件。最后的请求拟合继续保留代码单元边界，并如实标明省略。输入 token 是估算，实际 provider usage 独立记录，二者不能互换。
+- `electron/services/store.ts` 通过 `electron/services/atomic-json.ts` 在目标同目录写临时文件、fsync 后原子重命名；成功替换前保留一个 `.bak`，损坏源另存 `.corrupt`，由受控恢复显式替换。该保证针对单个文件，不构成设置主文件、备份及损坏快照间的跨文件事务；密钥迁移逐文件原子替换，中途失败保持 migration-pending，并在后续读取私有凭据、保存或受控恢复时安全重试。
 
-当前生成使用主进程内的服务模块和显式异步流程，共用上下文选择、题量规划、JSON 修复、补偿、取消及用量诊断。评估 LangChain 或 LangGraph 时，应先指出现有流程无法满足的用户需求和可测量收益。
+### 依赖与清单
 
-LangGraph 可独立组织现有模型客户端，适合后续需要跨重启恢复、人工检查点或按证据缺口进行条件补取的流程；这些能力目前尚未实现。LangChain 的模型或检索组件按实际需要选择，迁移时必须保留现有授权读取、脱敏、响应预算、凭据隔离与取消行为。功能边界参考 [LangGraph 官方说明](https://docs.langchain.com/oss/javascript/langgraph/overview)和[持久化说明](https://docs.langchain.com/oss/javascript/langgraph/persistence)。
+- 依赖解析以 `package-lock.json` 为准，锁文件随依赖变更提交，验证环境用 `npm ci`；文档中的命令与 `package.json` scripts 保持一致。
+- 除非确有必要，不增加依赖或引入新的架构层；例外在变更说明中写明原因与补偿措施。
 
-引入框架的对照须固定项目 revision、模型、提示、输入证据和题量，分别记录源码复核结果、实测 token、请求次数及耗时。规则校验不等于事实核验；额外模型审查与重试须计入成本。框架的等价替换不能单独视为质量或成本改进，也不能以框架名称代替验证结果。
+## TypeScript 约定
 
-### 当前引入判断（2026-10-25）
+- 遵循现有严格检查与格式：缩进 2 空格、单引号、不加分号；优先明确类型、窄化 `unknown`、小型纯函数和清晰异步边界；避免无理由的 `any`、类型断言、重复状态及隐藏的全局副作用。
+- 直接用 Node 测试 `.ts` 时使用显式 `.ts` 导入扩展名和共享别名注册器，这是测试运行方式的例外，不代表构建代码可以忽略模块解析边界。
+- 类型只描述可信形状，不代替外部数据校验；不用宽泛 catch 静默吞掉可诊断错误，用户提示与日志分开处理并过滤敏感值。
 
-当前保持已有服务模块与显式异步流程，不引入 LangChain，也不迁移到 LangGraph。RepoPrep 是本地桌面应用，生成任务使用单一活动槽位；主要流程为取上下文、按配额生成、有限格式修复与题量补偿、校验和保存。控制流仍然明确，主要业务复杂度在源码选择、预算和结果协议。按现有能力整体换成框架，维护收益不足以抵偿迁移与回归验证工作。
+## 自动化边界
 
-| 能力 | 当前已有实现 | 框架的潜在收益与现阶段判断 |
-| --- | --- | --- |
-| 模型接口与结构化输出 | OpenAI/Anthropic 两种接口规范、JSON 解析和一次格式修复 | LangChain 的模型与结构化输出组件在接入更多不同协议时可能减少适配；当前仍须保留定制端点、凭据隔离、响应大小限制、取消和真实用量统计。格式正确不代表事实正确。 |
-| 条件编排和并行汇合 | 批次配额与有限补偿，控制分支可直接追踪 | LangGraph 能统一复杂分支、共享状态及多路结果汇合；当前将这些函数包成图，不能单独改善答案或节约 token。 |
-| 跨重启恢复 | 活动任务在内存中，最终结果持久化 | 持久化 checkpointer 可恢复已完成步骤，但内存 saver 无法跨重启。按当前 HTTP 客户端实现，不能靠检查点从一次中断模型请求的中间继续生成。 |
-| 质量与成本 | AST/启发式取源、完整代码单元、预算与实际用量记录 | 后续可编排定向补证和局部重写，但必须验证是否少错及是否值得增加调用；框架本身不提供源码事实真值。 |
-
-依据为[当前真实报告](../reports/real-generation-eval/2026-10-24-grounded-v1-deepseek-v4-flash/report.md)：四个固定项目共 80 题、4 次请求，没有格式修复或题量补偿调用。核心事实完整覆盖 23/28，代理复核仍发现 3 条错误与 5 条不精确表述；当前更值得优先解决的是证据缺口和事实推断。该样本属于开发与回归观察，不是独立人工准确率，也不能证明任意项目均只需一次请求。
-
-当跨重启续跑、多轮按缺口补取源码、只重写未通过校验的题，或需要保存状态等待用户修改方向等功能实际进入产品范围，再评估 LangGraph。仍以普通顺序流程为主时，可先评估 [Functional API](https://docs.langchain.com/oss/javascript/langgraph/choosing-apis)；只有多分支和状态汇合本身成为维护负担，才考虑 Graph API。不以文件数量或节点数量设机械门槛。
-
-届时复用现有上下文和模型客户端，在主进程中对单条流程做对照，不同时重写 UI、存储和模型适配。LangGraph 可独立于上层 `langchain` 库使用，官方 JS 安装仍包括 `@langchain/langgraph` 与 `@langchain/core`。跨重启能力还需选择实际落盘的 checkpointer，并处理状态版本、源码变化、重复调用与清理；凭据不得进入状态或 trace。参见 [LangChain 概览](https://docs.langchain.com/oss/javascript/langchain/overview)、[结构化输出](https://docs.langchain.com/oss/javascript/langchain/structured-output)和 [checkpointer 边界](https://docs.langchain.com/oss/javascript/langgraph/checkpointers)。
-
-验收须比较整个流程的事实覆盖、具体错误、总 token 和真实 HTTP 次数，并验证取消与恢复；不把换框架、画出状态图或使用内存 saver 作为完成依据。框架编排本身未必增加模型调用；新增审查、工具选路、补取和重写所产生的调用与重复上下文必须计入。此类运行时框架引入属于重大改动，通过 PR 审查。
-
-## 安全与数据
-
-- 把 renderer 输入、项目文件、配置内容和模型输出都视作不可信。IPC 边界要做发送方、参数 schema 与项目授权校验；不能以 TypeScript 类型替代运行时校验。
-- 新增或修改 IPC 处理器必须继续走统一 guard。返回 renderer 的错误只允许暴露安全的静态业务提示；外部错误、文件系统细节及上游响应不得原样回显。
-- 保持 BrowserWindow 的 `sandbox`、`contextIsolation` 开启，`nodeIntegration` 与 `webviewTag` 关闭；窗口导航、权限请求和加载入口须继续受 `electron/window-security.ts` 的策略约束。
-- API Key 只在主进程私有配置和模型请求中解密。公开设置只返回模型配置元数据、密钥是否存在及凭据状态；保存使用 keep/replace/clear 意图，模型探测和连接测试使用显式新密钥或匹配原接口地址与有效接口规范的已保存凭据引用。缺省规范按 OpenAI 处理；Claude 使用 Anthropic Messages 规范。renderer 不得读取已保存明文或密文；密钥不得进入 IPC 返回、日志、错误消息、生成结果或导出。持久化密钥使用 Electron `safeStorage` 的异步 OS 加密；不可用时拒绝新密钥写入或密钥解密，不得回退为明文；无密钥配置和不触及密钥的元数据保存仍可进行。迁移和威胁范围见 `docs/credential-security.md`。
-- 扫描项目文件前遵守授权和排除规则；对敏感信息做过滤，限制扫描量、上下文和模型输出。不要把未授权路径或被过滤数据放入缓存、日志、模型请求、结果或导出。
-- 扫描缓存只是可失效的性能优化，不是事实来源；复用前需确认快照仍有效，项目移除或文件变化时正确失效。
-- `electron/services/store.ts` 使用 `electron/services/atomic-json.ts` 在目标同目录创建临时文件、写入并 fsync、关闭后原子重命名；成功替换前保留一个 `.bak`，损坏源另存 `.corrupt`，由受控恢复显式替换。此保证针对单个文件，不构成设置主文件、备份及损坏快照间的跨文件事务。密钥迁移逐文件原子替换；中途失败可能留下已转换和待转换副本，状态必须保持 migration-pending，并在后续读取私有凭据、保存或受控恢复时安全重试。
-- 长任务与流式请求须有明确的运行、成功、失败和取消状态生命周期；完成、失败、超时或取消时释放 abort/controller、监听器和其他临时资源，避免旧任务覆盖新任务或重复响应。
-- 对模型输出设置有界请求与结果预算，校验和归一化后再展示、保存或导出；模型生成内容不能被当作指令执行，也不能覆盖系统安全规则。
-
-## TypeScript 与实现
-
-- 遵循现有 TypeScript 严格检查和项目格式：缩进 2 空格、单引号、不加分号；优先明确类型、窄化 `unknown`、小型纯函数和清晰异步边界；避免无理由的 `any`、类型断言、重复状态及隐藏的全局副作用。直接用 Node 测试 `.ts` 时，现有测试会使用显式 `.ts` 导入扩展名和共享别名注册器；这是测试运行方式的例外，不应误认为构建代码普遍忽略模块解析边界。
-- 类型只描述可信形状，不代替外部数据校验。不要用宽泛 catch 静默吞掉可诊断错误；对用户提示与日志分开处理，并过滤敏感值。
-- 新增代码应沿用现有命名、模块和依赖方向。除非需求必要且有理由，不增加依赖或引入新的架构层。
-- 违反上述约束的例外应在变更说明中写明原因、影响范围和补偿措施。
-
-## 当前自动化边界
-
-项目已有 `typecheck`、构建、IPC、安全、扫描缓存、冒烟、题量预算与依赖审计等 npm 脚本，具体选择见 `docs/validation.md`。目前没有全局 lint、提交 hook 或自动版本一致性检查；相关风格和版本约束由人工审查落实。不要将目标规则描述成已有自动门禁。
-
-本规范借鉴 Koine 的分层责任、接口契约和可追溯证据思路，依据其根目录 `AGENTS.md` 与 `CLAUDE.md`；RepoPrep 的规则以本项目已有 Electron、IPC、React 和 JSON 存储结构为准。
+已有 `typecheck`、构建、IPC、安全、扫描缓存、冒烟、题量预算与依赖审计等 npm 脚本，选择方式见 [`validation.md`](validation.md)。目前没有全局 lint、提交 hook 或自动版本一致性检查，相关约束由人工审查落实；不要把目标规则描述成已有自动门禁。
 
 ## 安装与本地数据兼容
 
-`com.projectlens.app` 是沿用的 Electron 安装标识，用于让 RepoPrep 安装包升级现有 ProjectLens 安装。主进程也在 Electron 就绪前显式保留旧 `userData` 目录名称（开发环境 `projectlens`，打包环境 `ProjectLens`），因此旧设置、近期项目与结果仍可读取。
+`com.projectlens.app` 是沿用的 Electron 安装标识，让 RepoPrep 安装包升级现有 ProjectLens 安装。主进程在 Electron 就绪前显式保留旧 `userData` 目录名称（开发环境 `projectlens`，打包环境 `ProjectLens`），旧设置、近期项目与结果仍可读取。
