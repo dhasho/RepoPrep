@@ -207,7 +207,7 @@ test('真实 ResultPage 显示读取失败原因、相对路径和样本省略�
   assert.ok(!html.includes('C:\\synthetic'), 'project absolute path is not exposed in the warning')
 })
 
-test('真实 ResultPage distinguishes provider-usage receipts and hides scope for legacy results', async () => {
+test('问答结果不展示内部用量诊断，含诊断和旧格式都正常展示内容', async () => {
   const diagnostics = {
     version: 1 as const,
     status: 'succeeded' as const,
@@ -229,15 +229,15 @@ test('真实 ResultPage distinguishes provider-usage receipts and hides scope fo
     omittedFiles: 2
   }
   const partial = await render(makeResult({ generationDiagnostics: diagnostics }))
-  assert.ok(partial.includes('分析范围与用量'))
-  assert.ok(partial.includes('实际提供 4 个文件、7 个片段；省略 2 个候选文件'))
-  assert.ok(partial.includes('服务商部分回执：输入 1,000、输出 200、合计 1,200 token'))
-  assert.ok(partial.includes('系统估算输入 1,200 token'))
+  assert.ok(!partial.includes('分析范围与用量'))
+  assert.ok(!partial.includes('实际提供 4 个文件、7 个片段；省略 2 个候选文件'))
+  assert.ok(!partial.includes('服务商部分回执：输入 1,000、输出 200、合计 1,200 token'))
+  assert.ok(!partial.includes('系统估算输入 1,200 token'))
   assert.ok(!partial.includes('mixed-text-v1'))
   assert.ok(!partial.includes('C:\\synthetic'))
 
   const complete = await render(makeResult({ generationDiagnostics: { ...diagnostics, usageComplete: true } }))
-  assert.ok(complete.includes('服务商回执：输入 1,000'))
+  assert.ok(!complete.includes('服务商回执：输入 1,000'))
   const legacy = await render(makeResult())
   assert.ok(!legacy.includes('分析范围与用量'))
   assert.ok(!legacy.includes('服务商用量'))
@@ -463,4 +463,24 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     else Reflect.deleteProperty(dom.window.HTMLElement.prototype, 'scrollIntoView')
     dom.window.close()
   }
+})
+
+
+test('新问句提炼主题，不把代码路径或完整描述塞入导航', () => {
+  const labels = summarizeQuestions([
+    '请从 `worker/main.ts` 和 `ui.tsx` 说明程序的进程分层与模块职责。',
+    '主进程如何确认 IPC 请求来自可信页面，并限制项目路径？',
+    '文件树如何保证不会撑爆上下文？',
+    '问题去重和补偿请求是怎么设计的？',
+    '页面导航历史如何保证前进、后退和生成状态一致？'
+  ])
+  assert.deepEqual(labels, ['进程分层与模块职责', '请求来源与访问授权', '文件树与上下文预算', '问题去重与补偿', '导航历史与页面状态'])
+})
+
+test('未知主题也保留技术标点、下划线和英文词间距', () => {
+  for (const term of ['.gitignore', 'window.api', 'node:fs', 'C++/C#', 'src/cache.ts', 'cache_key', '#include']) {
+    assert.ok(summarizeQuestion(`Please explain ${term} behavior?`).includes(term), term)
+  }
+  assert.equal(summarizeQuestion('How does React state synchronization work?'), 'React state synchronization')
+  assert.match(summarizeQuestion('Python CSV 列映射如何设计？'), /Python|CSV|列映射/)
 })

@@ -21,3 +21,13 @@ test('generation prompt separates observed implementation facts from documentati
   assert.match(prompt, /不能证明脚本已经运行/)
   assert.match(prompt, /source contains only a small module/)
 })
+
+
+test('answer formatting requests readable Markdown without changing the question schema', () => {
+  const prompt = buildUserPrompt({contextText: '源码片段', granularity: 'medium', roleFocus: 'general', isModuleBatch: false, quota: 3})
+  assert.match(prompt, /有序或无序列表分点/)
+  assert.match(prompt, /段落之间留空行/)
+  assert.match(prompt, /子步骤适当缩进/)
+  assert.match(prompt, /不套固定标题模板/)
+  assert.ok(!prompt.includes('navigationTitle'))
+})

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 // @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
 import * as sharedTypes from '../../shared/types.ts'
 // @ts-ignore TS5097 -- direct Node tests require the runtime .ts suffix.
-import { renderGenerationDiagnostics, resultToMarkdown } from './markdown-export.ts'
+import { resultToMarkdown } from './markdown-export.ts'
 
 const fixtureRoots: string[] = []
 after(async () => {
@@ -299,10 +299,10 @@ test('real result storage retains successful generation scope for latest, list, 
   assert.ok(store.listAnalyses(projectPath).items.some((item: { id: string }) => item.id === id))
   assert.deepEqual(store.loadAnalysis(projectPath, id).generationDiagnostics, generationDiagnostics)
   const markdown = resultToMarkdown(store.loadAnalysis(projectPath, id))
-  assert.ok(markdown.includes('分析范围与用量'))
-  assert.ok(markdown.includes('服务商部分回执'))
+  assert.ok(!markdown.includes('分析范围与用量'))
+  assert.ok(!markdown.includes('服务商部分回执'))
   assert.ok(!markdown.includes(projectPath))
-  assert.deepEqual(renderGenerationDiagnostics(store.loadResult(projectPath)), renderGenerationDiagnostics(store.loadAnalysis(projectPath, id)))
+  assert.deepEqual(store.loadResult(projectPath).generationDiagnostics, store.loadAnalysis(projectPath, id).generationDiagnostics)
   assert.ok(!JSON.stringify(generationDiagnostics).includes('profileId'))
 })
 

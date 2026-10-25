@@ -7,6 +7,8 @@ import { formatContextTruncationWarning } from '../../shared/context-budget.ts'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- the direct Node test runner requires the explicit extension; bundler resolution does not.
 import { contentReadWarning } from '../../shared/content-read.ts'
+// @ts-ignore TS5097 -- direct Node tests use explicit TypeScript extensions.
+import { formatAnswerMarkdown } from '../../shared/answer-markdown.ts'
 
 /**
  * 转义 Markdown 表格单元格内容（issue #19）：
@@ -35,32 +37,13 @@ function renderContentReadWarning(result: InterviewResult): string[] {
   return [`> ${escapeMarkdownText(contentReadWarning(summary))}`]
 }
 
-export function renderGenerationDiagnostics(result: InterviewResult): string[] {
-  const diagnostics = result.generationDiagnostics
-  if (!diagnostics || diagnostics.status !== 'succeeded') return []
-  const n = (value: number) => value.toLocaleString('zh-CN')
-  const usage = diagnostics.actualUsage === null
-    ? '服务商用量未知（没有有效用量回执）'
-    : `${diagnostics.usageComplete ? '服务商回执' : '服务商部分回执'}：输入 ${n(diagnostics.actualUsage.inputTokens)}、输出 ${n(diagnostics.actualUsage.outputTokens)}、合计 ${n(diagnostics.actualUsage.totalTokens)} token`
-  return [
-    '## 分析范围与用量',
-    '',
-    `- 实际提供 ${n(diagnostics.selectedFiles)} 个文件、${n(diagnostics.selectedRegions)} 个片段；省略 ${n(diagnostics.omittedFiles)} 个候选文件。`,
-    `- 模型请求 ${n(diagnostics.requestCount)} 次（格式修复 ${n(diagnostics.repairRequestCount)}，补充 ${n(diagnostics.compensationRequestCount)}）。`,
-    `- 系统估算输入 ${n(diagnostics.estimatedInputTokens)} token（每次请求预算 ${n(diagnostics.inputTokenBudget)}）；估算值与服务商计量可能不同。`,
-    `- ${usage}。`,
-    `- 耗时：上下文 ${n(diagnostics.contextBuildMs)} ms，模型 ${n(diagnostics.modelMs)} ms，总计 ${n(diagnostics.totalMs)} ms。`,
-    ''
-  ]
-}
-
 function renderFollowUps(followUps: FollowUp[], depth: number): string {
   const indent = '  '.repeat(depth)
   const lines: string[] = []
   for (const f of followUps) {
     lines.push(`${indent}- **追问：**${stripTermMarks(f.question)}`)
     lines.push('')
-    const answerLines = stripTermMarks(f.answer)
+    const answerLines = stripTermMarks(formatAnswerMarkdown(f.answer))
       .split('\n')
       .map((l) => `${indent}  ${l}`)
     lines.push(...answerLines)
@@ -89,7 +72,6 @@ export function resultToMarkdown(result: InterviewResult): string {
   if (contextWarning || contentReadWarning.length) {
     lines.push('')
   }
-  lines.push(...renderGenerationDiagnostics(result))
   if (result.projectSummary) {
     lines.push('## 项目概览')
     lines.push('')
@@ -110,7 +92,7 @@ export function resultToMarkdown(result: InterviewResult): string {
       questionNo++
       lines.push(`### Q${questionNo}. ${stripTermMarks(q.question)}`)
       lines.push('')
-      lines.push(stripTermMarks(q.answer))
+      lines.push(stripTermMarks(formatAnswerMarkdown(q.answer)))
       lines.push('')
       if (q.followUps.length) {
         lines.push(`**追问：**`)

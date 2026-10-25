@@ -257,10 +257,10 @@ async function runWorkflow() {
   evidence.uiActions.push('open saved A analysis from history list')
   await waitForPage('history analysis opened', (text) => text.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
   const resultText = await bodyText()
-  assert.ok(resultText.includes('分析范围与用量'))
-  assert.ok(resultText.includes('系统估算输入'))
-  assert.match(resultText, /服务商回执：输入\s+37、输出\s+19/)
-  evidence.scopeUi = 'present'
+  assert.ok(!resultText.includes('分析范围与用量'))
+  assert.ok(!resultText.includes('系统估算输入'))
+  assert.ok(!resultText.includes('服务商回执'))
+  evidence.scopeUi = 'absent'
   await activeWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50))))')
   const scopeImage = await activeWindow.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
   await fs.writeFile(process.env.REPOPREP_WORKFLOW_SCREENSHOT, scopeImage.toPNG())
@@ -271,9 +271,9 @@ async function runWorkflow() {
   const markdown = await fs.readFile(exportPath, 'utf8')
   assert.ok(markdown.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
   assert.ok(markdown.includes('Loopback workflow') || markdown.includes('中粒度'))
-  assert.ok(markdown.includes('## 分析范围与用量'))
-  assert.ok(markdown.includes('系统估算输入'))
-  assert.match(markdown, /服务商回执：输入\s+37、输出\s+19/)
+  assert.ok(!markdown.includes('## 分析范围与用量'))
+  assert.ok(!markdown.includes('系统估算输入'))
+  assert.ok(!markdown.includes('服务商回执'))
   evidence.checks.export = { wroteFile: true, containsGeneratedQuestion: true, bytes: Buffer.byteLength(markdown) }
 
   // Start a second A generation, move to B in the background, then deliver A's

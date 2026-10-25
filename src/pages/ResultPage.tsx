@@ -4,6 +4,7 @@ import type { FollowUp, InterviewResult, QuestionItem, Section, PublicSettings }
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
 import { contentReadWarning } from '@shared/content-read'
 import { formatContextTruncationWarning } from '@shared/context-budget'
+import { formatAnswerMarkdown } from '@shared/answer-markdown'
 import { api } from '../lib/ipc'
 import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf } from '../lib/question-numbering'
 import { summarizeQuestions } from '../lib/question-summary'
@@ -249,7 +250,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                       numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })
                     )}
                   </span>
-                  <span className="min-w-0 flex-1 whitespace-nowrap">
+                  <span className="min-w-0 flex-1 truncate">
                     {navigationSummaries[sectionQuestionOffsets[q.sectionIndex] + q.questionIndex]}
                   </span>
                 </button>
@@ -310,10 +311,6 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
               <div role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {contextWarning}
               </div>
-            )}
-
-            {result.generationDiagnostics && (
-              <GenerationScopeSummary diagnostics={result.generationDiagnostics} />
             )}
 
             {result.projectSummary && (
@@ -399,24 +396,6 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   )
 }
 
-function GenerationScopeSummary({ diagnostics }: { diagnostics: NonNullable<InterviewResult['generationDiagnostics']> }) {
-  if (diagnostics.status !== 'succeeded') return null
-  const n = (value: number) => value.toLocaleString('zh-CN')
-  const serviceUsage = diagnostics.actualUsage === null
-    ? '服务商用量：未知（没有有效用量回执）'
-    : `${diagnostics.usageComplete ? '服务商回执' : '服务商部分回执'}：输入 ${n(diagnostics.actualUsage.inputTokens)}、输出 ${n(diagnostics.actualUsage.outputTokens)}、合计 ${n(diagnostics.actualUsage.totalTokens)} token`
-  return (
-    <section aria-label="分析范围与用量" className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-      <h2 className="mb-2 font-semibold text-slate-900">分析范围与用量</h2>
-      <p>实际提供 {n(diagnostics.selectedFiles)} 个文件、{n(diagnostics.selectedRegions)} 个片段；省略 {n(diagnostics.omittedFiles)} 个候选文件。</p>
-      <p className="mt-1">模型请求 {n(diagnostics.requestCount)} 次（格式修复 {n(diagnostics.repairRequestCount)}，补充 {n(diagnostics.compensationRequestCount)}）。</p>
-      <p className="mt-1">系统估算输入 {n(diagnostics.estimatedInputTokens)} token（每次请求预算 {n(diagnostics.inputTokenBudget)}）；估算值与服务商计量可能不同。</p>
-      <p className="mt-1">{serviceUsage}</p>
-      <p className="mt-1 text-xs text-slate-500">上下文 {n(diagnostics.contextBuildMs)} ms · 模型 {n(diagnostics.modelMs)} ms · 总计 {n(diagnostics.totalMs)} ms</p>
-    </section>
-  )
-}
-
 function ContentReadWarning({ summary }: { summary: NonNullable<InterviewResult['contentReadSummary']> }) {
   return (
     <section role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -454,7 +433,7 @@ function QuestionCard({
 
       {expanded && (
         <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-          <MarkdownView markdown={q.answer} onTerm={onTerm} />
+          <MarkdownView markdown={formatAnswerMarkdown(q.answer)} onTerm={onTerm} />
           {q.followUps.length > 0 && (
             <div className="mt-4 rounded-lg bg-slate-50 p-3">
               <div className="mb-2 text-xs font-semibold text-slate-400">面试官可能的追问（{q.followUps.length}）</div>
@@ -484,7 +463,7 @@ function FollowUpItem({ f, index, onTerm, depth = 1 }: { f: FollowUp; index: num
       </button>
       {open && (
         <div className="pb-2 pl-11 pr-2">
-          <MarkdownView markdown={f.answer} onTerm={onTerm} />
+          <MarkdownView markdown={formatAnswerMarkdown(f.answer)} onTerm={onTerm} />
           {(f.followUps ?? []).length > 0 && (
             <div className="mt-2">
               {(f.followUps ?? []).map((g, i) => (
