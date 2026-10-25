@@ -1,6 +1,6 @@
 # 文档索引
 
-按用途导航。规范与流程正文以各文件为准，本页不重复其内容。
+使用、开发和评测资料按用途归类。
 
 ## 开发与日常
 
@@ -17,15 +17,15 @@
 
 ## 生成质量评测
 
-- [评测指南](generation-evaluation.md)：离线评测方法与限制。
+- [评测指南](generation-evaluation.md)：真实评测、离线校准和源码复核的入口。
 - [真实模型评测](real-generation-evaluation.md)：固定公开语料上的真实模型评测流程。
 - [评测报告索引](../reports/README.md)：当前结果、基线与历史报告。
 
 ## 历史兼容
 
-- [升级到 1.0.0](upgrade-1.0.md)：数据与 IPC 的不兼容变化及迁移。
+- [旧版本升级与回退](upgrade-1.0.md)：数据与 IPC 的历史变化及迁移。
 - [历史来源字段兼容](source-evidence.md)：旧结果字段的读取策略。
 
 ## 模型编排
 
-- [模型编排取舍](model-orchestration.md)：为什么直接使用模型 HTTP 接口而不引入代理框架。
+- [模型编排取舍](model-orchestration.md)：现有生成流程与 LangChain/LangGraph 的取舍说明。

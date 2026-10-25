@@ -6,7 +6,7 @@ directories:
 files:
   - out/**
   # 注意：不要用 "!node_modules/**" 一刀切。main 进程运行时会 require 生产依赖
-  # （当前是 ignore，见 out/main/index.js），排掉它会让打包版直接起不来。
+  # 依赖以 package.json 与实际主进程产物为准，排除后应用可能无法启动。
   # 若要精简包体，只排除确认「已被 Vite 打进 out/renderer」的渲染进程专用依赖。
   - "!**/node_modules/**/.*"
   - package.json

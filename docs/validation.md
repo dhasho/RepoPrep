@@ -32,7 +32,7 @@
 | `npm run eval:real -- verify --repos-root <directory>` | 核验公开仓库的固定提交、工作树、来源及源码事实哈希/行号；不访问模型服务。 |
 | `npm run eval:real:saved -- --repos-root <directory> --output <new-directory>` | 在隔离 Electron 主进程内读取已保存模型，执行真实仓库生成。会调用配置的模型服务，边界见[真实评测](real-generation-evaluation.md)。 |
 | `npm run eval:real:cohort -- <baseline> <current> <prior> <proof> <new-directory>` | 组合已完成的子集运行与历史测量，不调用模型。 |
-| `npm run eval:offline` | 通过 loopback 合成响应器运行固定 fixture、生产生成流程和评分器；不读取用户设置或密钥。 |
+| `npm run eval:offline -- <new-directory>` | 通过 loopback 合成响应器运行固定 fixture、生产生成流程和评分器；不读取用户设置或密钥，独立输出目录可避免覆盖已有报告。 |
 | `npm run eval:review -- template <report.json> <review.json>` / `... import ...` | 生成或导入离线报告的人工评分，规则见 [generation-evaluation.md](generation-evaluation.md)。 |
 | `npm run build` | 构建 Electron 主进程、preload 与 renderer。 |
 | `npm run dist` | 重新构建并用 electron-builder 生成 Windows 安装包。 |
