@@ -62,3 +62,13 @@ test('long plain prose gets paragraph spacing while short answers remain simple'
   assert.equal(formatAnswerMarkdown('读取失败时返回错误。'), '读取失败时返回错误。')
   assert.equal(formatAnswerMarkdown(''), '')
 })
+
+
+test('inline formulas do not prevent safe prose layout and their code stays intact', () => {
+  const source = '职责分为三项：读取 `files * max(chars / 1000, 1)`；校验 `__cache_key`；返回结构化结果。'
+  const formatted = formatAnswerMarkdown(source)
+  assert.equal((formatted.match(/\n- /g) ?? []).length, 3)
+  assert.ok(formatted.includes('`files * max(chars / 1000, 1)`'))
+  assert.ok(formatted.includes('`__cache_key`'))
+  assert.equal(textOnly(formatted), textOnly(source))
+})

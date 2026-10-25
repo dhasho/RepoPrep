@@ -108,8 +108,10 @@ export function formatAnswerMarkdown(answer: string): string {
 
   // Existing inline markup/links may span punctuation. Leave ambiguous input intact.
   // Single-backtick code and [[terms]] are handled by the bounded scanner below.
-  if (/``|~~~|\*|__|[a-z][a-z\d+.-]*:\/\/|mailto:|\[[^\]\n]*\]\s*(?:\(|\[)|<[^>\n]+>/iu.test(answer)) return answer
-  if (/(?:^|[^\p{L}\p{N}_])_[^_]+_(?=$|[^\p{L}\p{N}_])/u.test(answer)) return answer
+  if (answer.includes('``')) return answer
+  const prose = answer.replace(/`[^`\n]*`/gu, '')
+  if (/~~~|\*|__|[a-z][a-z\d+.-]*:\/\/|mailto:|\[[^\]\n]*\]\s*(?:\(|\[)|<[^>\n]+>/iu.test(prose)) return answer
+  if (/(?:^|[^\p{L}\p{N}_])_[^_]+_(?=$|[^\p{L}\p{N}_])/u.test(prose)) return answer
 
   const sentences = splitSentences(answer)
   if (!sentences || sentences.length === 0) return answer
