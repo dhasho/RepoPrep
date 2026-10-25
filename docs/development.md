@@ -5,7 +5,7 @@
 - 使用 Node.js `^22.15.0 || >=24.0.0`（本地开发建议 24.x）；在仓库根目录 `npm ci` 按 `package-lock.json` 安装依赖。
 - `npm run dev` 在 `http://127.0.0.1:5186/` 启动开发应用，renderer 的 HMR 使用同一端口。该端口配置了 `strictPort`，被占用时启动直接失败：先确认并释放端口，或修改 `electron.vite.config.ts` 的 `renderer.server.port`；不要直接结束身份不明的占用进程。
 - `npm run build` 构建主进程、preload 与 renderer；`npm run dist` 重新构建并用 electron-builder 生成 Windows 安装包。
-- `npm run preview` 只用已有构建产物启动本地预览，本身不负责构建；需要先 `npm run build`。
+- `npm run preview` 默认先构建再启动生产预览；若已有最新构建，可用 `npm run preview -- --skipBuild` 直接启动。
 - `npm run typecheck` 执行 Node/Electron 与 Web 两套 TypeScript 检查。其他测试命令和适用范围见[验证指南](validation.md)。
 
 ## Electron 二进制
