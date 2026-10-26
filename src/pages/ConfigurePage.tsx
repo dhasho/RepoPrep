@@ -28,6 +28,13 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)}GB`
 }
 
+function draftErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  // Electron invoke wraps main-process errors; compare the known business
+  // message after that wrapper without treating arbitrary read errors as corrupt.
+  return Object.values(GENERATION_DRAFT_MESSAGES).find((known) => message === known || message.endsWith(`: ${known}`)) ?? message
+}
+
 export default function ConfigurePage({ overview, settings, initialOptions, notice = null, onStart, onOptionsChange, busyTask = null, onResumeTask, onResumeDraft, onOpenSettings, projectPath }: Props) {
   const [granularity, setGranularity] = useState<Granularity>(initialOptions?.granularity ?? 'medium')
   const [roleFocus, setRoleFocus] = useState<RoleFocus>(initialOptions?.roleFocus ?? 'general')
@@ -53,7 +60,7 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
     }).catch((error: unknown) => {
       if (ticket !== requestId.current) return
       setDraft(null)
-      setDraftError(error instanceof Error ? error.message : String(error))
+      setDraftError(draftErrorMessage(error))
       setDraftStatus('error')
     })
   }
@@ -79,7 +86,7 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
       }
     } catch (error) {
       if (ticket !== requestId.current) return
-      setDraftError(error instanceof Error ? error.message : String(error))
+      setDraftError(draftErrorMessage(error))
       setDraftStatus('error')
     }
   }

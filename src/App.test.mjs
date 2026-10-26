@@ -1144,7 +1144,7 @@ test('draft read failure can be retried and discarding sends only the selected p
 test('corrupt draft can only be explicitly discarded with null and leaves saved analysis history intact', async () => {
   const projectPath = 'C:\\ProjectCorruptDraft'
   const historical = makeResult(projectPath)
-  const corruptError = new Error('生成草稿损坏或版本不兼容，请丢弃后重新生成。')
+  const corruptError = new Error("Error invoking remote method 'generation:draft:get': DisplayableIpcError: 生成草稿损坏或版本不兼容，请丢弃后重新生成。")
   const h = await mountApp({
     savedResults: new Map([[projectPath, historical]]),
     generationDraftFailures: new Map([[projectPath, [corruptError]]])

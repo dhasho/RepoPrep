@@ -207,9 +207,21 @@ async function runWorkflow() {
   await waitForPage('project selection page', (text) => text.includes('选择一个项目'))
 
   const firstProjectName = path.basename(projectA)
+  const draftDirectory = assertSafeFixturePath(path.join(app.getPath('userData'), 'generation-drafts'))
+  const corruptDraftFile = path.join(draftDirectory, `${require('node:crypto').createHash('sha256').update(projectA).digest('hex')}.json`)
+  await fs.mkdir(draftDirectory, { recursive: true })
+  await fs.writeFile(corruptDraftFile, '{synthetic interrupted checkpoint')
   activeFolder = projectA
   await click('button[aria-label="新建分析"]', 'select and scan project A through UI')
   await waitForPage('project A configuration', (text) => text.includes(firstProjectName) && text.includes('开始生成面试题'))
+  await waitForPage('corrupt draft is actionable over actual Electron IPC', (text) => text.includes('丢弃损坏草稿'))
+  await clickButton('丢弃损坏草稿', 'explicitly archive corrupt generation draft')
+  await waitForPage('corrupt draft discarded without generation', (text) => !text.includes('读取生成草稿失败') && !text.includes('正在检查可继续'))
+  const archivedDrafts = (await fs.readdir(draftDirectory)).filter((name) => name.includes('.corrupt-'))
+  assert.equal(archivedDrafts.length, 1)
+  assert.equal(await fs.readFile(path.join(draftDirectory, archivedDrafts[0]), 'utf8'), '{synthetic interrupted checkpoint')
+  assert.equal((await modelState()).requests.length, 0, 'corrupt cleanup never invokes a model')
+  evidence.checks.corruptDraft = { explicitArchive: true, originalBytesPreserved: true, modelCalls: 0 }
   const recentAfterScan = await bridge('window.api.getRecentProjects()', 'verify project A entered recents')
   assert.ok(recentAfterScan.some((project) => project.path === projectA))
   await clickButton('后端', 'choose backend direction')
