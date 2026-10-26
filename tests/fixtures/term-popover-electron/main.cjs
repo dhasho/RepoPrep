@@ -4,7 +4,7 @@ const path = require('node:path')
 
 const fixtureDir = __dirname
 const outputDir = process.argv[process.argv.length - 1]
-const evidence = { verdict: 'NATIVE-FAIL', source: 'actual TermPopover bundle in hidden sandboxed Electron Chromium', scenarios: {} }
+const evidence = { verdict: 'NATIVE-FAIL', source: 'actual static TermPopover and SelectionExplainDialog bundles in hidden sandboxed Electron Chromium', scenarios: {} }
 try { evidence.sourceMetadata = JSON.parse(fs.readFileSync(process.env.PROJECTLENS_NATIVE_METADATA, 'utf8')) }
 catch (error) { evidence.metadataError = String(error) }
 let win
@@ -41,7 +41,7 @@ function installEvidenceObserver() {
 }
 
 async function snapshot() {
-  return evaluate(`({ ...window.__wheelEvidence, popup:!!document.querySelector('.z-50'), typography:(()=>{const e=document.querySelector('.md-body');if(!e)return null;const s=getComputedStyle(e);return {fontSize:s.fontSize,lineHeight:s.lineHeight,fontFamily:s.fontFamily}})(), content:(()=>{const e=document.querySelector('.overflow-y-auto');return e?{top:e.scrollTop,height:e.scrollHeight,client:e.clientHeight,max:e.scrollHeight-e.clientHeight,className:e.className,overscrollBehaviorY:getComputedStyle(e).overscrollBehaviorY}:null})(), pageScroll:scrollY, outsideTop:document.querySelector('#outside-scroll').scrollTop })`)
+  return evaluate(`({ ...window.__wheelEvidence, popup:!!document.querySelector('[role="dialog"]'), selectionText:document.querySelector('[role="dialog"] blockquote')?.textContent, typography:(()=>{const e=document.querySelector('.md-body');if(!e)return null;const s=getComputedStyle(e);return {fontSize:s.fontSize,lineHeight:s.lineHeight,fontFamily:s.fontFamily}})(), content:(()=>{const e=document.querySelector('[role="dialog"] .overflow-y-auto');return e?{top:e.scrollTop,height:e.scrollHeight,client:e.clientHeight,max:e.scrollHeight-e.clientHeight,className:e.className,overscrollBehaviorY:getComputedStyle(e).overscrollBehaviorY}:null})(), pageScroll:scrollY, outsideTop:document.querySelector('#outside-scroll').scrollTop })`)
 }
 
 async function observedWheel(selector, deltaY, previousCount, label) {
@@ -68,18 +68,18 @@ async function run() {
   win.webContents.debugger.attach('1.3')
   await within(win.loadFile(path.join(fixtureDir, 'index.html')), 'fixture load')
   await evaluate(installEvidenceObserver())
-  await waitFor(() => evaluate(`document.querySelector('#fixture-ready')?.textContent === 'ready' && !!document.querySelector('.overflow-y-auto')`), 'initial component mount')
-
-  await waitFor(async () => (await evaluate('window.nativeTest.state()')).explains.length === 1, 'glossary explain start')
+  await waitFor(() => evaluate(`document.querySelector('#fixture-ready')?.textContent === 'ready' && !!document.querySelector('[role="dialog"] .overflow-y-auto')`), 'initial static glossary mount')
   const glossaryBefore = await snapshot()
+  const glossaryInitialApi = await evaluate('window.nativeTest.state()')
   if (glossaryBefore.typography?.fontSize !== '15px') throw new Error(`definition has inconsistent typography: ${JSON.stringify(glossaryBefore.typography)}`)
+  if (glossaryInitialApi.explains.length !== 0 || glossaryInitialApi.subscriptions !== 0 || glossaryInitialApi.cancels.length !== 0) throw new Error(`static glossary unexpectedly started AI lifecycle: ${JSON.stringify(glossaryInitialApi)}`)
   await observedWheel('.overflow-y-auto', 520, glossaryBefore.wheels.length, 'trusted glossary wheel scroll')
   await waitFor(async () => (await snapshot()).content?.top>0, 'glossary scroll position change')
   const glossaryState = await evaluate('window.nativeTest.state()')
   const glossaryAfter = await snapshot()
   fs.writeFileSync(path.join(outputDir, 'definition-preview.png'), (await win.webContents.capturePage()).toPNG())
-  if (!glossaryAfter.popup || glossaryState.cancels.length !== 0 || glossaryState.pending.length !== 1 ||
-      glossaryState.subscriptions !== 1 || glossaryState.unsubscriptions !== 0) throw new Error('glossary internal wheel closed the popover or changed its pending explain lifecycle')
+  if (!glossaryAfter.popup || glossaryState.cancels.length !== 0 || glossaryState.explains.length !== 0 || glossaryState.pending.length !== 0 ||
+      glossaryState.subscriptions !== 0 || glossaryState.unsubscriptions !== 0) throw new Error('glossary internal wheel closed the static popover or started AI lifecycle')
   if (!glossaryAfter.content.className.split(/\s+/).includes('overscroll-contain') || glossaryAfter.content.overscrollBehaviorY !== 'contain') {
     throw new Error(`fixture did not apply the production overscroll utility: ${JSON.stringify(glossaryAfter.content)}`)
   }
@@ -106,14 +106,26 @@ async function run() {
   const topEdge = await observedWheel('.overflow-y-auto', -620, topBefore.wheels.length, 'trusted upward wheel at glossary top edge')
   const edgeApi = await evaluate('window.nativeTest.state()')
   if (!topEdge.popup || topEdge.content.top > 1 || topEdge.outsideTop !== 0 || topEdge.wheels.at(-1)?.deltaY >= 0 ||
-      edgeApi.cancels.length !== 0 || edgeApi.pending.length !== 1) {
-    throw new Error(`upward edge wheel chained outside or closed/cancelled: ${JSON.stringify(topEdge)}`)
+      edgeApi.cancels.length !== 0 || edgeApi.explains.length !== 0 || edgeApi.pending.length !== 0 || edgeApi.subscriptions !== 0) {
+    throw new Error(`upward edge wheel chained outside or closed/started AI lifecycle: ${JSON.stringify(topEdge)}`)
   }
-  evidence.scenarios.glossary = { before: glossaryBefore, after: glossaryAfter, bottomBefore, bottomEdge, topBefore, topEdge, api: glossaryState, edgeApi,
-    layoutBoundary: 'uses production renderer CSS captured from the current build; fixture CSS only lays out the test host and external scroll container; exercises the actual TermPopover component in Chromium and does not claim installed-app coverage' }
+  const glossaryExternalBefore = await snapshot()
+  await wheelAt('#outside-scroll', 540)
+  await waitFor(async () => { const s = await snapshot(); return !s.popup && s.outsideTop > 0 && s.wheels.length > glossaryExternalBefore.wheels.length && s.wheels.at(-1)?.trusted }, 'external glossary wheel closes static popover')
+  const glossaryExternal = await snapshot()
+  const glossaryExternalApi = await evaluate('window.nativeTest.state()')
+  if (glossaryExternalApi.explains.length !== 0 || glossaryExternalApi.cancels.length !== 0 || glossaryExternalApi.subscriptions !== 0 || glossaryExternalApi.unsubscriptions !== 0) throw new Error(`external glossary wheel started or cancelled AI lifecycle: ${JSON.stringify(glossaryExternalApi)}`)
+  evidence.scenarios.glossary = { before: glossaryBefore, after: glossaryAfter, bottomBefore, bottomEdge, topBefore, topEdge, externalBefore: glossaryExternalBefore, external: glossaryExternal, api: glossaryState, edgeApi, externalApi: glossaryExternalApi,
+    layoutBoundary: 'uses production renderer CSS captured from the current build; fixture CSS only lays out the test host and external scroll container; exercises the actual static TermPopover in Chromium and does not claim installed-app coverage' }
 
-  await evaluate(`window.nativeTest.resetScenario('stream')`)
-  await waitFor(async () => (await evaluate('window.nativeTest.state()')).explains.length === 1, 'stream explain start')
+  const beforeDialogMount = await evaluate('window.nativeTest.state()')
+  if (beforeDialogMount.explains.length !== 0 || beforeDialogMount.cancels.length !== 0 || beforeDialogMount.subscriptions !== 0 || beforeDialogMount.unsubscriptions !== 0) throw new Error(`static glossary changed AI lifecycle before dialog mounting: ${JSON.stringify(beforeDialogMount)}`)
+  await evaluate(`window.dispatchEvent(new CustomEvent('native-test-scenario', { detail: 'stream', bubbles: true }))`)
+  await waitFor(async () => (await evaluate('window.nativeTest.state()')).explains.length === 1, 'explicit selection ask mounts stream dialog')
+  const streamStateAtMount = await evaluate('window.nativeTest.state()')
+  const streamSnapshot = await snapshot()
+  if (streamSnapshot.selectionText !== 'SYNTHETIC_SELECTED_TEXT') throw new Error(`dialog did not show the synthetic selected text: ${JSON.stringify(streamSnapshot.selectionText)}`)
+  if (streamStateAtMount.subscriptions !== 1 || streamStateAtMount.pending.length !== 1) throw new Error(`dialog did not start exactly one explain lifecycle: ${JSON.stringify(streamStateAtMount)}`)
   const streamBeforeDelta = await snapshot()
   const longDelta = Array.from({length:90},(_,i)=>`Stream paragraph ${i}: native auto-scroll must keep this explanation open.\n\n`).join('')
   await evaluate(`window.nativeTest.pushDelta(${JSON.stringify(longDelta)})`)
@@ -122,26 +134,21 @@ async function run() {
   const afterAutoScroll = await snapshot()
   if (JSON.stringify(afterAutoScroll.typography) !== JSON.stringify(glossaryBefore.typography)) throw new Error('definition and streamed explanation use different typography')
   fs.writeFileSync(path.join(outputDir, 'detail-preview.png'), (await win.webContents.capturePage()).toPNG())
-  if (!afterAutoScroll.popup || streamState.cancels.length !== 0 || streamState.pending.length !== 1) throw new Error('streaming auto-scroll closed the popover or cancelled explain')
+  if (!afterAutoScroll.popup || streamState.cancels.length !== 0 || streamState.pending.length !== 1) throw new Error('streaming auto-scroll closed the dialog or cancelled explain')
   await wheelAt('.overflow-y-auto', -240)
   await waitFor(async () => {const s=await snapshot();return s.content?.top<afterAutoScroll.content?.top && s.wheels.length>afterAutoScroll.wheels.length && s.wheels.at(-1)?.trusted}, 'trusted upward stream wheel')
   const afterStreamWheel = await snapshot()
   const afterInternalWheelApi = await evaluate('window.nativeTest.state()')
-  if (!afterStreamWheel.popup || afterInternalWheelApi.cancels.length !== 0 || afterInternalWheelApi.pending.length !== 1) throw new Error('streaming internal wheel closed the popover or cancelled explain')
-  evidence.scenarios.streaming = { beforeDelta: streamBeforeDelta, afterAutoScroll, afterInternalWheel: afterStreamWheel, api: afterInternalWheelApi }
+  if (!afterStreamWheel.popup || afterInternalWheelApi.cancels.length !== 0 || afterInternalWheelApi.pending.length !== 1) throw new Error('streaming internal wheel closed the dialog or cancelled explain')
+  evidence.scenarios.streaming = { beforeDelta: streamBeforeDelta, afterAutoScroll, afterInternalWheel: afterStreamWheel, api: afterInternalWheelApi,
+    lifecycleBoundary: 'resetScenario(stream) simulates the report mounting the dialog after an explicit user Ask action; no requirement is asserted for external scroll closing the modal' }
 
-  await waitFor(async () => {const s=await snapshot(); return s.popup && s.content?.height>s.content?.client}, 'external wheel fixture ready')
-  const externalBefore = await snapshot()
-  await wheelAt('#outside-scroll', 540)
-  await waitFor(async () => {const s=await snapshot();const a=await evaluate('window.nativeTest.state()');return !s.popup && s.outsideTop>0 && s.wheels.length>externalBefore.wheels.length && s.wheels.at(-1)?.trusted && a.cancels.length===1}, 'external native wheel close and cancellation')
-  const external = await snapshot()
-  const externalApi = await evaluate('window.nativeTest.state()')
-  const transition = externalApi.transitions[0]?.beforeReset
-  if (!transition || transition.cancels.length !== 1 || transition.cancels[0] !== transition.explains[0] || transition.unsubscriptions !== 1) throw new Error('glossary-to-stream unmount cleanup evidence failed')
-  if (!evidence.scenarios.streaming.afterInternalWheel.wheels.some(e => e.trusted) || !external.wheels.some(e => e.trusted) ||
-      externalApi.cancels.length !== 1 || externalApi.cancels[0] !== externalApi.explains[0] || externalApi.unsubscriptions !== 1 || externalApi.pending.length !== 0) throw new Error('external wheel evidence or exactly-once matching cancellation failed')
-  evidence.scenarios.glossary.transitionCleanup = transition
-  evidence.scenarios.external = { before: externalBefore, after: external, api: externalApi }
+  await evaluate(`document.querySelector('[role="dialog"] button[aria-label="关闭"]').click()`)
+  await waitFor(async () => { const s = await evaluate('window.nativeTest.state()'); return s.cancels.length === 1 && s.unsubscriptions === 1 && s.pending.length === 0 }, 'explicit dialog close cancels/unsubscribes')
+  const dialogClose = await evaluate('window.nativeTest.state()')
+  if (dialogClose.cancels[0] !== dialogClose.explains[0] || dialogClose.cancels.length !== 1 || dialogClose.unsubscriptions !== 1) throw new Error(`dialog close did not cancel its UUID exactly once: ${JSON.stringify(dialogClose)}`)
+  evidence.scenarios.streaming.close = dialogClose
+  evidence.scenarios.external = { boundary: 'external wheel behavior is not asserted to close the AI dialog' }
   const image = await win.webContents.capturePage()
   fs.writeFileSync(path.join(outputDir, 'screenshot.png'), image.toPNG())
   evidence.verdict = 'NATIVE-OK'

@@ -98,7 +98,7 @@ function runElectron(executable, evidenceDir) {
   })
 }
 
-test('TermPopover internal and external scrolling follows real Chromium wheel input', { timeout: 60_000 }, async () => {
+test('static glossary and selected-text explanation scrolling follows real Chromium wheel input', { timeout: 60_000 }, async () => {
   const runId = `${new Date().toISOString().replaceAll(':', '-')}-${randomUUID()}`
   const evidenceDir = path.join(root, '.validation', 'issue-cycle', 'issue-92', 'native-electron', runId)
   try {
@@ -117,6 +117,12 @@ test('TermPopover internal and external scrolling follows real Chromium wheel in
     assert.match(evidence?.sourceMetadata?.componentSha256 ?? '', /^[0-9a-f]{64}$/)
     assert.match(evidence?.sourceMetadata?.productionCssSha256 ?? '', /^[0-9a-f]{64}$/)
     assert.ok(evidence.scenarios.glossary && evidence.scenarios.streaming && evidence.scenarios.external)
+    assert.equal(evidence.scenarios.glossary.external.api.explains.length, 0)
+    assert.equal(evidence.scenarios.glossary.external.api.subscriptions, 0)
+    assert.equal(evidence.scenarios.glossary.external.api.cancels.length, 0)
+    assert.equal(evidence.scenarios.streaming.close.cancels.length, 1)
+    assert.equal(evidence.scenarios.streaming.close.cancels[0], evidence.scenarios.streaming.close.explains[0])
+    assert.equal(evidence.scenarios.streaming.close.unsubscriptions, 1)
   } catch (error) {
     const message = error?.stack || String(error)
     console.error(`VERDICT NATIVE-FAIL\n${message}`)
