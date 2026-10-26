@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 
-test('dialog lifecycle, focus, bounded context, stale events, and per-report completion cache', async () => {
+test('panel lifecycle, focus, bounded context, stale events, and per-report completion cache', async () => {
   const { JSDOM } = await import('jsdom')
   const dom = new JSDOM('<!doctype html><body><div id="root"></div></body>', { url: 'http://localhost' })
   type E = { requestId: string; type: 'delta' | 'done' | 'error'; data: string }
@@ -20,16 +20,17 @@ test('dialog lifecycle, focus, bounded context, stale events, and per-report com
   const React = await import('react')
   const { createRoot } = await import('react-dom/client')
   const require = createRequire(import.meta.url)
-  const { default: Dialog } = require(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.render-test/selection-explain-dialog.cjs'))
+  const { default: Panel } = require(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.render-test/selection-explain-panel.cjs'))
   const container = dom.window.document.querySelector('#root')!
   const root = createRoot(container)
   const cache = new Map<string, string>()
   const closeCalls: string[] = []
+  const collapseCalls: string[] = []
   const trigger = dom.window.document.createElement('button')
   trigger.textContent = 'trigger'; dom.window.document.body.appendChild(trigger); trigger.focus()
-  const props = { selectedText: 'SELECTED_ORIGINAL', question: 'Q'.repeat(13000), snippet: 'CONTEXT'.repeat(8000), projectSummary: 'S'.repeat(25000), profileId: 'p1', explanationCache: cache, onClose: () => { closeCalls.push('close') } }
+  const props = { selectedText: 'SELECTED_ORIGINAL', question: 'Q'.repeat(13000), snippet: 'CONTEXT'.repeat(8000), projectSummary: 'S'.repeat(25000), profileId: 'p1', explanationCache: cache, onClose: () => { closeCalls.push('close') }, onCollapse: () => { collapseCalls.push('collapse') } }
   const render = async (show: boolean, overrides: Record<string, unknown> = {}) => {
-    await React.act(async () => root.render(show ? React.createElement(React.StrictMode, null, React.createElement(Dialog, { ...props, ...overrides })) : null))
+    await React.act(async () => root.render(show ? React.createElement(React.StrictMode, null, React.createElement(Panel, { ...props, ...overrides })) : null))
     await React.act(async () => new Promise((resolve) => setTimeout(resolve, 5)))
   }
   const emit = async (index: number, type: E['type'], data = '') => React.act(async () => handlers[index]({ requestId: requests[index].requestId, type, data }))
@@ -47,16 +48,33 @@ test('dialog lifecycle, focus, bounded context, stale events, and per-report com
     assert.equal(requests[0].term, 'SELECTED_ORIGINAL')
     assert.ok(requests[0].question.length <= 12_000)
     assert.ok(requests[0].projectSummary.length <= 20_000)
-    const dialog = dom.window.document.querySelector('[role="dialog"]')!
-    assert.equal(dom.window.document.activeElement, dialog.querySelector('button'), 'focus enters the modal')
-    await React.act(async () => dialog.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true })))
-    assert.equal(closeCalls.length, 0, 'internal mousedown and scrolling do not close')
-    await React.act(async () => { const scrollable = dialog.querySelector('.overflow-y-auto')!; scrollable.dispatchEvent(new dom.window.Event('scroll', { bubbles: true })) })
+    const panel = dom.window.document.querySelector('#selection-explain-panel')!
+    assert.equal(panel.getAttribute('role'), 'complementary')
+    assert.equal(dom.window.document.querySelector('[role="dialog"], [aria-modal], .fixed, [data-reactroot]'), null, 'panel has no modal, backdrop, or portal wrapper')
+    assert.equal(dom.window.document.activeElement, trigger, 'mount does not steal focus from the report')
+    await React.act(async () => panel.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true })))
+    assert.equal(closeCalls.length, 0, 'internal mousedown does not close')
+    await React.act(async () => { const scrollable = panel.querySelector('.overflow-y-auto')!; scrollable.dispatchEvent(new dom.window.Event('scroll', { bubbles: true })) })
     assert.equal(closeCalls.length, 0)
-    await React.act(async () => { const buttons = [...dialog.querySelectorAll('button')]; buttons[buttons.length - 1].focus(); dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })) })
-    assert.equal(dom.window.document.activeElement, dialog.querySelector('button'), 'Tab wraps at the final control')
-    await React.act(async () => { const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }); dom.window.dispatchEvent(event) })
-    assert.equal(dom.window.document.activeElement, [...dialog.querySelectorAll('button')].at(-1), 'Shift+Tab wraps at the first control')
+    const closeButton = panel.querySelector('[aria-label="关闭 AI 解释"]')!
+    const outside = dom.window.document.createElement('button'); outside.textContent = 'report control'; dom.window.document.body.appendChild(outside)
+    await React.act(async () => { closeButton.focus(); dom.window.document.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })) })
+    assert.equal(closeCalls.length, 0, 'Tab is not trapped')
+    await React.act(async () => { const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); outside.dispatchEvent(event) })
+    assert.equal(closeCalls.length, 0, 'Escape outside panel does not close')
+    await React.act(async () => { const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); panel.dispatchEvent(event) })
+    assert.equal(closeCalls.length, 1, 'Escape inside panel closes')
+    await render(true)
+    assert.equal(requests.length, 1)
+    await render(true, { collapsed: true })
+    assert.equal(requests.length, 1, 'collapse does not restart request')
+    assert.deepEqual(cancelled, [], 'collapse does not cancel request')
+    await emit(0, 'delta', 'STREAM_WHILE_COLLAPSED')
+    assert.ok(dom.window.document.body.textContent?.includes('STREAM_WHILE_COLLAPSED'), 'stream remains mounted while collapsed')
+    await React.act(async () => (panel.querySelector('[aria-label="收起 AI 解释"]') as HTMLButtonElement).click())
+    assert.equal(collapseCalls.length, 1, 'collapse control calls its callback')
+    await render(true, { collapsed: false })
+    assert.ok(dom.window.document.body.textContent?.includes('STREAM_WHILE_COLLAPSED'), 'expanded panel retains accumulated stream')
     await emit(0, 'delta', 'PARTIAL_ERROR')
     await emit(0, 'error', 'failure')
     assert.equal(cache.size, 0, 'partial error result is not cached')
@@ -94,14 +112,15 @@ test('dialog lifecycle, focus, bounded context, stale events, and per-report com
     assert.ok(dom.window.document.body.textContent?.includes('模型配置无效'))
     await render(true, { profileId: 'p1', question: 'OTHER_QUESTION' })
     const escape = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-    await React.act(async () => dom.window.dispatchEvent(escape))
-    assert.equal(escape.defaultPrevented, true, 'Escape is consumed by the modal')
-    assert.equal(closeCalls.length, 1, 'Escape closes the modal')
+    await React.act(async () => panel.dispatchEvent(escape))
+    assert.equal(escape.defaultPrevented, true, 'Escape is handled inside panel')
+    assert.equal(closeCalls.length, 2)
+    outside.focus()
     await render(false)
-    assert.equal(dom.window.document.activeElement, trigger, 'closing restores focus to the still-connected trigger')
+    assert.ok(!panel.contains(dom.window.document.activeElement), 'panel removal does not retain focus inside the removed panel')
     await render(true, { profileId: 'p1', question: 'OTHER_QUESTION' })
-    await React.act(async () => dom.window.document.querySelector('.fixed.inset-0')!.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true })))
-    assert.equal(closeCalls.length, 2, 'backdrop click closes the modal')
+    await React.act(async () => (dom.window.document.querySelector('[aria-label="关闭 AI 解释"]') as HTMLButtonElement).click())
+    assert.equal(closeCalls.length, 3, 'close control calls its callback')
   } finally {
     await React.act(async () => root.unmount())
     ;[g.window, g.document, g.IS_REACT_ACT_ENVIRONMENT] = previous

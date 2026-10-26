@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { createPortal } from 'react-dom'
 import { EXPLAIN_CONTEXT_LIMITS } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 import { ExplainStreamController } from '../lib/explain-stream'
@@ -13,6 +12,8 @@ export interface SelectionExplainDialogProps {
   projectSummary: string
   profileId: string
   explanationCache?: Map<string, string>
+  onCollapse: () => void
+  collapsed?: boolean
   onClose: () => void
 }
 
@@ -30,7 +31,7 @@ function boundedSnippet(selectedText: string, snippet: string): string {
   return `${prefix}${selectedText}${middle}${clip(snippet, remaining)}`
 }
 
-export default function SelectionExplainDialog({ selectedText, question, snippet, projectSummary, profileId, explanationCache, onClose }: SelectionExplainDialogProps) {
+export default function SelectionExplainPanel({ selectedText, question, snippet, projectSummary, profileId, explanationCache, onCollapse, collapsed = false, onClose }: SelectionExplainPanelProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const safeText = clip(selectedText, 8000)
   const term = safeText.length <= EXPLAIN_CONTEXT_LIMITS.term ? safeText : '所选文本'
@@ -47,7 +48,8 @@ export default function SelectionExplainDialog({ selectedText, question, snippet
   const valid = !!term.trim() && !!request.profileId.trim() && request.profileId.length <= EXPLAIN_CONTEXT_LIMITS.profileId && selectedText.length <= 8000
   const controller = useMemo(() => new ExplainStreamController({ explain: api.explain, cancelExplain: api.cancelExplain, onExplainEvent: api.onExplainEvent }), [contextKey])
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
-  const dialogRef = useRef<HTMLElement>(null)
+  const panelRef = useRef<HTMLElement>(null)
+  const followTailRef = useRef(true)
   const start = useCallback(() => {
     if (!valid) return
     explanationCache?.delete(contextKey)
@@ -68,47 +70,39 @@ export default function SelectionExplainDialog({ selectedText, question, snippet
       explanationCache.delete(oldest)
     }
   }, [explanationCache, contextKey, snapshot.status, snapshot.text])
+  const noteContentScroll = useCallback(() => {
+    const content = contentRef.current
+    if (!content) return
+    followTailRef.current = content.scrollHeight - content.scrollTop - content.clientHeight < 48
+  }, [])
   useEffect(() => {
-    const previousFocus = document.activeElement instanceof document.defaultView!.HTMLElement ? document.activeElement as HTMLElement : null
-    const dialog = dialogRef.current
-    const getFocusable = () => dialog ? [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((el) => !el.hasAttribute('hidden')) : []
-    getFocusable()[0]?.focus()
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); return }
-      if (event.key !== 'Tab') return
-      const items = getFocusable()
-      if (!items.length) { event.preventDefault(); dialog?.focus(); return }
-      const first = items[0]
-      const last = items[items.length - 1]
-      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) { event.preventDefault(); last.focus() }
-      else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) { event.preventDefault(); first.focus() }
-    }
-    window.addEventListener('keydown', key)
-    return () => {
-      window.removeEventListener('keydown', key)
-      if (previousFocus?.isConnected) previousFocus.focus()
-    }
-  }, [onClose])
-  useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = contentRef.current.scrollHeight }, [snapshot.text])
+    const content = contentRef.current
+    if (content && followTailRef.current) content.scrollTop = content.scrollHeight
+  }, [snapshot.text])
+  useEffect(() => { void collapsed }, [collapsed])
+  const onPanelKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); onClose() }
+  }
   const state = cachedText && snapshot.status === 'idle' ? 'done' : snapshot.status
   const text = snapshot.text || cachedText || (snapshot.status === 'idle' || snapshot.status === 'streaming' ? valid ? '正在准备详细解释…' : '选中内容或模型配置无效，无法发起解释。' : '')
 
-  return createPortal(<div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/30 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-    <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="selection-explain-title" className="flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-      <header className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-        <h2 id="selection-explain-title" className="text-base font-semibold text-slate-900">向 AI 提问</h2>
-        <button type="button" className="rounded p-1 text-slate-400 hover:bg-slate-100" onClick={onClose} title="关闭" aria-label="关闭"><AppIcon name="close" size={16} /></button>
+  return <aside ref={panelRef} tabIndex={-1} role="complementary" aria-label="AI 解释" id="selection-explain-panel" onKeyDown={onPanelKeyDown} className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-white">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3">
+        <h2 className="text-base font-semibold text-slate-900">向 AI 提问</h2>
+        <div className="flex items-center gap-1">
+          <button type="button" className="rounded p-1 text-slate-400 hover:bg-slate-100" onClick={onCollapse} title="收起" aria-label="收起 AI 解释"><AppIcon name="chevron-right" size={16} /></button>
+          <button type="button" className="rounded p-1 text-slate-400 hover:bg-slate-100" onClick={onClose} title="关闭" aria-label="关闭 AI 解释"><AppIcon name="close" size={16} /></button>
+        </div>
       </header>
-      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
-        <blockquote className="mb-4 max-h-24 overflow-y-auto border-l-2 border-indigo-200 pl-3 text-sm text-slate-500">{safeText}</blockquote>
+      <div ref={contentRef} onScroll={noteContentScroll} className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-5 py-4">
+        <blockquote className="mb-4 max-h-24 overflow-y-auto break-words [overflow-wrap:anywhere] border-l-2 border-indigo-200 pl-3 text-sm text-slate-500">{safeText}</blockquote>
         <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-400">AI 解释{snapshot.status === 'streaming' ? '（生成中…）' : ''}
           {snapshot.status === 'streaming' && <button type="button" onClick={() => controller.stop()} className="text-slate-500 hover:text-slate-700">停止</button>}
         </div>
-        <MarkdownView markdown={text} />
+        <div className="min-w-0 [overflow-wrap:anywhere]"><MarkdownView markdown={text} /></div>
         {state === 'done' && <button type="button" className="mt-3 w-full rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50" onClick={start}>重新解释</button>}
         {snapshot.status === 'error' && <div className="py-3 text-center text-sm text-rose-600"><p className="mb-2">解释失败：{snapshot.error}</p><button type="button" onClick={start} className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600">重试</button></div>}
         {snapshot.status === 'stopped' && <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500"><span>已停止生成</span><button type="button" onClick={start} className="rounded border border-slate-200 bg-white px-3 py-1 text-xs">继续解释</button></div>}
       </div>
-    </section>
-  </div>, document.body)
+    </aside>
 }
