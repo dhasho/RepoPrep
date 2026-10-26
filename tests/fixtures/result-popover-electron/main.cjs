@@ -37,10 +37,10 @@ async function waitFor(check, label, ms = 8000) {
 async function enterButton(text, occurrence = 0) {
   evidence.currentStep = `keyboard button ${text}`
   const focused = await evaluate(`(() => {
-    const candidates = [...document.querySelectorAll('button')].filter((item) => (item.innerText || item.textContent || '').trim().includes(${JSON.stringify(text)}));
+    const candidates = [...document.querySelectorAll('button')].filter((item) => (item.getAttribute('aria-label') || item.innerText || item.textContent || '').trim().includes(${JSON.stringify(text)}));
     const target = candidates[${occurrence}];
     if (!target) return null;
-    target.focus(); return {text:(target.innerText||target.textContent||'').trim(),tag:target.tagName,active:document.activeElement===target};
+    target.focus(); return {text:(target.getAttribute('aria-label')||target.innerText||target.textContent||'').trim(),tag:target.tagName,active:document.activeElement===target};
   })()`)
   if (!focused?.active) throw new Error(`button not focusable/found for keyboard activation: ${text}`)
   await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r', unmodifiedText: '\r' })
@@ -50,13 +50,18 @@ async function enterButton(text, occurrence = 0) {
 }
 async function tabToButton(fromText, targetText) {
   evidence.currentStep = `native Tab ${fromText} -> ${targetText}`
-  const focused = await evaluate(`(() => {const start=[...document.querySelectorAll('button')].find((item)=>(item.innerText||item.textContent||'').trim().includes(${JSON.stringify(fromText)}));if(!start)return null;start.focus();return document.activeElement===start})()`)
+  const focused = await evaluate(`(() => {const start=[...document.querySelectorAll('button')].find((item)=>(item.getAttribute('aria-label')||item.innerText||item.textContent||'').trim().includes(${JSON.stringify(fromText)}));if(!start)return null;start.focus();return document.activeElement===start})()`)
   if (!focused) throw new Error(`Tab start button missing: ${fromText}`)
-  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
-  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
-  const activeText = await evaluate(`(document.activeElement?.innerText||document.activeElement?.textContent||'').trim()`)
+  let activeText = ''
+  let tabCount = 0
+  while (tabCount < 40 && !activeText.includes(targetText)) {
+    await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
+    await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 })
+    activeText = await evaluate(`(document.activeElement?.getAttribute('aria-label')||document.activeElement?.innerText||document.activeElement?.textContent||'').trim()`)
+    tabCount++
+  }
   if (!activeText.includes(targetText)) throw new Error(`native Tab moved to unexpected target: ${activeText}; expected ${targetText}`)
-  evidence.keyboardSteps.push({ target: activeText, from: fromText, input: 'CDP Input.dispatchKeyEvent Tab', activeAfterTab: true })
+  evidence.keyboardSteps.push({ target: activeText, from: fromText, input: 'CDP Input.dispatchKeyEvent Tab', tabCount, activeAfterTab: true })
 }
 async function enterFocusedButton(text) {
   evidence.currentStep = `keyboard focused button ${text}`
@@ -102,7 +107,7 @@ async function enterTerm(term) {
 }
 function recorder() {
   return `(() => {
-    const describe = node => ({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.innerText||node?.textContent||'').toString().trim().slice(0,120),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});
+    const describe = node => ({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.getAttribute?.('aria-label')||node?.innerText||node?.textContent||'').toString().trim().slice(0,120),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});
     const scroll = target => ({target:describe(target),active:describe(document.activeElement),windowX:scrollX,windowY:scrollY,documentX:document.documentElement.scrollLeft,documentY:document.documentElement.scrollTop,bodyY:document.body.scrollTop});
     window.__issue93Events={keys:[],keyPresses:[],keyUps:[],clicks:[],mouseDowns:[],wheels:[],scrolls:[],errors:[],rejections:[]};
     addEventListener('keydown',e=>window.__issue93Events.keys.push({key:e.key,code:e.code,trusted:e.isTrusted,target:describe(e.target),active:describe(document.activeElement),scroll:scroll(e.target)}),true);
@@ -137,22 +142,24 @@ async function run() {
   win.webContents.debugger.attach('1.3')
   await within(win.loadFile(path.join(fixtureDir, 'index.html')), 'fixture load')
   await evaluate(recorder())
-  await waitFor(() => evaluate(`document.body.innerText.includes('选择项目文件夹') && !!window.nativeControl`), 'initial App render')
-
-  await tabToButton('设置', '选择项目文件夹')
-  await enterFocusedButton('选择项目文件夹')
+  await waitFor(() => evaluate(`document.body.innerText.includes('新建') && document.body.innerText.includes('ProjectA') && !!window.nativeControl`), 'initial App render')
+  await enterButton('新建')
   await waitFor(() => evaluate(`document.body.innerText.includes('ProjectB') && document.body.innerText.includes('开始生成面试题')`), 'B configuration')
-  await enterButton('开始生成面试题')
+  await tabToButton('设置', '开始生成面试题')
+  await enterFocusedButton('开始生成面试题')
   await waitFor(() => evaluate(`window.nativeControl.state().generationRequests.length===1`), 'B generation request')
   const generatedB = await evaluate('window.nativeControl.state().generationRequests[0]')
   if (generatedB.projectPath !== 'C:\\Fixture\\ProjectB' || generatedB.profileId !== 'profile-B') throw new Error(`B generation used unexpected project/profile: ${JSON.stringify(generatedB)}`)
-  await enterButton('切换项目')
+  await enterButton('上一步')
   await waitFor(() => evaluate(`document.body.innerText.includes('仍在生成')`), 'leave generation choice')
   await enterButton('后台继续')
-  await waitFor(() => evaluate(`document.body.innerText.includes('选择项目文件夹')`), 'select page after background continuation')
+  await waitFor(() => evaluate(`document.body.innerText.includes('开始生成面试题')`), 'configuration after background continuation')
   await evaluate('window.nativeControl.completeB()')
   await waitFor(() => evaluate(`window.nativeControl.state().pendingB===false`), 'background B completion')
-  await enterButton('查看结果')
+  await enterButton('展开 ProjectA 的分析')
+  await waitFor(() => evaluate(`!!document.querySelector('button[data-analysis-id="analysis-A"]')`), 'saved A analysis')
+  const analysisLabel = await evaluate(`document.querySelector('button[data-analysis-id="analysis-A"]').innerText.trim()`)
+  await enterButton(analysisLabel)
   await waitFor(() => evaluate(`document.body.innerText.includes('ProjectA · 面试题')`), 'history A result')
 
   const termAActivation = await enterTerm('TERM_A')
@@ -162,7 +169,6 @@ async function run() {
   termAActivation.clicksAfterActivation = afterAEnter.events.clicks.slice(termAActivation.clickStartIndex)
   termAActivation.questionCardDefaultClicks = termAActivation.clicksAfterActivation.filter((event) => event.trusted && event.activationTarget?.tag === 'BUTTON' && event.activationTarget.text === termAActivation.parentQuestionButtonText)
   if (!termAActivation.popoverOpened || termAActivation.questionCardDefaultClicks.length !== 0) throw new Error(`A question-title Enter did not open its popover cleanly: ${JSON.stringify(termAActivation)}`)
-  await enterButton('让 AI 结合本项目详细解释')
   await waitFor(() => evaluate(`window.nativeControl.state().explainRequests.length===1`), 'A explain request')
   const requestA = (await evaluate('window.nativeControl.state().explainRequests[0]'))
   if (requestA.term !== 'TERM_A' || requestA.profileId !== 'profile-A' || requestA.projectSummary !== 'SUMMARY_A' || requestA.question !== 'QUESTION_A TERM_A' || requestA.snippet !== 'ANSWER_A TERM_A context' || requestA.glossaryHint !== 'GLOSSARY_A') {
@@ -184,7 +190,6 @@ async function run() {
   termBActivation.clicksAfterActivation = afterBEnter.events.clicks.slice(termBActivation.clickStartIndex)
   termBActivation.questionCardDefaultClicks = termBActivation.clicksAfterActivation.filter((event) => event.trusted && event.activationTarget?.tag === 'BUTTON' && event.activationTarget.text === termBActivation.parentQuestionButtonText)
   if (!termBActivation.popoverOpened || termBActivation.questionCardDefaultClicks.length !== 0) throw new Error(`B question-title Enter did not open its popover cleanly: ${JSON.stringify(termBActivation)}`)
-  await enterButton('让 AI 结合本项目详细解释')
   await waitFor(() => evaluate(`window.nativeControl.state().explainRequests.length===2`), 'B explain request')
   const requestB = await evaluate('window.nativeControl.state().explainRequests[1]')
   if (requestB.term !== 'TERM_B' || requestB.profileId !== 'profile-B' || requestB.projectSummary !== 'SUMMARY_B' || requestB.question !== 'QUESTION_B TERM_B' || requestB.snippet !== 'ANSWER_B TERM_B context' || requestB.glossaryHint !== 'GLOSSARY_B') {
@@ -206,7 +211,7 @@ async function run() {
   if (keyboardClicks.some((event) => event.activationTarget?.tag !== 'BUTTON') || keyboardClicks.some((event) => /QUESTION_[AB]/.test(event.activationTarget?.text || ''))) {
     throw new Error(`keyboard-generated clicks included a non-button or question-card parent activation: ${JSON.stringify(keyboardClicks)}`)
   }
-  const allowedNativeTargets = [/选择项目文件夹/, /开始生成面试题/, /切换项目/, /后台继续/, /查看结果/, /让 AI 结合本项目详细解释/, /后台生成/]
+  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/]
   if (keyboardClicks.some((event) => !allowedNativeTargets.some((pattern) => pattern.test(event.activationTarget?.text || '')))) {
     throw new Error(`unexpected keyboard default button activation: ${JSON.stringify(keyboardClicks)}`)
   }

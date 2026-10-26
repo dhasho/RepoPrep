@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('api', {
   }),
   getRecentProjects: async () => [{ path: pathA, name: 'ProjectA', lastUsedAt: '2026-10-11T00:00:00.000Z' }],
   loadResult: async (projectPath) => projectPath === pathA ? resultA : null,
+  listAnalyses: async (projectPath) => ({ items: projectPath === pathA ? [{
+    id: 'analysis-A', createdAt: resultA.createdAt, granularity: resultA.granularity, roleFocus: resultA.roleFocus
+  }] : [], nextCursor: null }),
+  loadAnalysis: async (projectPath, analysisId) => projectPath === pathA && analysisId === 'analysis-A' ? resultA : null,
   removeRecent: async () => {},
   deleteResult: async () => {},
   getSettings: async () => ({ profiles: [

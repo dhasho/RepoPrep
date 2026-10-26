@@ -8,7 +8,22 @@ export type OnTerm = (term: string, anchor: DOMRect) => void
 
 /** 把字符串中的 [[名词]] 渲染为带下划线的可点击词条 */
 export function TermText({ text, onTerm }: { text: string; onTerm: OnTerm }) {
-  const parts = text.split(/(\[\[[^\[\]]+\]\])/g)
+  // Question titles are plain text, so protect literal backtick examples here too.
+  // In Markdown bodies code/pre nodes are skipped by renderWithTerms below.
+  const parts: string[] = []
+  let cursor = 0
+  let codeDelimiter = ''
+  for (const match of text.matchAll(/`+|\[\[[^\[\]]+\]\]/g)) {
+    const token = match[0]
+    if (token.startsWith('`')) {
+      if (!codeDelimiter) codeDelimiter = token
+      else if (token === codeDelimiter) codeDelimiter = ''
+    } else if (!codeDelimiter) {
+      parts.push(text.slice(cursor, match.index), token)
+      cursor = match.index + token.length
+    }
+  }
+  parts.push(text.slice(cursor))
   if (parts.length === 1) return <>{text}</>
   return (
     <>
@@ -53,6 +68,7 @@ function renderWithTerms(children: ReactNode, onTerm: OnTerm): ReactNode {
       return <Fragment key={i}>{renderWithTerms(child, onTerm)}</Fragment>
     }
     if (isValidElement(child)) {
+      if (child.type === 'code' || child.type === 'pre') return child
       const props = child.props as { children?: ReactNode }
       if (props.children) {
         return cloneElement(child, { key: child.key ?? i }, renderWithTerms(props.children, onTerm))

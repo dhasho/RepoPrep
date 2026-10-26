@@ -16,6 +16,96 @@ import type React from 'react'
 
 const noop = () => undefined
 
+test('completed explanations are reused only for the same context; partial, failed and stale streams are not cached', async () => {
+  const { JSDOM } = await import('jsdom')
+  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' })
+  type Event = { requestId: string; type: 'delta' | 'done' | 'error'; data: string }
+  const requests: Array<Record<string, string>> = []
+  const cancelled: string[] = []
+  const handlers: Array<(event: Event) => void> = []
+  const cache = new Map<string, string>()
+  ;(dom.window as unknown as Record<string, unknown>).api = {
+    explain: async (request: Record<string, string>) => { requests.push(request) },
+    cancelExplain: (id: string) => { cancelled.push(id) },
+    onExplainEvent: (handler: (event: Event) => void) => { handlers.push(handler); return noop }
+  }
+  const g = globalThis as unknown as Record<string, unknown>
+  const previous = [g.window, g.document, g.IS_REACT_ACT_ENVIRONMENT]
+  g.window = dom.window
+  g.document = dom.window.document
+  g.IS_REACT_ACT_ENVIRONMENT = true
+  const React = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { createRequire } = await import('node:module')
+  const require = createRequire(import.meta.url)
+  const bundle = await requireBundlePath()
+  delete require.cache[require.resolve(bundle)]
+  const Popover = require(bundle).default
+  const container = dom.window.document.getElementById('root')!
+  const root = createRoot(container)
+  const render = async (overrides: Record<string, unknown> = {}, key = 'original') => {
+    await React.act(async () => { root.render(React.createElement(React.StrictMode, null, React.createElement(Popover, {
+      key, term: 'IPC', anchor: { left: 10, top: 10, bottom: 30 }, question: 'QUESTION', snippet: 'CONTEXT',
+      projectSummary: 'SUMMARY', glossaryHint: '简短定义', profileId: 'p1', explanationCache: cache, onClose: noop, ...overrides
+    }))) })
+    await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+  }
+  const emit = async (index: number, type: Event['type'], data = '') => {
+    await React.act(async () => { handlers[index]({ requestId: requests[index].requestId, type, data }) })
+  }
+  const click = async (text: string) => {
+    const button = [...container.querySelectorAll('button')].find((item) => item.textContent === text)
+    assert.ok(button, `missing ${text}`)
+    await React.act(async () => { button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+  }
+  try {
+    await render()
+    assert.equal(requests.length, 1, 'StrictMode issues one automatic request, including terms with a glossary hint')
+    assert.ok(container.textContent?.includes('简短定义'))
+    await emit(0, 'delta', '**详细解释**\n\n- 具体机制\n- 具体例子')
+    await emit(0, 'done')
+    assert.equal(cache.size, 1)
+    assert.equal(container.querySelectorAll('.md-body').length, 1)
+    assert.ok(!container.textContent?.includes('简短定义'), 'completed detail replaces the fallback')
+    assert.ok(container.querySelector('.md-body ul'), 'detail uses formatted Markdown')
+    await render({}, 'reopened')
+    assert.equal(requests.length, 1, 'reopening the same term avoids another model request')
+    assert.ok(container.textContent?.includes('具体例子'))
+    await click('重新解释')
+    assert.equal(requests.length, 2, 'explicit regeneration starts a fresh request')
+    await emit(1, 'delta', 'PARTIAL')
+    await click('停止')
+    assert.equal(cache.size, 0, 'a stopped partial result is not reusable')
+    assert.deepEqual(cancelled, [requests[1].requestId])
+    await render({}, 'after-stopping')
+    assert.equal(requests.length, 3)
+    await emit(2, 'error', '请求失败')
+    assert.equal(cache.size, 0, 'failure is not reusable')
+    await click('重试')
+    assert.equal(requests.length, 4)
+    await emit(3, 'delta', 'COMPLETE')
+    await emit(3, 'done')
+    await render({ question: 'OTHER_QUESTION' })
+    assert.equal(requests.length, 5, 'same term in a different question has its own explanation')
+    await emit(4, 'delta', 'OLD_CONTEXT')
+    await render({ question: 'OTHER_QUESTION', profileId: 'p2' })
+    assert.equal(requests.length, 6, 'changing model identity starts a new explanation')
+    assert.ok(cancelled.includes(requests[4].requestId), 'context changes cancel the previous request')
+    await emit(4, 'delta', 'LATE_OLD_CONTEXT')
+    await emit(4, 'done')
+    assert.ok(!container.textContent?.includes('OLD_CONTEXT'), 'late events cannot populate the new context')
+    await emit(5, 'delta', 'NEW_CONTEXT')
+    await emit(5, 'done')
+    assert.equal(cache.size, 2, 'only completed explanations are retained')
+    await render({ explanationCache: new Map() }, 'new-report')
+    assert.equal(requests.length, 7, 'a new report does not reuse another report cache')
+  } finally {
+    await React.act(async () => { root.unmount() })
+    ;[g.window, g.document, g.IS_REACT_ACT_ENVIRONMENT] = previous
+    dom.window.close()
+  }
+})
+
 async function requireBundlePath(): Promise<string> {
   const here = path.dirname(fileURLToPath(import.meta.url))
   const bundlePath = path.join(here, '..', '..', '.render-test', 'term-popover.cjs')
@@ -67,11 +157,15 @@ async function renderPopover(props: Record<string, unknown>): Promise<string> {
   }
 }
 
-test('组件级：有术语表解释时展示术语表并停留在 idle（显示手动触发按钮）', async () => {
+test('组件级：简短定义与详细解释共用一个正文，不再分成两种展示', async () => {
   const html = await renderPopover({ glossaryHint: '一种解耦方式' })
   assert.ok(html.includes('名词'), '应渲染出弹卡「名词」标签')
-  assert.ok(html.includes('术语表'), '应展示术语表解释')
-  assert.ok(html.includes('让 AI 结合本项目详细解释'), '应显示手动触发按钮')
+  assert.ok(html.includes('术语解释'), '统一的解释标签')
+  assert.ok(html.includes('一种解耦方式'), '请求等待时保留定义')
+  assert.equal((html.match(/class="md-body"/g) ?? []).length, 1)
+  assert.ok(!html.includes('术语表：'))
+  assert.ok(!html.includes('让 AI 结合本项目详细解释'))
+  assert.ok(!html.includes('text-[13px]'), '解释正文不再使用单独的小字号')
   assert.ok(!html.includes('已停止生成'), 'idle 状态不应出现已停止提示')
   assert.ok(!html.includes('解释失败'), 'idle 状态不应出现失败提示')
   assert.ok(!html.includes('生成中'), 'idle 状态不应显示生成中')
@@ -156,6 +250,7 @@ test('组件级（真实挂载）：卸载时取消进行中的解释请求并�
       )
     })
 
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
     assert.equal(explained.length, 1, '挂载后应自动发起一次解释请求')
     assert.match(
       explained[0],
@@ -215,9 +310,7 @@ async function mountAndRequest(props: Record<string, unknown>): Promise<{ reques
         onClose: noop, ...props
       }))
     })
-    const button = [...container.querySelectorAll('button')].find((item) => item.textContent?.includes('让 AI 结合本项目详细解释'))
-    assert.ok(button, 'manual explain button should be present')
-    await act(async () => { button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
     const html = container.textContent ?? ''
     await act(async () => { root.unmount() })
     return { requests, html }
@@ -303,7 +396,8 @@ test('真实挂载：长术语和流式解释可在弹卡内滚动，外部滚�
         glossaryHint: '很长的术语解释。'.repeat(400), onClose: () => { closeCount++; root.unmount() }
       }))
     })
-    assert.equal(requests.length, 0, '有 glossary 时保留手动解释入口')
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    assert.equal(requests.length, 1, '有 glossary 时也自动获取详细解释')
     const content = container.querySelector('.overflow-y-auto') as HTMLDivElement | null
     assert.ok(content, '长术语内容应位于实际 overflow-y-auto 容器')
     assert.ok((content.textContent?.length ?? 0) > 1000, '弹卡应包含长 glossary 内容')
@@ -322,14 +416,11 @@ test('真实挂载：长术语和流式解释可在弹卡内滚动，外部滚�
 
     await act(async () => {
       content.dispatchEvent(new dom.window.Event('scroll'))
-      content.querySelector('.mb-3')?.dispatchEvent(new dom.window.Event('scroll'))
+      content.querySelector('.md-body')?.dispatchEvent(new dom.window.Event('scroll'))
     })
     assert.equal(closeCount, 0, '弹卡及其嵌套内容的非冒泡 scroll 不关闭弹卡')
     assert.deepEqual(cancelled, [], '内部滚动不取消解释请求')
 
-    const button = [...container.querySelectorAll('button')].find((item) => item.textContent?.includes('让 AI 结合本项目详细解释'))
-    assert.ok(button)
-    await act(async () => { button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
     assert.equal(requests.length, 1)
     const requestId = requests[0]
     await act(async () => {
@@ -393,6 +484,7 @@ test('真实挂载：Escape 和外部点击关闭弹卡并取消进行中的同�
           onClose: () => { closeCount++; root.unmount() }
         }))
       })
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
       assert.equal(requests.length, 1)
       const requestId = requests[0]
       assert.match(requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)

@@ -355,9 +355,12 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     assert.equal(enterA.defaultPrevented, true, 'Enter is consumed so the enclosing question button cannot activate')
     assert.ok(!container.textContent?.includes('ANSWER_A TermA context'), 'the enclosing question did not expand')
     assert.ok(container.textContent?.includes('GLOSSARY_A'), 'the title term popover remains open')
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    assert.equal(requests.length, 1, 'title terms also start detailed explanations automatically')
     const closeA = container.querySelector<HTMLButtonElement>('button[title="关闭"]')
     assert.ok(closeA)
     await act(async () => { closeA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+    assert.deepEqual(cancelled, [String(requests[0].requestId)])
     const questionA = [...container.querySelectorAll('aside button')].find((button) => button.getAttribute('aria-label')?.includes('QUESTION_A'))
     assert.ok(questionA)
     await act(async () => { questionA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
@@ -369,17 +372,15 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     await act(async () => { titleTermA.dispatchEvent(secondEnterA) })
     assert.equal(secondEnterA.defaultPrevented, true)
     assert.ok(container.textContent?.includes('GLOSSARY_A'))
-    const explainA = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('让 AI 结合本项目详细解释'))
-    assert.ok(explainA)
-    await act(async () => { explainA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-    assert.equal(requests.length, 1)
-    assert.equal(requests[0].question, 'QUESTION_A TermA')
-    assert.equal(requests[0].snippet, 'ANSWER_A TermA context')
-    assert.equal(requests[0].glossaryHint, 'GLOSSARY_A')
-    assert.equal(requests[0].projectSummary, 'SUMMARY_A')
-    assert.equal(requests[0].profileId, 'profile-A')
-    const requestA = String(requests[0].requestId)
-    const emitLateA = eventHandlers[0]
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    assert.equal(requests.length, 2)
+    assert.equal(requests[1].question, 'QUESTION_A TermA')
+    assert.equal(requests[1].snippet, 'ANSWER_A TermA context')
+    assert.equal(requests[1].glossaryHint, 'GLOSSARY_A')
+    assert.equal(requests[1].projectSummary, 'SUMMARY_A')
+    assert.equal(requests[1].profileId, 'profile-A')
+    const requestA = String(requests[1].requestId)
+    const emitLateA = eventHandlers[1]
 
     const search = container.querySelector('input')
     assert.ok(search)
@@ -420,7 +421,7 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
       glossary: { TermB: 'GLOSSARY_B' }
     })
     await act(async () => { root.render(React.createElement(ResultPage, { result: resultB, settings: settingsB, onRegenerate: () => undefined })) })
-    assert.deepEqual(cancelled, [requestA], 'replacing the owning result unmounts and cancels its pending request once')
+    assert.deepEqual(cancelled, [String(requests[0].requestId), requestA], 'replacing the owning result cancels its pending request once')
     assert.ok(!container.textContent?.includes('GLOSSARY_A'), 'A popover is gone before B can be interacted with')
     assert.equal((container.querySelector('input') as HTMLInputElement).value, '', 'search resets for the new result')
     assert.ok(!container.textContent?.includes('ANSWER_B TermB context'), 'expanded state resets')
@@ -434,12 +435,10 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     await act(async () => { termB.dispatchEvent(spaceB) })
     assert.equal(spaceB.defaultPrevented, true, 'Space is consumed so it cannot activate the enclosing question button')
     assert.ok(container.textContent?.includes('GLOSSARY_B'), 'Space opens the title term popover')
-    const explainB = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('让 AI 结合本项目详细解释'))
-    assert.ok(explainB)
-    await act(async () => { explainB.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-    assert.equal(requests.length, 2)
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    assert.equal(requests.length, 3)
     assert.deepEqual(
-      Object.fromEntries(['term', 'question', 'snippet', 'glossaryHint', 'projectSummary', 'profileId'].map((key) => [key, requests[1][key]])),
+      Object.fromEntries(['term', 'question', 'snippet', 'glossaryHint', 'projectSummary', 'profileId'].map((key) => [key, requests[2][key]])),
       { term: 'TermB', question: 'QUESTION_B TermB', snippet: 'ANSWER_B TermB context', glossaryHint: 'GLOSSARY_B', projectSummary: 'SUMMARY_B', profileId: 'profile-B' }
     )
 

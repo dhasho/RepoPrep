@@ -52,10 +52,13 @@ type QuestionSection = Omit<Section, 'questions'> & { sectionIndex: number; ques
 /** 从答案中截取术语附近的片段，作为 AI 解释的上下文 */
 function snippetAround(answer: string, term: string): string {
   const text = stripTermMarks(answer)
+  if (text.length <= 1200) return text
   const idx = text.indexOf(term)
-  if (idx < 0) return text.slice(0, 200)
-  const start = Math.max(0, idx - 90)
-  return (start > 0 ? '…' : '') + text.slice(start, idx + term.length + 110)
+  let start = idx < 0 ? 0 : Math.max(0, idx - 400)
+  let end = Math.min(text.length, start + 1200)
+  if (start > 0 && /[\uDC00-\uDFFF]/.test(text[start])) start++
+  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--
+  return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
 }
 
 export default function ResultPage(props: Props) {
@@ -74,6 +77,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeId, setActiveId] = useState('')
   const [popover, setPopover] = useState<TermTarget | null>(null)
+  const explanationCache = useRef(new Map<string, string>())
   const [toast, setToast] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -381,6 +385,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
 
       {popover && (
         <TermPopover
+          explanationCache={explanationCache.current}
           key={`${popover.term}-${popover.anchor.top}-${popover.anchor.left}`}
           term={popover.term}
           anchor={popover.anchor}

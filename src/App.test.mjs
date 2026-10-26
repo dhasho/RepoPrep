@@ -575,9 +575,7 @@ test('project/question sidebars preserve the selected analysis, its search, expa
     const term = termButton(h.host, 'TermA')
     assert.ok(term)
     await act(h, () => term.click())
-    const explain = button(h.host, '让 AI 结合本项目详细解释')
-    assert.ok(explain)
-    await act(h, () => explain.click())
+    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
     const pending = h.mock.explainRequests.at(-1)
     assert.ok(pending)
 
@@ -1074,8 +1072,7 @@ test('mouse navigation from history A to completed background B also cancels A e
     await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: resultB }))
     await viewRecentResult(h, pathA)
     await act(h, () => termButton(h.host, 'TERM_A').click())
-    const explainButton = [...h.dom.window.document.querySelectorAll('button')].find((item) => item.textContent.includes('让 AI 结合本项目详细解释'))
-    await act(h, () => explainButton.click())
+    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
     const pendingA = h.mock.explainRequests.at(-1)
     await mouseActivate(h, button(h.host, '后台生成'))
     assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId])
@@ -1115,8 +1112,8 @@ test('viewing B from the background task panel disposes A term context and ignor
     assert.ok(h.host.textContent.includes('ProjectA · 面试题'))
 
     await pressEnter(h, termButton(h.host, 'TERM_A'))
-    assert.ok(h.dom.window.document.body.textContent.includes('让 AI 结合本项目详细解释'))
-    await act(h, () => [...h.dom.window.document.querySelectorAll('button')].find((item) => item.textContent.includes('让 AI 结合本项目详细解释')).click())
+    assert.ok(h.dom.window.document.body.textContent.includes('术语解释'))
+    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
     const pendingA = h.mock.explainRequests.at(-1)
     assert.ok(pendingA, 'A term should immediately start its AI explanation')
     assert.deepEqual({ ...pendingA.request, requestId: '<uuid>' }, {
@@ -1131,7 +1128,7 @@ test('viewing B from the background task panel disposes A term context and ignor
     assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId], 'old A stream must be cancelled exactly once by its own UUID')
 
     await pressEnter(h, termButton(h.host, 'TERM_B'))
-    await act(h, () => [...h.dom.window.document.querySelectorAll('button')].find((item) => item.textContent.includes('让 AI 结合本项目详细解释')).click())
+    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
     const pendingB = h.mock.explainRequests.at(-1)
     assert.ok(pendingB)
     h.mock.emitExplainDelta(pendingB, 'B explanation prefix')
@@ -1141,7 +1138,7 @@ test('viewing B from the background task panel disposes A term context and ignor
     h.mock.emitExplainError(pendingA, 'LATE_A_ERROR')
     await act(h, () => {})
     assert.ok(h.dom.window.document.body.textContent.includes('B explanation prefix'))
-    assert.ok(h.dom.window.document.body.textContent.includes('AI 解释（生成中…）'), 'late A delta/done/error must leave B streaming')
+    assert.ok(h.dom.window.document.body.textContent.includes('术语解释（生成中…）'), 'late A delta/done/error must leave B streaming')
     assert.ok(!h.dom.window.document.body.textContent.includes('LATE_A_'))
     assert.deepEqual({ ...pendingB.request, requestId: '<uuid>' }, {
       term: 'TERM_B', profileId: 'profile-B', projectSummary: 'SUMMARY_B',

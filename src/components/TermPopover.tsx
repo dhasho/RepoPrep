@@ -1,4 +1,4 @@
-// 飞书风格名词解释弹卡：术语表解释 + AI 流式详细解释
+// 统一的点词解释弹卡：简短定义作为等待时的背景，详细解释流式替换。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { EXPLAIN_CONTEXT_LIMITS } from '@shared/result-contract'
@@ -15,6 +15,8 @@ export interface TermPopoverProps {
   glossaryHint?: string
   projectSummary: string
   profileId: string
+  /** 仅在当前报告页面存活期间复用已完成的解释。 */
+  explanationCache?: Map<string, string>
   onClose: () => void
 }
 
@@ -29,15 +31,25 @@ function clipContext(value: string, limit: number): { value: string; clipped: bo
 }
 
 export default function TermPopover(props: TermPopoverProps) {
-  const { term, anchor, question, snippet, glossaryHint, projectSummary, profileId, onClose } = props
+  const { term, anchor, question, snippet, glossaryHint, projectSummary, profileId, explanationCache, onClose } = props
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
-  const [requestHint, setRequestHint] = useState('')
   const boxRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const bounded = useMemo(() => ({
+    projectSummary: clipContext(projectSummary, EXPLAIN_CONTEXT_LIMITS.projectSummary),
+    question: clipContext(question, EXPLAIN_CONTEXT_LIMITS.question),
+    snippet: clipContext(snippet, EXPLAIN_CONTEXT_LIMITS.snippet),
+    glossaryHint: clipContext(glossaryHint ?? '', EXPLAIN_CONTEXT_LIMITS.glossaryHint)
+  }), [projectSummary, question, snippet, glossaryHint])
+  const contextKey = JSON.stringify([profileId, term, ...Object.values(bounded).map((entry) => entry.value)])
+  const cachedText = explanationCache?.get(contextKey)
+  const valid = !!term.trim() && term.length <= EXPLAIN_CONTEXT_LIMITS.term &&
+    !!profileId.trim() && profileId.length <= EXPLAIN_CONTEXT_LIMITS.profileId
+  const requestHint = !valid ? '术语或模型配置无效，无法发起解释。' :
+    Object.values(bounded).some((context) => context.clipped) ? '项目背景较长，本次解释将使用部分上下文。' : ''
 
   // 流式请求的生命周期交给控制器统一管理：
   // 切换词条会先取消旧请求，卸载/离开页面会取消进行中的请求
-  // （issue #12：此前关闭弹窗后主进程仍在跑、继续消耗模型额度）。
   const controller = useMemo(
     () =>
       new ExplainStreamController({
@@ -45,29 +57,16 @@ export default function TermPopover(props: TermPopoverProps) {
         cancelExplain: api.cancelExplain,
         onExplainEvent: api.onExplainEvent
       }),
-    []
+    [contextKey]
   )
   const explain = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
-  const explainState = explain.status
+  const explainState = cachedText && explain.status === 'idle' ? 'done' : explain.status
   const explainText = explain.text
   const explainError = explain.error
 
   const startExplain = useCallback(() => {
-    if (
-      !term.trim() || term.length > EXPLAIN_CONTEXT_LIMITS.term ||
-      !profileId.trim() || profileId.length > EXPLAIN_CONTEXT_LIMITS.profileId
-    ) {
-      setRequestHint('术语或模型配置无效，无法发起解释。')
-      return
-    }
-    const bounded = {
-      projectSummary: clipContext(projectSummary, EXPLAIN_CONTEXT_LIMITS.projectSummary),
-      question: clipContext(question, EXPLAIN_CONTEXT_LIMITS.question),
-      snippet: clipContext(snippet, EXPLAIN_CONTEXT_LIMITS.snippet),
-      glossaryHint: clipContext(glossaryHint ?? '', EXPLAIN_CONTEXT_LIMITS.glossaryHint)
-    }
-    const clipped = Object.values(bounded).some((context) => context.clipped)
-    setRequestHint(clipped ? '项目背景较长，本次解释将使用部分上下文。' : '')
+    if (!valid) return
+    explanationCache?.delete(contextKey)
     controller.start({
       term,
       profileId,
@@ -76,7 +75,7 @@ export default function TermPopover(props: TermPopoverProps) {
       snippet: bounded.snippet.value,
       glossaryHint: bounded.glossaryHint.value
     })
-  }, [controller, term, profileId, projectSummary, question, snippet, glossaryHint])
+  }, [controller, valid, term, profileId, bounded, explanationCache, contextKey])
 
   const stopExplain = useCallback(() => controller.stop(), [controller])
 
@@ -96,11 +95,22 @@ export default function TermPopover(props: TermPopoverProps) {
     setPos({ left, top })
   }, [anchor, explainState, explainText])
 
-  // 无术语表解释时自动请求 AI 解释
+  // 所有词条使用同一流程；延后到 effect 稳定后，避免 StrictMode 重复请求。
   useEffect(() => {
-    if (!glossaryHint) startExplain()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!valid || explanationCache?.has(contextKey)) return
+    const timer = setTimeout(startExplain, 0)
+    return () => clearTimeout(timer)
+  }, [valid, explanationCache, contextKey, startExplain])
+
+  useEffect(() => {
+    if (!explanationCache || explain.status !== 'done' || !explain.text.trim() || explain.text.length > 16_000) return
+    explanationCache.set(contextKey, explain.text)
+    while (explanationCache.size > 32) {
+      const oldest = explanationCache.keys().next().value
+      if (oldest === undefined) break
+      explanationCache.delete(oldest)
+    }
+  }, [explanationCache, contextKey, explain.status, explain.text])
 
   // 关闭时机：外部点击 / Esc / 滚动（弹卡跟随不了滚动，直接关闭）
   useEffect(() => {
@@ -152,49 +162,25 @@ export default function TermPopover(props: TermPopoverProps) {
       </div>
 
       <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
-        {glossaryHint && (
-          <div className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[13px] leading-6 text-slate-600">
-            <span className="mr-1 font-medium text-slate-500">术语表：</span>
-            {glossaryHint}
-          </div>
-        )}
-
         {requestHint && <p className="mb-2 text-xs text-amber-700">{requestHint}</p>}
-
-        {explainState === 'idle' && (
-          <div className="py-2 text-center">
-            <button
-              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-              onClick={startExplain}
-            >
-              <AppIcon name="sparkles" size={16} className="mr-1" />让 AI 结合本项目详细解释
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-xs font-medium text-slate-400">
+            术语解释{explainState === 'streaming' ? '（生成中…）' : ''}
+          </span>
+          {explainState === 'streaming' && (
+            <button className="text-xs text-slate-400 hover:text-slate-600" onClick={stopExplain}>
+              停止
             </button>
-          </div>
-        )}
-
-        {(explainState === 'streaming' ||
-          (explainText && explainState !== 'error' && explainState !== 'stopped')) && (
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-400">
-                AI 解释{explainState === 'streaming' ? '（生成中…）' : ''}
-              </span>
-              {explainState === 'streaming' && (
-                <button className="text-xs text-slate-400 hover:text-slate-600" onClick={stopExplain}>
-                  停止
-                </button>
-              )}
-            </div>
-            <MarkdownView markdown={explainText || '…'} />
-            {explainState === 'done' && (
-              <button
-                className="mt-2 w-full rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
-                onClick={startExplain}
-              >
-                重新解释
-              </button>
-            )}
-          </div>
+          )}
+        </div>
+        <MarkdownView markdown={explainText || cachedText || glossaryHint || (valid ? '正在准备详细解释…' : '暂无解释。')} />
+        {explainState === 'done' && (
+          <button
+            className="mt-2 w-full rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+            onClick={startExplain}
+          >
+            重新解释
+          </button>
         )}
 
         {explainState === 'error' && (
@@ -221,11 +207,6 @@ export default function TermPopover(props: TermPopoverProps) {
                 继续解释
               </button>
             </div>
-            {explainText && (
-              <div className="mt-3">
-                <MarkdownView markdown={explainText} />
-              </div>
-            )}
           </div>
         )}
       </div>

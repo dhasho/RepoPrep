@@ -41,7 +41,7 @@ function installEvidenceObserver() {
 }
 
 async function snapshot() {
-  return evaluate(`({ ...window.__wheelEvidence, popup:!!document.querySelector('.z-50'), content:(()=>{const e=document.querySelector('.overflow-y-auto');return e?{top:e.scrollTop,height:e.scrollHeight,client:e.clientHeight,max:e.scrollHeight-e.clientHeight,className:e.className,overscrollBehaviorY:getComputedStyle(e).overscrollBehaviorY}:null})(), pageScroll:scrollY, outsideTop:document.querySelector('#outside-scroll').scrollTop })`)
+  return evaluate(`({ ...window.__wheelEvidence, popup:!!document.querySelector('.z-50'), typography:(()=>{const e=document.querySelector('.md-body');if(!e)return null;const s=getComputedStyle(e);return {fontSize:s.fontSize,lineHeight:s.lineHeight,fontFamily:s.fontFamily}})(), content:(()=>{const e=document.querySelector('.overflow-y-auto');return e?{top:e.scrollTop,height:e.scrollHeight,client:e.clientHeight,max:e.scrollHeight-e.clientHeight,className:e.className,overscrollBehaviorY:getComputedStyle(e).overscrollBehaviorY}:null})(), pageScroll:scrollY, outsideTop:document.querySelector('#outside-scroll').scrollTop })`)
 }
 
 async function observedWheel(selector, deltaY, previousCount, label) {
@@ -70,13 +70,14 @@ async function run() {
   await evaluate(installEvidenceObserver())
   await waitFor(() => evaluate(`document.querySelector('#fixture-ready')?.textContent === 'ready' && !!document.querySelector('.overflow-y-auto')`), 'initial component mount')
 
-  await evaluate(`document.querySelector('.overflow-y-auto button')?.click()`)
   await waitFor(async () => (await evaluate('window.nativeTest.state()')).explains.length === 1, 'glossary explain start')
   const glossaryBefore = await snapshot()
+  if (glossaryBefore.typography?.fontSize !== '15px') throw new Error(`definition has inconsistent typography: ${JSON.stringify(glossaryBefore.typography)}`)
   await observedWheel('.overflow-y-auto', 520, glossaryBefore.wheels.length, 'trusted glossary wheel scroll')
   await waitFor(async () => (await snapshot()).content?.top>0, 'glossary scroll position change')
   const glossaryState = await evaluate('window.nativeTest.state()')
   const glossaryAfter = await snapshot()
+  fs.writeFileSync(path.join(outputDir, 'definition-preview.png'), (await win.webContents.capturePage()).toPNG())
   if (!glossaryAfter.popup || glossaryState.cancels.length !== 0 || glossaryState.pending.length !== 1 ||
       glossaryState.subscriptions !== 1 || glossaryState.unsubscriptions !== 0) throw new Error('glossary internal wheel closed the popover or changed its pending explain lifecycle')
   if (!glossaryAfter.content.className.split(/\s+/).includes('overscroll-contain') || glossaryAfter.content.overscrollBehaviorY !== 'contain') {
@@ -84,7 +85,8 @@ async function run() {
   }
 
   let edgeState = glossaryAfter
-  for (let i = 0; i < 8 && edgeState.content.top < edgeState.content.max - 1; i++) {
+  const edgeWheelLimit = Math.ceil(glossaryAfter.content.max / 560) + 4
+  for (let i = 0; i < edgeWheelLimit && edgeState.content.top < edgeState.content.max - 1; i++) {
     edgeState = await observedWheel('.overflow-y-auto', 560, edgeState.wheels.length, `glossary scroll toward bottom (${i + 1})`)
   }
   await waitFor(async () => { const s=await snapshot(); return s.content?.top >= s.content?.max - 1 }, 'glossary bottom boundary')
@@ -96,7 +98,7 @@ async function run() {
   }
 
   edgeState = bottomEdge
-  for (let i = 0; i < 8 && edgeState.content.top > 1; i++) {
+  for (let i = 0; i < edgeWheelLimit && edgeState.content.top > 1; i++) {
     edgeState = await observedWheel('.overflow-y-auto', -560, edgeState.wheels.length, `glossary scroll toward top (${i + 1})`)
   }
   await waitFor(async () => { const s=await snapshot(); return s.content?.top <= 1 }, 'glossary top boundary')
@@ -118,6 +120,8 @@ async function run() {
   await waitFor(async () => {const s=await snapshot();return s.content?.top>streamBeforeDelta.content?.top && s.scrolls.length>streamBeforeDelta.scrolls.length}, 'streaming content auto-scroll event')
   const streamState = await evaluate('window.nativeTest.state()')
   const afterAutoScroll = await snapshot()
+  if (JSON.stringify(afterAutoScroll.typography) !== JSON.stringify(glossaryBefore.typography)) throw new Error('definition and streamed explanation use different typography')
+  fs.writeFileSync(path.join(outputDir, 'detail-preview.png'), (await win.webContents.capturePage()).toPNG())
   if (!afterAutoScroll.popup || streamState.cancels.length !== 0 || streamState.pending.length !== 1) throw new Error('streaming auto-scroll closed the popover or cancelled explain')
   await wheelAt('.overflow-y-auto', -240)
   await waitFor(async () => {const s=await snapshot();return s.content?.top<afterAutoScroll.content?.top && s.wheels.length>afterAutoScroll.wheels.length && s.wheels.at(-1)?.trusted}, 'trusted upward stream wheel')
