@@ -97,6 +97,7 @@ export class GenerationDraftStore {
     try {
       const info = fs.lstatSync(target)
       if (!info.isFile() || info.isSymbolicLink()) return { status: 'unreadable' }
+      if (info.size > MAX_BYTES) return { status: 'corrupt' }
     } catch (error) {
       return { status: error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT' ? 'missing' : 'unreadable' }
     }
@@ -168,7 +169,27 @@ export class GenerationDraftStore {
     this.write(projectPath, value)
   }
 
-  remove(projectPath: string, id: string): void {
+  remove(projectPath: string, id: string | null): void {
+    if (id === null) {
+      try {
+        if (this.read(projectPath)) throw new Error(messages.changed)
+        throw new Error(messages.missing)
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== messages.corrupt) throw error
+      }
+      // Explicit corrupt-draft recovery never follows links or erases valid data.
+      // Keep original bytes recoverable without parsing an arbitrarily large file.
+      try {
+        const target = this.target(projectPath)
+        const files = [target, `${target}.bak`].filter((name) => fs.existsSync(name))
+        for (const name of files) {
+          const info = fs.lstatSync(name)
+          if (!info.isFile() || info.isSymbolicLink()) throw new Error('unsafe corrupt draft')
+        }
+        for (const name of files) fs.renameSync(name, `${name}.corrupt-${randomUUID()}`)
+        return
+      } catch { throw new Error(messages.discard) }
+    }
     this.owned(projectPath, id)
     try {
       const target = this.target(projectPath)

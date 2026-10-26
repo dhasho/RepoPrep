@@ -430,6 +430,16 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   if (checkpoint) {
     const fingerprint = sha256({
       version: GENERATION_CHECKPOINT_VERSION,
+      prompt: {
+        system: SYSTEM_PROMPT,
+        truncationMarker: REQUEST_TRUNCATION_MARKER,
+        instructions: built.batches.map((batch, index) => buildUserPrompt({
+          contextText: '', granularity, roleFocus,
+          isModuleBatch: batch.kind === 'module',
+          moduleLabel: batch.kind === 'module' ? batch.label.replace(/^模块「|」$/g, '') : undefined,
+          quota: plan.quotas[index].quota
+        }))
+      },
       context: { headerText: built.headerText, treeText: built.treeText, batches: built.batches },
       plan,
       granularity,

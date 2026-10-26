@@ -3,7 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
 import { GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
 import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, LlmProfileDraft, SettingsSaveRequest, GenerationDraftSummary } from '@shared/types'
@@ -286,7 +286,13 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
     if (!draft) throw new Error(GENERATION_DRAFT_MESSAGES.corrupt)
 
     if (draft.summary.ready && draft.result) {
-      const analysisId = saveResult(options.projectPath, draft.result)
+      const resultId = createHash('sha256').update(JSON.stringify(draft.result)).digest('hex')
+      let alreadyPublished = false
+      try {
+        const published = loadResult(options.projectPath)
+        alreadyPublished = Boolean(published && createHash('sha256').update(JSON.stringify(published)).digest('hex') === resultId)
+      } catch { /* saveResult remains responsible for existing result recovery and safe errors. */ }
+      const analysisId = alreadyPublished ? resultId : saveResult(options.projectPath, draft.result)
       ensureCurrentTask()
       addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
       ensureCurrentTask()

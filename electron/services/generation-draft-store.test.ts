@@ -55,7 +55,14 @@ test('bounded journal recovers its previous valid checkpoint and rejects corrupt
     fs.writeFileSync(`${file}.bak`, JSON.stringify({ ...store.read(projectPath), summary: { ...draft.summary, projectPath: directory } }))
     assert.throws(() => store.read(projectPath), { message: messages.corrupt })
     fs.writeFileSync(file, 'x'.repeat(16 * 1024 * 1024 + 1))
-    assert.throws(() => store.read(projectPath), { message: messages.unreadable })
+    assert.throws(() => store.read(projectPath), { message: messages.corrupt })
+    store.remove(projectPath, null)
+    assert.equal(store.read(projectPath), null)
+    const archives = fs.readdirSync(path.dirname(file)).filter((name) => name.includes('.corrupt-'))
+    assert.equal(archives.length, 2, 'explicit corrupt discard archives both original files')
+    const next = store.begin(projectPath, meta)
+    assert.throws(() => store.remove(projectPath, null), { message: messages.changed }, 'corrupt-discard mode cannot remove a now-valid draft')
+    assert.equal(store.read(projectPath)?.summary.id, next.summary.id)
   } finally { fs.rmSync(directory, { recursive: true, force: true }) }
 })
 

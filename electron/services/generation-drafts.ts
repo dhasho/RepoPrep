@@ -8,4 +8,4 @@ export const readGenerationDraft = (projectPath: string) => store().read(project
 export const beginGenerationDraft = (projectPath: string, meta: GenerationDraftMetadata) => store().begin(projectPath, meta)
 export const saveGenerationDraft = (projectPath: string, id: string, state: GenerationCheckpoint): void => store().save(projectPath, id, state)
 export const completeGenerationDraft = (projectPath: string, id: string, result: InterviewResult): void => store().complete(projectPath, id, result)
-export const removeGenerationDraft = (projectPath: string, id: string): void => store().remove(projectPath, id)
+export const removeGenerationDraft = (projectPath: string, id: string | null): void => store().remove(projectPath, id)

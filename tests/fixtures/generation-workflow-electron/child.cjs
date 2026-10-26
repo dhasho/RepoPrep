@@ -213,7 +213,11 @@ async function runWorkflow() {
   const recentAfterScan = await bridge('window.api.getRecentProjects()', 'verify project A entered recents')
   assert.ok(recentAfterScan.some((project) => project.path === projectA))
   await clickButton('后端', 'choose backend direction')
-  const startGeneration = () => clickButton('开始生成面试题', 'start generation', 'starts')
+  const startGeneration = async () => {
+    await waitFor('draft inspection settled', () => activeWindow.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).some(b=>!b.disabled && (b.innerText==='继续生成' || b.innerText.startsWith('开始生成面试题')))`))
+    if ((await bodyText()).includes('可继续的生成任务')) await clickButton('继续生成', 'resume saved generation draft')
+    else await clickButton('开始生成面试题', 'start generation', 'starts')
+  }
 
   // Cancel while the production request is held open by the loopback service.
   await startGeneration()
@@ -226,7 +230,11 @@ async function runWorkflow() {
   const afterCancelResult = await bridge(`window.api.loadResult(${JSON.stringify(projectA)})`, 'verify cancelled run has no latest result')
   assert.equal(afterCancelAnalyses.items.length, 0)
   assert.equal(afterCancelResult, null)
-  evidence.checks.cancel = { requestAborted: true, analysisCount: 0, latestResultNull: true }
+  const cancelledDraft = await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'verify cancelled run preserves a private draft')
+  assert.ok(cancelledDraft && !cancelledDraft.ready)
+  assert.equal(cancelledDraft.completedBatches, 0)
+  assert.equal(Object.hasOwn(cancelledDraft, 'checkpoint'), false)
+  evidence.checks.cancel = { requestAborted: true, analysisCount: 0, latestResultNull: true, resumableDraft: true }
 
   // Retry in the same configured UI. The loopback server returns exactly 20 unique medium questions.
   await startGeneration()

@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
 import ts from 'typescript'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -25,7 +25,7 @@ async function loadTypescriptModule(filename, requireModule, context = {}) {
   return module.exports
 }
 
-async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true } = {}) {
+async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true, storedResult = null } = {}) {
   const handlers = new Map()
   const appEvents = new Map()
   const windows = []
@@ -92,7 +92,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
     './services/llm': { chatCompletionStream: async () => {}, isLlmTimeoutError: () => false, listModels: async () => ({}), testConnection: async () => ({}) },
     './services/exporter': { exportMarkdownDialog: async () => ({}) },
     './window-security': { getTrustedDevUrl: () => null, installPermissionDenials() {}, installWindowSecurity() {} },
-    './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getPrivateProfile: async (id) => ({ id, name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic', model: 'mock' }), getRecentProjects: () => [], getSettings: async () => ({ profiles: [], defaultProfileId: null, scanLimits: { maxFiles: 12 } }), loadResult: () => null, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },
+    './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getPrivateProfile: async (id) => ({ id, name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic', model: 'mock' }), getRecentProjects: () => [], getSettings: async () => ({ profiles: [], defaultProfileId: null, scanLimits: { maxFiles: 12 } }), loadResult: () => storedResult, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },
     './services/ipc-authority': { AuthorizedProjectRegistry: class { registerRecent() {} registerSelected() {} removeRecent() {} requireAuthorized(value) { return value } } },
     './services/ipc-handler-guards': { ExplainAbortRegistry: class { begin() { return new AbortController() } finish() {} cancel() {} }, registerGuardedIpcHandler: (_ipc, channel, _deps, handler) => handlers.set(channel, handler) }
   }
@@ -100,7 +100,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
     if (id === 'node:path') return path
     if (id === 'node:fs') return { mkdirSync() {} }
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
-    if (id === 'node:crypto') return { randomUUID }
+    if (id === 'node:crypto') return { randomUUID, createHash }
     if (!modules[id]) throw new Error(`unexpected require: ${id}`)
     return modules[id]
   }
@@ -281,5 +281,22 @@ test('ready 草稿重试只幂等保存已有结果，不再次调用 generator'
   assert.equal(calls, 0)
   assert.equal(harness.saves.length, 1)
   assert.equal(harness.recents.length, 1)
+  assert.equal(harness.drafts.has(options.projectPath), false)
+})
+
+test('crash after publication reuses the already-saved report without another write or history archive', async () => {
+  const readyResult = { projectName: 'demo', projectPath: options.projectPath, sections: [] }
+  let generationCalls = 0
+  const harness = await createHarness({ storedResult: readyResult, generate: async () => { generationCalls++; return result } })
+  const draftId = randomUUID()
+  harness.drafts.set(options.projectPath, {
+    version: 1,
+    summary: { ...options, id: draftId, projectName: 'demo', modelLabel: 'mock', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), completedBatches: 1, completedQuestions: 0, totalBatches: 1, ready: true },
+    checkpoint: null, result: readyResult
+  })
+  const response = await harness.handlers.get(harness.IPC.generateRun)({ sender: harness.windows[0].webContents }, { ...request(randomUUID()), resumeDraftId: draftId })
+  assert.equal(generationCalls, 0)
+  assert.equal(harness.saves.length, 0)
+  assert.equal(response.analysisId, createHash('sha256').update(JSON.stringify(readyResult)).digest('hex'))
   assert.equal(harness.drafts.has(options.projectPath), false)
 })
