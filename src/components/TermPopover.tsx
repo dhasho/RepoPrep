@@ -13,9 +13,21 @@ export interface TermPopoverProps {
 
 const POPOVER_WIDTH = 380
 
+function definitionParts(definition: string | undefined): [string, string] | null {
+  const text = definition?.trim()
+  // Existing Markdown paragraphs and lists already carry their own structure.
+  if (!text || /\n\s*\n|(^|\n)\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|```)/m.test(text)) return null
+  const boundary = /[。！？][”’」』）)]?/u.exec(text)
+  if (!boundary) return null
+  const splitAt = boundary.index + boundary[0].length
+  const mechanism = text.slice(splitAt).trim()
+  return mechanism ? [text.slice(0, splitAt), mechanism] : null
+}
+
 export default function TermPopover({ term, anchor, definition, onClose }: TermPopoverProps) {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+  const parts = definitionParts(definition)
 
   useLayoutEffect(() => {
     const el = boxRef.current
@@ -66,7 +78,22 @@ export default function TermPopover({ term, anchor, definition, onClose }: TermP
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
         <p className="mb-1 text-xs font-medium text-slate-400">术语表</p>
-        <MarkdownView markdown={definition || '术语表暂无此项解释，可选中文本后使用“向 AI 提问”。'} />
+        {parts ? (
+          <div className="mt-2 space-y-4">
+            {parts.map((text, index) => (
+              <section key={index} aria-label={index === 0 ? '是什么' : '如何作用'}>
+                <h3 className="mb-1 text-sm font-semibold text-slate-800">{index === 0 ? '是什么' : '如何作用'}</h3>
+                <div className="pl-3">
+                  <MarkdownView markdown={text} />
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className={definition ? 'pl-3' : undefined}>
+            <MarkdownView markdown={definition || '术语表暂无此项解释，可选中文本后使用“向 AI 提问”。'} />
+          </div>
+        )}
       </div>
     </div>,
     document.body

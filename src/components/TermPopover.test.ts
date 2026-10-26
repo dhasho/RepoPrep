@@ -43,11 +43,27 @@ test('term popover is a stable glossary view and never requests AI, with or with
       assert.equal(container.textContent, before, 'no delayed replacement or generation screen')
       assert.ok(container.textContent?.includes('术语表'))
       assert.ok(!container.textContent?.includes('生成中'))
-      assert.equal(container.querySelectorAll('.md-body').length, 1)
+      assert.equal(container.querySelectorAll('.md-body').length, definition ? 2 : 1)
       assert.equal(container.querySelectorAll('button').length, 1, 'only the close button; no automatic or manual model action here')
-      assert.ok(container.textContent?.includes(definition ?? '术语表暂无此项解释'))
+      if (definition) {
+        assert.equal([...container.querySelectorAll('.md-body')].map((body) => body.textContent).join(''), definition)
+        assert.ok(container.querySelector('section[aria-label="是什么"] .pl-3'))
+        assert.ok(container.querySelector('section[aria-label="如何作用"] .pl-3'))
+      } else assert.ok(container.textContent?.includes('术语表暂无此项解释'))
     })
   }
+})
+
+test('glossary formatting preserves inline code and already formatted lists', async () => {
+  await withPopover('框架使用 `Node.js` 提供系统能力。它通过 IPC 交换消息。', async ({ container }) => {
+    assert.equal(container.querySelector('section[aria-label="是什么"] code')?.textContent, 'Node.js')
+    assert.equal(container.querySelector('section[aria-label="如何作用"] .md-body')?.textContent, '它通过 IPC 交换消息。')
+  })
+  await withPopover('已有解释。\n\n- 保留原列表\n- 保留第二项', async ({ container }) => {
+    assert.equal(container.querySelectorAll('li').length, 2)
+    assert.equal(container.querySelectorAll('.md-body').length, 1)
+    assert.equal(container.querySelector('section[aria-label="如何作用"]'), null)
+  })
 })
 
 test('glossary internal scrolling stays open; Escape, outside clicks and external scroll close it', async () => {
