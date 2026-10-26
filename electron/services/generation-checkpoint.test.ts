@@ -34,6 +34,7 @@ function response(prompt: string): string {
   const wanted = Number(prompt.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1] ?? 2)
   const topic = prompt.match(/模块「([^」]+)」/)?.[1] ?? 'global'
   const questions = Array.from({ length: wanted }, (_, i) => ({
+    title: `${topic} topic ${i + 1}`,
     question: `${topic} question ${i + 1}: explain the implementation`,
     answer: `The implementation uses [[${topic}Term]] to organize behavior.`,
     followUps: [{ question: `Why ${i + 1}?`, answer: 'Because this is the selected implementation.', followUps: [] }]
@@ -86,6 +87,12 @@ test('replays completed production batches after a later batch fails, then finis
     assert.equal(result.generationDiagnostics?.requestCount, resumeFetchCalls.length)
     assert.ok(resumeFetchCalls.every((prompt) => !calls.slice(0, 2).includes(prompt)), 'completed primary prompts must not be fetched again')
     assert.ok(countQuestions(result) >= 25)
+    const completedTitles = new Map(prior.entries.flatMap(entry => entry.batch.sections.flatMap(section =>
+      section.questions.map(question => [question.question, question.title] as const))))
+    const replayedQuestions = result.sections.flatMap(section => section.questions)
+      .filter(question => completedTitles.has(question.question))
+    assert.ok(replayedQuestions.length > 0, 'completed batches remain in the resumed report')
+    replayedQuestions.forEach(question => assert.equal(question.title, completedTitles.get(question.question), 'resumed batches retain their short titles'))
     assert.ok(Object.keys(result.glossary).length > 0)
     assert.equal(calls.length, 3, 'the third batch failed once after two completed batches')
   })
