@@ -77,6 +77,8 @@ function makeApi({
   loadFailures: initialLoadFailures = new Map(),
   storageDiagnostics: initialStorageDiagnostics = [],
   storageRecoveryFailures: initialStorageRecoveryFailures = new Map(),
+  generationDrafts: initialGenerationDrafts = new Map(),
+  generationDraftFailures: initialDraftFailures = new Map(),
   scanOverview,
   generateImmediately,
   profiles = [{ id: 'profile-1', name: 'Mock', baseUrl: 'https://example.test/v1', apiKey: '', model: 'mock-model' }],
@@ -101,6 +103,10 @@ function makeApi({
   const storageRecoveryFailures = initialStorageRecoveryFailures instanceof Map
     ? new Map(initialStorageRecoveryFailures)
     : new Map(Object.entries(initialStorageRecoveryFailures))
+  const generationDrafts = initialGenerationDrafts instanceof Map ? new Map(initialGenerationDrafts) : new Map(Object.entries(initialGenerationDrafts))
+  const draftReads = []
+  const draftDiscards = []
+  const draftFailures = initialDraftFailures instanceof Map ? new Map(initialDraftFailures) : new Map(Object.entries(initialDraftFailures))
   const delayedStorageRecoveries = new Map()
   const listeners = new Set()
   const delayedScans = new Map()
@@ -140,6 +146,13 @@ function makeApi({
     for (const [projectPath, error] of Object.entries(initialLoadFailures)) queue(loadFailures, projectPath, error)
   }
   const api = {
+    getGenerationDraft: async (projectPath) => {
+      draftReads.push(projectPath)
+      const failures = draftFailures.get(projectPath)
+      if (failures?.length) { const error = failures.shift(); if (!failures.length) draftFailures.delete(projectPath); throw error }
+      return generationDrafts.get(projectPath) ?? null
+    },
+    discardGenerationDraft: async (projectPath, draftId) => { draftDiscards.push({ projectPath, draftId }); if (generationDrafts.get(projectPath)?.id === draftId) generationDrafts.delete(projectPath) },
     selectFolder: async () => { selectCalls++; return selectedPath },
     scanProject: async (projectPath) => {
       scans.push(projectPath)
@@ -251,6 +264,8 @@ function makeApi({
   return {
     api,
     requests,
+    draftReads,
+    draftDiscards,
     explainRequests,
     explainCancellations,
     cancellations,
@@ -282,6 +297,7 @@ function makeApi({
       return control
     },
     failNextScan: (projectPath, error = new Error('scan failed')) => queue(scanFailures, projectPath, error),
+    failNextDraftRead: (projectPath, error = new Error('draft read failed')) => queue(draftFailures, projectPath, error),
     failNextLoad: (projectPath, error = new Error('load failed')) => queue(loadFailures, projectPath, error),
     failNextAnalysisList: (projectPath, error = new Error('analysis list failed')) => queue(analysisListFailures, projectPath, error),
     failNextAnalysisLoad: (projectPath, error = new Error('analysis load failed'), id) => queue(analysisLoadFailures, id ? `${projectPath}:${id}` : projectPath, error),
@@ -1035,6 +1051,56 @@ async function startGeneration(harness) {
   assert.equal(harness.mock.requests.length > 0, true, 'API generate 应被调用')
   return harness.mock.requests.at(-1)
 }
+
+test('saved generation draft is passive until resumed and continuation uses its original options and a fresh run id', async () => {
+  const projectPath = 'C:\\ProjectDraft'
+  const draft = {
+    id: 'draft-123', projectPath, projectName: 'ProjectDraft', granularity: 'fine', roleFocus: 'backend',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 2, completedQuestions: 8, totalBatches: 5, ready: true
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
+  try {
+    await openProject(h, projectPath)
+    await act(h, () => {})
+    assert.ok(h.host.textContent.includes('可继续的生成任务'))
+    assert.ok(h.host.textContent.includes('已保存 2/5 个完整批次 · 8 道题 · 原模型：mock-model'))
+    assert.equal(h.mock.requests.length, 0, 'checking a draft does not call the model')
+    await act(h, () => button(h.host, '继续生成').click())
+    assert.equal(h.mock.requests.length, 1)
+    const request = h.mock.requests[0].request
+    assert.equal(request.resumeDraftId, draft.id)
+    assert.notEqual(request.runId, draft.id)
+    assert.match(request.runId, /^[0-9a-f-]{36}$/i)
+    assert.deepEqual({ projectPath: request.projectPath, granularity: request.granularity, roleFocus: request.roleFocus, profileId: request.profileId }, {
+      projectPath, granularity: draft.granularity, roleFocus: draft.roleFocus, profileId: draft.profileId
+    })
+  } finally { await unmount(h) }
+})
+
+test('draft read failure can be retried and discarding sends only the selected project path and draft id', async () => {
+  const projectPath = 'C:\\ProjectDraft'
+  const draft = {
+    id: 'draft-discard', projectPath, projectName: 'ProjectDraft', granularity: 'medium', roleFocus: 'general',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 1, completedQuestions: 4, totalBatches: 3, ready: true
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]), generationDraftFailures: new Map([[projectPath, [new Error('temporary read failure')]]]) })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('读取生成草稿失败'))
+    const start = button(h.host, '开始生成面试题')
+    assert.equal(start.disabled, true, 'starting is blocked while draft state is unknown')
+    await act(h, () => button(h.host, '重试读取').click())
+    assert.ok(h.host.textContent.includes('可继续的生成任务'))
+    await act(h, () => button(h.host, '丢弃草稿').click())
+    assert.deepEqual(h.mock.draftDiscards, [{ projectPath, draftId: draft.id }])
+    assert.equal(h.mock.requests.length, 0, 'discarding a draft does not start a generation')
+    assert.equal(h.mock.deletions.length, 0, 'discarding a draft does not delete analysis history')
+    assert.ok(!h.host.textContent.includes('可继续的生成任务'))
+    assert.equal(button(h.host, '开始生成面试题').disabled, false)
+  } finally { await unmount(h) }
+})
 
 async function leaveGenerationToSelect(harness) {
   await clickHistoryButton(harness, 'back')

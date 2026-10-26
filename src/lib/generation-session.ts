@@ -78,7 +78,7 @@ export class GenerationSession {
     return this.snapshot.tasks.find((task) => task.runId === runId) ?? null
   }
 
-  start(options: GenerateOptions, overview: ProjectOverview, existingResult: InterviewResult | null = null): string | null {
+  start(options: GenerateOptions, overview: ProjectOverview, existingResult: InterviewResult | null = null, resumeDraftId?: string): string | null {
     if (this.disposed || this.snapshot.activeRunId) return null
     const runId = this.makeRunId()
     const frozenOptions = immutableClone(options)
@@ -99,7 +99,7 @@ export class GenerationSession {
     // Claim the slot before invoking IPC, then invoke synchronously so an immediate
     // unmount can only cancel a request that has already been sent.
     this.snapshot = { activeRunId: runId, tasks: [task, ...this.snapshot.tasks].slice(0, 10) }
-    const request = { ...frozenOptions, runId }
+    const request = { ...frozenOptions, runId, ...(resumeDraftId ? { resumeDraftId } : {}) } as GenerateRequest
     let pending: Promise<GenerateResponse>
     try {
       pending = this.api.generate(request)

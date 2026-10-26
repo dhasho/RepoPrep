@@ -34,6 +34,7 @@ export default function GeneratingPage({ overview, options, progress, logs, erro
             <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-rose-50 px-4 py-3 text-[13px] leading-6 text-rose-700">
               {error}
             </pre>
+            <p className="mt-3 text-xs leading-5 text-slate-500">已成功保存的完整批次可在返回配置后继续；尚未保存的内容无法恢复。</p>
             <div className="mt-5 flex gap-3">
               <button
                 className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700"

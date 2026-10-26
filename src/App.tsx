@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { GenerateOptions, InterviewResult, ProjectOverview, PublicSettings } from '@shared/types'
+import type { GenerationDraftSummary } from '@shared/generation-checkpoint'
 import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { api } from './lib/ipc'
@@ -499,11 +500,11 @@ export default function App() {
     }
   }
 
-  const startGenerate = useCallback((options: GenerateOptions) => {
+  const startGenerate = useCallback((options: GenerateOptions, resumeDraftId?: string) => {
     if (!overview) return
     const taskExistingResult = existingResult?.projectPath === overview.root ? existingResult : null
     const capturedOptions = { ...options, projectPath: projectStoragePath ?? options.projectPath }
-    const runId = session.start(capturedOptions, overview, taskExistingResult)
+    const runId = session.start(capturedOptions, overview, taskExistingResult, resumeDraftId)
     if (!runId) return
     navigationEpoch.current++
     historyRecoveryAttempt.current = null
@@ -739,6 +740,20 @@ export default function App() {
                 onOptionsChange={saveConfigureOptions}
                 busyTask={busyForConfigure}
                 onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
+                projectPath={projectStoragePath ?? overview.root}
+                onResumeDraft={(draft: GenerationDraftSummary) => {
+                  if (activeTask || !draft.ready || draft.projectPath !== (projectStoragePath ?? overview.root)) return
+                  const options: GenerateOptions = {
+                    projectPath: projectStoragePath ?? overview.root,
+                    granularity: draft.granularity,
+                    roleFocus: draft.roleFocus,
+                    profileId: draft.profileId
+                  }
+                  startGenerate(options, draft.id)
+                }}
+                onOpenSettings={() => {
+                  visitPage({ view: 'settings', sidebarMode: 'projects', foregroundRunId: null })
+                }}
               />
             )}
             {generationPage && (
