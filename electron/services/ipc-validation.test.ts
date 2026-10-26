@@ -209,6 +209,8 @@ test('闭合输入对象拒绝额外或循环字段，requestId 仅接受 UUID',
   rejects(IPC.generationDraftDiscard, 'C:\\demo')
   rejects(IPC.generationDraftDiscard, 'C:\\demo', 'not-a-uuid')
   rejects(IPC.generationDraftDiscard, 'C:\\demo', requestId, 'extra')
+  assert.doesNotThrow(() => validateIpcArgs(IPC.generationDraftDiscard, ['C:\\demo', null]))
+  rejects(IPC.generationDraftDiscard, 'C:\\demo', {})
   rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', runId: requestId, resumeDraftId: 'not-a-uuid' })
   rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', runId: requestId, resumeDraftId: requestId, injected: true })
   rejects(IPC.explainStart, { requestId: 'r1\nforged', term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' })

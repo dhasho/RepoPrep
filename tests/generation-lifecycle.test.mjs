@@ -84,7 +84,9 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
       },
       saveGenerationDraft: (projectPath, _id, state) => { drafts.get(projectPath).checkpoint = state },
       completeGenerationDraft: (projectPath, _id, value) => { const draft = drafts.get(projectPath); draft.result = value; draft.summary.ready = true },
-      removeGenerationDraft: (projectPath, id) => { if (drafts.get(projectPath)?.summary.id === id) drafts.delete(projectPath) }
+      removeGenerationDraft: (projectPath, id) => {
+        if (id === null || drafts.get(projectPath)?.summary.id === id) drafts.delete(projectPath)
+      }
     },
     './services/generator': { generateInterview: (...args) => generate(...args), buildExplainMessages() {} },
     './services/llm': { chatCompletionStream: async () => {}, isLlmTimeoutError: () => false, listModels: async () => ({}), testConnection: async () => ({}) },
@@ -258,6 +260,9 @@ test('草稿 IPC 只返回摘要、按精确 ID 丢弃，并在任务活动时�
   ), /未找到此生成草稿/)
   await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, summary.id)
   assert.equal(await harness.handlers.get(harness.IPC.generationDraftGet)({ sender }, options.projectPath), null)
+  harness.drafts.set(options.projectPath, { corrupt: true })
+  await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, null)
+  assert.equal(harness.drafts.has(options.projectPath), false, 'null ID delegates corrupt-draft removal without resolving a valid draft ID')
 })
 
 test('ready 草稿重试只幂等保存已有结果，不再次调用 generator', async () => {

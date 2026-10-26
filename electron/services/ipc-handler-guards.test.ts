@@ -97,6 +97,8 @@ test('项目 handler 与导出 handler 收到 registry 中登记的原始路径'
     const path = typeof received === 'string' ? received : received.projectPath
     assert.equal(path, 'C:\\Demo', channel)
   }
+  const draftHandler = createGuardedIpcHandler(IPC.generationDraftDiscard, deps, (_event, projectPath, draftId) => ({ projectPath, draftId }))
+  assert.deepEqual(await draftHandler(event, 'c:\\demo', null), { projectPath: 'C:\\Demo', draftId: null })
 })
 
 test('removeRecent authorizes the supplied alias but preserves the exact persisted key', async () => {

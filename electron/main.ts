@@ -197,8 +197,12 @@ handle(IPC.generationDraftGet, (_e, projectPath: string): GenerationDraftSummary
   readGenerationDraft(projectPath)?.summary ?? null
 )
 
-handle(IPC.generationDraftDiscard, (_e, projectPath: string, draftId: string) => {
+handle(IPC.generationDraftDiscard, (_e, projectPath: string, draftId: string | null) => {
   if (generationTasks.active) throw new Error('已有生成任务在进行中')
+  if (draftId === null) {
+    removeGenerationDraft(projectPath, null)
+    return
+  }
   const draft = readGenerationDraft(projectPath)
   if (!draft || draft.summary.id !== draftId) {
     throw new Error(GENERATION_DRAFT_MESSAGES.missing)

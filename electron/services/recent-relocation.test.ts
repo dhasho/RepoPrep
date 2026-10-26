@@ -148,6 +148,8 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
     ['electron', electron],
     ['@shared/ipc', { IPC }],
     ['@shared/types', {}],
+    ['@shared/generation-checkpoint', { GENERATION_DRAFT_MESSAGES: { exists: 'exists', missing: 'missing', changed: 'changed', corrupt: 'corrupt', unreadable: 'unreadable', save: 'save', discard: 'discard' } }],
+    ['./services/generation-drafts', { readGenerationDraft: () => null, beginGenerationDraft: () => null, saveGenerationDraft() {}, completeGenerationDraft() {}, removeGenerationDraft() {} }],
     ['./services/scan-cache', { ProjectScanCache: class {
       async refresh(projectPath: string) { return { scan: { root: projectPath, name: projectPath.split(/[\\/]/).filter(Boolean).at(-1) ?? 'Demo' } } }
       async getFresh(projectPath: string) { return { scan: { root: projectPath, name: 'Demo' } } }

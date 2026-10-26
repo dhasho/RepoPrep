@@ -136,7 +136,7 @@ const validators: Record<string, Validator> = {
   [IPC.storageDiagnostics]: (a) => exactArgs(a, 0),
   [IPC.storageRecover]: (a) => { exactArgs(a, 1); if (!isStorageDiagnosticId(a[0])) fail() },
   [IPC.generationDraftGet]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
-  [IPC.generationDraftDiscard]: (a) => { exactArgs(a, 2); absolutePath(a[0]); requestId(a[1]) },
+  [IPC.generationDraftDiscard]: (a) => { exactArgs(a, 2); absolutePath(a[0]); if (a[1] !== null) requestId(a[1]) },
   [IPC.scanProject]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.removeRecent]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.loadResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },

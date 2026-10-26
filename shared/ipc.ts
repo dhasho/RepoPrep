@@ -69,5 +69,5 @@ export interface ProjectLensApi {
   getStorageDiagnostics(): Promise<StorageDiagnostic[]>
   recoverStorage(id: string): Promise<void>
   getGenerationDraft(projectPath: string): Promise<GenerationDraftSummary | null>
-  discardGenerationDraft(projectPath: string, draftId: string): Promise<void>
+  discardGenerationDraft(projectPath: string, draftId: string | null): Promise<void>
 }
