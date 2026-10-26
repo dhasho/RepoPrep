@@ -1,5 +1,5 @@
 // 面试题生成编排：构建上下文 -> 调用大模型 -> 容错解析 JSON -> 合并批次
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type {
   FollowUp,
   Granularity,
@@ -20,6 +20,8 @@ import { buildContext, renderBatch, renderBatchWithinBudget } from './context-bu
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
 import { buildCompensationInstruction, selectUniqueQuestions } from './question-dedupe'
 import type { ScanResult } from './scanner'
+import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
+import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
@@ -31,6 +33,34 @@ export interface GenerateParams {
   signal: AbortSignal
   onProgress: (step: string, detail: string | undefined, percent: number) => void
   onDiagnostics?: (diagnostics: GenerationDiagnostics) => void
+  checkpoint?: { state?: GenerationCheckpoint | null; save: (state: GenerationCheckpoint) => void | Promise<void> }
+}
+
+const CHECKPOINT_PROMPT_VERSION = 'generation-prompt-v1'
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+function sha256(value: unknown): string { return createHash('sha256').update(stableJson(value)).digest('hex') }
+function cloneBatch(batch: ParsedBatch): GenerationCheckpoint['entries'][number]['batch'] {
+  return JSON.parse(JSON.stringify(batch)) as GenerationCheckpoint['entries'][number]['batch']
+}
+function validateCheckpointBatch(batch: unknown): ParsedBatch {
+  if (!batch || typeof batch !== 'object') throw new Error(GENERATION_DRAFT_MESSAGES.changed)
+  const keys = Object.keys(batch as object).sort()
+  if (keys.join(',') !== 'glossary,projectSummary,sections') throw new Error(GENERATION_DRAFT_MESSAGES.changed)
+  const candidate = batch as ParsedBatch
+  try {
+    assertInterviewResultContract({
+      version: 1, createdAt: '2026-01-01T00:00:00.000Z', projectName: 'checkpoint', projectPath: '/checkpoint',
+      granularity: 'coarse', roleFocus: 'general', profileId: 'checkpoint', modelUsed: 'checkpoint',
+      projectSummary: candidate.projectSummary, sections: candidate.sections, glossary: candidate.glossary
+    }, () => true)
+  } catch { throw new Error(GENERATION_DRAFT_MESSAGES.changed) }
+  return JSON.parse(JSON.stringify(candidate)) as ParsedBatch
 }
 
 const SYSTEM_PROMPT = `你是一位经验丰富的资深技术面试官，擅长通读候选人的项目代码与文档，围绕真实项目出有深度的面试题。
@@ -391,11 +421,52 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     built.batches.map((b) => ({ label: b.label, weight: b.weight, kind: b.kind }))
   )
 
+  const checkpoint = params.checkpoint
+  const resumed = Boolean(checkpoint)
+  let checkpointState: GenerationCheckpoint | undefined
+  let checkpointEntries: GenerationCheckpoint['entries'] = []
+  let replayCursor = 0
+  let requestOrdinal = 0
+  if (checkpoint) {
+    const fingerprint = sha256({
+      version: GENERATION_CHECKPOINT_VERSION,
+      context: { headerText: built.headerText, treeText: built.treeText, batches: built.batches },
+      plan,
+      granularity,
+      roleFocus,
+      profile: {
+        id: profile.id, model: profile.model, baseUrl: profile.baseUrl,
+        protocol: profile.protocol ?? 'openai', temperature: profile.temperature,
+        contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens
+      }
+    })
+    const prior = checkpoint.state ?? null
+    if (prior && (prior.version !== GENERATION_CHECKPOINT_VERSION || prior.fingerprint !== fingerprint ||
+      prior.totalBatches !== plan.quotas.length || !Array.isArray(prior.entries) ||
+      prior.entries.some((entry) => !entry || typeof entry.key !== 'string' || !entry.batch))) {
+      throw new Error(GENERATION_DRAFT_MESSAGES.changed)
+    }
+    checkpointEntries = prior ? JSON.parse(JSON.stringify(prior.entries)) as GenerationCheckpoint['entries'] : []
+    if (prior) {
+      try { for (const entry of checkpointEntries) validateCheckpointBatch(entry.batch) }
+      catch { throw new Error(GENERATION_DRAFT_MESSAGES.changed) }
+    }
+    checkpointState = {
+      version: GENERATION_CHECKPOINT_VERSION, fingerprint, totalBatches: plan.quotas.length,
+      entries: JSON.parse(JSON.stringify(checkpointEntries)) as GenerationCheckpoint['entries']
+    }
+    if (!prior) {
+      try { await checkpoint.save({ ...checkpointState, entries: [] }) }
+      catch { throw new Error(GENERATION_DRAFT_MESSAGES.save) }
+    }
+  }
+
   // 合并各批次产出，并在总量低于下限时对"少给的批次"发起一轮补偿请求。
   failedStage = 'merge'
   const mergeResult = await mergeWithCompensation({
     budget,
     signal,
+    checkpointResume: resumed,
     batches: built.batches,
     quotas: plan.quotas.map((q) => q.quota),
     total: plan.total,
@@ -411,6 +482,12 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     requestBatch: async (index, quota, extraInstruction) => {
       failedStage = 'model'
       if (signal.aborted) throw new Error('生成已取消。')
+      const callOrder = requestOrdinal++
+      const checkpointKey = resumed ? sha256({
+        version: CHECKPOINT_PROMPT_VERSION, fingerprint: checkpointState!.fingerprint,
+        callOrder, index, quota, extraInstruction: extraInstruction ?? null,
+        batch: { label: built.batches[index].label, kind: built.batches[index].kind }
+      }) : ''
       const contextText = renderBatch(built.headerText, built.treeText, built.batches[index])
       const minimumContextChars = renderBatch(
         built.headerText,
@@ -454,9 +531,21 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         }
         return messages
       }
+      if (resumed && checkpointEntries[callOrder]) {
+        if (checkpointEntries[callOrder].key !== checkpointKey) throw new Error(GENERATION_DRAFT_MESSAGES.changed)
+        const replay = validateCheckpointBatch(checkpointEntries[callOrder].batch)
+        try {
+          const fitted = fitMessages(makePrompt, contextText.length, minimumContextChars, CONTEXT_CHAR_BUDGETS[granularity], undefined, tokenBudget.inputTokens)
+          if (fitted.contextLimit < contextText.length) markRequestTruncation()
+        } catch { throw new Error(GENERATION_DRAFT_MESSAGES.changed) }
+        replayCursor++
+        if (extraInstruction && counters.compensationPending > 0) counters.compensationPending--
+        return replay
+      }
       failedStage = 'model'
+      let parsed: ParsedBatch
       try {
-        const parsed = await callForJson(
+        parsed = await callForJson(
           profile,
           makePrompt,
           contextText.length,
@@ -467,13 +556,30 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           tokenBudget.inputTokens,
           counters
         )
-        failedStage = 'merge'
-        return parsed
       } catch (error) { failedStage = 'model'; throw error }
+      if (signal.aborted) throw new Error('生成已取消。')
+      if (resumed) {
+        const entry = { key: checkpointKey, batch: cloneBatch(parsed) }
+        const nextEntries = [...checkpointState!.entries, entry]
+        const snapshot: GenerationCheckpoint = {
+          version: checkpointState!.version,
+          fingerprint: checkpointState!.fingerprint,
+          totalBatches: checkpointState!.totalBatches,
+          entries: JSON.parse(JSON.stringify(nextEntries)) as GenerationCheckpoint['entries']
+        }
+        try { await checkpoint!.save(snapshot) }
+        catch { throw new Error(GENERATION_DRAFT_MESSAGES.save) }
+        checkpointState!.entries.push(entry)
+      }
+      failedStage = 'merge'
+      return parsed
     }
   })
 
   const merged = mergeResult
+  if (resumed && replayCursor < checkpointEntries.length) {
+    throw new Error(GENERATION_DRAFT_MESSAGES.changed)
+  }
   if (signal.aborted) throw new Error('生成已取消。')
   const capped = capSectionsToMax(merged.sections, budget.max)
   // 裁剪后收敛 glossary：丢弃不再被引用的孤儿词条（多批合并 + 裁剪会明显膨胀）
@@ -548,6 +654,8 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
 
 export interface MergeInput {
   signal?: AbortSignal
+  /** Recovery must preserve a resumable draft when any compensation request fails. */
+  checkpointResume?: boolean
   /** 该颗粒度的题量预算 */
   budget: { min: number; target: number; max: number }
   /** 各批次的标识（仅用于进度文案） */
@@ -678,6 +786,7 @@ export async function mergeWithCompensation(
       merged.compensated += absorb(parsed, ask, target)
     } catch (error) {
       if (signal?.aborted) throw error
+      if (input.checkpointResume) throw error
       // Timeouts need to reach the main IPC layer so it can surface the explicit
       // timeout state; ordinary compensation failures remain best-effort.
       if (isLlmTimeoutError(error)) throw error
