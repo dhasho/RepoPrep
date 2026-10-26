@@ -30,6 +30,7 @@ test('每个 invoke 通道全部登记且各自接受合法参数形状', () => 
     [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
     [IPC.explainCancel, [requestId]], [IPC.settingsGet, []], [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]],
     [IPC.storageDiagnostics, []], [IPC.storageRecover, [`result:${'a'.repeat(40)}`]],
+    [IPC.generationDraftGet, ['C:\\demo']], [IPC.generationDraftDiscard, ['C:\\demo', requestId]],
     [IPC.llmTest, [profile]], [IPC.llmListModels, [profile]], [IPC.exportMarkdown, [result]]
   ])
   for (const channel of INVOKE_CHANNELS) {
@@ -44,6 +45,7 @@ test('生成请求与取消接受大小写不同但格式合法的 UUIDv4', () =
     { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'backend', profileId: 'p1', runId }
   ]))
   assert.doesNotThrow(() => validateIpcArgs(IPC.generateCancel, [runId]))
+  assert.doesNotThrow(() => validateIpcArgs(IPC.generationDraftDiscard, ['C:\\demo', runId]))
 })
 
 test('拒绝未知通道、参数缺失/多余及事件通道', () => {
@@ -203,6 +205,12 @@ test('闭合输入对象拒绝额外或循环字段，requestId 仅接受 UUID',
   rejects(IPC.generateCancel)
   rejects(IPC.generateCancel, 'not-a-uuid')
   rejects(IPC.generateCancel, requestId, 'extra')
+  rejects(IPC.generationDraftGet, 'C:\\demo', 'extra')
+  rejects(IPC.generationDraftDiscard, 'C:\\demo')
+  rejects(IPC.generationDraftDiscard, 'C:\\demo', 'not-a-uuid')
+  rejects(IPC.generationDraftDiscard, 'C:\\demo', requestId, 'extra')
+  rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', runId: requestId, resumeDraftId: 'not-a-uuid' })
+  rejects(IPC.generateRun, { projectPath: 'C:\\demo', granularity: 'fine', roleFocus: 'general', profileId: 'p1', runId: requestId, resumeDraftId: requestId, injected: true })
   rejects(IPC.explainStart, { requestId: 'r1\nforged', term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' })
   rejects(IPC.explainCancel, ['r1\0'])
 })

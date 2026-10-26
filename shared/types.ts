@@ -1,4 +1,5 @@
 // 主进程与渲染进程共享的类型定义
+export type { GenerationDraftSummary } from './generation-checkpoint'
 
 export type Granularity = 'coarse' | 'medium' | 'fine'
 export type RoleFocus = 'general' | 'frontend' | 'backend' | 'algorithm'
@@ -271,6 +272,8 @@ export interface GenerateOptions {
 /** 一次生成请求的会话标识；runId 由渲染进程为每次尝试创建。 */
 export interface GenerateRequest extends GenerateOptions {
   runId: string
+  /** Existing generation draft to resume; omitted for a new draft. */
+  resumeDraftId?: string
 }
 
 /** 生成响应封套；result 保持原有持久化格式与类型。 */

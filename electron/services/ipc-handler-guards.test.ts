@@ -28,6 +28,7 @@ const inputs = new Map<string, unknown[]>([
   [IPC.generateCancel, [requestId]], [IPC.explainStart, [{ requestId, term: 'IPC', profileId: 'p1', projectSummary: '', question: '问题', snippet: '' }]],
   [IPC.explainCancel, [requestId]], [IPC.settingsGet, []],
   [IPC.storageDiagnostics, []], [IPC.storageRecover, [`result:${'a'.repeat(40)}`]],
+  [IPC.generationDraftGet, ['C:\\demo']], [IPC.generationDraftDiscard, ['C:\\demo', requestId]],
   [IPC.settingsSave, [{ profiles: [profile], defaultProfileId: 'p1' }]], [IPC.llmTest, [profile]],
   [IPC.llmListModels, [profile]], [IPC.exportMarkdown, [result]]
 ])
@@ -163,6 +164,7 @@ test('拒绝子框架、其他窗口与尚未确定信任入口的请求', async
 test('路径操作与导出拒绝未登记项目，服务层不执行', async () => {
   for (const [channel, args] of [
     [IPC.scanProject, ['C:\\private']], [IPC.loadResult, ['C:\\private']],
+    [IPC.generationDraftGet, ['C:\\private']], [IPC.generationDraftDiscard, ['C:\\private', requestId]],
     [IPC.listAnalyses, ['C:\\private']], [IPC.loadAnalysis, ['C:\\private', 'a'.repeat(64)]],
     [IPC.deleteResult, ['C:\\private']], [IPC.generateRun, [{ ...inputs.get(IPC.generateRun)![0] as object, projectPath: 'C:\\private' }]],
     [IPC.exportMarkdown, [{ ...result, projectPath: 'C:\\private' }]]
