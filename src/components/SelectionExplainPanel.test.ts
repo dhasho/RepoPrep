@@ -30,7 +30,7 @@ test('panel lifecycle, focus, bounded context, stale events, and per-report comp
   trigger.textContent = 'trigger'; dom.window.document.body.appendChild(trigger); trigger.focus()
   const props = { selectedText: 'SELECTED_ORIGINAL', question: 'Q'.repeat(13000), snippet: 'CONTEXT'.repeat(8000), projectSummary: 'S'.repeat(25000), profileId: 'p1', explanationCache: cache, onClose: () => { closeCalls.push('close') }, onCollapse: () => { collapseCalls.push('collapse') } }
   const render = async (show: boolean, overrides: Record<string, unknown> = {}) => {
-    await React.act(async () => root.render(show ? React.createElement(React.StrictMode, null, React.createElement(Panel, { ...props, ...overrides })) : null))
+    await React.act(async () => root.render(show ? React.createElement(React.StrictMode, null, React.createElement('div', { id: 'host', hidden: Boolean(overrides.collapsed) }, React.createElement(Panel, { ...props, ...overrides }))) : null))
     await React.act(async () => new Promise((resolve) => setTimeout(resolve, 5)))
   }
   const emit = async (index: number, type: E['type'], data = '') => React.act(async () => handlers[index]({ requestId: requests[index].requestId, type, data }))
@@ -49,6 +49,16 @@ test('panel lifecycle, focus, bounded context, stale events, and per-report comp
     assert.ok(requests[0].question.length <= 12_000)
     assert.ok(requests[0].projectSummary.length <= 20_000)
     const panel = dom.window.document.querySelector('#selection-explain-panel')!
+    const content = panel.querySelector('.overflow-y-auto') as HTMLDivElement
+    let mockScrollTop = 400
+    let mockScrollHeight = 1000
+    let mockClientHeight = 200
+    const scrollWrites: number[] = []
+    Object.defineProperties(content, {
+      scrollTop: { configurable: true, get: () => mockScrollTop, set: (value: number) => { mockScrollTop = value; scrollWrites.push(value) } },
+      scrollHeight: { configurable: true, get: () => mockScrollHeight },
+      clientHeight: { configurable: true, get: () => mockClientHeight }
+    })
     assert.equal(panel.getAttribute('role'), 'complementary')
     assert.equal(dom.window.document.querySelector('[role="dialog"], [aria-modal], .fixed, [data-reactroot]'), null, 'panel has no modal, backdrop, or portal wrapper')
     assert.equal(dom.window.document.activeElement, trigger, 'mount does not steal focus from the report')
@@ -62,18 +72,34 @@ test('panel lifecycle, focus, bounded context, stale events, and per-report comp
     assert.equal(closeCalls.length, 0, 'Tab is not trapped')
     await React.act(async () => { const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); outside.dispatchEvent(event) })
     assert.equal(closeCalls.length, 0, 'Escape outside panel does not close')
+    outside.focus()
     await React.act(async () => { const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); panel.dispatchEvent(event) })
+    assert.equal(closeCalls.length, 0, 'Escape on the region does not close while focus is outside')
+    await React.act(async () => { closeButton.focus(); const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); closeButton.dispatchEvent(event) })
     assert.equal(closeCalls.length, 1, 'Escape inside panel closes')
     await render(true)
     assert.equal(requests.length, 1)
+    mockScrollTop = 240
+    await React.act(async () => content.dispatchEvent(new dom.window.Event('scroll', { bubbles: true })))
+    const visibleWrites = scrollWrites.length
+    await emit(0, 'delta', 'VISIBLE_STREAM_WHILE_READING')
+    assert.equal(scrollWrites.length, visibleWrites, 'new deltas do not pull a reader away from earlier text')
     await render(true, { collapsed: true })
     assert.equal(requests.length, 1, 'collapse does not restart request')
     assert.deepEqual(cancelled, [], 'collapse does not cancel request')
+    assert.equal((dom.window.document.querySelector('#host') as HTMLElement).hidden, true, 'test host hides the mounted panel')
+    mockScrollTop = 0; mockClientHeight = 0; mockScrollHeight = 0
+    const hiddenWrites = scrollWrites.length
     await emit(0, 'delta', 'STREAM_WHILE_COLLAPSED')
     assert.ok(dom.window.document.body.textContent?.includes('STREAM_WHILE_COLLAPSED'), 'stream remains mounted while collapsed')
+    assert.equal(scrollWrites.length, hiddenWrites, 'hidden stream updates do not write zero-sized scroll state')
     await React.act(async () => (panel.querySelector('[aria-label="收起 AI 解释"]') as HTMLButtonElement).click())
     assert.equal(collapseCalls.length, 1, 'collapse control calls its callback')
+    mockClientHeight = 200; mockScrollHeight = 1600
     await render(true, { collapsed: false })
+    assert.equal(mockScrollTop, 240, 'expanding restores the prior reading position')
+    assert.equal(requests.length, 1)
+    assert.deepEqual(cancelled, [])
     assert.ok(dom.window.document.body.textContent?.includes('STREAM_WHILE_COLLAPSED'), 'expanded panel retains accumulated stream')
     await emit(0, 'delta', 'PARTIAL_ERROR')
     await emit(0, 'error', 'failure')

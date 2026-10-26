@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { EXPLAIN_CONTEXT_LIMITS } from '@shared/result-contract'
 import { api } from '../lib/ipc'
 import { ExplainStreamController } from '../lib/explain-stream'
@@ -50,6 +50,7 @@ export default function SelectionExplainPanel({ selectedText, question, snippet,
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
   const panelRef = useRef<HTMLElement>(null)
   const followTailRef = useRef(true)
+  const scrollTopRef = useRef(0)
   const start = useCallback(() => {
     if (!valid) return
     explanationCache?.delete(contextKey)
@@ -71,17 +72,30 @@ export default function SelectionExplainPanel({ selectedText, question, snippet,
     }
   }, [explanationCache, contextKey, snapshot.status, snapshot.text])
   const noteContentScroll = useCallback(() => {
+    if (collapsed) return
     const content = contentRef.current
-    if (!content) return
+    if (!content || content.clientHeight <= 0) return
+    scrollTopRef.current = content.scrollTop
     followTailRef.current = content.scrollHeight - content.scrollTop - content.clientHeight < 48
-  }, [])
+  }, [collapsed])
   useEffect(() => {
+    if (collapsed) return
     const content = contentRef.current
-    if (content && followTailRef.current) content.scrollTop = content.scrollHeight
-  }, [snapshot.text])
-  useEffect(() => { void collapsed }, [collapsed])
+    if (!content || content.clientHeight <= 0) return
+    if (followTailRef.current) {
+      content.scrollTop = content.scrollHeight
+      scrollTopRef.current = content.scrollTop
+    }
+  }, [collapsed, snapshot.text])
+  useLayoutEffect(() => {
+    if (collapsed) return
+    const content = contentRef.current
+    if (!content || content.clientHeight <= 0) return
+    content.scrollTop = followTailRef.current ? content.scrollHeight : scrollTopRef.current
+    scrollTopRef.current = content.scrollTop
+  }, [collapsed])
   const onPanelKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') { event.preventDefault(); onClose() }
+    if (event.key === 'Escape' && panelRef.current?.contains(document.activeElement)) { event.preventDefault(); onClose() }
   }
   const state = cachedText && snapshot.status === 'idle' ? 'done' : snapshot.status
   const text = snapshot.text || cachedText || (snapshot.status === 'idle' || snapshot.status === 'streaming' ? valid ? '正在准备详细解释…' : '选中内容或模型配置无效，无法发起解释。' : '')
