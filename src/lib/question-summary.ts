@@ -24,11 +24,13 @@ const scoringStopWords = new Set([
 
 function stripPromptFrame(text: string): string {
   return text
+    .replace(/^(?:请)?(?:从|结合|根据).{1,180}?(?:说明|介绍|分析|解释|阐述)\s*/u, '')
     .replace(/^(?:请)?根据[^，,。]{1,40}[，,]\s*(?:请)?(?:说明|介绍|分析|解释|阐述)\s*/u, '')
     .replace(/^(?:从现有代码看|从代码看|结合代码|在项目中|项目中|请问|麻烦|请|帮我|简单地|详细地)\s*/u, '')
     .replace(/^(?:(?:could|can|would) you\s+)?(?:please\s+)?(?:tell me about|explain|describe|introduce)\s+/iu, '')
     .replace(/^(?:could you|can you|would you|please)\s+/iu, '')
     .replace(/^(?:what is|what are|what does|how does|how do|how can|why is|why does|why do)\s+/iu, '')
+    .replace(/^(?:the|a|an)\s+/iu, '')
 }
 
 function rewriteQuestionFrame(text: string): string {
@@ -78,7 +80,7 @@ function candidatePhrase(raw: string): string {
     .replace(/\s+/gu, ' ')
     .replace(/([\u2e80-\u9fff\uff00-\uffef])\s+(?=[\u2e80-\u9fff\uff00-\uffef])/gu, '$1')
     .replace(/^(?:它们?的?|这类|项目中|在项目中|同时有|的|与|和|及|并)[，,：:\s]*/u, '')
-    .replace(/[\s，,：:、]*(?:并|与|和|它|它们|有|不|在哪里|之间|是什么)$/u, '')
+    .replace(/[\s，,：:、]*(?:并|与|和|它|它们|有|不|是|在哪里|之间|是什么)$/u, '')
     .replace(/^[\s，,：:、-]+|[\s，,：:、-]+$/gu, '').trim()
   return text
 }

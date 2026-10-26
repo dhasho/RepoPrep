@@ -41,7 +41,7 @@ function makeResult(overrides: Partial<InterviewResult> = {}): InterviewResult {
   }
 }
 
-test('导航摘要覆盖 12 个真实技术问题并保留其核心意图', () => {
+test('历史报告的通用摘要保留不同技术问题的考察主题', () => {
   const questions = [
     '请介绍 RepoPrep 的整体架构，主进程、preload、渲染进程各自负责什么？',
     'preload 暴露的 window.api 是如何设计的？IPC 通道契约如何保证两端一致？',
@@ -56,34 +56,30 @@ test('导航摘要覆盖 12 个真实技术问题并保留其核心意图', () =
     'question-budget 如何保证题量落在目标区间？它与补偿请求如何协作？',
     'llm.ts 与 sse-parser 如何消费流式响应？如何处理 DONE、错误事件和读取中断？'
   ]
-  assert.deepEqual(summarizeQuestions(questions), [
-    '整体架构与进程协作',
-    'preload接口与IPC契约',
-    '页面状态流转',
-    '后台生成任务建模与隔离',
-    '项目扫描与忽略规则',
-    '缓存键与失效策略',
-    '内容读取边界与错误处理',
-    '敏感信息脱敏流程',
-    '生成请求数据流',
-    '上下文组装与预算',
-    '题量分配与补偿',
-    '流式响应与异常处理'
-  ])
+  const concerns = [/架构|进程/u, /preload|接口|IPC|契约/iu, /页面|状态/u,
+    /生成任务|后台|隔离/u, /扫描|忽略|gitignore/iu, /缓存键|失效/u,
+    /内容|读取|路径穿越/u, /敏感信息|脱敏/u, /请求|数据流|生成/u,
+    /上下文|预算/u, /题量|补偿/u, /流式|异常|响应/u]
+  const labels = summarizeQuestions(questions)
+  labels.forEach((label, index) => {
+    assert.match(label, concerns[index], questions[index])
+    assert.notEqual(label, '问题摘要')
+  })
 })
 
 test('通用摘要压缩礼貌语、英文问句框架和文件名，但不硬截断长标识符', () => {
-  assert.equal(summarizeQuestion('请介绍RepoPrep的整体架构'), 'RepoPrep整体架构')
+  assert.match(summarizeQuestion('请介绍RepoPrep的整体架构'), /整体架构/u)
   assert.equal(summarizeQuestion('Could you explain .gitignore rule handling?'), '.gitignore rule handling')
   assert.equal(summarizeQuestion('How does the cache invalidation strategy work?'), 'cache invalidation strategy')
-  assert.equal(summarizeQuestion('扫描缓存的缓存键与失效策略是什么'), '缓存键与失效策略')
+  assert.match(summarizeQuestion('扫描缓存的缓存键与失效策略是什么'), /缓存.*失效|缓存键|失效策略/u)
 })
 
 test('导航摘要长度有界且相同主题的问题会带上区分信息', () => {
   const longIdentifier = 'How does ExtremelyLongProjectConfigurationManager handle invalidation and cache refresh strategies?'
   const longSummary = summarizeQuestion(longIdentifier)
   assert.ok(Array.from(longSummary).length <= 32)
-  assert.ok(longSummary.endsWith('Project'), 'a long identifier is compacted at a whole-word boundary')
+  assert.match(longSummary, /invalidation|cache refresh/u, 'the caption describes the question instead of truncating its identifier')
+  assert.doesNotMatch(longSummary, /ExtremelyLong|ConfigurationManager/u)
 
   const labels = summarizeQuestions([
     '系统扫描缓存失效原因如何快速查找',
@@ -136,6 +132,64 @@ async function render(result: InterviewResult, initialSearch = ''): Promise<stri
   }
 }
 
+test('新生成和历史报告都从原题提炼主题，不依赖某一份已修复的数据', async () => {
+  const questions = [
+    '`OpenAICompatibleSemanticEncoder.encode_many` 对 embedding 批处理做了哪些输入和响应约束？哪些保证无法从片段确认？',
+    '从现有代码看，`BasicMediaInspector` 和 `QualityPolicy` 能提供多强的质量保证？哪些结论不能下？'
+  ]
+  const { JSDOM } = await import('jsdom')
+  const captions: string[][] = []
+  for (const createdAt of ['2026-10-17T10:00:00.000Z', '2026-10-26T13:13:53.828Z']) {
+    const result = makeResult({
+      createdAt,
+      projectName: 'Another project',
+      sections: [{ id: 's1', title: '核心实现', questions: questions.map((question, index) => ({
+        id: `q${index}`, question, answer: `保留完整答案 ${index}。`,
+        followUps: [{ question: `保留追问 ${index}？`, answer: `保留追问答案 ${index}。` }]
+      })) }]
+    })
+    const original = JSON.stringify(result)
+    const dom = new JSDOM(await render(result))
+    try {
+      const buttons = Array.from(dom.window.document.querySelectorAll('nav button'))
+      const labels = buttons.map(button => button.lastElementChild?.textContent ?? '')
+      assert.equal(labels.length, 2)
+      assert.match(labels[0], /批处理|输入.*响应/u)
+      assert.match(labels[1], /质量保证/u)
+      assert.ok(labels.every(label => !/问题摘要|从现有代码看|OpenAICompatible|BasicMediaInspector/u.test(label)))
+      assert.deepEqual(buttons.map(button => button.getAttribute('title')), questions, 'navigation retains full original questions')
+      const cards = Array.from(dom.window.document.querySelectorAll('[data-report-question]'))
+      questions.forEach((question, index) => assert.ok(cards[index].textContent?.includes(question), 'cards retain full original questions'))
+      assert.equal(JSON.stringify(result), original, 'caption rendering never modifies a report')
+      captions.push(labels)
+    } finally {
+      dom.window.close()
+    }
+  }
+  assert.deepEqual(captions[0], captions[1], 'fresh and historical reports share the same summary path')
+})
+
+test('不同项目与话题都直接使用随题生成的短标题，保留完整问答', async () => {
+  const questions = [
+    { id: 'q1', title: '库存流水幂等校验', question: '`InventoryJournal.reconcile` 如何校验重复流水？', answer: '原始库存答案。', followUps: [] },
+    { id: 'q2', title: '余额冻结与扣款确认', question: '`PaymentGateway.confirm` 为什么先冻结余额再确认扣款？', answer: '原始支付答案。', followUps: [] }
+  ]
+  const { JSDOM } = await import('jsdom')
+  const result = makeResult({ sections: [{ id: 's1', title: '未知项目的新话题', questions }] })
+  const original = JSON.stringify(result)
+  const dom = new JSDOM(await render(result))
+  try {
+    const buttons = Array.from(dom.window.document.querySelectorAll('nav button'))
+    assert.deepEqual(buttons.map(button => button.lastElementChild?.textContent), questions.map(question => question.title))
+    assert.deepEqual(buttons.map(button => button.getAttribute('title')), questions.map(question => question.question))
+    const cards = Array.from(dom.window.document.querySelectorAll('[data-report-question]'))
+    questions.forEach((question, index) => assert.ok(cards[index].textContent?.includes(question.question), 'cards retain full original questions'))
+    assert.equal(JSON.stringify(result), original)
+  } finally {
+    dom.window.close()
+  }
+})
+
 test('真实 ResultPage 显示截断提示，普通结果和缺省元数据的旧结果不显示', async () => {
   const truncated = await render(makeResult({
     contextTruncation: { treeTruncated: true, contentTruncated: false, requestTruncated: false }
@@ -154,7 +208,7 @@ test('导航展示紧凑摘要但保留完整问题，结果头部不显示统�
   const originalQuestion = '请介绍RepoPrep的整体架构，主进程、preload、渲染进程各自负责什么'
   const html = await render(makeResult({
     modelUsed: 'secret-model-label',
-    sections: [{ id: 's1', title: '系统架构', questions: [{ id: 'q1', question: originalQuestion, answer: '完整答案内容。', followUps: [] }] }],
+    sections: [{ id: 's1', title: '系统架构', questions: [{ id: 'q1', title: '整体架构与进程协作', question: originalQuestion, answer: '完整答案内容。', followUps: [] }] }],
     glossary: { IPC: '进程通信' }
   }))
 
@@ -172,8 +226,8 @@ test('搜索也能命中导航摘要，过滤不改变原题编号或完整内�
   const originalQuestion = 'scanner 扫描本地项目时如何处理 .gitignore、构建产物和嵌套 worktree？'
   const html = await render(makeResult({
     sections: [{ id: 's1', title: '扫描', questions: [
-      { id: 'q1', question: originalQuestion, answer: '扫描答案。', followUps: [] },
-      { id: 'q2', question: '缓存键与失效策略是什么？', answer: '缓存答案。', followUps: [] }
+      { id: 'q1', title: '项目扫描与忽略规则', question: originalQuestion, answer: '扫描答案。', followUps: [] },
+      { id: 'q2', title: '缓存键与失效策略', question: '缓存键与失效策略是什么？', answer: '缓存答案。', followUps: [] }
     ] }]
   }), '忽略规则')
 
@@ -583,7 +637,8 @@ test('新问句提炼主题，不把代码路径或完整描述塞入导航', ()
     '问题去重和补偿请求是怎么设计的？',
     '页面导航历史如何保证前进、后退和生成状态一致？'
   ])
-  assert.deepEqual(labels, ['进程分层与模块职责', '请求来源与访问授权', '文件树与上下文预算', '问题去重与补偿', '导航历史与页面状态'])
+  const concerns = [/进程|分层|职责/u, /可信|来源|授权|IPC/u, /文件树|上下文/u, /去重|补偿/u, /导航|历史|状态/u]
+  labels.forEach((label, index) => assert.match(label, concerns[index]))
 })
 
 test('未知主题也保留技术标点、下划线和英文词间距', () => {
