@@ -32,6 +32,20 @@ test('toolbar callbacks, preserves selection on mousedown, and closes on outside
     }
     await React.act(async () => dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape' })))
     assert.equal(calls.at(-1), 'close')
+    const toolbar = dom.window.document.querySelector('[role="toolbar"]')!
+    await React.act(async () => toolbar.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true })))
+    assert.equal(calls.at(-1), 'close', 'mousedown inside the toolbar does not close it')
+    await React.act(async () => dom.window.dispatchEvent(new dom.window.Event('scroll')))
+    assert.equal(calls.at(-1), 'close', 'external scroll closes the toolbar')
+    await React.act(async () => root.render(React.createElement(Actions, { anchor: new dom.window.DOMRect(30, 40, 10, 10), onAsk: () => calls.push('ask'), onCopy: () => calls.push('copy'), onSelectAll: () => calls.push('all'), onClose: close, askDisabled: true })))
+    const ask = [...dom.window.document.querySelectorAll('button')].find((item) => item.textContent === '向 AI 提问')!
+    await React.act(async () => ask.click())
+    assert.equal(calls.includes('ask'), true, 'previous enabled request was invoked')
+    assert.equal(calls.filter((call) => call === 'ask').length, 1, 'disabled ask does not invoke its callback')
+    assert.equal(ask.disabled, true)
+    assert.equal(ask.title, '选中内容较长，请缩小范围后提问')
+    await React.act(async () => dom.window.document.body.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true })))
+    assert.equal(calls.at(-1), 'close', 'outside mousedown closes the toolbar')
   } finally {
     await React.act(async () => root.unmount())
     ;[g.window, g.document, g.IS_REACT_ACT_ENVIRONMENT] = previous
