@@ -14,7 +14,7 @@ const makeResult = (projectPath, identity) => ({
   projectSummary: `SUMMARY_${identity}`,
   sections: [{ id: `s-${identity}`, title: `${identity} section`, questions: [{
     id: `q-${identity}`, question: `QUESTION_${identity} [[TERM_${identity}]]`,
-    answer: `ANSWER_${identity} TERM_${identity} context`, followUps: []
+    answer: `ANSWER_${identity} TERM_${identity} context. ${'报告段落随分栏宽度自动换行，并保留原有文字和缩进。'.repeat(16)}`, followUps: []
   }] }],
   glossary: { [`TERM_${identity}`]: `GLOSSARY_${identity}` }
 })
@@ -86,6 +86,11 @@ contextBridge.exposeInMainWorld('nativeControl', {
     }
   },
   completeB() { if (!resolveB) throw new Error('B generation has not started'); resolveB(); resolveB = undefined },
+  currentDelta(text) {
+    const request = explainRequests.at(-1)
+    if (!request) throw new Error('No explanation request')
+    for (const callback of explainListeners) callback({ type: 'delta', requestId: request.requestId, data: text })
+  },
   lateAEvents(requestId) {
     const events = [
       { type: 'delta', requestId, data: 'LATE_A_DELTA' },

@@ -506,7 +506,7 @@ test('glossary lookup, selection, copy and select-all stay local; only Ask start
   const container = dom.window.document.getElementById('root')!
   const root = createRoot(container)
   const click = async (text: string, scope: Element = container) => {
-    const target = [...scope.querySelectorAll('button')].find((item) => item.textContent === text)
+    const target = [...scope.querySelectorAll('button')].find((item) => item.textContent === text || item.getAttribute('aria-label') === text)
     assert.ok(target, text)
     await React.act(async () => { target.click() })
   }
@@ -554,9 +554,19 @@ test('glossary lookup, selection, copy and select-all stay local; only Ask start
     assert.equal(requests[0].term, 'shared 契约分层来自报告。')
     assert.equal(requests[0].question, 'Question Electron?')
     assert.ok(requests[0].snippet.includes('选中的原文：\nshared 契约分层来自报告。'))
-    const dialog = container.querySelector('[aria-modal="true"]')!
-    assert.ok(dialog)
-    await click('', dialog)
+    const panel = container.querySelector('[role="complementary"][aria-label="AI 解释"]')!
+    assert.ok(panel)
+    assert.equal(container.querySelector('[aria-modal="true"]'), null, 'AI explanation is an inline reading pane')
+    assert.ok(container.querySelector('[role="separator"]'))
+    await click('收起 AI 解释', panel)
+    assert.ok(container.querySelector('[data-reading-secondary] > [hidden]')?.contains(panel))
+    assert.equal(requests.length, 1)
+    assert.deepEqual(cancelled, [], 'collapsing does not cancel the active explanation')
+    await click('展开 AI 解释')
+    assert.equal(container.querySelector('[role="complementary"][aria-label="AI 解释"]'), panel, 'expanding preserves the mounted request owner')
+    assert.equal(requests.length, 1)
+    assert.deepEqual(cancelled, [])
+    await click('关闭 AI 解释', panel)
     assert.deepEqual(cancelled, [requests[0].requestId])
   } finally {
     await React.act(async () => { root.unmount() })

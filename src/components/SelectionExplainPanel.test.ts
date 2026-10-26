@@ -66,7 +66,7 @@ test('panel lifecycle, focus, bounded context, stale events, and per-report comp
     assert.equal(closeCalls.length, 0, 'internal mousedown does not close')
     await React.act(async () => { const scrollable = panel.querySelector('.overflow-y-auto')!; scrollable.dispatchEvent(new dom.window.Event('scroll', { bubbles: true })) })
     assert.equal(closeCalls.length, 0)
-    const closeButton = panel.querySelector('[aria-label="关闭 AI 解释"]')!
+    const closeButton = panel.querySelector<HTMLButtonElement>('[aria-label="关闭 AI 解释"]')!
     const outside = dom.window.document.createElement('button'); outside.textContent = 'report control'; dom.window.document.body.appendChild(outside)
     await React.act(async () => { closeButton.focus(); dom.window.document.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })) })
     assert.equal(closeCalls.length, 0, 'Tab is not trapped')

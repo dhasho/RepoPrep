@@ -13,7 +13,8 @@ import { copyReportSelection, readReportSelection, selectReportText, type Report
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
 import TermPopover from '../components/TermPopover'
 import SelectionActions from '../components/SelectionActions'
-import SelectionExplainDialog from '../components/SelectionExplainDialog'
+import SelectionExplainPanel from '../components/SelectionExplainPanel'
+import ReadingSplitPane from '../components/ReadingSplitPane'
 import { AppIcon } from '../components/AppIcon'
 
 interface Props {
@@ -74,9 +75,12 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   const [popover, setPopover] = useState<TermTarget | null>(null)
   const [selection, setSelection] = useState<SelectionTarget | null>(null)
   const [aiTarget, setAiTarget] = useState<SelectionTarget | null>(null)
+  const [aiCollapsed, setAiCollapsed] = useState(false)
   const closeGlossary = useCallback(() => setPopover(null), [])
   const closeSelection = useCallback(() => setSelection(null), [])
-  const closeExplanation = useCallback(() => setAiTarget(null), [])
+  const closeExplanation = useCallback(() => { setAiTarget(null); setAiCollapsed(false) }, [])
+  const collapseExplanation = useCallback(() => { setAiCollapsed(true); setSelection(null) }, [])
+  const expandExplanation = useCallback(() => setAiCollapsed(false), [])
   const reportRef = useRef<HTMLDivElement>(null)
   const explanationCache = useRef(new Map<string, string>())
   const [toast, setToast] = useState('')
@@ -224,7 +228,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 min-w-0">
       {/* 左：大纲 */}
       <aside aria-hidden={!showSidebar} className={`flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white ${sidebarClassName} ${showSidebar ? '' : 'hidden'}`}>
         <div className="border-b border-slate-100 p-3">
@@ -299,122 +303,141 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
       </aside>
 
       {/* 右：内容 */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* 概览头部 */}
-        <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
-          <div className="mx-auto flex max-w-3xl items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="text-lg font-bold text-slate-900">{result.projectName} · 面试题</h1>
-              <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
-                <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">
-                  {GRANULARITY_META[result.granularity].label}
-                </span>
-                <span className="rounded bg-slate-100 px-1.5 py-0.5">{ROLE_META[result.roleFocus].label}方向</span>
-                <span>{new Date(result.createdAt).toLocaleString('zh-CN')}</span>
-              </p>
-              {result.contentReadSummary && result.contentReadSummary.failedReads > 0 && (
-                <ContentReadWarning summary={result.contentReadSummary} />
-              )}
-              {result.security && (result.security.excludedFiles > 0 || result.security.redactedFiles > 0) && (
-                <div className="mt-2 inline-flex rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
-                  安全保护：排除 {result.security.excludedFiles} / 脱敏 {result.security.redactedFiles} 文件（{result.security.redactionMatches} 处）
-                </div>
-              )}
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={doExport}
-              >
-                导出 Markdown
-              </button>
-              <button
-                className="rounded-lg bg-slate-800 px-3.5 py-2 text-sm text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
-                onClick={onRegenerate}
-                disabled={regenerating}
-              >
-                {regenerating ? '重新扫描项目…' : '重新生成'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 正文滚动区 */}
-        <div
-          className="min-h-0 flex-1 overflow-y-auto"
-          onClick={() => setPopover(null)}
-          onMouseUp={(event) => captureSelection({ x: event.clientX, y: event.clientY })}
-          onKeyUp={(event) => { if (event.shiftKey) captureSelection() }}
-          onContextMenu={(event) => {
-            if (captureSelection({ x: event.clientX, y: event.clientY })) event.preventDefault()
-          }}
-        >
-          <div ref={reportRef} data-report-content className="mx-auto max-w-3xl px-6 py-6">
-            {contextWarning && (
-              <div role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {contextWarning}
-              </div>
-            )}
-
-            {result.projectSummary && (
-              <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
-                <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-indigo-900">
-                  <AppIcon name="clipboard" size={16} />项目概览
-                </h2>
-                <div className="text-sm">
-                  <MarkdownView markdown={result.projectSummary} onTerm={onTerm} />
-                </div>
-              </div>
-            )}
-
-            {filtered.map((s) => (
-              <section key={s.id} className="mb-8">
-                <div className="mb-3 border-b border-slate-200 pb-2">
-                  <h2 className="text-base font-semibold text-slate-900">
-                    <span className="mr-2 text-slate-300">{String(s.sectionIndex + 1).padStart(2, '0')}</span>
-                    {s.title}
-                  </h2>
-                  {s.summary && <p className="mt-0.5 pl-8 text-xs text-slate-400">{s.summary}</p>}
-                </div>
-
-                <div className="space-y-3">
-                  {s.questions.map((q, qi) => (
-                    <QuestionCard
-                      key={q.id ?? `${s.id}-${q.questionIndex}-${qi}`}
-                      q={q}
-                      index={numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })}
-                      expanded={expanded.has(q.id)}
-                      onToggle={() => toggle(q.id)}
-                      onTerm={onTerm}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-
-            {Object.keys(result.glossary).length > 0 && (
-              <section className="mb-8">
-                <div className="mb-3 border-b border-slate-200 pb-2">
-                  <h2 className="text-base font-semibold text-slate-900">
-                    <AppIcon name="attachment" size={16} className="mr-2 text-slate-300" />附录：专业名词表
-                  </h2>
-                  <p className="mt-0.5 pl-8 text-xs text-slate-400">
-                    生成答案时识别出的专业名词（正文中的下划线名词可点击查看）
+      <ReadingSplitPane
+        collapsed={aiCollapsed}
+        onExpand={expandExplanation}
+        secondary={aiTarget ? (
+          <SelectionExplainPanel
+            selectedText={aiTarget.text}
+            question={aiTarget.question}
+            snippet={aiTarget.snippet}
+            projectSummary={stripTermMarks(result.projectSummary)}
+            profileId={profileId}
+            explanationCache={explanationCache.current}
+            collapsed={aiCollapsed}
+            onCollapse={collapseExplanation}
+            onClose={closeExplanation}
+          />
+        ) : undefined}
+        primary={(
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+            {/* 概览头部 */}
+            <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
+              <div className="mx-auto flex max-w-3xl flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold text-slate-900">{result.projectName} · 面试题</h1>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                    <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">
+                      {GRANULARITY_META[result.granularity].label}
+                    </span>
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5">{ROLE_META[result.roleFocus].label}方向</span>
+                    <span>{new Date(result.createdAt).toLocaleString('zh-CN')}</span>
                   </p>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {Object.entries(glossary).map(([term, def]) => (
-                    <div key={term} className="rounded-lg border border-slate-200 bg-white p-3">
-                      <div className="mb-1 text-sm font-semibold text-slate-800">{term}</div>
-                      <p className="text-[13px] leading-6 text-slate-500">{def}</p>
+                  {result.contentReadSummary && result.contentReadSummary.failedReads > 0 && (
+                    <ContentReadWarning summary={result.contentReadSummary} />
+                  )}
+                  {result.security && (result.security.excludedFiles > 0 || result.security.redactedFiles > 0) && (
+                    <div className="mt-2 inline-flex rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                      安全保护：排除 {result.security.excludedFiles} / 脱敏 {result.security.redactedFiles} 文件（{result.security.redactionMatches} 处）
                     </div>
-                  ))}
+                  )}
                 </div>
-              </section>
-            )}
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    onClick={doExport}
+                  >
+                    导出 Markdown
+                  </button>
+                  <button
+                    className="rounded-lg bg-slate-800 px-3.5 py-2 text-sm text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
+                    onClick={onRegenerate}
+                    disabled={regenerating}
+                  >
+                    {regenerating ? '重新扫描项目…' : '重新生成'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 正文滚动区 */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto"
+              onClick={() => setPopover(null)}
+              onMouseUp={(event) => captureSelection({ x: event.clientX, y: event.clientY })}
+              onKeyUp={(event) => { if (event.shiftKey) captureSelection() }}
+              onContextMenu={(event) => {
+                if (captureSelection({ x: event.clientX, y: event.clientY })) event.preventDefault()
+              }}
+            >
+              <div ref={reportRef} data-report-content className="mx-auto max-w-3xl px-6 py-6">
+                {contextWarning && (
+                  <div role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {contextWarning}
+                  </div>
+                )}
+
+                {result.projectSummary && (
+                  <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-indigo-900">
+                      <AppIcon name="clipboard" size={16} />项目概览
+                    </h2>
+                    <div className="text-sm">
+                      <MarkdownView markdown={result.projectSummary} onTerm={onTerm} />
+                    </div>
+                  </div>
+                )}
+
+                {filtered.map((s) => (
+                  <section key={s.id} className="mb-8">
+                    <div className="mb-3 border-b border-slate-200 pb-2">
+                      <h2 className="text-base font-semibold text-slate-900">
+                        <span className="mr-2 text-slate-300">{String(s.sectionIndex + 1).padStart(2, '0')}</span>
+                        {s.title}
+                      </h2>
+                      {s.summary && <p className="mt-0.5 pl-8 text-xs text-slate-400">{s.summary}</p>}
+                    </div>
+
+                    <div className="space-y-3">
+                      {s.questions.map((q, qi) => (
+                        <QuestionCard
+                          key={q.id ?? `${s.id}-${q.questionIndex}-${qi}`}
+                          q={q}
+                          index={numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })}
+                          expanded={expanded.has(q.id)}
+                          onToggle={() => toggle(q.id)}
+                          onTerm={onTerm}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+
+                {Object.keys(result.glossary).length > 0 && (
+                  <section className="mb-8">
+                    <div className="mb-3 border-b border-slate-200 pb-2">
+                      <h2 className="text-base font-semibold text-slate-900">
+                        <AppIcon name="attachment" size={16} className="mr-2 text-slate-300" />附录：专业名词表
+                      </h2>
+                      <p className="mt-0.5 pl-8 text-xs text-slate-400">
+                        生成答案时识别出的专业名词（正文中的下划线名词可点击查看）
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {Object.entries(glossary).map(([term, def]) => (
+                        <div key={term} className="rounded-lg border border-slate-200 bg-white p-3">
+                          <div className="mb-1 text-sm font-semibold text-slate-800">{term}</div>
+                          <p className="text-[13px] leading-6 text-slate-500">{def}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+      />
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
@@ -431,30 +454,20 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
           onClose={closeGlossary}
         />
       )}
-      {selection && !aiTarget && (
+      {selection && (
         <SelectionActions
           anchor={selection.anchor}
           askDisabled={selection.text.length > 8000}
           onAsk={() => {
             if (selection.text.length > 8000) return
             setAiTarget(selection)
+            setAiCollapsed(false)
             setSelection(null)
             setPopover(null)
           }}
           onCopy={copySelection}
           onSelectAll={selectAll}
           onClose={closeSelection}
-        />
-      )}
-      {aiTarget && (
-        <SelectionExplainDialog
-          selectedText={aiTarget.text}
-          question={aiTarget.question}
-          snippet={aiTarget.snippet}
-          projectSummary={stripTermMarks(result.projectSummary)}
-          profileId={profileId}
-          explanationCache={explanationCache.current}
-          onClose={closeExplanation}
         />
       )}
     </div>

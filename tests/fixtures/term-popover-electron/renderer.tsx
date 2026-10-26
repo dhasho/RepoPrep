@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import TermPopover from '../../../src/components/TermPopover'
-import SelectionExplainDialog from '../../../src/components/SelectionExplainDialog'
+import SelectionExplainPanel from '../../../src/components/SelectionExplainPanel'
 
 declare global {
   interface Window {
@@ -40,14 +40,15 @@ function Fixture() {
       definition={Array.from({ length: 100 }, (_, i) => `Glossary paragraph ${i}: a long static definition for real Chromium scrolling.`).join('\n\n')}
       onClose={close}
     />}
-    {open && scenario === 'stream' && <SelectionExplainDialog key={revision}
+    {open && scenario === 'stream' && <div className="native-panel-host"><SelectionExplainPanel key={revision}
       selectedText="SYNTHETIC_SELECTED_TEXT"
       question="Why does the selected text explain dialog preserve native scrolling?"
       snippet="The real component owns this scrollable content."
       projectSummary="Isolated native wheel fixture"
       profileId="fixture-profile"
+      onCollapse={() => {}}
       onClose={close}
-    />}
+    /></div>}
     <output id="fixture-ready">ready</output>
   </>
 }

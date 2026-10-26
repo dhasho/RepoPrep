@@ -129,11 +129,55 @@ async function askBySelectingTerm(term, expectedRequests) {
   await waitFor(() => evaluate(`window.nativeControl.state().explainRequests.length===${expectedRequests}`), 'explicit selected-text explanation')
 }
 
+async function checkReadingSplit() {
+  const response = '这段解释用于核对右侧阅读区的自动换行，拖动分隔条只改变宽度，不改变段落文字。'.repeat(18)
+  await evaluate(`window.nativeControl.currentDelta(${JSON.stringify(response + '\n\n```ts\n' + 'const longLine = "' + 'a'.repeat(500) + '"\n```')})`)
+  await waitFor(() => evaluate(`!!document.querySelector('[aria-label="AI 解释"] .md-body p')`), 'AI paragraph for reflow')
+  const sizes = () => evaluate(`(() => {const main=document.querySelector('[data-reading-primary]');const side=document.querySelector('[data-reading-secondary]');const panel=document.querySelector('[aria-label="AI 解释"]');const p=panel.querySelector('.md-body p');return {main:main.getBoundingClientRect().width,side:side.getBoundingClientRect().width,pHeight:p.getBoundingClientRect().height,text:p.textContent,viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,requests:window.nativeControl.state().explainRequests.length,cancels:window.nativeControl.state().explainCancels.length,mainScroll:main.querySelector('.overflow-y-auto').scrollTop,sideScroll:panel.querySelector('.overflow-y-auto').scrollTop}})()`)
+  const before = await sizes()
+  const handle = await evaluate(`(() => {const r=document.querySelector('[role="separator"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+Math.min(180,r.height/2)}})()`)
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x: handle.x, y: handle.y, button: 'left', buttons: 1, clickCount: 1 })
+  for (let step = 1; step <= 6; step++) {
+    await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: handle.x - step * 28, y: handle.y, button: 'left', buttons: 1 })
+    await delay(20)
+  }
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', x: handle.x - 168, y: handle.y, button: 'left', clickCount: 1 })
+  await waitFor(async () => (await sizes()).side > before.side + 40, 'native divider drag widens the AI pane')
+  const widened = await sizes()
+  if (widened.main >= before.main || widened.pHeight >= before.pHeight || widened.text !== before.text || widened.documentWidth > widened.viewport + 1) throw new Error(`reading panes failed to reflow: ${JSON.stringify({ before, widened })}`)
+  if (widened.requests !== before.requests || widened.cancels !== before.cancels) throw new Error('resizing changed the active model request')
+  fs.writeFileSync(path.join(outputDir, 'ai-sidebar-expanded.png'), (await win.webContents.capturePage()).toPNG())
+  await enterButton('收起 AI 解释')
+  await waitFor(() => evaluate(`!!document.querySelector('[aria-label="展开 AI 解释"]') && document.querySelector('[data-reading-secondary]').getBoundingClientRect().width<=41`), 'collapsed AI rail')
+  await evaluate(`window.nativeControl.currentDelta(${JSON.stringify('\n\n收起期间到达的后续内容。')})`)
+  await enterButton('展开 AI 解释')
+  await waitFor(() => evaluate(`document.querySelector('[aria-label="AI 解释"]').innerText.includes('收起期间到达的后续内容')`), 'expanded AI keeps hidden streaming content')
+  const expanded = await sizes()
+  if (Math.abs(expanded.side - widened.side) > 1 || expanded.requests !== before.requests || expanded.cancels !== before.cancels) throw new Error('collapse/expand did not preserve width and request')
+  win.setContentSize(980, 835)
+  await delay(150)
+  const narrow = await sizes()
+  if (narrow.documentWidth > narrow.viewport + 1 || narrow.main < 319 || narrow.side < 279 || narrow.requests !== before.requests || narrow.cancels !== before.cancels) throw new Error(`narrow window overflowed or restarted AI: ${JSON.stringify(narrow)}`)
+  await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`)
+  await delay(150)
+  fs.writeFileSync(path.join(outputDir, 'ai-sidebar-narrow.png'), (await win.webContents.capturePage()).toPNG())
+  win.setContentSize(1264, 835)
+  await delay(150)
+  await evaluate(`document.querySelector('[data-reading-primary] .overflow-y-auto').scrollTop=80`)
+  const mainScroll = (await sizes()).mainScroll
+  const panePoint = await evaluate(`(() => {const r=document.querySelector('[aria-label="AI 解释"] .overflow-y-auto').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`)
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseWheel', x: panePoint.x, y: panePoint.y, deltaX: 0, deltaY: -240 })
+  await delay(120)
+  if ((await sizes()).mainScroll !== mainScroll) throw new Error('AI scrolling moved the report')
+  evidence.readingSplit = { before, widened, expanded, narrow, actualMouseDrag: true, independentScrolling: true }
+}
+
 function recorder() {
   return `(() => {
     const describe = node => ({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.getAttribute?.('aria-label')||node?.innerText||node?.textContent||'').toString().trim().slice(0,120),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});
     const scroll = target => ({target:describe(target),active:describe(document.activeElement),windowX:scrollX,windowY:scrollY,documentX:document.documentElement.scrollLeft,documentY:document.documentElement.scrollTop,bodyY:document.body.scrollTop});
-    window.__issue93Events={keys:[],keyPresses:[],keyUps:[],clicks:[],mouseDowns:[],wheels:[],scrolls:[],errors:[],rejections:[]};
+    window.__issue93Events={keys:[],keyPresses:[],keyUps:[],clicks:[],mouseDowns:[],pointerDowns:[],wheels:[],scrolls:[],errors:[],rejections:[]};
+    addEventListener('pointerdown',e=>window.__issue93Events.pointerDowns.push({trusted:e.isTrusted,role:e.target?.getAttribute?.('role')||'',pointerType:e.pointerType}),true);
     addEventListener('keydown',e=>window.__issue93Events.keys.push({key:e.key,code:e.code,trusted:e.isTrusted,target:describe(e.target),active:describe(document.activeElement),scroll:scroll(e.target)}),true);
     addEventListener('keypress',e=>window.__issue93Events.keyPresses.push({key:e.key,code:e.code,trusted:e.isTrusted,target:describe(e.target),active:describe(document.activeElement),scroll:scroll(e.target)}),true);
     addEventListener('keyup',e=>window.__issue93Events.keyUps.push({key:e.key,code:e.code,trusted:e.isTrusted,target:describe(e.target),active:describe(document.activeElement),scroll:scroll(e.target)}),true);
@@ -146,7 +190,7 @@ function recorder() {
   })()`
 }
 async function snapshot() {
-  return evaluate(`(() => {const describe=node=>({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.innerText||node?.textContent||'').toString().trim().slice(0,180),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});return {title:document.body.innerText.slice(0,6000),bodyHtml:document.body.innerHTML.slice(0,24000),popover:[...document.querySelectorAll('[role=dialog]')].map(e=>({text:e.innerText,html:e.outerHTML.slice(0,9000)})),termElements:[...document.querySelectorAll('.term-link')].map(e=>({text:e.textContent.trim(),active:document.activeElement===e,detail:describe(e)})),activeElement:describe(document.activeElement),scroll:{windowX:scrollX,windowY:scrollY,documentX:document.documentElement.scrollLeft,documentY:document.documentElement.scrollTop,bodyY:document.body.scrollTop,bodyHeight:document.body.scrollHeight,viewportHeight:innerHeight},events:window.__issue93Events,api:window.nativeControl.state()}})()`)
+  return evaluate(`(() => {const describe=node=>({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.innerText||node?.textContent||'').toString().trim().slice(0,180),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});return {title:document.body.innerText.slice(0,6000),bodyHtml:document.body.innerHTML.slice(0,24000),popover:[...document.querySelectorAll('[role=dialog], [aria-label="AI 解释"]')].map(e=>({text:e.innerText,html:e.outerHTML.slice(0,9000)})),termElements:[...document.querySelectorAll('.term-link')].map(e=>({text:e.textContent.trim(),active:document.activeElement===e,detail:describe(e)})),activeElement:describe(document.activeElement),scroll:{windowX:scrollX,windowY:scrollY,documentX:document.documentElement.scrollLeft,documentY:document.documentElement.scrollTop,bodyY:document.body.scrollTop,bodyHeight:document.body.scrollHeight,viewportHeight:innerHeight},events:window.__issue93Events,api:window.nativeControl.state()}})()`)
 }
 async function run() {
   if (!evidence.sourceMetadata?.appSha256 || !evidence.sourceMetadata?.markdownViewSha256 || !evidence.sourceMetadata?.productionCssSha256) throw new Error(`missing source provenance: ${evidence.metadataError || 'incomplete metadata'}`)
@@ -199,9 +243,6 @@ async function run() {
     throw new Error(`A explain request context mismatch: ${JSON.stringify(requestA)}`)
   }
   const beforeSwitch = await snapshot()
-  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
-  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
-  await waitFor(() => evaluate(`!document.querySelector('[aria-modal="true"]')`), 'A explanation closed before navigation')
   await enterButton('后台生成')
   await waitFor(() => evaluate(`document.body.innerText.includes('ProjectB') && document.body.innerText.includes('查看结果')`), 'background task panel')
   await enterButton('查看结果')
@@ -231,21 +272,24 @@ async function run() {
   if (lateEvents.length !== 3 || lateEvents.some((event) => event.requestId !== requestA.requestId || event.activeListenerCount < 1) || lateEvents.map((event) => event.type).join(',') !== 'delta,done,error') {
     throw new Error(`valid late A IPC events were not broadcast to B's current subscription: ${JSON.stringify(lateEvents)}`)
   }
-  const trustedEnterKeys = afterLate.events.keys.filter((event) => event.key === 'Enter' && event.trusted)
-  const trustedTabKeys = afterLate.events.keys.filter((event) => event.key === 'Tab' && event.trusted)
-  const keyboardClicks = afterLate.events.clicks.filter((event) => event.trusted && event.detail === 0)
+  await checkReadingSplit()
+  const afterSplit = await snapshot()
+  const trustedEnterKeys = afterSplit.events.keys.filter((event) => event.key === 'Enter' && event.trusted)
+  const trustedTabKeys = afterSplit.events.keys.filter((event) => event.key === 'Tab' && event.trusted)
+  const keyboardClicks = afterSplit.events.clicks.filter((event) => event.trusted && event.detail === 0)
   if (trustedEnterKeys.length < 8 || trustedTabKeys.length < 1 || keyboardClicks.length < 7) throw new Error(`insufficient trusted native keyboard/default activation evidence: Enter=${trustedEnterKeys.length}, Tab=${trustedTabKeys.length}, clicks=${keyboardClicks.length}`)
   if (keyboardClicks.some((event) => event.activationTarget?.tag !== 'BUTTON') || keyboardClicks.some((event) => /QUESTION_[AB]/.test(event.activationTarget?.text || ''))) {
     throw new Error(`keyboard-generated clicks included a non-button or question-card parent activation: ${JSON.stringify(keyboardClicks)}`)
   }
-  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/, /关闭/, /向 AI 提问/]
+  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/, /关闭/, /向 AI 提问/, /收起 AI 解释/, /展开 AI 解释/]
   if (keyboardClicks.some((event) => !allowedNativeTargets.some((pattern) => pattern.test(event.activationTarget?.text || '')))) {
     throw new Error(`unexpected keyboard default button activation: ${JSON.stringify(keyboardClicks)}`)
   }
-  const mouseDowns = afterLate.events.mouseDowns
+  const mouseDowns = afterSplit.events.mouseDowns
   if (mouseDowns.length !== 4 || mouseDowns.some((event) => !event.trusted) || mouseDowns.filter((event) => event.target.tag === 'P' && /^ANSWER_[AB]/.test(event.target.text)).length !== 2) {
     throw new Error(`native answer expansion/selection did not use the expected trusted mouse gestures: ${JSON.stringify(mouseDowns)}`)
   }
+  if (!afterSplit.events.pointerDowns.some((event) => event.trusted && event.role === 'separator' && event.pointerType === 'mouse')) throw new Error('divider resizing has no trusted pointer evidence')
   if (evidence.nativeSelections?.length !== 2 || evidence.nativeSelections.some((item) => item.state.text !== item.term || !item.state.toolbar)) throw new Error('native selections did not preserve the selected answer text and its toolbar')
   evidence.scenarios = {
     backgroundBThenHistoryA: { generationRequest: generatedB, historyTitle: beforeSwitch.title.includes('ProjectA · 面试题') },

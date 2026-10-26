@@ -4,7 +4,7 @@ const path = require('node:path')
 
 const fixtureDir = __dirname
 const outputDir = process.argv[process.argv.length - 1]
-const evidence = { verdict: 'NATIVE-FAIL', source: 'actual static TermPopover and SelectionExplainDialog bundles in hidden sandboxed Electron Chromium', scenarios: {} }
+const evidence = { verdict: 'NATIVE-FAIL', source: 'actual static TermPopover and SelectionExplainPanel bundles in hidden sandboxed Electron Chromium', scenarios: {} }
 try { evidence.sourceMetadata = JSON.parse(fs.readFileSync(process.env.PROJECTLENS_NATIVE_METADATA, 'utf8')) }
 catch (error) { evidence.metadataError = String(error) }
 let win
@@ -41,7 +41,7 @@ function installEvidenceObserver() {
 }
 
 async function snapshot() {
-  return evaluate(`({ ...window.__wheelEvidence, popup:!!document.querySelector('[role="dialog"]'), selectionText:document.querySelector('[role="dialog"] blockquote')?.textContent, typography:(()=>{const e=document.querySelector('.md-body');if(!e)return null;const s=getComputedStyle(e);return {fontSize:s.fontSize,lineHeight:s.lineHeight,fontFamily:s.fontFamily}})(), content:(()=>{const e=document.querySelector('[role="dialog"] .overflow-y-auto');return e?{top:e.scrollTop,height:e.scrollHeight,client:e.clientHeight,max:e.scrollHeight-e.clientHeight,className:e.className,overscrollBehaviorY:getComputedStyle(e).overscrollBehaviorY}:null})(), pageScroll:scrollY, outsideTop:document.querySelector('#outside-scroll').scrollTop })`)
+  return evaluate(`({ ...window.__wheelEvidence, popup:!!document.querySelector('[role="dialog"], [aria-label="AI 解释"]'), selectionText:document.querySelector('[aria-label="AI 解释"] blockquote')?.textContent, typography:(()=>{const e=document.querySelector('.md-body');if(!e)return null;const s=getComputedStyle(e);return {fontSize:s.fontSize,lineHeight:s.lineHeight,fontFamily:s.fontFamily}})(), content:(()=>{const e=document.querySelector('[role="dialog"] .overflow-y-auto, [aria-label="AI 解释"] .overflow-y-auto');return e?{top:e.scrollTop,height:e.scrollHeight,client:e.clientHeight,max:e.scrollHeight-e.clientHeight,className:e.className,overscrollBehaviorY:getComputedStyle(e).overscrollBehaviorY}:null})(), pageScroll:scrollY, outsideTop:document.querySelector('#outside-scroll').scrollTop })`)
 }
 
 async function observedWheel(selector, deltaY, previousCount, label) {
@@ -68,7 +68,7 @@ async function run() {
   win.webContents.debugger.attach('1.3')
   await within(win.loadFile(path.join(fixtureDir, 'index.html')), 'fixture load')
   await evaluate(installEvidenceObserver())
-  await waitFor(() => evaluate(`document.querySelector('#fixture-ready')?.textContent === 'ready' && !!document.querySelector('[role="dialog"] .overflow-y-auto')`), 'initial static glossary mount')
+  await waitFor(() => evaluate(`document.querySelector('#fixture-ready')?.textContent === 'ready' && !!document.querySelector('[role="dialog"] .overflow-y-auto, [aria-label="AI 解释"] .overflow-y-auto')`), 'initial static glossary mount')
   const glossaryBefore = await snapshot()
   const glossaryInitialApi = await evaluate('window.nativeTest.state()')
   if (glossaryBefore.typography?.fontSize !== '15px') throw new Error(`definition has inconsistent typography: ${JSON.stringify(glossaryBefore.typography)}`)
@@ -143,7 +143,7 @@ async function run() {
   evidence.scenarios.streaming = { beforeDelta: streamBeforeDelta, afterAutoScroll, afterInternalWheel: afterStreamWheel, api: afterInternalWheelApi,
     lifecycleBoundary: 'resetScenario(stream) simulates the report mounting the dialog after an explicit user Ask action; no requirement is asserted for external scroll closing the modal' }
 
-  await evaluate(`document.querySelector('[role="dialog"] button[aria-label="关闭"]').click()`)
+  await evaluate(`document.querySelector('[aria-label="AI 解释"] button[aria-label="关闭 AI 解释"]').click()`)
   await waitFor(async () => { const s = await evaluate('window.nativeTest.state()'); return s.cancels.length === 1 && s.unsubscriptions === 1 && s.pending.length === 0 }, 'explicit dialog close cancels/unsubscribes')
   const dialogClose = await evaluate('window.nativeTest.state()')
   if (dialogClose.cancels[0] !== dialogClose.explains[0] || dialogClose.cancels.length !== 1 || dialogClose.unsubscriptions !== 1) throw new Error(`dialog close did not cancel its UUID exactly once: ${JSON.stringify(dialogClose)}`)

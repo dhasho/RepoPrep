@@ -385,7 +385,7 @@ async function unmount(harness) {
 
 async function act(harness, action) {
   await harness.React.act(async () => {
-    action()
+    await action()
     await new Promise((resolve) => setImmediate(resolve))
   })
 }

@@ -5,7 +5,7 @@ import { ExplainStreamController } from '../lib/explain-stream'
 import MarkdownView from './MarkdownView'
 import { AppIcon } from './AppIcon'
 
-export interface SelectionExplainDialogProps {
+export interface SelectionExplainPanelProps {
   selectedText: string
   question: string
   snippet: string

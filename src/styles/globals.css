@@ -82,6 +82,25 @@ body {
 .md-body p {
   @apply my-2.5;
 }
+
+/* Reading panes reflow independently of the application window width. */
+.reading-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+.reading-pane .md-body {
+  min-width: 0;
+  max-width: 100%;
+}
+.reading-pane .md-body pre {
+  max-width: 100%;
+}
+.reading-pane .md-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
 .md-body h1,
 .md-body h2,
 .md-body h3,
