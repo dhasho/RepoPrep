@@ -304,6 +304,9 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
   }
   const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(dom.window.HTMLElement.prototype, 'scrollIntoView')
   dom.window.HTMLElement.prototype.scrollIntoView = () => undefined
+  // React was loaded by the SSR cases without a document and enables its legacy
+  // input event shim; these obsolete methods are only needed in this jsdom host.
+  Object.assign(dom.window.HTMLElement.prototype, { attachEvent: () => undefined, detachEvent: () => undefined })
   ;(dom.window as unknown as Record<string, unknown>).api = {
     exportMarkdown: async () => ({ ok: true, message: 'ok' }),
     explain: (request: Record<string, unknown>) => {
@@ -356,11 +359,11 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     assert.ok(!container.textContent?.includes('ANSWER_A TermA context'), 'the enclosing question did not expand')
     assert.ok(container.textContent?.includes('GLOSSARY_A'), 'the title term popover remains open')
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
-    assert.equal(requests.length, 1, 'title terms also start detailed explanations automatically')
+    assert.equal(requests.length, 0, 'title terms only read the glossary')
     const closeA = container.querySelector<HTMLButtonElement>('button[title="关闭"]')
     assert.ok(closeA)
     await act(async () => { closeA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
-    assert.deepEqual(cancelled, [String(requests[0].requestId)])
+    assert.deepEqual(cancelled, [])
     const questionA = [...container.querySelectorAll('aside button')].find((button) => button.getAttribute('aria-label')?.includes('QUESTION_A'))
     assert.ok(questionA)
     await act(async () => { questionA.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
@@ -372,15 +375,31 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     await act(async () => { titleTermA.dispatchEvent(secondEnterA) })
     assert.equal(secondEnterA.defaultPrevented, true)
     assert.ok(container.textContent?.includes('GLOSSARY_A'))
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
-    assert.equal(requests.length, 2)
-    assert.equal(requests[1].question, 'QUESTION_A TermA')
-    assert.equal(requests[1].snippet, 'ANSWER_A TermA context')
-    assert.equal(requests[1].glossaryHint, 'GLOSSARY_A')
-    assert.equal(requests[1].projectSummary, 'SUMMARY_A')
-    assert.equal(requests[1].profileId, 'profile-A')
-    const requestA = String(requests[1].requestId)
-    const emitLateA = eventHandlers[1]
+    assert.equal(requests.length, 0)
+    const selectAndAsk = async (element: Element) => {
+      const range = dom.window.document.createRange()
+      range.selectNodeContents(element)
+      dom.window.document.getSelection()!.removeAllRanges()
+      dom.window.document.getSelection()!.addRange(range)
+      await act(async () => { element.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true, clientX: 30, clientY: 50 })) })
+      const ask = [...container.querySelectorAll('button')].find((button) => button.textContent === '向 AI 提问')
+      assert.ok(ask, 'dragging report text offers an explicit AI action')
+      const count = requests.length
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+      assert.equal(requests.length, count, 'selecting text alone never requests AI')
+      await act(async () => { ask.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })) })
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    }
+    await selectAndAsk(titleTermA)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].question, 'QUESTION_A TermA')
+    assert.match(String(requests[0].snippet), /选中的原文：\nTermA/)
+    assert.match(String(requests[0].snippet), /ANSWER_A TermA context/)
+    assert.equal(requests[0].glossaryHint, '')
+    assert.equal(requests[0].projectSummary, 'SUMMARY_A')
+    assert.equal(requests[0].profileId, 'profile-A')
+    const requestA = String(requests[0].requestId)
+    const emitLateA = eventHandlers[0]
 
     const search = container.querySelector('input')
     assert.ok(search)
@@ -421,7 +440,7 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
       glossary: { TermB: 'GLOSSARY_B' }
     })
     await act(async () => { root.render(React.createElement(ResultPage, { result: resultB, settings: settingsB, onRegenerate: () => undefined })) })
-    assert.deepEqual(cancelled, [String(requests[0].requestId), requestA], 'replacing the owning result cancels its pending request once')
+    assert.deepEqual(cancelled, [requestA], 'replacing the owning result cancels its pending request once')
     assert.ok(!container.textContent?.includes('GLOSSARY_A'), 'A popover is gone before B can be interacted with')
     assert.equal((container.querySelector('input') as HTMLInputElement).value, '', 'search resets for the new result')
     assert.ok(!container.textContent?.includes('ANSWER_B TermB context'), 'expanded state resets')
@@ -435,11 +454,11 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
     await act(async () => { termB.dispatchEvent(spaceB) })
     assert.equal(spaceB.defaultPrevented, true, 'Space is consumed so it cannot activate the enclosing question button')
     assert.ok(container.textContent?.includes('GLOSSARY_B'), 'Space opens the title term popover')
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
-    assert.equal(requests.length, 3)
+    await selectAndAsk(termB)
+    assert.equal(requests.length, 2)
     assert.deepEqual(
-      Object.fromEntries(['term', 'question', 'snippet', 'glossaryHint', 'projectSummary', 'profileId'].map((key) => [key, requests[2][key]])),
-      { term: 'TermB', question: 'QUESTION_B TermB', snippet: 'ANSWER_B TermB context', glossaryHint: 'GLOSSARY_B', projectSummary: 'SUMMARY_B', profileId: 'profile-B' }
+      Object.fromEntries(['term', 'question', 'glossaryHint', 'projectSummary', 'profileId'].map((key) => [key, requests[1][key]])),
+      { term: 'TermB', question: 'QUESTION_B TermB', glossaryHint: '', projectSummary: 'SUMMARY_B', profileId: 'profile-B' }
     )
 
     for (const event of [
@@ -464,6 +483,87 @@ test('真实 ResultPage 在结果对象替换时同步隔离弹卡、请求和�
   }
 })
 
+
+test('glossary lookup, selection, copy and select-all stay local; only Ask starts a contextual request', async () => {
+  const { JSDOM } = await import('jsdom')
+  const dom = new JSDOM('<!doctype html><body><div id="root"></div></body>', { url: 'http://localhost/' })
+  const g = globalThis as unknown as Record<string, unknown>
+  const previous = [g.window, g.document, g.IS_REACT_ACT_ENVIRONMENT]
+  g.window = dom.window; g.document = dom.window.document; g.IS_REACT_ACT_ENVIRONMENT = true
+  const requests: Array<Record<string, string>> = []
+  const cancelled: string[] = []
+  const copied: string[] = []
+  ;(dom.window as unknown as Record<string, unknown>).api = {
+    explain: async (request: Record<string, string>) => { requests.push(request) },
+    cancelExplain: (id: string) => { cancelled.push(id) }, onExplainEvent: () => () => undefined
+  }
+  Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText: async (text: string) => { copied.push(text) } } })
+  const React = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const require = createRequire(import.meta.url)
+  delete require.cache[require.resolve(bundlePath)]
+  const Page = require(bundlePath).default
+  const container = dom.window.document.getElementById('root')!
+  const root = createRoot(container)
+  const click = async (text: string, scope: Element = container) => {
+    const target = [...scope.querySelectorAll('button')].find((item) => item.textContent === text)
+    assert.ok(target, text)
+    await React.act(async () => { target.click() })
+  }
+  const select = async (element: Element) => {
+    const range = dom.window.document.createRange()
+    range.selectNodeContents(element)
+    dom.window.document.getSelection()!.removeAllRanges()
+    dom.window.document.getSelection()!.addRange(range)
+    await React.act(async () => { element.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true, clientX: 40, clientY: 80 })) })
+  }
+  try {
+    await React.act(async () => { root.render(React.createElement(Page, {
+      result: makeResult({ projectSummary: '报告概览', sections: [{ id: 's1', title: 'Section', questions: [{ id: 'q1', question: 'Question [[Electron]]?', answer: 'shared 契约分层来自报告。', followUps: [] }] }], glossary: { Electron: '短定义' } }),
+      settings: { profiles: [{ id: 'p1' }], defaultProfileId: 'p1' }, onRegenerate: () => undefined
+    })) })
+    const term = [...container.querySelectorAll<HTMLElement>('.term-link')].find((item) => item.textContent === 'Electron')!
+    await React.act(async () => { term.click() })
+    await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+    const lookup = container.querySelector('[role="dialog"]')!
+    assert.ok(lookup.textContent?.includes('术语表'))
+    assert.ok(lookup.textContent?.includes('Chromium'))
+    assert.ok(!lookup.textContent?.includes('短定义'))
+    assert.equal(requests.length, 0)
+    await click('', lookup)
+    await React.act(async () => { container.querySelector<HTMLButtonElement>('#q-q1 > button')!.click() })
+    const paragraph = container.querySelector('#q-q1 .md-body p')!
+    await select(paragraph)
+    assert.equal(dom.window.document.getSelection()?.toString(), 'shared 契约分层来自报告。', 'opening the toolbar preserves the native selection and its DOM nodes')
+    await click('复制')
+    assert.deepEqual(copied, ['shared 契约分层来自报告。'])
+    assert.equal(requests.length, 0)
+    await select(paragraph)
+    await click('全选')
+    const all = dom.window.document.getSelection()!.toString()
+    assert.ok(all.includes('报告概览'))
+    assert.ok(!all.includes('导出 Markdown'))
+    assert.ok(!all.includes('向 AI 提问'))
+    await click('复制')
+    assert.equal(copied[1], all.trim())
+    assert.equal(requests.length, 0)
+    await select(paragraph)
+    await click('向 AI 提问')
+    await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].term, 'shared 契约分层来自报告。')
+    assert.equal(requests[0].question, 'Question Electron?')
+    assert.ok(requests[0].snippet.includes('选中的原文：\nshared 契约分层来自报告。'))
+    const dialog = container.querySelector('[aria-modal="true"]')!
+    assert.ok(dialog)
+    await click('', dialog)
+    assert.deepEqual(cancelled, [requests[0].requestId])
+  } finally {
+    await React.act(async () => { root.unmount() })
+    ;[g.window, g.document, g.IS_REACT_ACT_ENVIRONMENT] = previous
+    dom.window.close()
+  }
+})
 
 test('新问句提炼主题，不把代码路径或完整描述塞入导航', () => {
   const labels = summarizeQuestions([

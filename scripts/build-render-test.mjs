@@ -39,6 +39,8 @@ const entries = [
   { name: 'result-page', entry: 'src/pages/ResultPage.tsx' },
   { name: 'term-popover', entry: 'src/components/TermPopover.tsx' },
   { name: 'markdown-view', entry: 'src/components/MarkdownView.tsx' },
+  { name: 'selection-actions', entry: 'src/components/SelectionActions.tsx' },
+  { name: 'selection-explain-dialog', entry: 'src/components/SelectionExplainDialog.tsx' },
   { name: 'settings-page', entry: 'src/pages/SettingsPage.tsx' },
   { name: 'project-sidebar', entry: 'src/components/ProjectSidebar.tsx' },
   { name: 'select-page', entry: 'src/pages/SelectPage.tsx' },

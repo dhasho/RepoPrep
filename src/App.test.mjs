@@ -335,6 +335,8 @@ function installDom(dom) {
     Event: dom.window.Event,
     MouseEvent: dom.window.MouseEvent,
     Node: dom.window.Node,
+    requestAnimationFrame: dom.window.requestAnimationFrame?.bind(dom.window) ?? ((callback) => setTimeout(() => callback(Date.now()), 0)),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame?.bind(dom.window) ?? clearTimeout,
     IS_REACT_ACT_ENVIRONMENT: true
   }
   const previous = new Map()
@@ -396,6 +398,23 @@ function button(host, text) {
 function buttonByLabel(host, label) {
   return [...host.querySelectorAll('button[aria-label]')]
     .find((item) => item.getAttribute('aria-label') === label)
+}
+
+async function askSelectedTerm(harness, term) {
+  const target = termButton(harness.host, term)
+  assert.ok(target)
+  const range = harness.dom.window.document.createRange()
+  range.selectNodeContents(target)
+  const selection = harness.dom.window.document.getSelection()
+  selection.removeAllRanges()
+  selection.addRange(range)
+  const before = harness.mock.explainRequests.length
+  await act(harness, () => target.dispatchEvent(new harness.dom.window.MouseEvent('mouseup', { bubbles: true, clientX: 40, clientY: 50 })))
+  assert.equal(harness.mock.explainRequests.length, before, 'selection itself is free of model requests')
+  const ask = button(harness.host, '向 AI 提问')
+  assert.ok(ask)
+  await act(harness, () => ask.click())
+  await act(harness, () => new Promise((resolve) => setTimeout(resolve, 5)))
 }
 
 async function showProjectDirectory(harness) {
@@ -575,9 +594,14 @@ test('project/question sidebars preserve the selected analysis, its search, expa
     const term = termButton(h.host, 'TermA')
     assert.ok(term)
     await act(h, () => term.click())
-    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
+    assert.equal(h.mock.explainRequests.length, 0, 'term lookup is a static glossary operation')
+    await askSelectedTerm(h, 'TermA')
     const pending = h.mock.explainRequests.at(-1)
     assert.ok(pending)
+
+    const stop = button(h.host, '停止')
+    assert.ok(stop)
+    stop.focus()
 
     await showProjectDirectory(h)
     assert.ok(h.host.textContent.includes('ProjectA · 面试题'), 'the project directory changes only the sidebar')
@@ -586,6 +610,7 @@ test('project/question sidebars preserve the selected analysis, its search, expa
     const restoredSearch = h.host.querySelector('input[placeholder*="搜索问题"]')
     assert.equal(restoredSearch?.value, 'SEARCH_NEEDLE')
     assert.ok(h.host.textContent.includes('EXPANDED_ANSWER_A'), 'expanded answer state survives both sidebar switches')
+    assert.equal(h.dom.window.document.activeElement, stop, 'parent updates do not reset focus inside the AI dialog')
     assert.deepEqual(h.mock.scans, [], 'sidebar switches do not scan the selected project')
     assert.equal(h.mock.analysisLoads.length, loadedAnalysisCount, 'sidebar switches do not reload the selected analysis')
     assert.deepEqual(h.mock.explainCancellations, [], 'sidebar switches do not cancel a term explanation')
@@ -1072,11 +1097,11 @@ test('mouse navigation from history A to completed background B also cancels A e
     await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: resultB }))
     await viewRecentResult(h, pathA)
     await act(h, () => termButton(h.host, 'TERM_A').click())
-    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
+    await askSelectedTerm(h, 'TERM_A')
     const pendingA = h.mock.explainRequests.at(-1)
     await mouseActivate(h, button(h.host, '后台生成'))
-    assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId])
     await mouseActivate(h, button(h.host, '查看结果'))
+    assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId])
     assert.ok(h.host.textContent.includes('MouseB · 面试题'))
     assert.equal(h.dom.window.document.body.querySelector('.z-50'), null)
   } finally { await cleanupAndUnmount(h) }
@@ -1112,13 +1137,14 @@ test('viewing B from the background task panel disposes A term context and ignor
     assert.ok(h.host.textContent.includes('ProjectA · 面试题'))
 
     await pressEnter(h, termButton(h.host, 'TERM_A'))
-    assert.ok(h.dom.window.document.body.textContent.includes('术语解释'))
-    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
+    assert.ok(h.dom.window.document.body.textContent.includes('术语表'))
+    assert.equal(h.mock.explainRequests.length, 0)
+    await askSelectedTerm(h, 'TERM_A')
     const pendingA = h.mock.explainRequests.at(-1)
-    assert.ok(pendingA, 'A term should immediately start its AI explanation')
-    assert.deepEqual({ ...pendingA.request, requestId: '<uuid>' }, {
+    assert.ok(pendingA, 'explicit Ask starts the selected-text explanation')
+    assert.deepEqual({ ...pendingA.request, requestId: '<uuid>', snippet: '<context>' }, {
       term: 'TERM_A', profileId: 'profile-A', projectSummary: 'SUMMARY_A',
-      question: 'QUESTION_A TERM_A', snippet: 'ANSWER_A TERM_A context', glossaryHint: 'GLOSSARY_A', requestId: '<uuid>'
+      question: 'QUESTION_A TERM_A', snippet: '<context>', glossaryHint: '', requestId: '<uuid>'
     })
 
     await simulatedKeyboardButton(h, button(h.host, '后台生成'))
@@ -1128,7 +1154,7 @@ test('viewing B from the background task panel disposes A term context and ignor
     assert.deepEqual(h.mock.explainCancellations, [pendingA.request.requestId], 'old A stream must be cancelled exactly once by its own UUID')
 
     await pressEnter(h, termButton(h.host, 'TERM_B'))
-    await act(h, () => new Promise((resolve) => setTimeout(resolve, 5)))
+    await askSelectedTerm(h, 'TERM_B')
     const pendingB = h.mock.explainRequests.at(-1)
     assert.ok(pendingB)
     h.mock.emitExplainDelta(pendingB, 'B explanation prefix')
@@ -1138,11 +1164,11 @@ test('viewing B from the background task panel disposes A term context and ignor
     h.mock.emitExplainError(pendingA, 'LATE_A_ERROR')
     await act(h, () => {})
     assert.ok(h.dom.window.document.body.textContent.includes('B explanation prefix'))
-    assert.ok(h.dom.window.document.body.textContent.includes('术语解释（生成中…）'), 'late A delta/done/error must leave B streaming')
+    assert.ok(h.dom.window.document.body.textContent.includes('AI 解释（生成中…）'), 'late A delta/done/error must leave B streaming')
     assert.ok(!h.dom.window.document.body.textContent.includes('LATE_A_'))
-    assert.deepEqual({ ...pendingB.request, requestId: '<uuid>' }, {
+    assert.deepEqual({ ...pendingB.request, requestId: '<uuid>', snippet: '<context>' }, {
       term: 'TERM_B', profileId: 'profile-B', projectSummary: 'SUMMARY_B',
-      question: 'QUESTION_B TERM_B', snippet: 'ANSWER_B TERM_B context', glossaryHint: 'GLOSSARY_B', requestId: '<uuid>'
+      question: 'QUESTION_B TERM_B', snippet: '<context>', glossaryHint: '', requestId: '<uuid>'
     })
   } finally { await cleanupAndUnmount(h) }
 })

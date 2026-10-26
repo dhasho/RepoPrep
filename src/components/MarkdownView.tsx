@@ -1,5 +1,5 @@
 // Markdown 渲染 + [[名词]] 转可点击下划线词条
-import { Children, Fragment, cloneElement, isValidElement, type ReactNode } from 'react'
+import { Children, Fragment, cloneElement, isValidElement, useMemo, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -89,7 +89,9 @@ function disableLink({ children, href }: { children?: ReactNode; href?: string }
 }
 
 export default function MarkdownView({ markdown, onTerm }: { markdown: string; onTerm?: OnTerm }) {
-  const termComponents = onTerm
+  // Keep paragraph/component identities stable so opening the selection toolbar
+  // cannot replace the DOM nodes that own the user's native text selection.
+  const termComponents = useMemo(() => onTerm
     ? {
         p: ({ children }: { children?: ReactNode }) => <p>{renderWithTerms(children, onTerm)}</p>,
         li: ({ children }: { children?: ReactNode }) => <li>{renderWithTerms(children, onTerm)}</li>,
@@ -104,7 +106,7 @@ export default function MarkdownView({ markdown, onTerm }: { markdown: string; o
         h4: ({ children }: { children?: ReactNode }) => <h4>{renderWithTerms(children, onTerm)}</h4>,
         a: disableLink
       }
-    : { a: disableLink }
+    : { a: disableLink }, [onTerm])
 
   return (
     <div className="md-body">

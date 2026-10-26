@@ -1,5 +1,5 @@
 // 结果页：大纲导航 + 问题卡片（答案/追问）+ 名词解释弹卡 + 搜索 + 导出
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FollowUp, InterviewResult, QuestionItem, Section, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META, stripTermMarks } from '@shared/types'
 import { contentReadWarning } from '@shared/content-read'
@@ -8,8 +8,12 @@ import { formatAnswerMarkdown } from '@shared/answer-markdown'
 import { api } from '../lib/ipc'
 import { buildQuestionNumbers, formatQuestionNumber, numberOf, sectionNumberOf } from '../lib/question-numbering'
 import { summarizeQuestions } from '../lib/question-summary'
+import { resolveTermDefinition } from '../lib/term-glossary'
+import { copyReportSelection, readReportSelection, selectReportText, type ReportSelection } from '../lib/report-selection'
 import MarkdownView, { TermText, type OnTerm } from '../components/MarkdownView'
 import TermPopover from '../components/TermPopover'
+import SelectionActions from '../components/SelectionActions'
+import SelectionExplainDialog from '../components/SelectionExplainDialog'
 import { AppIcon } from '../components/AppIcon'
 
 interface Props {
@@ -40,26 +44,17 @@ function resultIdentity(result: InterviewResult): number {
 interface TermTarget {
   term: string
   anchor: DOMRect
+  definition?: string
+}
+
+interface SelectionTarget extends ReportSelection {
   question: string
   snippet: string
-  glossaryHint?: string
 }
 
 /** 过滤后的条目：问题自带原始下标，用于取稳定题号（过滤不改变题号） */
 type QuestionEntry = QuestionItem & { sectionIndex: number; questionIndex: number }
 type QuestionSection = Omit<Section, 'questions'> & { sectionIndex: number; questions: QuestionEntry[] }
-
-/** 从答案中截取术语附近的片段，作为 AI 解释的上下文 */
-function snippetAround(answer: string, term: string): string {
-  const text = stripTermMarks(answer)
-  if (text.length <= 1200) return text
-  const idx = text.indexOf(term)
-  let start = idx < 0 ? 0 : Math.max(0, idx - 400)
-  let end = Math.min(text.length, start + 1200)
-  if (start > 0 && /[\uDC00-\uDFFF]/.test(text[start])) start++
-  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--
-  return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
-}
 
 export default function ResultPage(props: Props) {
   const initialResult = useRef(props.result)
@@ -77,6 +72,12 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [activeId, setActiveId] = useState('')
   const [popover, setPopover] = useState<TermTarget | null>(null)
+  const [selection, setSelection] = useState<SelectionTarget | null>(null)
+  const [aiTarget, setAiTarget] = useState<SelectionTarget | null>(null)
+  const closeGlossary = useCallback(() => setPopover(null), [])
+  const closeSelection = useCallback(() => setSelection(null), [])
+  const closeExplanation = useCallback(() => setAiTarget(null), [])
+  const reportRef = useRef<HTMLDivElement>(null)
   const explanationCache = useRef(new Map<string, string>())
   const [toast, setToast] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
@@ -94,17 +95,47 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   }, [])
 
   const profileId = result.profileId || settings.defaultProfileId || settings.profiles[0]?.id || ''
+  const glossary = useMemo(() => Object.fromEntries(Object.entries(result.glossary).map(([term, definition]) =>
+    [term, resolveTermDefinition(term, definition) ?? definition]
+  )), [result.glossary])
+  const allQuestions = useMemo(() => result.sections.flatMap((section) => section.questions), [result.sections])
 
-  const onTerm = (question: QuestionItem): OnTerm =>
-    (term, anchor) => {
-      setPopover({
-        term,
-        anchor,
-        question: stripTermMarks(question.question),
-        snippet: snippetAround(question.answer, term),
-        glossaryHint: result.glossary[term]
-      })
+  const selectionTarget = (selected: ReportSelection): SelectionTarget => {
+    const question = selected.questionIndex ? allQuestions[selected.questionIndex - 1] : undefined
+    return {
+      ...selected,
+      question: question ? stripTermMarks(question.question) : '项目报告内容解读',
+      snippet: stripTermMarks(question?.answer ?? result.projectSummary)
     }
+  }
+
+  const captureSelection = (pointer?: { x: number; y: number }) => {
+    const selected = reportRef.current ? readReportSelection(reportRef.current, pointer) : null
+    setSelection(selected ? selectionTarget(selected) : null)
+    if (selected) setPopover(null)
+    return selected
+  }
+
+  const copySelection = async () => {
+    const root = reportRef.current
+    if (!root || !selection) return
+    const copied = await copyReportSelection(root, selection)
+    if (reportRef.current) {
+      showToast(copied ? '已复制' : '复制失败，请使用 Ctrl+C')
+      setSelection(null)
+    }
+  }
+
+  const selectAll = () => {
+    const selected = reportRef.current ? selectReportText(reportRef.current) : null
+    setSelection(selected ? selectionTarget(selected) : null)
+  }
+
+  const onTerm = useCallback<OnTerm>((term, anchor) => {
+    if (reportRef.current && readReportSelection(reportRef.current)) return
+    setSelection(null)
+    setPopover({ term, anchor, definition: resolveTermDefinition(term, glossary[term]) })
+  }, [glossary])
 
   const query = search.trim().toLowerCase()
   const navigationSummaries = useMemo(
@@ -309,8 +340,16 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
         </div>
 
         {/* 正文滚动区 */}
-        <div className="min-h-0 flex-1 overflow-y-auto" onClick={() => setPopover(null)}>
-          <div className="mx-auto max-w-3xl px-6 py-6">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto"
+          onClick={() => setPopover(null)}
+          onMouseUp={(event) => captureSelection({ x: event.clientX, y: event.clientY })}
+          onKeyUp={(event) => { if (event.shiftKey) captureSelection() }}
+          onContextMenu={(event) => {
+            if (captureSelection({ x: event.clientX, y: event.clientY })) event.preventDefault()
+          }}
+        >
+          <div ref={reportRef} data-report-content className="mx-auto max-w-3xl px-6 py-6">
             {contextWarning && (
               <div role="status" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {contextWarning}
@@ -323,7 +362,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                   <AppIcon name="clipboard" size={16} />项目概览
                 </h2>
                 <div className="text-sm">
-                  <MarkdownView markdown={result.projectSummary} onTerm={onTerm({ id: '', question: '项目概览', answer: result.projectSummary, followUps: [] })} />
+                  <MarkdownView markdown={result.projectSummary} onTerm={onTerm} />
                 </div>
               </div>
             )}
@@ -346,7 +385,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                       index={numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })}
                       expanded={expanded.has(q.id)}
                       onToggle={() => toggle(q.id)}
-                      onTerm={onTerm(q)}
+                      onTerm={onTerm}
                     />
                   ))}
                 </div>
@@ -364,7 +403,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                   </p>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {Object.entries(result.glossary).map(([term, def]) => (
+                  {Object.entries(glossary).map(([term, def]) => (
                     <div key={term} className="rounded-lg border border-slate-200 bg-white p-3">
                       <div className="mb-1 text-sm font-semibold text-slate-800">{term}</div>
                       <p className="text-[13px] leading-6 text-slate-500">{def}</p>
@@ -385,16 +424,37 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
 
       {popover && (
         <TermPopover
-          explanationCache={explanationCache.current}
           key={`${popover.term}-${popover.anchor.top}-${popover.anchor.left}`}
           term={popover.term}
           anchor={popover.anchor}
-          question={popover.question}
-          snippet={popover.snippet}
-          glossaryHint={popover.glossaryHint}
+          definition={popover.definition}
+          onClose={closeGlossary}
+        />
+      )}
+      {selection && !aiTarget && (
+        <SelectionActions
+          anchor={selection.anchor}
+          askDisabled={selection.text.length > 8000}
+          onAsk={() => {
+            if (selection.text.length > 8000) return
+            setAiTarget(selection)
+            setSelection(null)
+            setPopover(null)
+          }}
+          onCopy={copySelection}
+          onSelectAll={selectAll}
+          onClose={closeSelection}
+        />
+      )}
+      {aiTarget && (
+        <SelectionExplainDialog
+          selectedText={aiTarget.text}
+          question={aiTarget.question}
+          snippet={aiTarget.snippet}
           projectSummary={stripTermMarks(result.projectSummary)}
           profileId={profileId}
-          onClose={() => setPopover(null)}
+          explanationCache={explanationCache.current}
+          onClose={closeExplanation}
         />
       )}
     </div>
@@ -423,12 +483,16 @@ function QuestionCard({
   onTerm: OnTerm
 }) {
   return (
-    <div id={`q-${q.id}`} className="scroll-mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <button className="flex w-full items-start gap-3 px-4 py-3.5 text-left hover:bg-slate-50/60" onClick={onToggle}>
+    <div id={`q-${q.id}`} data-report-question={index} className="scroll-mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button className="flex w-full items-start gap-3 px-4 py-3.5 text-left hover:bg-slate-50/60" onClick={(event) => {
+        const selected = window.getSelection()
+        if (event.detail > 0 && selected && !selected.isCollapsed && selected.rangeCount && selected.getRangeAt(0).intersectsNode(event.currentTarget)) return
+        onToggle()
+      }}>
         <span className="mt-0.5 shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-500">
           {formatQuestionNumber(index)}
         </span>
-        <span className="min-w-0 flex-1 text-[15px] font-medium leading-6 text-slate-900">
+        <span className="min-w-0 flex-1 select-text text-[15px] font-medium leading-6 text-slate-900">
           <TermText text={q.question} onTerm={onTerm} />
         </span>
         <span className="mt-1 shrink-0 text-slate-400">

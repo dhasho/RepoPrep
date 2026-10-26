@@ -105,6 +105,30 @@ async function enterTerm(term) {
   evidence.keyboardSteps.push({ target: `question title term ${term}`, activeBeforeKey: focused.active, input: 'CDP Input.dispatchKeyEvent Enter', termActivation: targetEvidence, questionCardDefaultClicks: parentDefaultClicks })
   return targetEvidence
 }
+async function askBySelectingTerm(term, expectedRequests) {
+  await enterButton('关闭')
+  const before = await evaluate('window.nativeControl.state().explainRequests.length')
+  if (before !== expectedRequests - 1) throw new Error('glossary lookup unexpectedly requested a model')
+  const expand = await evaluate(`(() => {const r=document.querySelector('[data-report-question] > button').getBoundingClientRect();return {x:r.right-18,y:r.top+r.height/2}})()`)
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x: expand.x, y: expand.y, button: 'left', buttons: 1, clickCount: 1 })
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', x: expand.x, y: expand.y, button: 'left', clickCount: 1 })
+  await waitFor(() => evaluate(`!!document.querySelector('[data-report-question] .md-body')`), 'expanded answer for free-text selection')
+  const rect = await evaluate(`(() => {const e=document.querySelector('[data-report-question] .md-body');const walker=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){const i=node.textContent.indexOf(${JSON.stringify(term)});if(i>=0){const range=document.createRange();range.setStart(node,i);range.setEnd(node,i+${term.length});const r=range.getBoundingClientRect();return {left:r.left,right:r.right,y:r.top+r.height/2,userSelect:getComputedStyle(e).userSelect}}}throw new Error('selected phrase missing')})()`)
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.left, y: rect.y, button: 'left', buttons: 1, clickCount: 1 })
+  for (let step = 1; step <= 6; step++) {
+    await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.left + (rect.right - rect.left) * step / 6, y: rect.y, button: 'left', buttons: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.right, y: rect.y, button: 'left', clickCount: 1 })
+  evidence.nativeSelections ??= []
+  evidence.nativeSelections.push({ term, rect, state: await evaluate(`({text:getSelection().toString(),toolbar:!!document.querySelector('[role="toolbar"]')})`) })
+  await waitFor(() => evaluate(`!!document.querySelector('[role="toolbar"]') && getSelection().toString().trim()===${JSON.stringify(term)}`), 'native report text selection')
+  if ((await evaluate('window.nativeControl.state().explainRequests.length')) !== before) throw new Error('selection unexpectedly requested a model')
+  fs.writeFileSync(path.join(outputDir, `selection-actions-${term}.png`), (await win.webContents.capturePage()).toPNG())
+  await enterButton('向 AI 提问')
+  await waitFor(() => evaluate(`window.nativeControl.state().explainRequests.length===${expectedRequests}`), 'explicit selected-text explanation')
+}
+
 function recorder() {
   return `(() => {
     const describe = node => ({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.getAttribute?.('aria-label')||node?.innerText||node?.textContent||'').toString().trim().slice(0,120),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});
@@ -122,7 +146,7 @@ function recorder() {
   })()`
 }
 async function snapshot() {
-  return evaluate(`(() => {const describe=node=>({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.innerText||node?.textContent||'').toString().trim().slice(0,180),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});return {title:document.body.innerText.slice(0,6000),bodyHtml:document.body.innerHTML.slice(0,24000),popover:[...document.querySelectorAll('.z-50')].map(e=>({text:e.innerText,html:e.outerHTML.slice(0,9000)})),termElements:[...document.querySelectorAll('.term-link')].map(e=>({text:e.textContent.trim(),active:document.activeElement===e,detail:describe(e)})),activeElement:describe(document.activeElement),scroll:{windowX:scrollX,windowY:scrollY,documentX:document.documentElement.scrollLeft,documentY:document.documentElement.scrollTop,bodyY:document.body.scrollTop,bodyHeight:document.body.scrollHeight,viewportHeight:innerHeight},events:window.__issue93Events,api:window.nativeControl.state()}})()`)
+  return evaluate(`(() => {const describe=node=>({tag:node?.tagName||node?.nodeName||'',id:node?.id||'',className:typeof node?.className==='string'?node.className:'',text:(node?.innerText||node?.textContent||'').toString().trim().slice(0,180),scrollTop:typeof node?.scrollTop==='number'?node.scrollTop:null,scrollHeight:typeof node?.scrollHeight==='number'?node.scrollHeight:null,clientHeight:typeof node?.clientHeight==='number'?node.clientHeight:null});return {title:document.body.innerText.slice(0,6000),bodyHtml:document.body.innerHTML.slice(0,24000),popover:[...document.querySelectorAll('[role=dialog]')].map(e=>({text:e.innerText,html:e.outerHTML.slice(0,9000)})),termElements:[...document.querySelectorAll('.term-link')].map(e=>({text:e.textContent.trim(),active:document.activeElement===e,detail:describe(e)})),activeElement:describe(document.activeElement),scroll:{windowX:scrollX,windowY:scrollY,documentX:document.documentElement.scrollLeft,documentY:document.documentElement.scrollTop,bodyY:document.body.scrollTop,bodyHeight:document.body.scrollHeight,viewportHeight:innerHeight},events:window.__issue93Events,api:window.nativeControl.state()}})()`)
 }
 async function run() {
   if (!evidence.sourceMetadata?.appSha256 || !evidence.sourceMetadata?.markdownViewSha256 || !evidence.sourceMetadata?.productionCssSha256) throw new Error(`missing source provenance: ${evidence.metadataError || 'incomplete metadata'}`)
@@ -169,12 +193,15 @@ async function run() {
   termAActivation.clicksAfterActivation = afterAEnter.events.clicks.slice(termAActivation.clickStartIndex)
   termAActivation.questionCardDefaultClicks = termAActivation.clicksAfterActivation.filter((event) => event.trusted && event.activationTarget?.tag === 'BUTTON' && event.activationTarget.text === termAActivation.parentQuestionButtonText)
   if (!termAActivation.popoverOpened || termAActivation.questionCardDefaultClicks.length !== 0) throw new Error(`A question-title Enter did not open its popover cleanly: ${JSON.stringify(termAActivation)}`)
-  await waitFor(() => evaluate(`window.nativeControl.state().explainRequests.length===1`), 'A explain request')
+  await askBySelectingTerm('TERM_A', 1)
   const requestA = (await evaluate('window.nativeControl.state().explainRequests[0]'))
-  if (requestA.term !== 'TERM_A' || requestA.profileId !== 'profile-A' || requestA.projectSummary !== 'SUMMARY_A' || requestA.question !== 'QUESTION_A TERM_A' || requestA.snippet !== 'ANSWER_A TERM_A context' || requestA.glossaryHint !== 'GLOSSARY_A') {
+  if (requestA.term !== 'TERM_A' || requestA.profileId !== 'profile-A' || requestA.projectSummary !== 'SUMMARY_A' || requestA.question !== 'QUESTION_A TERM_A' || !requestA.snippet.includes('ANSWER_A TERM_A context') || requestA.glossaryHint !== '') {
     throw new Error(`A explain request context mismatch: ${JSON.stringify(requestA)}`)
   }
   const beforeSwitch = await snapshot()
+  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+  await waitFor(() => evaluate(`!document.querySelector('[aria-modal="true"]')`), 'A explanation closed before navigation')
   await enterButton('后台生成')
   await waitFor(() => evaluate(`document.body.innerText.includes('ProjectB') && document.body.innerText.includes('查看结果')`), 'background task panel')
   await enterButton('查看结果')
@@ -190,9 +217,9 @@ async function run() {
   termBActivation.clicksAfterActivation = afterBEnter.events.clicks.slice(termBActivation.clickStartIndex)
   termBActivation.questionCardDefaultClicks = termBActivation.clicksAfterActivation.filter((event) => event.trusted && event.activationTarget?.tag === 'BUTTON' && event.activationTarget.text === termBActivation.parentQuestionButtonText)
   if (!termBActivation.popoverOpened || termBActivation.questionCardDefaultClicks.length !== 0) throw new Error(`B question-title Enter did not open its popover cleanly: ${JSON.stringify(termBActivation)}`)
-  await waitFor(() => evaluate(`window.nativeControl.state().explainRequests.length===2`), 'B explain request')
+  await askBySelectingTerm('TERM_B', 2)
   const requestB = await evaluate('window.nativeControl.state().explainRequests[1]')
-  if (requestB.term !== 'TERM_B' || requestB.profileId !== 'profile-B' || requestB.projectSummary !== 'SUMMARY_B' || requestB.question !== 'QUESTION_B TERM_B' || requestB.snippet !== 'ANSWER_B TERM_B context' || requestB.glossaryHint !== 'GLOSSARY_B') {
+  if (requestB.term !== 'TERM_B' || requestB.profileId !== 'profile-B' || requestB.projectSummary !== 'SUMMARY_B' || requestB.question !== 'QUESTION_B TERM_B' || !requestB.snippet.includes('ANSWER_B TERM_B context') || requestB.glossaryHint !== '') {
     throw new Error(`B explain request mixed result contexts: ${JSON.stringify(requestB)}`)
   }
   await evaluate(`window.nativeControl.lateAEvents(${JSON.stringify(requestA.requestId)})`)
@@ -211,11 +238,15 @@ async function run() {
   if (keyboardClicks.some((event) => event.activationTarget?.tag !== 'BUTTON') || keyboardClicks.some((event) => /QUESTION_[AB]/.test(event.activationTarget?.text || ''))) {
     throw new Error(`keyboard-generated clicks included a non-button or question-card parent activation: ${JSON.stringify(keyboardClicks)}`)
   }
-  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/]
+  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/, /关闭/, /向 AI 提问/]
   if (keyboardClicks.some((event) => !allowedNativeTargets.some((pattern) => pattern.test(event.activationTarget?.text || '')))) {
     throw new Error(`unexpected keyboard default button activation: ${JSON.stringify(keyboardClicks)}`)
   }
-  if (afterLate.events.mouseDowns.length !== 0) throw new Error(`native sequence unexpectedly used mouseDown: ${JSON.stringify(afterLate.events.mouseDowns)}`)
+  const mouseDowns = afterLate.events.mouseDowns
+  if (mouseDowns.length !== 4 || mouseDowns.some((event) => !event.trusted) || mouseDowns.filter((event) => event.target.tag === 'P' && /^ANSWER_[AB]/.test(event.target.text)).length !== 2) {
+    throw new Error(`native answer expansion/selection did not use the expected trusted mouse gestures: ${JSON.stringify(mouseDowns)}`)
+  }
+  if (evidence.nativeSelections?.length !== 2 || evidence.nativeSelections.some((item) => item.state.text !== item.term || !item.state.toolbar)) throw new Error('native selections did not preserve the selected answer text and its toolbar')
   evidence.scenarios = {
     backgroundBThenHistoryA: { generationRequest: generatedB, historyTitle: beforeSwitch.title.includes('ProjectA · 面试题') },
     keyboardOpenedA: { request: requestA, popover: beforeSwitch.popover, termActivation: termAActivation, evidence: beforeSwitch.events },
