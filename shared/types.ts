@@ -170,6 +170,8 @@ export interface FollowUp {
 
 export interface QuestionItem {
   id: string
+  /** Optional short navigation topic; question text remains the canonical wording. */
+  title?: string
   question: string
   answer: string // Markdown，专业名词用 [[名词]] 标记
   followUps: FollowUp[]

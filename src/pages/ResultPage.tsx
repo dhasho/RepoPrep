@@ -143,7 +143,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
 
   const query = search.trim().toLowerCase()
   const navigationSummaries = useMemo(
-    () => summarizeQuestions(result.sections.flatMap((section) => section.questions.map((question) => question.question))),
+    () => summarizeQuestions(result.sections.flatMap((section) => section.questions)),
     [result.sections]
   )
   const sectionQuestionOffsets = useMemo(() => {

@@ -13,6 +13,8 @@ import { GRANULARITY_QUESTION_BUDGET, type Section } from '../../shared/types.ts
 import { mergeWithCompensation, type MergeInput } from './generator.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { LlmRequestError } from './llm.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { selectUniqueQuestions } from './question-dedupe.ts'
 
 const budget = GRANULARITY_QUESTION_BUDGET.fine
 
@@ -61,6 +63,21 @@ function makeInput(
 // 测不出"无补偿"的分支。32/30 是细粒度真实规划出来的量级。
 const FULL_QUOTAS = [12, 10, 10] // 合计 32（= target）
 const FULL_TOTAL = 32
+
+test('question dedupe ignores titles: same-title questions remain and duplicate wording keeps the first title', () => {
+  const questions = [
+    { id: 'q1', title: '共享主题', question: '如何管理请求状态？', answer: 'A1', followUps: [] },
+    { id: 'q2', title: '共享主题', question: '如何调度后台任务？', answer: 'A2', followUps: [] },
+    { id: 'q3', title: '另一主题', question: '如何管理请求状态？', answer: 'A3', followUps: [] }
+  ]
+  const selected = selectUniqueQuestions([{ id: 's1', title: '主题', questions }], 10, new Set())
+  assert.equal(selected.kept, 2)
+  assert.equal(selected.duplicates, 1)
+  assert.deepEqual(selected.sections[0].questions.map(({ id, title }) => ({ id, title })), [
+    { id: 'q1', title: '共享主题' },
+    { id: 'q2', title: '共享主题' }
+  ])
+})
 
 test('模型超额：每批按配额裁剪，总量等于规划总量', async () => {
   const { input } = makeInput(FULL_QUOTAS, ({ quota }) => quota + 5) // 每批多出 5 题
