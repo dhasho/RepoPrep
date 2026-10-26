@@ -44,3 +44,11 @@ test('answer formatting requests readable Markdown without changing the question
   assert.match(prompt, /不套固定标题模板/)
   assert.ok(!prompt.includes('navigationTitle'))
 })
+
+test('generation glossary instructions require two concrete, grounded sentences', () => {
+  const prompt = buildUserPrompt({contextText: '源码片段', granularity: 'medium', roleFocus: 'general', isModuleBatch: false, quota: 3})
+  assert.match(prompt, /glossary.*严格写两句话/)
+  assert.match(prompt, /第一句较具体地说明是什么或解决什么问题，第二句说明如何起作用/)
+  assert.match(prompt, /不得编造项目实现细节/)
+  assert.match(prompt, /"glossary".*严格用两句话解释/)
+})
