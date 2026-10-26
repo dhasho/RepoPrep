@@ -1057,13 +1057,14 @@ test('saved generation draft is passive until resumed and continuation uses its 
   const draft = {
     id: 'draft-123', projectPath, projectName: 'ProjectDraft', granularity: 'fine', roleFocus: 'backend',
     profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
-    completedBatches: 2, completedQuestions: 8, totalBatches: 5, ready: true
+    completedBatches: 2, completedQuestions: 8, totalBatches: 5, ready: false
   }
   const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
   try {
     await openProject(h, projectPath)
     await act(h, () => {})
     assert.ok(h.host.textContent.includes('可继续的生成任务'))
+    assert.ok(button(h.host, '继续生成'), 'an interrupted draft with completed batches can resume')
     assert.ok(h.host.textContent.includes('已保存 2/5 个完整批次 · 8 道题 · 原模型：mock-model'))
     assert.equal(h.mock.requests.length, 0, 'checking a draft does not call the model')
     await act(h, () => button(h.host, '继续生成').click())
@@ -1075,6 +1076,40 @@ test('saved generation draft is passive until resumed and continuation uses its 
     assert.deepEqual({ projectPath: request.projectPath, granularity: request.granularity, roleFocus: request.roleFocus, profileId: request.profileId }, {
       projectPath, granularity: draft.granularity, roleFocus: draft.roleFocus, profileId: draft.profileId
     })
+  } finally { await unmount(h) }
+})
+
+test('draft with no completed checkpoint batches can still resume', async () => {
+  const projectPath = 'C:\\ProjectEmptyCheckpoint'
+  const draft = {
+    id: 'draft-no-batches', projectPath, projectName: 'ProjectEmptyCheckpoint', granularity: 'medium', roleFocus: 'general',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 0, completedQuestions: 0, totalBatches: 3, ready: false
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('已保存 0/3 个完整批次 · 0 道题'))
+    assert.ok(button(h.host, '继续生成'))
+    await act(h, () => button(h.host, '继续生成').click())
+    assert.equal(h.mock.requests[0].request.resumeDraftId, draft.id)
+  } finally { await unmount(h) }
+})
+
+test('ready draft offers the completed report save action', async () => {
+  const projectPath = 'C:\\ProjectReadyDraft'
+  const draft = {
+    id: 'draft-ready', projectPath, projectName: 'ProjectReadyDraft', granularity: 'medium', roleFocus: 'general',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 3, completedQuestions: 12, totalBatches: 3, ready: true
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(button(h.host, '保存已完成报告'))
+    assert.equal(h.mock.requests.length, 0, 'reading a ready draft does not send a generation request')
+    await act(h, () => button(h.host, '保存已完成报告').click())
+    assert.equal(h.mock.requests[0].request.resumeDraftId, draft.id, 'the main process receives the ready draft id to finalize its saved result')
   } finally { await unmount(h) }
 })
 

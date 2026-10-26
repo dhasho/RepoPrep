@@ -742,7 +742,7 @@ export default function App() {
                 onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
                 projectPath={projectStoragePath ?? overview.root}
                 onResumeDraft={(draft: GenerationDraftSummary) => {
-                  if (activeTask || !draft.ready || draft.projectPath !== (projectStoragePath ?? overview.root)) return
+                  if (activeTask || draft.projectPath !== (projectStoragePath ?? overview.root)) return
                   const options: GenerateOptions = {
                     projectPath: projectStoragePath ?? overview.root,
                     granularity: draft.granularity,
