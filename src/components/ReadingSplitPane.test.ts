@@ -62,7 +62,9 @@ test('reading split pane resizes, collapses without unmounting, and cleans up dr
     await React.act(async () => dom.window.dispatchEvent(up))
     assert.equal(dom.window.document.body.style.cursor, 'crosshair')
     assert.equal(dom.window.document.body.style.userSelect, 'text')
-    await React.act(async () => separator.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'End', bubbles: true })))
+    const endKey = new dom.window.KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true })
+    await React.act(async () => separator.dispatchEvent(endKey))
+    assert.equal(endKey.defaultPrevented, true, 'supported resize keys do not scroll the page')
     assert.equal(width(), 674, 'End reaches the maximum while preserving 320px primary space')
     await React.act(async () => separator.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Home', bubbles: true })))
     assert.equal(width(), 280)
@@ -84,6 +86,21 @@ test('reading split pane resizes, collapses without unmounting, and cleans up dr
     assert.equal(dom.window.document.body.style.cursor, 'crosshair')
     assert.equal(dom.window.document.body.style.userSelect, 'text')
 
+    await React.act(async () => pointer(separator, 'pointerdown', 400, 10))
+    const widthBeforeExtraPointer = width()
+    await React.act(async () => pointer(separator, 'pointerdown', 300, 11))
+    assert.equal(dom.window.document.body.style.cursor, 'col-resize')
+    const extraMove = new dom.window.Event('pointermove', { bubbles: true, cancelable: true }) as any
+    Object.defineProperty(extraMove, 'pointerId', { value: 11 })
+    Object.defineProperty(extraMove, 'clientX', { value: 200 })
+    await React.act(async () => dom.window.dispatchEvent(extraMove))
+    assert.equal(width(), widthBeforeExtraPointer, 'a second pointer cannot take over the active drag')
+    const firstUp = new dom.window.Event('pointerup', { bubbles: true }) as any
+    Object.defineProperty(firstUp, 'pointerId', { value: 10 })
+    await React.act(async () => dom.window.dispatchEvent(firstUp))
+    assert.equal(dom.window.document.body.style.cursor, 'crosshair')
+    assert.equal(dom.window.document.body.style.userSelect, 'text')
+
     collapsed = true
     await render()
     assert.equal(dom.window.document.querySelector('[role="separator"]'), null)
@@ -93,6 +110,17 @@ test('reading split pane resizes, collapses without unmounting, and cleans up dr
     await React.act(async () => (expand as HTMLButtonElement).click())
     await render()
     assert.equal(width(), 304, 'preferred width survives collapse and expansion')
+
+    const expandedSeparator = dom.window.document.querySelector('[role="separator"]')!
+    await React.act(async () => pointer(expandedSeparator, 'pointerdown', 400, 12))
+    assert.equal(dom.window.document.body.style.cursor, 'col-resize')
+    collapsed = true
+    await render()
+    assert.equal(dom.window.document.body.style.cursor, 'crosshair', 'collapsing during drag restores body styles')
+    assert.equal(dom.window.document.body.style.userSelect, 'text')
+    collapsed = false
+    await render()
+    assert.equal(width(), 304)
 
     Object.defineProperty(container, 'clientWidth', { configurable: true, value: 450 })
     await React.act(async () => dom.window.dispatchEvent(new dom.window.Event('resize')))

@@ -15,7 +15,7 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
   const containerRef = useRef<HTMLDivElement>(null)
   const separatorRef = useRef<HTMLDivElement>(null)
   const preferredWidth = useRef(DEFAULT_SECONDARY_WIDTH)
-  const [revision, setRevision] = useState(0)
+  const [, setRevision] = useState(0)
   const drag = useRef<{ pointerId: number; startX: number; startWidth: number; bodyCursor: string; bodyUserSelect: string } | null>(null)
   const hasSecondary = secondary !== undefined && secondary !== null
 
@@ -50,9 +50,12 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
   }, [])
 
   useEffect(() => () => restoreDrag(true), [restoreDrag])
+  useEffect(() => {
+    if (collapsed || !hasSecondary) restoreDrag(true)
+  }, [collapsed, hasSecondary, restoreDrag])
 
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
+    if (event.button !== 0 || drag.current) return
     event.preventDefault()
     const separator = event.currentTarget
     drag.current = {
@@ -92,21 +95,23 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
   }, [available, measure, restoreDrag])
 
   const adjustByKeyboard = (key: string) => {
-    if (key === 'ArrowLeft') preferredWidth.current = Math.min(preferredWidth.current + 24, Math.max(0, available - 320))
-    else if (key === 'ArrowRight') preferredWidth.current = Math.max(preferredWidth.current - 24, available < 600 ? 0 : 280)
-    else if (key === 'Home') preferredWidth.current = available < 600 ? 0 : 280
-    else if (key === 'End') preferredWidth.current = Math.max(0, available - 320)
+    const min = available < 600 ? constrainedWidth : 280
+    const max = available < 600 ? constrainedWidth : Math.max(280, available - 320)
+    if (key === 'ArrowLeft') preferredWidth.current = Math.min(constrainedWidth + 24, max)
+    else if (key === 'ArrowRight') preferredWidth.current = Math.max(constrainedWidth - 24, min)
+    else if (key === 'Home') preferredWidth.current = min
+    else if (key === 'End') preferredWidth.current = max
     else return
     setRevision((value) => value + 1)
   }
 
   return <div ref={containerRef} data-reading-split className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-    <div data-reading-primary className="reading-pane min-h-0 min-w-0 flex-1 overflow-auto">{primary}</div>
+    <div data-reading-primary className="reading-pane min-h-0 min-w-0 flex-1 overflow-hidden">{primary}</div>
     {hasSecondary && <>
-      {!collapsed && <div ref={separatorRef} role="separator" aria-orientation="vertical" aria-label="调整报告与 AI 解释区域宽度" aria-valuemin={available < 600 ? 0 : 280} aria-valuemax={Math.max(0, available < 600 ? available : available - 320)} aria-valuenow={Math.round(constrainedWidth)} tabIndex={0} onPointerDown={beginDrag} onKeyDown={(event) => adjustByKeyboard(event.key)} className="z-10 w-[6px] shrink-0 cursor-col-resize touch-none border-l border-slate-200 bg-slate-50 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500" />}
-      <aside data-reading-secondary className={`reading-pane flex h-full shrink-0 border-l border-slate-200 bg-white ${collapsed ? 'w-10 flex-col items-center py-2' : 'min-h-0 overflow-auto'}`} style={{ width: collapsed ? '40px' : `${constrainedWidth}px` }}>
+      {!collapsed && <div ref={separatorRef} role="separator" aria-orientation="vertical" aria-label="调整报告与 AI 解释区域宽度" aria-valuemin={available < 600 ? constrainedWidth : 280} aria-valuemax={available < 600 ? constrainedWidth : Math.max(280, available - 320)} aria-valuenow={Math.round(constrainedWidth)} tabIndex={0} onLostPointerCapture={() => restoreDrag(false)} onPointerDown={beginDrag} onKeyDown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) event.preventDefault(); adjustByKeyboard(event.key) }} className="z-10 w-[6px] shrink-0 cursor-col-resize touch-none border-l border-slate-200 bg-slate-50 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500" />}
+      <aside data-reading-secondary className={`reading-pane flex h-full shrink-0 border-l border-slate-200 bg-white ${collapsed ? 'w-10 flex-col items-center py-2' : 'min-h-0'}`} style={{ width: collapsed ? '40px' : `${constrainedWidth}px` }}>
         {collapsed && <button type="button" onClick={onExpand} aria-label="展开 AI 解释" title="展开 AI 解释" className="rounded-md p-2 text-indigo-600 hover:bg-indigo-50"><AppIcon name="bot" size={18} /></button>}
-        <div hidden={collapsed} className={collapsed ? '' : 'min-h-0 w-full'}>{secondary}</div>
+        <div hidden={collapsed} className={collapsed ? '' : 'h-full min-h-0 w-full'}>{secondary}</div>
       </aside>
     </>}
   </div>
