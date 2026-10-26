@@ -121,6 +121,7 @@ test('all result text field ceilings accept exact values and reject one characte
     ['section title', (v, text) => { v.sections[0].title = text }, limits.sectionTitle],
     ['section summary', (v, text) => { v.sections[0].summary = text }, limits.sectionSummary],
     ['question id', (v, text) => { v.sections[0].questions[0].id = text }, limits.profileId],
+    ['question title', (v, text) => { v.sections[0].questions[0].title = text }, limits.questionTitle],
     ['question text', (v, text) => { v.sections[0].questions[0].question = text }, limits.question],
     ['answer', (v, text) => { v.sections[0].questions[0].answer = text }, limits.answer],
     ['follow-up question', (v, text) => { v.sections[0].questions[0].followUps[0].question = text }, limits.question],
@@ -140,6 +141,24 @@ test('all result text field ceilings accept exact values and reject one characte
   }
   const overlongDate = makeResult({ createdAt: `${'2026-01-01T00:00:00.000Z'}${' '.repeat(limits.createdAt)}` })
   assertKind(overlongDate, 'invalid')
+})
+
+test('optional question title accepts legacy absence and rejects blank or non-string values', () => {
+  assertValid(makeResult())
+  assertValid(makeResult({ sections: [{ id: 's1', title: 'Section', questions: [{
+    id: 'q1', title: '请求取消与状态清理', question: 'Question', answer: '', followUps: []
+  }] }] }))
+  for (const title of ['', '   ', 42, null]) {
+    assertKind(makeResult({ sections: [{ id: 's1', title: 'Section', questions: [{
+      id: 'q1', title, question: 'Question', answer: '', followUps: []
+    }] }] }), 'invalid')
+  }
+  assertKind(makeResult({ sections: [{ id: 's1', title: 'Section', questions: [{
+    id: 'q1', title: 'x'.repeat(RESULT_LIMITS.questionTitle + 1), question: 'Question', answer: '', followUps: []
+  }] }] }), 'invalid')
+  assertKind(makeResult({ sections: [{ id: 's1', title: 'Section', questions: [{
+    id: 'q1', title: 'topic', question: 'Question', answer: '', followUps: [], extra: true
+  }] }] }), 'invalid')
 })
 
 test('question, follow-up, section, glossary, category and tree count ceilings are enforced', () => {

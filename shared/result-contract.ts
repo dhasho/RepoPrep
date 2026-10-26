@@ -27,6 +27,7 @@ export const RESULT_LIMITS = {
   followUpsPerItem: 100,
   followUps: 5000,
   followUpDepth: 16,
+  questionTitle: 120,
   question: 12_000,
   answer: 50_000,
   glossaryEntries: 2000,
@@ -362,8 +363,12 @@ export function assertInterviewResultContract(
     if (!Array.isArray(section.questions) || section.questions.length > RESULT_LIMITS.questionsPerSection) invalid()
     for (const question of section.questions) {
       if (++questions > RESULT_LIMITS.questions || !record(question) || !Array.isArray(question.followUps) || question.followUps.length > RESULT_LIMITS.followUpsPerItem) oversized()
-      exactKeys(question, ['id', 'question', 'answer', 'followUps', 'sourceEvidence'])
+      exactKeys(question, ['id', 'title', 'question', 'answer', 'followUps', 'sourceEvidence'])
       string(question.id, RESULT_LIMITS.profileId)
+      if (question.title !== undefined) {
+        string(question.title, RESULT_LIMITS.questionTitle)
+        if (!question.title.trim()) invalid()
+      }
       string(question.question, RESULT_LIMITS.question)
       string(question.answer, RESULT_LIMITS.answer, 0)
       if (question.sourceEvidence !== undefined) {

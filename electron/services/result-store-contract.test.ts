@@ -150,6 +150,24 @@ test('real store module loads old wide-glossary/profile result without migrating
   assert.equal(await fs.readFile(file, 'utf8'), raw, 'loading old result must not migrate or rewrite the historical file')
 })
 
+test('real result store writes and reads optional question titles without changing question content', async () => {
+  const { store, userData } = await makeHarness()
+  const projectPath = path.join(userData, 'question-title-roundtrip')
+  const result = legacyAffectedResult(projectPath)
+  result.sections[0].questions[0] = {
+    ...result.sections[0].questions[0],
+    title: '请求取消与状态清理',
+    question: '原始问题？',
+    answer: '原始答案。'
+  }
+
+  store.saveResult(projectPath, result)
+  const loaded = store.loadResult(projectPath)
+  assert.equal(loaded.sections[0].questions[0].title, '请求取消与状态清理')
+  assert.equal(loaded.sections[0].questions[0].question, '原始问题？')
+  assert.equal(loaded.sections[0].questions[0].answer, '原始答案。')
+})
+
 test('legacy GitHub result metadata is normalized only during bounded history reads', async () => {
   const { store, userData } = await makeHarness()
   const projectPath = path.join(userData, 'legacy-github-project')

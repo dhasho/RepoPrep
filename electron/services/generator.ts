@@ -12,7 +12,7 @@ import type {
   LlmUsage
 } from '@shared/types'
 import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@shared/types'
-import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
+import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES, RESULT_LIMITS } from '@shared/result-contract'
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
 import { contentReadWarning } from '@shared/content-read'
 import { chatCompletion, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
@@ -49,6 +49,7 @@ function jsonSchemaRule(questionCount: string, granularityDesc: string): string 
       "summary": "该主题考察点的一句话说明",
       "questions": [
         {
+          "title": "简短主题",
           "question": "面试问题",
           "answer": "参考答案（Markdown 格式）",
           "followUps": [
@@ -69,7 +70,8 @@ function jsonSchemaRule(questionCount: string, granularityDesc: string): string 
 4. answer 用 Markdown 书写，150-400 字。多职责、多步骤或多项比较的答案先用一句话说明要点，再用有序或无序列表分点；段落之间留空行，子步骤适当缩进，代码独立成块。简短结论保持一两句即可，不套固定标题模板；代码引用要用 \`路径\` 注明出处。
 5. 每题配 2-4 个 followUps 追问，模拟面试官顺藤摸瓜的深挖：为什么这样选型/换个方案行不行/性能瓶颈在哪/边界与异常情况怎么处理。追问 answer 50-150 字，包含多个要点时同样使用 Markdown 分点和段落。追问内部可再嵌套一层 followUps（可为空数组）。
 6. 专业名词标记：在 question、answer、followUps 的文本中，把专业术语、框架、库、算法、协议、设计模式等名词用 [[名词]] 双括号包裹（名词内部不能有空格，中英文均可）。glossary 必须覆盖所有被 [[ ]] 标记过的名词，key 与括号内文本完全一致。每个 glossary 值严格写两句话：第一句较具体地说明是什么或解决什么问题，第二句说明如何起作用；使用准确、通俗的通用解释，不堆标签、不用 [[ ]] 标注，也不得编造项目实现细节。
-7. 问题以面试官向候选人提问的口吻书写。`
+7. 所有主问题都要提供 title：用约 8–16 个汉字概括“考察对象+机制/关注点”，可混用中英文技术名词；写成简短主题而非问句，使用纯文本，不含编号或 [[ ]] 标记，不复制长代码符号或题干。追问不需要 title。
+8. 问题以面试官向候选人提问的口吻书写。`
 }
 
 const GRANULARITY_TASK: Record<Granularity, string> = {
@@ -129,6 +131,7 @@ function extractJson(raw: string): string {
 }
 
 interface RawQuestion {
+  title?: unknown
   question?: unknown
   answer?: unknown
   followUps?: unknown
@@ -164,7 +167,7 @@ type ParsedBatch = {
   glossary: Record<string, string>
 }
 
-function normalizeParsed(raw: unknown): ParsedBatch {
+export function normalizeParsed(raw: unknown): ParsedBatch {
   if (!raw || typeof raw !== 'object') throw new Error('模型输出不是 JSON 对象')
   const obj = raw as RawResult
   const projectSummary = typeof obj.projectSummary === 'string' ? obj.projectSummary.trim() : ''
@@ -183,8 +186,12 @@ function normalizeParsed(raw: unknown): ParsedBatch {
           const question = typeof qo.question === 'string' ? qo.question.trim() : ''
           const answer = typeof qo.answer === 'string' ? qo.answer.trim() : ''
           if (!question || !answer) continue
+          const title = typeof qo.title === 'string'
+            ? qo.title.trim().replace(/[\r\n]+/g, ' ')
+            : ''
           questions.push({
             id: randomUUID(),
+            ...(title && title.length <= RESULT_LIMITS.questionTitle ? { title } : {}),
             question,
             answer,
             followUps: normalizeFollowUps(qo.followUps, 1)

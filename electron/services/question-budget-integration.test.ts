@@ -58,7 +58,7 @@ afterEach(async () => {
  * 被后续题引用的词条"这类问题才会暴露——若所有批次共用同一份 glossary，
  * 该缺陷会被掩盖。
  */
-function mockReplyForPrompt(prompt: string, callNo: number): string {
+function mockReplyForPrompt(prompt: string, callNo: number, titleMode: 'present' | 'missing' = 'present'): string {
   const strict = prompt.match(/严格\s*(\d+)\s*题/)
   const approx = prompt.match(/约\s*(\d+)\s*题/)
   const requested = Number(strict?.[1] ?? approx?.[1] ?? 5)
@@ -68,6 +68,7 @@ function mockReplyForPrompt(prompt: string, callNo: number): string {
   const prefix = `${batchMatch ? `模块${batchMatch[1]}` : '全局'}请求${callNo}`
 
   const questions = Array.from({ length: count }, (_, i) => ({
+    ...(titleMode === 'present' ? { title: `${prefix}要点${i + 1}` } : {}),
     question: `第 ${i + 1} 题（${prefix}）：这里的实现为什么这样写？`,
     answer: `参考答案 ${i + 1}，涉及 [[${prefix}术语${i + 1}]] 与 [[共用术语]]。`,
     followUps: [{ question: `追问 ${i + 1}`, answer: '追问答案', followUps: [] }]
@@ -82,7 +83,7 @@ function mockReplyForPrompt(prompt: string, callNo: number): string {
 }
 
 /** 用 fetch 层伪造模型响应；同时记录每次请求的提示词，便于断言配额确实下达给了模型 */
-async function withMockLlm<T>(run: (prompts: string[]) => Promise<T>): Promise<T> {
+async function withMockLlm<T>(run: (prompts: string[]) => Promise<T>, titleMode: 'present' | 'missing' = 'present'): Promise<T> {
   const originalFetch = globalThis.fetch
   const prompts: string[] = []
   globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -91,7 +92,7 @@ async function withMockLlm<T>(run: (prompts: string[]) => Promise<T>): Promise<T
       ? body.messages.map((m: { content?: string }) => m.content ?? '').join('\n')
       : ''
     prompts.push(prompt)
-    return new Response(JSON.stringify({ choices: [{ message: { content: mockReplyForPrompt(prompt, prompts.length) } }] }), {
+    return new Response(JSON.stringify({ choices: [{ message: { content: mockReplyForPrompt(prompt, prompts.length, titleMode) } }] }), {
       status: 200,
       headers: { 'content-type': 'application/json' }
     })
@@ -103,7 +104,7 @@ async function withMockLlm<T>(run: (prompts: string[]) => Promise<T>): Promise<T
   }
 }
 
-async function generateFor(root: string, granularity: Granularity) {
+async function generateFor(root: string, granularity: Granularity, titleMode: 'present' | 'missing' = 'present') {
   const scan = await scanProject(root)
   return withMockLlm(async (prompts) => {
     const result = await generateInterview({
@@ -115,7 +116,7 @@ async function generateFor(root: string, granularity: Granularity) {
       onProgress: () => undefined
     })
     return { result, prompts }
-  })
+  }, titleMode)
 }
 
 const countQuestions = (result: { sections: Array<{ questions: unknown[] }> }) =>
@@ -155,6 +156,27 @@ test('粗粒度与中粒度遵守各自题量区间', async () => {
     )
     assert.equal(prompts.length, 1, `${granularity} 应为单批`)
   }
+})
+
+test('生产生成链路保留标题与题目配对；缺失标题仍成功且不增加传输请求', async () => {
+  const root = await makeProject(2, 3)
+  const titled = await generateFor(root, 'fine', 'present')
+  const untitled = await generateFor(root, 'fine', 'missing')
+
+  assert.ok(titled.prompts.length > 1, '细粒度真实生成链路应覆盖多批合并')
+  assert.equal(untitled.prompts.length, titled.prompts.length, '缺少可选标题不得触发额外请求')
+  assert.equal(untitled.result.generationDiagnostics?.requestCount, titled.result.generationDiagnostics?.requestCount)
+  assert.ok(countQuestions(titled.result) > 0)
+  assert.ok(countQuestions(untitled.result) > 0)
+
+  for (const section of titled.result.sections) {
+    for (const question of section.questions) {
+      const match = /^第 (\d+) 题（(.+)）：/.exec(question.question)
+      assert.ok(match, `预期保留合成题干，实际为 ${question.question}`)
+      assert.equal(question.title, `${match[2]}要点${match[1]}`, '合并或按配额裁剪后标题仍应属于原题')
+    }
+  }
+  assert.ok(untitled.result.sections.every((section) => section.questions.every((question) => question.title === undefined)))
 })
 
 test('两个主题里的 glossary 被合并，且裁剪后不残留空 section', async () => {
