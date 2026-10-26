@@ -152,7 +152,11 @@ function makeApi({
       if (failures?.length) { const error = failures.shift(); if (!failures.length) draftFailures.delete(projectPath); throw error }
       return generationDrafts.get(projectPath) ?? null
     },
-    discardGenerationDraft: async (projectPath, draftId) => { draftDiscards.push({ projectPath, draftId }); if (generationDrafts.get(projectPath)?.id === draftId) generationDrafts.delete(projectPath) },
+    discardGenerationDraft: async (projectPath, draftId) => {
+      draftDiscards.push({ projectPath, draftId })
+      if (draftId === null) draftFailures.delete(projectPath)
+      else if (generationDrafts.get(projectPath)?.id === draftId) generationDrafts.delete(projectPath)
+    },
     selectFolder: async () => { selectCalls++; return selectedPath },
     scanProject: async (projectPath) => {
       scans.push(projectPath)
@@ -1134,6 +1138,28 @@ test('draft read failure can be retried and discarding sends only the selected p
     assert.equal(h.mock.deletions.length, 0, 'discarding a draft does not delete analysis history')
     assert.ok(!h.host.textContent.includes('可继续的生成任务'))
     assert.equal(button(h.host, '开始生成面试题').disabled, false)
+  } finally { await unmount(h) }
+})
+
+test('corrupt draft can only be explicitly discarded with null and leaves saved analysis history intact', async () => {
+  const projectPath = 'C:\\ProjectCorruptDraft'
+  const historical = makeResult(projectPath)
+  const corruptError = new Error('生成草稿损坏或版本不兼容，请丢弃后重新生成。')
+  const h = await mountApp({
+    savedResults: new Map([[projectPath, historical]]),
+    generationDraftFailures: new Map([[projectPath, [corruptError]]])
+  })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('丢弃损坏草稿'))
+    assert.equal(h.mock.draftDiscards.length, 0, 'rendering a corrupt draft error does not discard it automatically')
+    assert.equal(h.mock.requests.length, 0, 'checking a corrupt draft does not invoke generation')
+    assert.equal(h.mock.deletions.length, 0)
+    await act(h, () => button(h.host, '丢弃损坏草稿').click())
+    assert.deepEqual(h.mock.draftDiscards, [{ projectPath, draftId: null }])
+    assert.equal(h.mock.deletions.length, 0, 'corrupt draft cleanup does not delete report history')
+    assert.equal(h.mock.requests.length, 0, 'discarding corrupt draft does not invoke generation')
+    assert.equal(h.host.textContent.includes('读取生成草稿失败'), false, 'successful cleanup reloads the draft state')
   } finally { await unmount(h) }
 })
 

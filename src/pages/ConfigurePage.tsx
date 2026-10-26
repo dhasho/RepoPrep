@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GenerateOptions, Granularity, ProjectOverview, RoleFocus, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
-import type { GenerationDraftSummary } from '@shared/generation-checkpoint'
+import { GENERATION_DRAFT_MESSAGES, type GenerationDraftSummary } from '@shared/generation-checkpoint'
 import { api } from '../lib/ipc'
 import FileTreeView from '../components/FileTreeView'
 import { AppIcon } from '../components/AppIcon'
@@ -61,18 +61,22 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
     loadDraft()
     return () => { requestId.current++ }
   }, [currentProjectPath])
-  const discardDraft = async () => {
-    if (!draft || busyTask || draftStatus === 'discarding') return
+  const discardDraft = async (draftId: string | null) => {
+    if ((draftId === null && draftError !== GENERATION_DRAFT_MESSAGES.corrupt) || busyTask || draftStatus === 'discarding') return
     const ticket = ++requestId.current
     setDraftStatus('discarding')
     setDraftError(null)
     try {
-      const discard = (api as unknown as { discardGenerationDraft?: (path: string, id: string) => Promise<void> }).discardGenerationDraft
+      const discard = (api as unknown as { discardGenerationDraft?: (path: string, id: string | null) => Promise<void> }).discardGenerationDraft
       if (!discard) throw new Error('当前版本不支持丢弃生成草稿。')
-      await discard(currentProjectPath, draft.id)
+      await discard(currentProjectPath, draftId)
       if (ticket !== requestId.current) return
-      setDraft(null)
-      setDraftStatus('ready')
+      if (draftId === null) {
+        loadDraft()
+      } else {
+        setDraft(null)
+        setDraftStatus('ready')
+      }
     } catch (error) {
       if (ticket !== requestId.current) return
       setDraftError(error instanceof Error ? error.message : String(error))
@@ -190,7 +194,12 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
             {draftStatus === 'error' && (
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
                 <p>读取生成草稿失败：{draftError}</p>
-                <button className="mt-2 rounded border border-rose-300 bg-white px-3 py-1.5 text-xs" onClick={loadDraft}>重试读取</button>
+                <div className="mt-2 flex gap-2">
+                  <button className="rounded border border-rose-300 bg-white px-3 py-1.5 text-xs" disabled={Boolean(busyTask)} onClick={loadDraft}>重试读取</button>
+                  {draftError === GENERATION_DRAFT_MESSAGES.corrupt && (
+                    <button className="rounded border border-rose-300 bg-white px-3 py-1.5 text-xs disabled:opacity-50" disabled={Boolean(busyTask)} onClick={() => void discardDraft(null)}>丢弃损坏草稿</button>
+                  )}
+                </div>
               </div>
             )}
             {draft && draftStatus !== 'error' && (
@@ -205,7 +214,7 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
                   {settings.profiles.some((item) => item.id === draft.profileId)
                     ? <button className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={Boolean(busyTask) || draftStatus === 'discarding'} onClick={() => onResumeDraft(draft)}>{draft.ready ? '保存已完成报告' : '继续生成'}</button>
                     : <button className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={Boolean(busyTask)} onClick={onOpenSettings}>前往设置恢复配置</button>}
-                  <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 disabled:opacity-50" disabled={Boolean(busyTask) || draftStatus === 'discarding'} onClick={() => void discardDraft()}>{draftStatus === 'discarding' ? '正在丢弃…' : '丢弃草稿'}</button>
+                  <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 disabled:opacity-50" disabled={Boolean(busyTask) || draftStatus === 'discarding'} onClick={() => void discardDraft(draft.id)}>{draftStatus === 'discarding' ? '正在丢弃…' : '丢弃草稿'}</button>
                 </div>
               </section>
             )}
