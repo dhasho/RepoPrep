@@ -179,16 +179,24 @@ export default function App() {
   const activeTask = sessionSnapshot.activeRunId
     ? sessionSnapshot.tasks.find((task) => task.runId === sessionSnapshot.activeRunId) ?? null
     : null
+  const failedGenerationTask = generationFailure
+    ? sessionSnapshot.tasks.find((task) => task.runId === generationFailure.runId) ?? null
+    : null
   const backgroundTasks = sessionSnapshot.tasks.filter((task) => task.mode === 'background')
   const generationPage = view === 'generating' && foregroundTask ? {
+    runId: foregroundTask.runId,
     overview: foregroundTask.overview as ProjectOverview,
     options: foregroundTask.options as GenerateOptions,
     existingResult: foregroundTask.existingResult as InterviewResult | null,
     progress: foregroundTask.progress, logs: foregroundTask.logs,
+    preview: foregroundTask.preview, startedAt: foregroundTask.startedAt,
     error: foregroundTask.error, cancelling: foregroundTask.status === 'cancelling'
   } : view === 'generation-error' && generationFailure && overview && configureInitialOptions ? {
+    runId: generationFailure.runId,
     overview, options: configureInitialOptions, existingResult,
-    progress: null, logs: [], error: generationFailure.error, cancelling: false
+    progress: null, logs: [], preview: failedGenerationTask?.preview ?? null,
+    startedAt: failedGenerationTask?.startedAt ?? 0,
+    error: generationFailure.error, cancelling: false
   } : null
 
   const refreshStorageDiagnostics = useCallback(() => {
@@ -351,6 +359,7 @@ export default function App() {
   }
 
   const openQuestionDirectory = () => {
+    if (viewRef.current === 'generating') return
     if (viewRef.current === 'result') {
       setPageSidebarMode('questions')
       return
@@ -679,7 +688,7 @@ export default function App() {
       <main className="flex min-h-0 flex-1">
         <NavigationRail
           mode={sidebarMode}
-          canShowQuestions={Boolean(lastAnalysisPage)}
+          canShowQuestions={Boolean(lastAnalysisPage) && view !== 'generating'}
           onProjects={openProjectDirectory}
           onQuestions={openQuestionDirectory}
           onSettings={() => requestNavigation({ kind: 'settings' })}
@@ -758,10 +767,13 @@ export default function App() {
             )}
             {generationPage && (
               <GeneratingPage
+                key={generationPage.runId}
                 overview={generationPage.overview}
                 options={generationPage.options}
                 progress={generationPage.progress}
                 logs={generationPage.logs}
+                preview={generationPage.preview}
+                startedAt={generationPage.startedAt}
                 error={generationPage.error}
                 cancelling={generationPage.cancelling}
                 onCancel={cancelGenerate}

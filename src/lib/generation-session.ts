@@ -1,4 +1,4 @@
-import type { GenerateOptions, GenerateProgress, GenerateRequest, GenerateResponse, InterviewResult, ProjectOverview } from '@shared/types'
+import type { GenerateOptions, GenerateProgress, GenerateRequest, GenerateResponse, GenerationPreview, InterviewResult, ProjectOverview } from '@shared/types'
 
 export interface GenerationApi {
   generate(request: GenerateRequest): Promise<GenerateResponse>
@@ -16,6 +16,7 @@ export interface GenerationTask {
   status: GenerationStatus
   mode: GenerationMode
   progress: GenerateProgress | null
+  preview?: GenerationPreview | null
   logs: readonly GenerateProgress[]
   result: InterviewResult | null
   resultStoragePath?: string
@@ -91,6 +92,7 @@ export class GenerationSession {
       status: 'running',
       mode: 'foreground',
       progress: { runId, step: '准备中…', percent: 1, ts: Date.now() },
+      preview: null,
       logs: [],
       result: null,
       error: null,
@@ -119,10 +121,12 @@ export class GenerationSession {
     if (this.disposed || !progress.runId || progress.runId !== this.snapshot.activeRunId) return
     const task = this.getTask(progress.runId)
     if (!task || task.status !== 'running') return
-    const stamped = { ...progress }
+    const { preview, ...progressFields } = progress
+    const stamped = { ...progressFields }
     this.replaceTask(task.runId, {
       ...task,
       progress: stamped,
+      preview: preview ? immutableClone(preview) : task.preview,
       logs: [...task.logs.slice(-79), stamped]
     })
   }

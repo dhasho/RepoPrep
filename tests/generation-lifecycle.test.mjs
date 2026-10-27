@@ -133,10 +133,11 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
   const firstRunId = randomUUID().toUpperCase()
   const nextRunId = randomUUID().toUpperCase()
   const canonicalNextRunId = nextRunId.toLowerCase()
+  const preview = { projectSummary: 'partial summary', sections: [], completedQuestions: 0, targetQuestions: 4 }
   const harness = await createHarness({ generate: async (args) => {
     calls += 1
     if (calls === 1) { onProgress = args.onProgress; return generation.promise }
-    args.onProgress('新任务进度', undefined, 25)
+    args.onProgress('新任务进度', undefined, 25, preview)
     return result
   } })
   const oldWindow = harness.windows[0]
@@ -168,6 +169,7 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
   assert.equal(progress[0].payload.runId, canonicalNextRunId)
   assert.equal(progress[2].payload.runId, canonicalNextRunId)
   assert.equal(progress[2].payload.step, '新任务进度')
+  assert.deepEqual(progress[2].payload.preview, preview, 'the bounded report snapshot reaches the renderer progress event')
   assert.equal(harness.saves.length, 1)
   assert.equal(harness.recents.length, 1)
 })
