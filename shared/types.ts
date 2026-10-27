@@ -254,6 +254,27 @@ export interface RecentProject {
   granularity?: Granularity
 }
 
+/** Transient report text for the generating page; never published as a saved report. */
+export interface GenerationPreview {
+  projectSummary: string
+  /** Only questions whose checkpoint has been accepted are included here. */
+  sections: Section[]
+  completedQuestions: number
+  targetQuestions: number
+  /** Incomplete text stays separate from the durable question prefix. */
+  activeQuestion?: {
+    key: string
+    sectionTitle: string
+    sectionSummary?: string
+    title?: string
+    question: string
+    answer: string
+    followUps: FollowUp[]
+  }
+  security?: SecurityProtectionSummary
+  contextTruncation?: ContextTruncationMetadata
+}
+
 export interface GenerateProgress {
   step: string
   detail?: string
@@ -262,6 +283,8 @@ export interface GenerateProgress {
   runId: string
   /** 事件产生的时刻（epoch 毫秒）。由主进程发送时写入，渲染层只读它，避免历史日志时间漂移 */
   ts: number
+  /** A bounded snapshot of decoded report fields, excluding raw JSON and model reasoning. */
+  preview?: GenerationPreview
 }
 
 export interface GenerateOptions {
