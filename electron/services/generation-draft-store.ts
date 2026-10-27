@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import type { Granularity, InterviewResult, RoleFocus } from '@shared/types'
 import { assertInterviewResultContract } from '@shared/result-contract'
-import { GENERATION_DRAFT_MESSAGES as messages, type GenerationCheckpoint, type GenerationDraftRecord } from '@shared/generation-checkpoint'
+import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES as messages, type CheckpointBatch, type GenerationCheckpoint, type GenerationDraftRecord } from '@shared/generation-checkpoint'
 import { atomicReplaceBytes, readBounded, writeBackup } from './atomic-json'
 
 const MAX_BYTES = 16 * 1024 * 1024
@@ -33,6 +33,68 @@ function integer(value: unknown, max: number): asserts value is number {
   if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > max) throw new Error(messages.corrupt)
 }
 
+function normalizeQuestion(question: string): string {
+  return question.replace(/\[\[|\]\]/g, '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function questionCount(checkpoint: GenerationCheckpoint): number {
+  const seen = new Set<string>()
+  const batches = [...checkpoint.entries.map((entry) => entry.batch), ...(checkpoint.pending ? [checkpoint.pending.batch] : [])]
+  for (const batch of batches) for (const section of batch.sections) for (const question of section.questions) {
+    seen.add(normalizeQuestion(question.question))
+  }
+  return seen.size
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+type LocatedQuestion = { sectionId: string; sectionTitle: string; sectionSummary?: string; question: Record<string, unknown> }
+
+function flattenQuestions(batch: CheckpointBatch): LocatedQuestion[] {
+  return batch.sections.flatMap((section) => section.questions.map((question) => ({
+    sectionId: section.id,
+    sectionTitle: section.title,
+    sectionSummary: section.summary,
+    question: question as unknown as Record<string, unknown>
+  })))
+}
+
+function sameOrSupplemented(oldValue: unknown, nextValue: unknown): boolean {
+  return oldValue === undefined || oldValue === '' || sameJson(oldValue, nextValue)
+}
+
+/** Existing accepted questions remain an ordered, section-owned prefix; optional metadata may be added. */
+function preservesQuestionPrefix(previous: CheckpointBatch, next: CheckpointBatch): boolean {
+  if (!sameOrSupplemented(previous.projectSummary, next.projectSummary)) return false
+  const oldQuestions = flattenQuestions(previous)
+  const newQuestions = flattenQuestions(next)
+  if (newQuestions.length < oldQuestions.length) return false
+  const nextSections = new Map(next.sections.map((section) => [section.id, section]))
+  for (let index = 0; index < oldQuestions.length; index += 1) {
+    const oldItem = oldQuestions[index]
+    const newItem = newQuestions[index]
+    if (oldItem.sectionId !== newItem.sectionId) return false
+    if (!sameOrSupplemented(oldItem.sectionTitle, newItem.sectionTitle) || !sameOrSupplemented(oldItem.sectionSummary, newItem.sectionSummary)) return false
+    const section = nextSections.get(oldItem.sectionId)
+    if (!section || !sameOrSupplemented(oldItem.sectionTitle, section.title) || !sameOrSupplemented(oldItem.sectionSummary, section.summary)) return false
+    if (!sameJson(oldItem.question, newItem.question)) return false
+  }
+  const oldGlossary = previous.glossary
+  for (const [term, definition] of Object.entries(oldGlossary)) {
+    if (!Object.hasOwn(next.glossary, term) || next.glossary[term] !== definition) return false
+  }
+  return true
+}
+
+function validatesPromotion(previous: GenerationCheckpoint, next: GenerationCheckpoint): boolean {
+  if (!previous.pending) return true
+  if (next.pending?.key === previous.pending.key) return preservesQuestionPrefix(previous.pending.batch, next.pending.batch)
+  const promoted = next.entries.slice(previous.entries.length).find((entry) => entry.key === previous.pending!.key)
+  return Boolean(promoted && preservesQuestionPrefix(previous.pending.batch, promoted.batch))
+}
+
 function validate(value: unknown, projectPath: string): asserts value is GenerationDraftRecord {
   if (!record(value) || value.version !== 1 || !record(value.summary)) throw new Error(messages.corrupt)
   keys(value, ['version', 'summary', 'checkpoint', 'result'])
@@ -54,8 +116,9 @@ function validate(value: unknown, projectPath: string): asserts value is Generat
   }
   if (value.checkpoint !== null) {
     const state = value.checkpoint
-    if (!record(state) || state.version !== 1 || typeof state.fingerprint !== 'string' || !HASH.test(state.fingerprint) || !Array.isArray(state.entries) || state.entries.length > 256) throw new Error(messages.corrupt)
-    keys(state, ['version', 'fingerprint', 'totalBatches', 'entries'])
+    if (!record(state) || (state.version !== 1 && state.version !== GENERATION_CHECKPOINT_VERSION) || typeof state.fingerprint !== 'string' || !HASH.test(state.fingerprint) || !Array.isArray(state.entries) || state.entries.length > 256) throw new Error(messages.corrupt)
+    keys(state, ['version', 'fingerprint', 'totalBatches', 'entries', 'pending'])
+    if (state.pending !== undefined && state.version !== GENERATION_CHECKPOINT_VERSION) throw new Error(messages.corrupt)
     integer(state.totalBatches, 256)
     if (state.totalBatches !== summary.totalBatches) throw new Error(messages.corrupt)
     const seen = new Set<string>()
@@ -65,7 +128,18 @@ function validate(value: unknown, projectPath: string): asserts value is Generat
       seen.add(entry.key)
       validateResult({ version: 1, createdAt: summary.createdAt, projectName: summary.projectName, projectPath, granularity: summary.granularity, roleFocus: summary.roleFocus, profileId: summary.profileId, modelUsed: summary.modelLabel, ...entry.batch })
     }
+    if (state.pending !== undefined) {
+      const pending = state.pending
+      if (!record(pending) || typeof pending.key !== 'string' || !HASH.test(pending.key) || seen.has(pending.key) || !record(pending.batch)) throw new Error(messages.corrupt)
+      keys(pending, ['key', 'batch']); keys(pending.batch, ['projectSummary', 'sections', 'glossary'])
+      validateResult({ version: 1, createdAt: summary.createdAt, projectName: summary.projectName, projectPath, granularity: summary.granularity, roleFocus: summary.roleFocus, profileId: summary.profileId, modelUsed: summary.modelLabel, ...pending.batch })
+    }
     if (summary.completedBatches !== Math.min(state.entries.length, state.totalBatches)) throw new Error(messages.corrupt)
+    const checkpoint = state as unknown as GenerationCheckpoint
+    const expectedQuestions = questionCount(checkpoint)
+    // Version 1 records predate pending batches and retain their original summary semantics.
+    if (state.version === GENERATION_CHECKPOINT_VERSION && summary.completedQuestions !== expectedQuestions) throw new Error(messages.corrupt)
+    if (state.version === 1 && summary.completedQuestions !== new Set(checkpoint.entries.flatMap((entry) => entry.batch.sections.flatMap((section) => section.questions.map((question) => normalizeQuestion(question.question))))).size) throw new Error(messages.corrupt)
   } else if (summary.totalBatches !== 0 || summary.completedBatches !== 0 || summary.completedQuestions !== 0) throw new Error(messages.corrupt)
   if (value.result !== undefined) validateResult(value.result)
   if (summary.ready !== (value.result !== undefined)) throw new Error(messages.corrupt)
@@ -155,8 +229,20 @@ export class GenerationDraftStore {
   save(projectPath: string, id: string, checkpoint: GenerationCheckpoint): void {
     const value = this.owned(projectPath, id)
     if (value.result) throw new Error(messages.changed)
-    if (value.checkpoint && (value.checkpoint.fingerprint !== checkpoint.fingerprint || checkpoint.entries.length < value.checkpoint.entries.length || value.checkpoint.entries.some((entry, index) => JSON.stringify(entry) !== JSON.stringify(checkpoint.entries[index])))) throw new Error(messages.changed)
-    const completedQuestions = new Set(checkpoint.entries.flatMap((entry) => entry.batch.sections.flatMap((section) => section.questions.map((question) => question.question.replace(/\[\[|\]\]/g, '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim())))).size
+    if (checkpoint.version !== GENERATION_CHECKPOINT_VERSION) throw new Error(messages.changed)
+    const previous = value.checkpoint
+    if (previous) {
+      if (previous.fingerprint !== checkpoint.fingerprint || previous.totalBatches !== checkpoint.totalBatches || checkpoint.entries.length < previous.entries.length || previous.version > checkpoint.version || previous.entries.some((entry, index) => !sameJson(entry, checkpoint.entries[index]))) throw new Error(messages.changed)
+      if (!validatesPromotion(previous, checkpoint)) throw new Error(messages.changed)
+      if (previous.pending) {
+        if (checkpoint.pending?.key === previous.pending.key) {
+          if (!preservesQuestionPrefix(previous.pending.batch, checkpoint.pending.batch)) throw new Error(messages.changed)
+        } else if (!previous.entries.some((entry) => entry.key === previous.pending!.key) && !checkpoint.entries.slice(previous.entries.length).some((entry) => entry.key === previous.pending!.key)) {
+          throw new Error(messages.changed)
+        }
+      }
+    }
+    const completedQuestions = questionCount(checkpoint)
     value.checkpoint = checkpoint
     value.summary = { ...value.summary, updatedAt: new Date().toISOString(), completedBatches: Math.min(checkpoint.entries.length, checkpoint.totalBatches), completedQuestions, totalBatches: checkpoint.totalBatches }
     this.write(projectPath, value)

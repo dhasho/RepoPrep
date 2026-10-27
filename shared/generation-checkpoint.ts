@@ -1,7 +1,7 @@
 import type { GenerateOptions, InterviewResult, Section } from './types'
 
 /** Bump when generation prompts, quota planning or replay semantics change. */
-export const GENERATION_CHECKPOINT_VERSION = 1 as const
+export const GENERATION_CHECKPOINT_VERSION = 2 as const
 
 export interface CheckpointBatch {
   projectSummary: string
@@ -10,10 +10,12 @@ export interface CheckpointBatch {
 }
 
 export interface GenerationCheckpoint {
-  version: 1
+  version: 1 | 2
   fingerprint: string
   totalBatches: number
   entries: Array<{ key: string; batch: CheckpointBatch }>
+  /** Validated, durable question prefix for the currently active request. */
+  pending?: { key: string; batch: CheckpointBatch }
 }
 
 export interface GenerationDraftSummary extends GenerateOptions {
