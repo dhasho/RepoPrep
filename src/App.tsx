@@ -195,7 +195,7 @@ export default function App() {
     runId: generationFailure.runId,
     overview, options: configureInitialOptions, existingResult,
     progress: null, logs: [], preview: failedGenerationTask?.preview ?? null,
-    startedAt: failedGenerationTask?.startedAt ?? 0,
+    startedAt: failedGenerationTask?.startedAt,
     error: generationFailure.error, cancelling: false
   } : null
 

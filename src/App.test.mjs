@@ -1306,7 +1306,8 @@ test('App foreground generation resolves to its result', async () => {
     assert.match(request.request.runId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     h.mock.emitProgress({ runId: request.request.runId, step: 'Mock progress', percent: 42, ts: Date.now() })
     await act(h, () => {})
-    assert.ok(h.host.textContent.includes('Mock progress'))
+    assert.ok(h.host.textContent.includes('正在思考'))
+    assert.ok(!h.host.textContent.includes('Mock progress'), 'internal stage logs do not replace the report preview')
     await act(h, () => request.resolve({ runId: request.request.runId, result: makeResult(request.request.projectPath) }))
     assert.ok(h.host.textContent.includes('ProjectA · 面试题'), '当前任务完成后应显示该项目结果')
   } finally { await unmount(h) }
@@ -1359,7 +1360,7 @@ test('background task recovery shows the frozen project A snapshot while project
     assert.ok(h.host.textContent.includes('ProjectB'))
     await act(h, () => button(h.host, '后台生成').click())
     await act(h, () => button(h.host, '恢复任务').click())
-    assert.ok(h.host.textContent.includes('正在思考'))
+    assert.ok(!h.host.textContent.includes('正在思考'), 'received report content replaces the initial waiting indicator')
     assert.ok(h.host.textContent.includes('BACKGROUND_A_PREVIEW'), 'the detached task restores its latest report snapshot')
     assert.ok(h.host.textContent.includes('ProjectA'))
     assert.ok([...h.host.querySelectorAll('button[data-project-path]')].some((item) => item.getAttribute('data-project-path') === 'C:\\ProjectB'), 'restoring A preserves B in the project directory')
@@ -1527,11 +1528,13 @@ test('old run progress is ignored while a newer project run is foreground', asyn
       runId: requestA.request.runId, step: 'OLD A PROGRESS', percent: 90, ts: Date.now(),
       preview: { projectSummary: 'OLD_A_PREVIEW', sections: [], completedQuestions: 1, targetQuestions: 2 }
     })
-    h.mock.emitProgress({ runId: requestB.request.runId, step: 'B PROGRESS', percent: 33, ts: Date.now() })
+    h.mock.emitProgress({ runId: requestB.request.runId, step: 'B PROGRESS', percent: 33, ts: Date.now(),
+      preview: { projectSummary: 'CURRENT_B_PREVIEW', sections: [], completedQuestions: 0, targetQuestions: 20 } })
     await act(h, () => {})
     assert.ok(!h.host.textContent.includes('OLD A PROGRESS'))
     assert.ok(!h.host.textContent.includes('OLD_A_PREVIEW'))
-    assert.ok(h.host.textContent.includes('B PROGRESS'))
+    assert.ok(h.host.textContent.includes('CURRENT_B_PREVIEW'))
+    assert.ok(!h.host.textContent.includes('B PROGRESS'))
     await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: makeResult(requestB.request.projectPath) }))
     assert.ok(h.host.textContent.includes('ProjectB · 面试题'))
   } finally { await unmount(h) }
@@ -1560,7 +1563,8 @@ test('generation keeps the project directory visible, renders partial preview, t
     await act(h, () => {})
     assert.ok(h.host.textContent.includes('PARTIAL_REPORT_SUMMARY'))
     assert.ok(h.host.textContent.includes('PARTIAL_QUESTION_TEXT'))
-    assert.ok(h.host.textContent.includes('正在思考'))
+    assert.ok(h.host.textContent.includes('正在生成'))
+    assert.ok(!h.host.textContent.includes('正在思考'))
     assert.equal(buttonByLabel(h.host, '项目分析目录')?.getAttribute('aria-pressed'), 'true')
     assert.equal(buttonByLabel(h.host, '最近分析的问题目录')?.disabled, true, 'the result question directory is unavailable during generation')
     assert.ok(h.host.textContent.includes('ProjectA'), 'the project history remains visible while rendering the partial report')
@@ -2127,7 +2131,8 @@ test('returning from A history recovery to task B restores B options after cance
       assert.ok(h.host.textContent.includes('仍在生成'), 'background B should keep recovered A configuration busy')
       await act(h, () => button(h.host, '查看任务').click())
       assert.ok(h.host.textContent.includes('正在思考'), 'task panel should restore B')
-      assert.ok(h.host.textContent.includes('细粒度 · 后端方向'), 'resumed B should show its frozen task options')
+      const generationHeader = [...h.host.querySelectorAll('header')].find(header => header.textContent.includes('ProjectB · 面试题'))
+      assert.ok(generationHeader?.textContent.includes('细粒度') && generationHeader?.textContent.includes('后端方向'), 'resumed B should show its frozen task options')
 
       if (settlement === 'cancel') {
         await act(h, () => button(h.host, '取消生成').click())

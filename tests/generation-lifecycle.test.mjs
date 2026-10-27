@@ -7,6 +7,7 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import { createHash, randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc.ts'
+import { isGenerationPreview } from '../shared/generation-preview.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const deferred = () => {
@@ -65,6 +66,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   const modules = {
     electron: { app, BrowserWindow: FakeWindow, dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showErrorBox() {} }, ipcMain: { handle: (channel, listener) => handlers.set(channel, listener) }, session: { defaultSession: {} } },
     '@shared/ipc': { IPC },
+    '@shared/generation-preview': { isGenerationPreview },
     '@shared/generation-checkpoint': { GENERATION_DRAFT_MESSAGES: {
       exists: '存在可恢复的生成任务，请继续或先丢弃该任务。', missing: '未找到此生成草稿，请重新打开项目。',
       changed: '项目上下文或模型配置已变化，无法继续原任务。请丢弃草稿后重新生成。',

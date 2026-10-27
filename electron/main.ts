@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url'
 import { createHash, randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
 import { GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
-import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, LlmProfileDraft, SettingsSaveRequest, GenerationDraftSummary } from '@shared/types'
+import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, LlmProfileDraft, SettingsSaveRequest, GenerationDraftSummary, GenerationPreview } from '@shared/types'
+import { isGenerationPreview } from '@shared/generation-preview'
 import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { ProjectScanCache } from './services/scan-cache'
 import { GenerationTaskRegistry } from './services/generation-tasks'
@@ -239,9 +240,10 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
   }
   // 进度绑定到发起请求的 webContents，并在发送时检查任务和取消状态。
   // ts 保留主进程产生时刻，runId 供 renderer 做任务隔离。
-  const sendProgress = (step: string, detail: string | undefined, percent: number): void => {
+  const sendProgress = (step: string, detail: string | undefined, percent: number, preview?: GenerationPreview): void => {
     if (!isCurrentTask()) return
-    sender.send(IPC.generateProgress, { step, detail, percent, ts: Date.now(), runId })
+    sender.send(IPC.generateProgress, { step, detail, percent, ts: Date.now(), runId,
+      ...(preview && isGenerationPreview(preview) ? { preview } : {}) })
   }
 
   try {

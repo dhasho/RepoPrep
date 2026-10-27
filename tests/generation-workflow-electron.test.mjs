@@ -108,6 +108,19 @@ async function startSyntheticServer() {
       response.end(JSON.stringify({ requests: state.requests, completed: state.completed, aborted: state.aborted }))
       return
     }
+    if (request.method === 'POST' && url.pathname.startsWith('/__workflow/advance/')) {
+      const [, , , rawIndex, stage] = url.pathname.split('/')
+      const held = state.held.get(Number(rawIndex))
+      const field = stage === 'initial' ? 'initial' : stage === 'prefix' ? 'prefixRemainder' : null
+      if (!held?.stream || !field || typeof held[field] !== 'string') {
+        response.writeHead(409); response.end('stage-not-held'); return
+      }
+      sseContent(held.response, held[field])
+      delete held[field]
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ advanced: stage }))
+      return
+    }
     if (request.method === 'POST' && url.pathname.startsWith('/__workflow/release/')) {
       const index = Number(url.pathname.split('/').at(-1))
       const held = state.held.get(index)
@@ -171,9 +184,18 @@ async function startSyntheticServer() {
       const result = syntheticResult()
       if (index === 1 || index === 3) {
         const prefix = streamPrefix(result, result.sections[0].questions.slice(0, 3))
-        for (const fragment of prefix) sseContent(response, fragment)
         const remainingQuestions = result.sections[0].questions.slice(3).map((question) => `,${JSON.stringify(question)}`).join('')
-        state.held.set(index, { response, stream: true, suffix: `${remainingQuestions}${streamSuffix(result)}` })
+        if (index === 1) {
+          const firstQuestion = prefix[1]
+          const splitAt = firstQuestion.indexOf('"answer":"') + '"answer":"'.length + 28
+          state.held.set(index, { response, stream: true,
+            initial: prefix[0] + firstQuestion.slice(0, splitAt),
+            prefixRemainder: firstQuestion.slice(splitAt) + prefix.slice(2).join(''),
+            suffix: `${remainingQuestions}${streamSuffix(result)}` })
+        } else {
+          for (const fragment of prefix) sseContent(response, fragment)
+          state.held.set(index, { response, stream: true, suffix: `${remainingQuestions}${streamSuffix(result)}` })
+        }
         return
       }
       streamResult(response, result, index === 2 ? result.sections[0].questions.slice(3) : result.sections[0].questions)

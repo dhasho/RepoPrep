@@ -20,6 +20,8 @@ import * as resultContract from '../../shared/result-contract.ts'
 import * as contentRead from '../../shared/content-read.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import * as storageContract from '../../shared/storage-contract.ts'
+// @ts-ignore Node direct TypeScript tests require runtime .ts suffixes.
+import * as generationPreview from '../../shared/generation-preview.ts'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -147,6 +149,7 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
   const modules = new Map<string, unknown>([
     ['electron', electron],
     ['@shared/ipc', { IPC }],
+    ['@shared/generation-preview', generationPreview],
     ['@shared/types', {}],
     ['@shared/generation-checkpoint', { GENERATION_DRAFT_MESSAGES: { exists: 'exists', missing: 'missing', changed: 'changed', corrupt: 'corrupt', unreadable: 'unreadable', save: 'save', discard: 'discard' } }],
     ['./services/generation-drafts', { readGenerationDraft: () => null, beginGenerationDraft: () => null, saveGenerationDraft() {}, completeGenerationDraft() {}, removeGenerationDraft() {} }],
