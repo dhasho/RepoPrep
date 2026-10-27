@@ -81,6 +81,7 @@ function requestBody(profile: LlmProfile, messages: ChatMessage[], stream: boole
     messages,
     temperature: profile.temperature ?? 0.4,
     stream,
+    ...(stream && opts.includeUsage ? { stream_options: { include_usage: true } } : {}),
     ...((opts.maxOutputTokens ?? profile.maxOutputTokens) ? { max_tokens: opts.maxOutputTokens ?? profile.maxOutputTokens } : {})
   }
 }
@@ -186,6 +187,7 @@ export interface CallOptions {
   signal?: AbortSignal
   timeoutMs?: number
   maxOutputTokens?: number
+  includeUsage?: boolean
   onUsage?: (usage: LlmUsage) => void
   onRequest?: () => void
 }
@@ -508,6 +510,7 @@ async function request(
 function extractOpenAiContent(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.choices)) throw new LlmRequestError('response')
   const first = value.choices[0]
+  if (isRecord(first) && first.finish_reason !== undefined && first.finish_reason !== null && first.finish_reason !== 'stop') throw new LlmRequestError('response')
   const message = isRecord(first) ? first.message : undefined
   const content = isRecord(message) ? message.content : undefined
   if (typeof content !== 'string') throw new LlmRequestError('response')
