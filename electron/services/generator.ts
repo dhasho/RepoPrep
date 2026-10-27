@@ -592,8 +592,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         detail,
         generationPercent()
       ),
-    // 补偿轮使用同一进度条末端，文案由调用方给
-    onCompensate: (detail) => { counters.compensationPending++; reportProgress('补充请求（题量不足）', detail, 94) },
+    onCompensate: (detail) => { counters.compensationPending++; reportProgress('补充请求（题量不足）', detail, generationPercent()) },
     requestBatch: async (index, quota, extraInstruction) => {
       failedStage = 'model'
       if (signal.aborted) throw new Error('生成已取消。')

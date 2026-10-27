@@ -17,7 +17,7 @@
 | --- | --- |
 | `npm run typecheck` | 对 Node/Electron 与 Web 两套 TypeScript 配置执行 `tsc --noEmit`。 |
 | `npm run test:ipc` | IPC schema、调用方权限、handler 防护与安全结果测试，OpenAI/Claude 格式、流式响应和本地合成模型生成链路。 |
-| `npm run test:recovery` | 原子草稿存储、批次重放，以及跨进程中断与恢复；使用本地合成模型，不调用真实服务。 |
+| `npm run test:recovery` | 增量 JSON 解析、逐题原子保存、取消与断流恢复，以及真实 SSE 跨进程续传；使用本地合成模型，不调用真实服务。 |
 | `npm run test:lib` | 设置保存、服务商预设、扫描滑条、模型探测及导航等纯逻辑测试。 |
 | `npm run test:renderer` | 组件实际挂载与交互：设置、滑条、接口规范切换、项目侧栏和结果页。 |
 | `npm run test:scan-cache` | 项目快照和扫描缓存测试。 |
