@@ -81,6 +81,9 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: 'RepoPrep',
+    icon: app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.png')
+      : path.join(__dirname, '../../resources/icon.png'),
     ...(process.platform === 'win32' ? {
       titleBarStyle: 'hidden' as const,
       titleBarOverlay: { color: '#ffffff', symbolColor: '#475569', height: 48 }
