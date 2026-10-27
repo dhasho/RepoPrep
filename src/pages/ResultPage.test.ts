@@ -77,7 +77,7 @@ test('通用摘要压缩礼貌语、英文问句框架和文件名，但不硬�
 test('导航摘要长度有界且相同主题的问题会带上区分信息', () => {
   const longIdentifier = 'How does ExtremelyLongProjectConfigurationManager handle invalidation and cache refresh strategies?'
   const longSummary = summarizeQuestion(longIdentifier)
-  assert.ok(Array.from(longSummary).length <= 32)
+  assert.ok(Array.from(longSummary).length <= 48)
   assert.match(longSummary, /invalidation|cache refresh/u, 'the caption describes the question instead of truncating its identifier')
   assert.doesNotMatch(longSummary, /ExtremelyLong|ConfigurationManager/u)
 

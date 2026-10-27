@@ -13,8 +13,8 @@ const makeResult = (projectPath, identity) => ({
   modelUsed: `model-${identity}`,
   projectSummary: `SUMMARY_${identity}`,
   sections: [{ id: `s-${identity}`, title: `${identity} section`, questions: [{
-    id: `q-${identity}`, question: `QUESTION_${identity} [[TERM_${identity}]]`,
-    answer: `ANSWER_${identity} TERM_${identity} context. ${'报告段落随分栏宽度自动换行，并保留原有文字和缩进。'.repeat(16)}`, followUps: []
+    id: `q-${identity}`, title: '类型安全通信契约与跨进程权限校验边界', question: `QUESTION_${identity} [[TERM_${identity}]]`,
+    answer: `ANSWER_${identity} TERM_${identity} context. ${'报告段落随分栏宽度自动换行并保留原有文字和缩进'.repeat(2)}。\n\n${'报告段落随分栏宽度自动换行，并保留原有文字和缩进。'.repeat(16)}`, followUps: []
   }] }],
   glossary: { [`TERM_${identity}`]: `GLOSSARY_${identity}` }
 })
@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('api', {
   loadAnalysis: async (projectPath, analysisId) => projectPath === pathA && analysisId === 'analysis-A' ? resultA : null,
   removeRecent: async () => {},
   deleteResult: async () => {},
+  getGenerationDraft: async () => null,
+  discardGenerationDraft: async () => {},
   getSettings: async () => ({ profiles: [
     { id: 'profile-A', name: 'Profile A', baseUrl: 'https://a.invalid/v1', apiKey: '', model: 'model-A' },
     { id: 'profile-B', name: 'Profile B', baseUrl: 'https://b.invalid/v1', apiKey: '', model: 'model-B' }

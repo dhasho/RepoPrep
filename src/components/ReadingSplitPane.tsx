@@ -15,6 +15,7 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
   const containerRef = useRef<HTMLDivElement>(null)
   const separatorRef = useRef<HTMLDivElement>(null)
   const preferredWidth = useRef(DEFAULT_SECONDARY_WIDTH)
+  const userAdjustedWidth = useRef(false)
   const [, setRevision] = useState(0)
   const drag = useRef<{ pointerId: number; startX: number; startWidth: number; bodyCursor: string; bodyUserSelect: string } | null>(null)
   const hasSecondary = secondary !== undefined && secondary !== null
@@ -34,8 +35,9 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
 
   const containerWidth = containerRef.current?.clientWidth ?? 0
   const available = Math.max(0, containerWidth - HANDLE_WIDTH)
+  const narrowMinimum = Math.min(160, available / 2)
   const constrainedWidth = available < 600
-    ? available / 2
+    ? userAdjustedWidth.current ? Math.max(narrowMinimum, Math.min(preferredWidth.current, available - narrowMinimum)) : available / 2
     : Math.min(Math.max(preferredWidth.current, 280), available - 320)
 
   const restoreDrag = useCallback((releaseCapture: boolean) => {
@@ -76,9 +78,10 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
       if (!active || event.pointerId !== active.pointerId) return
       event.preventDefault()
       const width = active.startWidth + active.startX - event.clientX
-      const min = available < 600 ? 0 : 280
-      const max = available < 600 ? available : available - 320
+      const min = available < 600 ? narrowMinimum : 280
+      const max = available < 600 ? available - narrowMinimum : available - 320
       preferredWidth.current = Math.max(min, Math.min(width, max))
+      userAdjustedWidth.current = true
       measure()
     }
     const end = (event: PointerEvent) => {
@@ -92,23 +95,24 @@ export default function ReadingSplitPane({ primary, secondary, collapsed, onExpa
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
     }
-  }, [available, measure, restoreDrag])
+  }, [available, measure, narrowMinimum, restoreDrag])
 
   const adjustByKeyboard = (key: string) => {
-    const min = available < 600 ? constrainedWidth : 280
-    const max = available < 600 ? constrainedWidth : Math.max(280, available - 320)
+    const min = available < 600 ? narrowMinimum : 280
+    const max = available < 600 ? Math.max(narrowMinimum, available - narrowMinimum) : Math.max(280, available - 320)
     if (key === 'ArrowLeft') preferredWidth.current = Math.min(constrainedWidth + 24, max)
     else if (key === 'ArrowRight') preferredWidth.current = Math.max(constrainedWidth - 24, min)
     else if (key === 'Home') preferredWidth.current = min
     else if (key === 'End') preferredWidth.current = max
     else return
+    userAdjustedWidth.current = true
     setRevision((value) => value + 1)
   }
 
   return <div ref={containerRef} data-reading-split className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
     <div data-reading-primary className="reading-pane min-h-0 min-w-0 flex-1 overflow-hidden">{primary}</div>
     {hasSecondary && <>
-      {!collapsed && <div ref={separatorRef} role="separator" aria-orientation="vertical" aria-label="调整报告与 AI 解释区域宽度" aria-valuemin={available < 600 ? constrainedWidth : 280} aria-valuemax={available < 600 ? constrainedWidth : Math.max(280, available - 320)} aria-valuenow={Math.round(constrainedWidth)} tabIndex={0} onLostPointerCapture={() => restoreDrag(false)} onPointerDown={beginDrag} onKeyDown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) event.preventDefault(); adjustByKeyboard(event.key) }} className="z-10 w-[6px] shrink-0 cursor-col-resize touch-none border-l border-slate-200 bg-slate-50 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500" />}
+      {!collapsed && <div ref={separatorRef} role="separator" aria-orientation="vertical" aria-label="调整报告与 AI 解释区域宽度" aria-valuemin={available < 600 ? narrowMinimum : 280} aria-valuemax={available < 600 ? Math.max(narrowMinimum, available - narrowMinimum) : Math.max(280, available - 320)} aria-valuenow={Math.round(constrainedWidth)} tabIndex={0} onLostPointerCapture={() => restoreDrag(false)} onPointerDown={beginDrag} onKeyDown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) event.preventDefault(); adjustByKeyboard(event.key) }} className="z-10 w-[6px] shrink-0 cursor-col-resize touch-none border-l border-slate-200 bg-slate-50 hover:bg-indigo-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500" />}
       <aside data-reading-secondary className={`reading-pane flex h-full shrink-0 border-l border-slate-200 bg-white ${collapsed ? 'w-10 flex-col items-center py-2' : 'min-h-0'}`} style={{ width: collapsed ? '40px' : `${constrainedWidth}px` }}>
         {collapsed && <button type="button" onClick={onExpand} aria-label="展开 AI 解释" title="展开 AI 解释" className="rounded-md p-2 text-indigo-600 hover:bg-indigo-50"><AppIcon name="bot" size={18} /></button>}
         <div hidden={collapsed} className={collapsed ? '' : 'h-full min-h-0 w-full'}>{secondary}</div>

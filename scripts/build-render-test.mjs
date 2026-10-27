@@ -43,6 +43,7 @@ const entries = [
   { name: 'selection-actions', entry: 'src/components/SelectionActions.tsx' },
   { name: 'selection-explain-panel', entry: 'src/components/SelectionExplainPanel.tsx' },
   { name: 'reading-split-pane', entry: 'src/components/ReadingSplitPane.tsx' },
+  { name: 'resizable-question-outline', entry: 'src/components/ResizableQuestionOutline.tsx' },
   { name: 'settings-page', entry: 'src/pages/SettingsPage.tsx' },
   { name: 'project-sidebar', entry: 'src/components/ProjectSidebar.tsx' },
   { name: 'select-page', entry: 'src/pages/SelectPage.tsx' },

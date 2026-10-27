@@ -35,12 +35,12 @@ test('fallback skips prompt framing and long implementation identifiers for ques
   const labels = summarizeQuestions(questions)
   assert.equal(labels.length, questions.length)
   assert.ok(labels.every(label => label.length > 0 && label !== '问题摘要'))
-  assert.ok(labels.every(label => width(label) <= 32), labels.join('\n'))
-  assert.ok(labels.every(label => !/(?:并强制|它不|在哪里|并|与|和|有|不)$/u.test(label)), labels.join('\n'))
+  assert.ok(labels.every(label => width(label) <= 48), labels.join('\n'))
+  assert.deepEqual(labels.filter(label => /(?:并强制|它不|在哪里|并|与|和|有|不)$/u.test(label)), [], labels.join('\n'))
   assert.ok(labels[0].includes('幂等'), labels[0])
   assert.ok(labels[1].includes('余额') || labels[1].includes('扣款'), labels[1])
   assert.ok(labels[3].includes('模型') || labels[3].includes('防御'), labels[3])
-  assert.ok(labels[4].includes('配额') || labels[4].includes('媒介'), labels[4])
+  assert.ok(labels[4].includes('路由选择') || labels[4].includes('配额') || labels[4].includes('媒介'), labels[4])
   assert.ok(labels[15].includes('质量'), labels[15])
   assert.ok(labels[16].includes('崩溃') || labels[16].includes('一致性'), labels[16])
 })
@@ -95,6 +95,7 @@ test('a provided generated title wins over the same generic legacy fallback for 
     { question: questions[0], title: 'Shared title' },
     { question: questions[1], title: 'Shared title' }
   ]), ['Shared title', 'Shared title'])
+  assert.equal(summarizeQuestion({ question: questions[0], title: 'addRecentProject 去重策略' }), 'addRecentProject 去重策略')
   assert.notEqual(summarizeQuestion({ question: questions[0], title: '  ' }), '问题摘要')
 })
 
@@ -105,9 +106,85 @@ test('different concerns remain distinguishable and summaries obey narrow widths
   ], 24)
   assert.notEqual(labels[0], labels[1])
   assert.ok(labels.every(label => width(label) <= 24), labels.join('\n'))
+  const tight = summarizeQuestions(['系统扫描缓存失效原因如何快速查找', '系统扫描缓存失效时机如何快速定位'], 14)
+  assert.notEqual(tight[0], tight[1])
+  assert.ok(tight.every(label => width(label) <= 14 && !/·$/u.test(label)))
 })
 
 test('meaningless input may use a neutral caption', () => {
   assert.equal(summarizeQuestion('😀?!'), '问题摘要')
   assert.equal(summarizeQuestion('w'.repeat(200)), '问题摘要')
+})
+
+test('two-line captions preserve complete titles and reject a question disguised as a title', () => {
+  const title = '类型安全通信契约与跨进程权限校验边界'
+  assert.equal(summarizeQuestion({ title, question: '原始完整问题保持不变？' }), title)
+  const question = '读取任务如何保证租约一致性？'
+  assert.equal(summarizeQuestion({ title: question.slice(0, -1), question }), summarizeQuestion(question))
+  assert.equal(summarizeQuestion({ title: 'x'.repeat(120), question }), summarizeQuestion(question))
+})
+
+test('whole source anchors and path examples do not leave filename or sentence fragments', () => {
+  assert.match(summarizeQuestion('请从 electron/main.ts、preload.ts 与 src/App.tsx 说明 ProductAlpha 的进程分层与模块职责。'), /进程分层与模块职责/u)
+  assert.equal(summarizeQuestion('electron.vite.config.ts 中如何配置多个构建目标？'), '配置多个构建目标')
+  for (const topic of ['租约一致性', '权限边界', '完整数据流']) {
+    const caption = summarizeQuestion(`每次读取任务从 Reader.load 到 Response.publish 的${topic}是什么？`)
+    assert.ok(caption.includes(topic), caption)
+    assert.doesNotMatch(caption, /Reader|Response|从|到/u)
+  }
+  assert.match(summarizeQuestion('结束后 prepareBatch 和 trimItems 分别做什么？trimItems 的裁剪策略有什么取舍？'), /裁剪策略/u)
+})
+
+test('RepoPrep legacy screenshot captions retain each question topic, including its distinguishing end', () => {
+  const questions = [
+    '请介绍 RepoPrep 的整体架构，主进程、preload、渲染进程各自负责什么？为什么这样划分？',
+    'preload 暴露的 window.api 是如何设计的？IPC 通道契约如何保证两端类型一致？新增通道要改哪些文件？',
+    '渲染进程的页面状态流转如何管理？navigationEpoch 和 foregroundRunId 解决了什么竞态？',
+    '后台生成任务在渲染进程如何建模？GenerationSession 如何隔离不同 runId 的进度与结果？',
+    'scanner 扫描本地项目时如何处理 .gitignore、构建产物和嵌套 worktree？扫描安全上限如何生效？',
+    'ProjectScanCache 的缓存键与失效策略是什么？为什么 removeRecent 时要同时 invalidate 缓存并撤销授权？',
+    'project-content-reader 读取内容时如何防止路径穿越和超大文件？读取失败如何汇总给用户和模型？',
+    'sensitive 模块的敏感信息脱敏流程是怎样的？脱敏统计如何进入结果？',
+    '一次生成请求从 IPC generateRun 到 saveResult 的完整数据流是怎样的？',
+    'context-builder 如何按粒度组装上下文？CONTEXT_CHAR_BUDGETS 为什么 coarse/medium/fine 不同？截断如何标记？',
+    'question-budget 如何保证题量落在目标区间？它与 GRANULARITY_QUESTION_BUDGET 是什么关系？',
+    'llm.ts 与 sse-parser 如何消费流式响应？如何处理 [DONE]、错误事件、超时和取消？',
+    'generation-tasks 的 begin/finish/cancel 如何防止并发和 stale finish？ExplainAbortRegistry 有什么类似设计？',
+    'IPC 守卫链 registerGuardedIpcHandler 做了哪些校验？为什么 trustedAppEntryUrl 为 null 时拒绝所有 IPC？',
+    '凭据存储如何保证 API Key 不进入渲染进程？为什么修改 baseUrl 前要先替换 Key？',
+    'installWindowSecurity 如何限制导航、新窗口和权限请求？CSP 在构建时如何注入？',
+    'store 的原子写与备份恢复机制是怎样的？storage-recovery 如何生成诊断并恢复？',
+    'result-contract 如何校验不可信的历史结果？为什么要限制树深度、节点数、总字符和总字节？',
+    'verify.mjs 的验证流水线包含哪些阶段？它如何处理前置条件失败和 BLOCKED？',
+    'audit-deps 脚本如何从 lockfile 解析依赖并查询 GitHub 安全公告？为什么要处理分页、无效 range 和响应错误？'
+  ]
+  const expected = [
+    /整体架构/u,
+    /window\.api|IPC.*契约/u,
+    /页面状态流转/u,
+    /后台生成任务|生成任务.*建模/u,
+    /本地项目.*扫描|扫描本地项目/u,
+    /缓存键.*失效策略/u,
+    /内容读取.*路径穿越|路径穿越/u,
+    /敏感信息.*脱敏/u,
+    /完整数据流/u,
+    /组装.*上下文/u,
+    /题量.*目标区间/u,
+    /流式响应/u,
+    /任务.*并发.*(?:防护|控制)|并发.*(?:防止|控制|保护)|防止并发/u,
+    /守卫链.*校验/u,
+    /API Key.*渲染进程/u,
+    /导航.*新窗口.*权限|窗口安全/u,
+    /原子写.*备份恢复/u,
+    /历史结果.*校验|校验.*历史结果/u,
+    /验证流水线/u,
+    /依赖.*安全公告/u
+  ]
+  const labels = summarizeQuestions(questions)
+  assert.equal(labels.length, 20)
+  labels.forEach((label, index) => {
+    assert.ok(label.length > 0 && width(label) <= 48, `${index}: ${label}`)
+    assert.match(label, expected[index], `${index}: ${label}`)
+    assert.ok(!label.startsWith('的') && !/(?:从|到|在|时|如何|有哪些|包含哪些|和|与)$/u.test(label), `${index}: ${label}`)
+  })
 })

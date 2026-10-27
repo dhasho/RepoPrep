@@ -125,8 +125,23 @@ test('reading split pane resizes, collapses without unmounting, and cleans up dr
     Object.defineProperty(container, 'clientWidth', { configurable: true, value: 450 })
     await React.act(async () => dom.window.dispatchEvent(new dom.window.Event('resize')))
     await render()
-    assert.equal(width(), 222, 'narrow container evenly splits available pane width')
-    assert.ok(width() <= 450)
+    assert.equal(width(), 284, 'narrow layout preserves at least 160px for the report when clamping a preferred width')
+    const narrowSeparator = dom.window.document.querySelector('[role="separator"]')!
+    await React.act(async () => pointer(narrowSeparator, 'pointerdown', 300, 13))
+    const narrowMove = new dom.window.Event('pointermove', { bubbles: true, cancelable: true }) as any
+    Object.defineProperty(narrowMove, 'pointerId', { value: 13 })
+    Object.defineProperty(narrowMove, 'clientX', { value: 320 })
+    await React.act(async () => dom.window.dispatchEvent(narrowMove))
+    assert.equal(width(), 264, 'narrow layout remains draggable while preserving space for both panes')
+    assert.equal(narrowSeparator.getAttribute('aria-valuemin'), '160')
+    assert.equal(narrowSeparator.getAttribute('aria-valuemax'), '284')
+    await React.act(async () => narrowSeparator.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Home', bubbles: true })))
+    assert.equal(width(), 160, 'narrow layout keeps the secondary pane usable')
+    await React.act(async () => narrowSeparator.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'End', bubbles: true })))
+    assert.equal(width(), 284, 'narrow layout keeps at least 160px for the report')
+    const narrowUp = new dom.window.Event('pointerup', { bubbles: true }) as any
+    Object.defineProperty(narrowUp, 'pointerId', { value: 13 })
+    await React.act(async () => dom.window.dispatchEvent(narrowUp))
 
     await React.act(async () => pointer(dom.window.document.querySelector('[role="separator"]')!, 'pointerdown', 300, 9))
     assert.equal(dom.window.document.body.style.userSelect, 'none')

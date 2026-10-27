@@ -38,13 +38,14 @@ async function buildFixture(evidenceDir) {
   await writeFile(path.join(artifactDir, 'index.html'), fixtureHtml)
   await copyFile(cssReal, path.join(artifactDir, 'production.css'))
   for (const filename of ['main.cjs', 'preload.cjs']) await copyFile(path.join(fixture, filename), path.join(artifactDir, filename))
-  const sourcePaths = [path.join(root, 'src', 'App.tsx'), path.join(root, 'src', 'pages', 'ResultPage.tsx'), path.join(root, 'src', 'components', 'MarkdownView.tsx'), path.join(fixture, 'renderer.tsx'), path.join(fixture, 'main.cjs'), path.join(fixture, 'preload.cjs')]
-  const [appSource, resultPageSource, markdownViewSource, rendererSource, mainSource, preloadSource, cssSource] = await Promise.all([...sourcePaths, cssReal].map((item) => readFile(item)))
+  const sourcePaths = [path.join(root, 'src', 'App.tsx'), path.join(root, 'src', 'pages', 'ResultPage.tsx'), path.join(root, 'src', 'components', 'MarkdownView.tsx'), path.join(fixture, 'renderer.tsx'), path.join(fixture, 'main.cjs'), path.join(fixture, 'preload.cjs'), path.join(root, 'src', 'lib', 'question-summary.ts'), path.join(root, 'src', 'components', 'ResizableQuestionOutline.tsx'), path.join(root, 'src', 'components', 'ReadingSplitPane.tsx')]
+  const [appSource, resultPageSource, markdownViewSource, rendererSource, mainSource, preloadSource, questionSummarySource, outlineSource, splitSource, cssSource] = await Promise.all([...sourcePaths, cssReal].map((item) => readFile(item)))
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
   const metadata = {
     sourceCommit: commit,
     appSha256: sha(appSource), resultPageSha256: sha(resultPageSource), markdownViewSha256: sha(markdownViewSource), rendererSha256: sha(rendererSource), mainSha256: sha(mainSource),
     preloadSha256: sha(preloadSource), productionCssSha256: sha(cssSource),
+    questionSummarySha256: sha(questionSummarySource), questionOutlineSha256: sha(outlineSource), readingSplitSha256: sha(splitSource),
     harness: 'complete App; isolated mock window.api; Chromium CDP native keyDown/keyUp; no element.click keyboard claim'
   }
   await writeFile(path.join(artifactDir, 'metadata.json'), JSON.stringify(metadata, null, 2))
@@ -101,11 +102,12 @@ test('complete App clears old result popover on trusted native keyboard navigati
     assert.equal(result.code, 0, `Electron exit ${result.code}; expected VERDICT NATIVE-OK\n${result.stdout}\n${result.stderr}`)
     assert.match(result.stdout, /VERDICT NATIVE-OK/, result.stdout)
     assert.equal(evidence?.verdict, 'NATIVE-OK', JSON.stringify(evidence, null, 2))
-    for (const field of ['appSha256', 'resultPageSha256', 'markdownViewSha256', 'rendererSha256', 'rendererBundleSha256', 'mainSha256', 'preloadSha256', 'productionCssSha256']) {
+    for (const field of ['appSha256', 'resultPageSha256', 'markdownViewSha256', 'rendererSha256', 'rendererBundleSha256', 'mainSha256', 'preloadSha256', 'productionCssSha256', 'questionSummarySha256', 'questionOutlineSha256', 'readingSplitSha256']) {
       assert.match(evidence?.sourceMetadata?.[field] ?? '', /^[0-9a-f]{64}$/, `missing ${field} provenance`)
     }
     assert.match(evidence?.sourceMetadata?.sourceCommit ?? '', /^[0-9a-f]{40}$/)
     assert.ok(evidence.scenarios.backgroundBThenHistoryA && evidence.scenarios.keyboardViewedB && evidence.scenarios.freshBExplain && evidence.scenarios.lateAEvents)
+    assert.ok(evidence.questionDirectory?.twoCompleteLines && evidence.questionDirectory.actualMouseDrag && evidence.questionDirectory.independentScrolling && evidence.questionDirectory.navigationRailUnchanged)
   } catch (error) {
     const message = error?.stack || String(error)
     console.error(`VERDICT NATIVE-FAIL\n${message}`)

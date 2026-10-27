@@ -19,6 +19,7 @@ RepoPrep 是 Electron 桌面应用，调用方向为 renderer → `window.api` �
 
 - 题量唯一来源是 `shared/types.ts` 的 `GRANULARITY_QUESTION_BUDGET`（coarse 8/10/12、medium 15/20/25、fine 25/32/40，单位 min/target/max）；`electron/services/question-budget.ts` 负责批次配额规划，生成器负责合并与裁剪。改动预算时同步检查 `GRANULARITY_META`、README 和 UI 承诺，并运行 `npm run test:question-budget`。
 - `[[术语]]` 标记、`glossary` 键和值、渲染展示与 Markdown 导出构成结果协议；调整任一部分时审查生成归一化、结果持久化、renderer 展示、导出和旧结果兼容。
+- 问题目录优先使用有效的简短主题标题；旧报告缺少标题时走同一通用提炼逻辑，不按项目或报告硬编码。标题一行放不下时自然换行，不用裁切或省略号隐藏内容；完整问题与答案保留原文。
 
 ### IPC 与安全
 

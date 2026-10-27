@@ -135,7 +135,7 @@ async function checkReadingSplit() {
   await waitFor(() => evaluate(`!!document.querySelector('[aria-label="AI 解释"] .md-body p')`), 'AI paragraph for reflow')
   const sizes = () => evaluate(`(() => {const main=document.querySelector('[data-reading-primary]');const side=document.querySelector('[data-reading-secondary]');const panel=document.querySelector('[aria-label="AI 解释"]');const p=panel.querySelector('.md-body p');return {main:main.getBoundingClientRect().width,side:side.getBoundingClientRect().width,pHeight:p.getBoundingClientRect().height,text:p.textContent,viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,requests:window.nativeControl.state().explainRequests.length,cancels:window.nativeControl.state().explainCancels.length,mainScroll:main.querySelector('.overflow-y-auto').scrollTop,sideScroll:panel.querySelector('.overflow-y-auto').scrollTop}})()`)
   const before = await sizes()
-  const handle = await evaluate(`(() => {const r=document.querySelector('[role="separator"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+Math.min(180,r.height/2)}})()`)
+  const handle = await evaluate(`(() => {const r=document.querySelector('[aria-label="调整报告与 AI 解释区域宽度"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+Math.min(180,r.height/2)}})()`)
   await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x: handle.x, y: handle.y, button: 'left', buttons: 1, clickCount: 1 })
   for (let step = 1; step <= 6; step++) {
     await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: handle.x - step * 28, y: handle.y, button: 'left', buttons: 1 })
@@ -170,6 +170,74 @@ async function checkReadingSplit() {
   await delay(120)
   if ((await sizes()).mainScroll !== mainScroll) throw new Error('AI scrolling moved the report')
   evidence.readingSplit = { before, widened, expanded, narrow, actualMouseDrag: true, independentScrolling: true }
+}
+
+async function checkQuestionDirectory() {
+  const expectedCaption = '类型安全通信契约与跨进程权限校验边界'
+  const read = () => evaluate(`(() => {
+    const directory=document.querySelector('[data-question-directory]');
+    const caption=directory?.querySelector('[data-question-caption]');
+    const report=document.querySelector('[data-reading-primary]');
+    const paragraph=report.querySelector('[data-report-question] .md-body p');
+    const rail=document.querySelector('[aria-label="主导航"]');
+    const captionStyle=caption&&getComputedStyle(caption);
+    const railRect=rail.getBoundingClientRect();
+    return {directoryWidth:directory.getBoundingClientRect().width,
+      caption:caption?.textContent,captionHeight:caption?.getBoundingClientRect().height,
+      captionWidth:caption?.clientWidth,captionScrollWidth:caption?.scrollWidth,
+      lineHeight:captionStyle&&parseFloat(captionStyle.lineHeight),
+      textOverflow:captionStyle?.textOverflow,whiteSpace:captionStyle?.whiteSpace,
+      paragraphHeight:paragraph.getBoundingClientRect().height,paragraph:paragraph.textContent,
+      reportWidth:report.getBoundingClientRect().width,
+      reportScroll:report.querySelector('.overflow-y-auto').scrollTop,
+      explanationScroll:document.querySelector('[aria-label="AI 解释"] .overflow-y-auto').scrollTop,
+      rail:{left:railRect.left,width:railRect.width,html:rail.outerHTML},
+      viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,
+      requests:window.nativeControl.state().explainRequests.length,
+      cancels:window.nativeControl.state().explainCancels.length};
+  })()`)
+  win.setContentSize(980, 835)
+  await delay(180)
+  const before = await read()
+  if (before.caption !== expectedCaption || before.captionHeight < before.lineHeight * 1.9 || before.captionHeight > before.lineHeight * 2.1 || before.captionScrollWidth > before.captionWidth + 1 || before.textOverflow === 'ellipsis' || before.whiteSpace === 'nowrap') {
+    throw new Error(`concise directory caption must wrap into two complete lines: ${JSON.stringify(before)}`)
+  }
+  await enterButton('收起 AI 解释')
+  await waitFor(() => evaluate(`!!document.querySelector('[aria-label="展开 AI 解释"]')`), 'AI collapsed for report reflow')
+  const start = await read()
+  const handle = await evaluate(`(() => {const r=document.querySelector('[aria-label="调整题目目录宽度"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+160}})()`)
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x: handle.x, y: handle.y, button: 'left', buttons: 1, clickCount: 1 })
+  for (let step = 1; step <= 6; step++) {
+    await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: handle.x + step * 16, y: handle.y, button: 'left', buttons: 1 })
+    await delay(20)
+  }
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', x: handle.x + 96, y: handle.y, button: 'left', clickCount: 1 })
+  await waitFor(async () => (await read()).directoryWidth > start.directoryWidth + 40, 'native divider drag widens question directory')
+  const widened = await read()
+  if (widened.paragraph !== start.paragraph || widened.reportWidth >= start.reportWidth || widened.paragraphHeight <= start.paragraphHeight || widened.documentWidth > widened.viewport + 1 || JSON.stringify(widened.rail) !== JSON.stringify(start.rail)) {
+    throw new Error(`directory resize did not reflow report or changed the navigation rail: ${JSON.stringify({start,widened})}`)
+  }
+  fs.writeFileSync(path.join(outputDir, 'question-directory-wide.png'), (await win.webContents.capturePage()).toPNG())
+  await enterButton('收起题目目录')
+  await waitFor(() => evaluate(`!!document.querySelector('[aria-label="展开题目目录"]') && document.querySelector('[data-question-directory]').getBoundingClientRect().width<=41`), 'collapsed question directory')
+  const collapsed = await read()
+  if (collapsed.reportWidth <= widened.reportWidth || JSON.stringify(collapsed.rail) !== JSON.stringify(start.rail)) throw new Error('directory collapse did not release width independently of the main navigation')
+  await enterButton('展开题目目录')
+  await waitFor(async () => Math.abs((await read()).directoryWidth - widened.directoryWidth) <= 1, 'question directory restores preferred width')
+  await enterButton('展开 AI 解释')
+  await waitFor(() => evaluate(`!!document.querySelector('[aria-label="收起 AI 解释"]')`), 'AI expanded alongside directory')
+  const expanded = await read()
+  if (expanded.requests !== before.requests || expanded.cancels !== before.cancels || expanded.caption !== expectedCaption || expanded.documentWidth > expanded.viewport + 1 || expanded.reportWidth < 319) throw new Error(`directory interaction restarted AI or cramped the report: ${JSON.stringify(expanded)}`)
+  const reportScrollBefore = expanded.reportScroll
+  const sidePoint = await evaluate(`(() => {const r=document.querySelector('[aria-label="AI 解释"] .overflow-y-auto').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`)
+  await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseWheel', x: sidePoint.x, y: sidePoint.y, deltaX: 0, deltaY: 200 })
+  await waitFor(async () => (await read()).explanationScroll > expanded.explanationScroll, 'AI scrolling changes its own scroll position')
+  const afterScroll = await read()
+  if (afterScroll.reportScroll !== reportScrollBefore) throw new Error('AI scrolling changed report position with question directory open')
+  fs.writeFileSync(path.join(outputDir, 'question-directory-and-ai.png'), (await win.webContents.capturePage()).toPNG())
+  evidence.questionDirectory = {before,start,widened,collapsed,expanded,afterScroll,actualMouseDrag:true,twoCompleteLines:true,independentScrolling:true,navigationRailUnchanged:true}
+  win.setContentSize(1264, 835)
+  await delay(150)
 }
 
 function recorder() {
@@ -213,6 +281,7 @@ async function run() {
   await waitFor(() => evaluate(`document.body.innerText.includes('新建') && document.body.innerText.includes('ProjectA') && !!window.nativeControl`), 'initial App render')
   await enterButton('新建')
   await waitFor(() => evaluate(`document.body.innerText.includes('ProjectB') && document.body.innerText.includes('开始生成面试题')`), 'B configuration')
+  await waitFor(() => evaluate(`[...document.querySelectorAll('button')].some(item=>item.textContent.includes('开始生成面试题') && !item.disabled)`), 'B configuration draft check complete')
   await tabToButton('设置', '开始生成面试题')
   await enterFocusedButton('开始生成面试题')
   await waitFor(() => evaluate(`window.nativeControl.state().generationRequests.length===1`), 'B generation request')
@@ -273,6 +342,7 @@ async function run() {
     throw new Error(`valid late A IPC events were not broadcast to B's current subscription: ${JSON.stringify(lateEvents)}`)
   }
   await checkReadingSplit()
+  await checkQuestionDirectory()
   const afterSplit = await snapshot()
   const trustedEnterKeys = afterSplit.events.keys.filter((event) => event.key === 'Enter' && event.trusted)
   const trustedTabKeys = afterSplit.events.keys.filter((event) => event.key === 'Tab' && event.trusted)
@@ -281,7 +351,7 @@ async function run() {
   if (keyboardClicks.some((event) => event.activationTarget?.tag !== 'BUTTON') || keyboardClicks.some((event) => /QUESTION_[AB]/.test(event.activationTarget?.text || ''))) {
     throw new Error(`keyboard-generated clicks included a non-button or question-card parent activation: ${JSON.stringify(keyboardClicks)}`)
   }
-  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/, /关闭/, /向 AI 提问/, /收起 AI 解释/, /展开 AI 解释/]
+  const allowedNativeTargets = [/新建/, /开始生成面试题/, /上一步/, /后台继续/, /展开 ProjectA 的分析/, /^2026/, /查看结果/, /后台生成/, /关闭/, /向 AI 提问/, /收起 AI 解释/, /展开 AI 解释/, /收起题目目录/, /展开题目目录/]
   if (keyboardClicks.some((event) => !allowedNativeTargets.some((pattern) => pattern.test(event.activationTarget?.text || '')))) {
     throw new Error(`unexpected keyboard default button activation: ${JSON.stringify(keyboardClicks)}`)
   }

@@ -15,6 +15,7 @@ import TermPopover from '../components/TermPopover'
 import SelectionActions from '../components/SelectionActions'
 import SelectionExplainPanel from '../components/SelectionExplainPanel'
 import ReadingSplitPane from '../components/ReadingSplitPane'
+import ResizableQuestionOutline from '../components/ResizableQuestionOutline'
 import { AppIcon } from '../components/AppIcon'
 
 interface Props {
@@ -82,6 +83,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   const collapseExplanation = useCallback(() => { setAiCollapsed(true); setSelection(null) }, [])
   const expandExplanation = useCallback(() => setAiCollapsed(false), [])
   const reportRef = useRef<HTMLDivElement>(null)
+  const pageLayoutRef = useRef<HTMLDivElement>(null)
   const explanationCache = useRef(new Map<string, string>())
   const [toast, setToast] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
@@ -228,10 +230,11 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0">
+    <div ref={pageLayoutRef} className="flex h-full min-h-0 min-w-0">
       {/* 左：大纲 */}
-      <aside aria-hidden={!showSidebar} className={`flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white ${sidebarClassName} ${showSidebar ? '' : 'hidden'}`}>
-        <div className="border-b border-slate-100 p-3">
+      <ResizableQuestionOutline visible={showSidebar} layoutRef={pageLayoutRef} className={sidebarClassName} minContentWidth={aiTarget && !aiCollapsed ? 606 : 320}>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white">
+        <div className="border-b border-slate-100 p-3 pr-12">
           <form
             role="search"
             className="flex h-10 items-center overflow-hidden rounded-full border border-slate-200 bg-white focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-200"
@@ -267,7 +270,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
         <nav className="min-h-0 flex-1 overflow-y-auto p-2">
           {filtered.map((s) => (
             <div key={s.id} className="mb-3">
-              <div className="mb-1 px-2 py-1 text-xs font-semibold text-slate-400" title={s.title}>
+              <div data-section-caption className="mb-1 break-words px-2 py-1 text-xs font-semibold text-slate-400 [overflow-wrap:anywhere]" title={s.title}>
                 {s.title}
               </div>
               {s.questions.map((q, qi) => (
@@ -289,7 +292,7 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
                       numberOf(questionNumbers, q.id, { sectionIndex: q.sectionIndex, questionIndex: q.questionIndex })
                     )}
                   </span>
-                  <span className="min-w-0 flex-1 truncate">
+                  <span data-question-caption className="min-w-0 flex-1 whitespace-normal break-words [overflow-wrap:anywhere]">
                     {navigationSummaries[sectionQuestionOffsets[q.sectionIndex] + q.questionIndex]}
                   </span>
                 </button>
@@ -300,7 +303,8 @@ function OwnedResultPage({ result, settings, onRegenerate, regenerating = false,
             <p className="p-4 text-center text-sm text-slate-400">没有匹配的问题</p>
           )}
         </nav>
-      </aside>
+      </div>
+      </ResizableQuestionOutline>
 
       {/* 右：内容 */}
       <ReadingSplitPane
