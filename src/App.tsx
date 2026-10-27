@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { GenerateOptions, InterviewResult, ProjectOverview, PublicSettings } from '@shared/types'
+import type { GenerationDraftSummary } from '@shared/generation-checkpoint'
 import { RESULT_CONTRACT_MESSAGES } from '@shared/result-contract'
 import { STORAGE_MESSAGES, type StorageDiagnostic } from '@shared/storage-contract'
 import { api } from './lib/ipc'
@@ -178,16 +179,24 @@ export default function App() {
   const activeTask = sessionSnapshot.activeRunId
     ? sessionSnapshot.tasks.find((task) => task.runId === sessionSnapshot.activeRunId) ?? null
     : null
+  const failedGenerationTask = generationFailure
+    ? sessionSnapshot.tasks.find((task) => task.runId === generationFailure.runId) ?? null
+    : null
   const backgroundTasks = sessionSnapshot.tasks.filter((task) => task.mode === 'background')
   const generationPage = view === 'generating' && foregroundTask ? {
+    runId: foregroundTask.runId,
     overview: foregroundTask.overview as ProjectOverview,
     options: foregroundTask.options as GenerateOptions,
     existingResult: foregroundTask.existingResult as InterviewResult | null,
     progress: foregroundTask.progress, logs: foregroundTask.logs,
+    preview: foregroundTask.preview, startedAt: foregroundTask.startedAt,
     error: foregroundTask.error, cancelling: foregroundTask.status === 'cancelling'
   } : view === 'generation-error' && generationFailure && overview && configureInitialOptions ? {
+    runId: generationFailure.runId,
     overview, options: configureInitialOptions, existingResult,
-    progress: null, logs: [], error: generationFailure.error, cancelling: false
+    progress: null, logs: [], preview: failedGenerationTask?.preview ?? null,
+    startedAt: failedGenerationTask?.startedAt,
+    error: generationFailure.error, cancelling: false
   } : null
 
   const refreshStorageDiagnostics = useCallback(() => {
@@ -350,6 +359,7 @@ export default function App() {
   }
 
   const openQuestionDirectory = () => {
+    if (viewRef.current === 'generating') return
     if (viewRef.current === 'result') {
       setPageSidebarMode('questions')
       return
@@ -499,11 +509,11 @@ export default function App() {
     }
   }
 
-  const startGenerate = useCallback((options: GenerateOptions) => {
+  const startGenerate = useCallback((options: GenerateOptions, resumeDraftId?: string) => {
     if (!overview) return
     const taskExistingResult = existingResult?.projectPath === overview.root ? existingResult : null
     const capturedOptions = { ...options, projectPath: projectStoragePath ?? options.projectPath }
-    const runId = session.start(capturedOptions, overview, taskExistingResult)
+    const runId = session.start(capturedOptions, overview, taskExistingResult, resumeDraftId)
     if (!runId) return
     navigationEpoch.current++
     historyRecoveryAttempt.current = null
@@ -678,7 +688,7 @@ export default function App() {
       <main className="flex min-h-0 flex-1">
         <NavigationRail
           mode={sidebarMode}
-          canShowQuestions={Boolean(lastAnalysisPage)}
+          canShowQuestions={Boolean(lastAnalysisPage) && view !== 'generating'}
           onProjects={openProjectDirectory}
           onQuestions={openQuestionDirectory}
           onSettings={() => requestNavigation({ kind: 'settings' })}
@@ -739,14 +749,31 @@ export default function App() {
                 onOptionsChange={saveConfigureOptions}
                 busyTask={busyForConfigure}
                 onResumeTask={() => activeTask && requestReturnToTask(activeTask)}
+                projectPath={projectStoragePath ?? overview.root}
+                onResumeDraft={(draft: GenerationDraftSummary) => {
+                  if (activeTask || draft.projectPath !== (projectStoragePath ?? overview.root)) return
+                  const options: GenerateOptions = {
+                    projectPath: projectStoragePath ?? overview.root,
+                    granularity: draft.granularity,
+                    roleFocus: draft.roleFocus,
+                    profileId: draft.profileId
+                  }
+                  startGenerate(options, draft.id)
+                }}
+                onOpenSettings={() => {
+                  visitPage({ view: 'settings', sidebarMode: 'projects', foregroundRunId: null })
+                }}
               />
             )}
             {generationPage && (
               <GeneratingPage
+                key={generationPage.runId}
                 overview={generationPage.overview}
                 options={generationPage.options}
                 progress={generationPage.progress}
                 logs={generationPage.logs}
+                preview={generationPage.preview}
+                startedAt={generationPage.startedAt}
                 error={generationPage.error}
                 cancelling={generationPage.cancelling}
                 onCancel={cancelGenerate}

@@ -174,6 +174,78 @@ test('compatibility events allow role/null/empty/reasoning/usage metadata and se
   assert.deepEqual(deltas, ['answer'])
 })
 
+test('awaits async delta callbacks serially and reports streaming usage-only frames', async () => {
+  const wire = sseData(chatChunk({ content: 'one' }, null, 0)) +
+    sseData(chatChunk({ content: 'two' }, null, 0)) +
+    sseData({ choices: [], usage: { prompt_tokens: 7, completion_tokens: 2 } }) +
+    sseData(chatChunk({}, 'stop', 0))
+  const { response } = createResponse([bytes(wire)])
+  const order: string[] = []
+  const usages: unknown[] = []
+  await withFetch(async () => response, async () => {
+    assert.equal(await chatCompletionStream(profile, messages, async (delta) => {
+      order.push(`start:${delta}`)
+      await Promise.resolve()
+      order.push(`end:${delta}`)
+    }, { onUsage: (usage) => usages.push(usage) }), 'onetwo')
+  })
+  assert.deepEqual(order, ['start:one', 'end:one', 'start:two', 'end:two'])
+  assert.deepEqual(usages, [{ inputTokens: 7, outputTokens: 2, totalTokens: 9 }])
+})
+
+test('a valid delta in a read is delivered before a later malformed SSE event rejects', async () => {
+  const response = createResponse([bytes(sseData(chatChunk({ content: 'saved-question' }, null, 0)) + 'event: error\ndata: {"error":true}\n\n')])
+  const saved: string[] = []
+  await withFetch(async () => response.response, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, async (delta) => {
+      await Promise.resolve()
+      saved.push(delta)
+    }), (error: unknown) => error instanceof LlmRequestError && error.kind === 'response')
+  })
+  assert.deepEqual(saved, ['saved-question'])
+  assert.equal(response.response.body?.locked, false)
+})
+
+test('stream mode falls back to one bounded JSON completion request', async () => {
+  let calls = 0
+  const deltas: string[] = []
+  const usages: unknown[] = []
+  await withFetch(async () => {
+    calls++
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'whole answer' } }], usage: { prompt_tokens: 4, completion_tokens: 3 } }), {
+      headers: { 'content-type': 'application/json' }
+    })
+  }, async () => {
+    assert.equal(await chatCompletionStream(profile, messages, (delta) => { deltas.push(delta) }, { onUsage: (usage) => { usages.push(usage) } }), 'whole answer')
+  })
+  assert.equal(calls, 1)
+  assert.deepEqual(deltas, ['whole answer'])
+  assert.deepEqual(usages, [{ inputTokens: 4, outputTokens: 3, totalTokens: 7 }])
+})
+
+test('ambiguous content types preserve text/plain SSE and probe JSON without another request', async () => {
+  let calls = 0
+  const deltas: string[] = []
+  const wire = sseData(chatChunk({ content: 'plain SSE' }, null, 0)) + sseData(chatChunk({}, 'stop', 0))
+  await withFetch(async () => {
+    calls++
+    return new Response(bytes(wire), { headers: { 'content-type': 'text/plain' } })
+  }, async () => {
+    assert.equal(await chatCompletionStream(profile, messages, (delta) => { deltas.push(delta) }), 'plain SSE')
+  })
+  assert.equal(calls, 1)
+  assert.deepEqual(deltas, ['plain SSE'])
+
+  calls = 0
+  await withFetch(async () => {
+    calls++
+    return new Response(bytes(JSON.stringify({ choices: [{ message: { content: 'untyped JSON' } }] })))
+  }, async () => {
+    assert.equal(await chatCompletionStream(profile, messages, () => {}), 'untyped JSON')
+  })
+  assert.equal(calls, 1)
+})
+
 test('delta is delivered before the upstream stream closes', async () => {
   const response = openResponse(sseData(chatChunk({ content: 'early' }, null, 0)))
   let resolveDelta!: () => void
@@ -308,7 +380,8 @@ test('invalid UTF-8, lone JSON surrogates, and oversized event/output buffers re
 test('onDelta exceptions reject and still cancel/release the reader', async () => {
   const response = openResponse(sseData(chatChunk({ content: 'delta' }, null, 0)))
   await withFetch(async () => response.response, async () => {
-    await assert.rejects(chatCompletionStream(profile, messages, () => { throw new Error('consumer failure') }))
+    const failure = new Error('consumer failure')
+    await assert.rejects(chatCompletionStream(profile, messages, () => { throw failure }), (error: unknown) => error === failure)
   })
   assert.equal(response.cancelCalls, 1)
   assert.equal(response.response.body?.locked, false)
@@ -331,6 +404,28 @@ test('external cancellation while streaming rejects as cancelled and leaves no l
       assert.equal(error.kind, 'cancelled')
       return true
     })
+  })
+  assert.equal(response.cancelCalls, 1)
+  assert.equal(response.response.body?.locked, false)
+})
+
+test('abort while awaiting an async callback releases the reader and handles its late rejection', async () => {
+  const response = openResponse(sseData(chatChunk({ content: 'pending save' }, null, 0)))
+  const caller = new AbortController()
+  let rejectSave!: (error: Error) => void
+  let startSave!: () => void
+  const entered = new Promise<void>((resolve) => { startSave = resolve })
+  const save = new Promise<void>((_resolve, reject) => { rejectSave = reject })
+  await withFetch(async () => response.response, async () => {
+    const pending = chatCompletionStream(profile, messages, () => {
+      startSave()
+      return save
+    }, { signal: caller.signal })
+    await entered
+    caller.abort()
+    await assert.rejects(pending, (error: unknown) => error instanceof LlmRequestError && error.kind === 'cancelled')
+    rejectSave(new Error('late persistence failure'))
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
   })
   assert.equal(response.cancelCalls, 1)
   assert.equal(response.response.body?.locked, false)

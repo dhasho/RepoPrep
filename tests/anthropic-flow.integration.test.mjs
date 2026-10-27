@@ -56,6 +56,25 @@ test('production generation and explanation clients use Anthropic Messages over 
       response.setHeader('connection', 'close')
       if (body.stream) {
         response.writeHead(200, { 'content-type': 'text/event-stream' })
+        if (body.system?.includes('资深技术面试官')) {
+          const userMessage = body.messages.find((message) => message.role === 'user')?.content ?? ''
+          const quota = Number(userMessage.match(/(?:严格|约)\s*(\d+)\s*题/)?.[1] ?? 20)
+          const content = JSON.stringify({
+            projectSummary: 'Synthetic project for the Anthropic integration flow.',
+            sections: [{ title: 'Synthetic section', questions: Array.from({ length: quota }, (_, index) => ({
+              title: `实现机制 ${index + 1}`, question: `Anthropic question ${index + 1}`, answer: `Synthetic answer ${index + 1}`, followUps: []
+            })) }], glossary: {}
+          })
+          response.write(sse('message_start', { type: 'message_start', message: { type: 'message', usage: { input_tokens: 30, output_tokens: 0 } } }))
+          response.write(sse('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }))
+          for (let offset = 0; offset < content.length; offset += 41) {
+            response.write(sse('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: content.slice(offset, offset + 41) } }))
+          }
+          response.write(sse('content_block_stop', { type: 'content_block_stop', index: 0 }))
+          response.write(sse('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 500 } }))
+          response.end(sse('message_stop', { type: 'message_stop' }))
+          return
+        }
         const wire = [
           sse('message_start', { type: 'message_start', message: { type: 'message', role: 'assistant', content: [] } }),
           sse('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: 'Claude explanation' } }),
@@ -139,7 +158,8 @@ test('production generation and explanation clients use Anthropic Messages over 
     assert.ok(questions.length >= budget.min && questions.length <= budget.max)
     assert.equal(result.profileId, profile.id)
     assert.ok(!JSON.stringify(result).includes(profile.apiKey), 'synthetic API key never enters the generated result')
-    assert.ok(requests.length > 0 && requests.every((request) => request.body.stream === false))
+    assert.ok(requests.length > 0 && requests.every((request) => request.body.stream === true))
+    assert.deepEqual(result.generationDiagnostics.actualUsage, { inputTokens: 30, outputTokens: 500, totalTokens: 530 }, 'streamed cumulative usage is recorded once')
     assert.ok(requests.every((request) => typeof request.body.system === 'string'))
     assert.ok(requests.every((request) => request.body.max_tokens === 16_384), 'production generation gets enough default output tokens for its full structured batch')
 

@@ -81,6 +81,7 @@ function requestBody(profile: LlmProfile, messages: ChatMessage[], stream: boole
     messages,
     temperature: profile.temperature ?? 0.4,
     stream,
+    ...(stream && opts.includeUsage ? { stream_options: { include_usage: true } } : {}),
     ...((opts.maxOutputTokens ?? profile.maxOutputTokens) ? { max_tokens: opts.maxOutputTokens ?? profile.maxOutputTokens } : {})
   }
 }
@@ -186,6 +187,7 @@ export interface CallOptions {
   signal?: AbortSignal
   timeoutMs?: number
   maxOutputTokens?: number
+  includeUsage?: boolean
   onUsage?: (usage: LlmUsage) => void
   onRequest?: () => void
 }
@@ -230,7 +232,7 @@ async function request(
   profile: LlmProfile,
   messages: ChatMessage[],
   stream: boolean,
-  onDelta: ((delta: string) => void) | null,
+  onDelta: ((delta: string) => unknown) | null,
   opts: CallOptions
 ): Promise<string> {
   const controller = new AbortController()
@@ -239,6 +241,8 @@ async function request(
   let timeout: ReturnType<typeof setTimeout> | undefined
   let externalListenerAttached = false
   let response: Response | null = null
+  let callbackFailed = false
+  let callbackFailure: unknown
   const abort = (kind: 'timeout' | 'cancelled'): void => {
     if (abortKind !== null) return
     abortKind = kind
@@ -310,27 +314,70 @@ async function request(
       return content
     }
 
-    // SSE 流式解析
+    // Some compatible endpoints ignore stream=true and return one JSON completion.
     if (!response.body) throw new LlmRequestError('response')
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+    const probe = contentType.includes('text/event-stream')
+      ? { mode: 'sse' as const, chunks: [] as Uint8Array[] }
+      : contentType.includes('application/json')
+        ? { mode: 'json' as const, chunks: [] as Uint8Array[] }
+        : await probeStreamBody(response.body, controller.signal)
+    if (probe.mode === 'json') {
+      const text = await readBodyText(response.body, controller.signal, {
+        maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
+        fatalUtf8: true,
+        initialChunks: probe.chunks
+      })
+      throwIfAborted()
+      let json: unknown
+      try { json = JSON.parse(text) as unknown } catch { throw new LlmRequestError('response') }
+      const usage = isRecord(json) ? boundedUsage(json.usage, profile.protocol) : null
+      if (usage) { try { opts.onUsage?.(usage) } catch { /* diagnostics cannot affect generation */ } }
+      const content = profile.protocol === 'anthropic'
+        ? parseAnthropicMessage(json)
+        : extractOpenAiContent(json)
+      if (!content || content.length > LLM_RESPONSE_LIMITS.chatContentChars || hasUnpairedSurrogate(content)) throw new LlmRequestError('response')
+      if (onDelta) {
+        try { await awaitCallback(onDelta(content), controller.signal) }
+        catch (error) { callbackFailed = true; callbackFailure = error; throw error }
+      }
+      throwIfAborted()
+      return content
+    }
+
+    // SSE 流式解析
     let full = ''
     let completed = false
     let sawStop = false
-    let callbackFailed = false
-    let callbackFailure: unknown
+    let anthropicInputTokens: unknown
+    let anthropicOutputTokens: unknown
+    let lastUsageReceipt: LlmUsage | null = null
     const anthropicState: AnthropicStreamState = { completed: false }
     const contentState = { content: '' }
-    const notifyDelta = (delta: string): void => {
-      try {
-        onDelta?.(delta)
-      } catch (error) {
-        callbackFailed = true
-        callbackFailure = error
-        throw error
+    const deltas: string[] = []
+    const notifyDelta = (delta: string): void => { deltas.push(delta) }
+    const usageFromEvent = (value: unknown): void => {
+      if (!isRecord(value)) return
+      if (profile.protocol === 'anthropic') {
+        const usageValue = isRecord(value.message) && isRecord(value.message.usage)
+          ? value.message.usage
+          : isRecord(value.delta) && isRecord(value.delta.usage) ? value.delta.usage : value.usage
+        if (isRecord(usageValue)) {
+          if (usageValue.input_tokens !== undefined) anthropicInputTokens = usageValue.input_tokens
+          if (usageValue.output_tokens !== undefined) anthropicOutputTokens = usageValue.output_tokens
+        }
+        const usage = boundedUsage({ input_tokens: anthropicInputTokens, output_tokens: anthropicOutputTokens }, profile.protocol)
+        if (usage) lastUsageReceipt = usage
+        return
       }
+      const usage = boundedUsage(value.usage, profile.protocol)
+      if (usage) lastUsageReceipt = usage
     }
     const decoder = new SseDecoder((event) => {
       if (profile.protocol === 'anthropic') {
         try {
+          const parsed = event.data.trim() ? JSON.parse(event.data) as unknown : null
+          usageFromEvent(isRecord(parsed) && isRecord(parsed.message) ? parsed.message : parsed)
           const shouldContinue = handleAnthropicStreamEvent(event, anthropicState, contentState, notifyDelta)
           full = contentState.content
           if (shouldContinue === false) completed = true
@@ -357,6 +404,7 @@ async function request(
         throw new LlmRequestError('response')
       }
       if (!isRecord(chunk)) throw new LlmRequestError('response')
+      usageFromEvent(chunk)
       if ('error' in chunk && chunk.error !== null) throw new LlmRequestError('response')
 
       const choices = chunk.choices
@@ -389,13 +437,7 @@ async function request(
           if (content.length > 0) {
             if (full.length + content.length > LLM_RESPONSE_LIMITS.chatContentChars) throw new LlmRequestError('response')
             full += content
-            try {
-              onDelta?.(content)
-            } catch (error) {
-              callbackFailed = true
-              callbackFailure = error
-              throw error
-            }
+            notifyDelta(content)
           }
         }
       }
@@ -409,35 +451,49 @@ async function request(
       throw new LlmRequestError('response')
     }, { maxBufferChars: LLM_RESPONSE_LIMITS.chatContentChars })
 
-    const feed = (decoded: string): boolean => {
+    const feed = async (decoded: string): Promise<boolean> => {
+      let parseFailure: unknown
       try {
         decoder.push(decoded)
       } catch (error) {
-        if (callbackFailed) throw callbackFailure
-        if (error instanceof LlmRequestError) throw error
-        throw new LlmRequestError('response')
+        parseFailure = error instanceof LlmRequestError ? error : new LlmRequestError('response')
       }
+      const queued = deltas.splice(0)
+      for (const delta of queued) {
+        if (abortKind) throw new LlmRequestError(abortKind)
+        try { if (onDelta) await awaitCallback(onDelta(delta), controller.signal) }
+        catch (error) { callbackFailed = true; callbackFailure = error; throw error }
+      }
+      if (parseFailure !== undefined) throw parseFailure
       return !decoder.stopped
     }
 
-    await readBodyChunks(response.body, controller.signal, feed, { flushDecoder: true, fatalUtf8: true })
+    await readBodyChunks(response.body, controller.signal, feed, { flushDecoder: true, fatalUtf8: true, initialChunks: probe.chunks })
     throwIfAborted()
     if (!decoder.stopped) {
+      let parseFailure: unknown
       try {
         decoder.finish()
       } catch (error) {
-        if (callbackFailed) throw callbackFailure
-        if (error instanceof LlmRequestError) throw error
-        throw new LlmRequestError('response')
+        parseFailure = error instanceof LlmRequestError ? error : new LlmRequestError('response')
       }
+      const queued = deltas.splice(0)
+      for (const delta of queued) {
+        if (abortKind) throw new LlmRequestError(abortKind)
+        try { if (onDelta) await awaitCallback(onDelta(delta), controller.signal) }
+        catch (error) { callbackFailed = true; callbackFailure = error; throw error }
+      }
+      if (parseFailure !== undefined) throw parseFailure
     }
     throwIfAborted()
     if (profile.protocol === 'anthropic' && anthropicState.completed) completed = true
     if (sawStop) completed = true // EOF is also a valid terminator after finish_reason: stop.
     if (!completed || full.trim().length === 0) throw new LlmRequestError('response')
+    if (lastUsageReceipt) { try { opts.onUsage?.(lastUsageReceipt) } catch { /* diagnostics cannot affect generation */ } }
     return full
   } catch (error) {
     if (abortKind) throw new LlmRequestError(abortKind)
+    if (callbackFailed) throw callbackFailure
     if (error instanceof LlmRequestError) throw error
     // An AbortError without our timeout/user-abort marker is an unrelated transport failure.
     throw new LlmRequestError('network')
@@ -451,11 +507,33 @@ async function request(
   }
 }
 
+function extractOpenAiContent(value: unknown): string {
+  if (!isRecord(value) || !Array.isArray(value.choices)) throw new LlmRequestError('response')
+  const first = value.choices[0]
+  if (isRecord(first) && first.finish_reason !== undefined && first.finish_reason !== null && first.finish_reason !== 'stop') throw new LlmRequestError('response')
+  const message = isRecord(first) ? first.message : undefined
+  const content = isRecord(message) ? message.content : undefined
+  if (typeof content !== 'string') throw new LlmRequestError('response')
+  return content
+}
+
+async function awaitCallback(value: unknown, signal: AbortSignal): Promise<void> {
+  if (!value || typeof (value as Promise<void>).then !== 'function') return
+  if (signal.aborted) throw new LlmRequestError('cancelled')
+  let listener: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    listener = () => reject(new LlmRequestError('cancelled'))
+    signal.addEventListener('abort', listener, { once: true })
+  })
+  try { await Promise.race([value, aborted]) }
+  finally { if (listener) signal.removeEventListener('abort', listener) }
+}
+
 /** Read and release the response reader ourselves so aborts during body reads are observable. */
 async function readBodyText(
   body: ReadableStream<Uint8Array> | null,
   signal: AbortSignal,
-  options: { maxBytes?: number; fatalUtf8?: boolean } = {}
+  options: { maxBytes?: number; fatalUtf8?: boolean; initialChunks?: Uint8Array[] } = {}
 ): Promise<string> {
   if (!body) return ''
   let text = ''
@@ -463,11 +541,51 @@ async function readBodyText(
   return text
 }
 
+async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<{ mode: 'json' | 'sse'; chunks: Uint8Array[] }> {
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  const probeBytes: number[] = []
+  let bytesRead = 0
+  let done = false
+  let classified = false
+  let scanned = 0
+  let bomResolved = false
+  const cancel = (): void => { try { void reader.cancel().catch(() => undefined) } catch { /* best effort */ } }
+  const onAbort = (): void => cancel()
+  signal.addEventListener('abort', onAbort, { once: true })
+  if (signal.aborted) onAbort()
+  try {
+    for (;;) {
+      const result = await reader.read()
+      if (result.done) { done = true; return { mode: 'json', chunks } }
+      chunks.push(result.value)
+      bytesRead += result.value.byteLength
+      if (bytesRead > LLM_RESPONSE_LIMITS.chatBodyBytes) throw new LlmRequestError('response')
+      for (const byte of result.value) probeBytes.push(byte)
+      if (!bomResolved) {
+        if (probeBytes.length < 3 && (probeBytes[0] === 0xef && (probeBytes.length === 1 || probeBytes[1] === 0xbb))) continue
+        if (probeBytes[0] === 0xef && probeBytes[1] === 0xbb && probeBytes[2] === 0xbf) scanned = 3
+        bomResolved = true
+      }
+      while (scanned < probeBytes.length) {
+        const first = probeBytes[scanned++]
+        if (first === 0x09 || first === 0x0a || first === 0x0d || first === 0x20) continue
+        classified = true
+        return { mode: first === 0x7b || first === 0x5b ? 'json' : 'sse', chunks }
+      }
+    }
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+    if (!done && !classified) cancel()
+    try { reader.releaseLock() } catch { /* cleanup must not mask request error */ }
+  }
+}
+
 async function readBodyChunks(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
-  onChunk: (text: string) => boolean | void,
-  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number } = {}
+  onChunk: (text: string) => boolean | void | Promise<boolean | void>,
+  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number; initialChunks?: Uint8Array[] } = {}
 ): Promise<void> {
   const reader = body.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: options.fatalUtf8 ?? false })
@@ -482,7 +600,19 @@ async function readBodyChunks(
   const onAbort = (): void => cancelReader()
   signal.addEventListener('abort', onAbort, { once: true })
   if (signal.aborted) onAbort()
+  const consumeChunk = async (value: Uint8Array): Promise<boolean> => {
+    if (options.maxBytes !== undefined) {
+      if (value.byteLength > options.maxBytes - bytesRead) throw new LlmRequestError('response')
+      bytesRead += value.byteLength
+    }
+    let decoded: string
+    try { decoded = decoder.decode(value, { stream: true }) } catch { throw new LlmRequestError('response') }
+    return !decoded || await onChunk(decoded) !== false
+  }
   try {
+    for (const chunk of options.initialChunks ?? []) {
+      if (!await consumeChunk(chunk)) return
+    }
     for (;;) {
       const { done, value } = await reader.read()
       if (done) {
@@ -490,17 +620,11 @@ async function readBodyChunks(
         if (options.flushDecoder !== false) {
           let tail: string
           try { tail = decoder.decode() } catch { throw new LlmRequestError('response') }
-          if (tail) onChunk(tail)
+          if (tail) await onChunk(tail)
         }
         return
       }
-      if (options.maxBytes !== undefined) {
-        if (value.byteLength > options.maxBytes - bytesRead) throw new LlmRequestError('response')
-        bytesRead += value.byteLength
-      }
-      let decoded: string
-      try { decoded = decoder.decode(value, { stream: true }) } catch { throw new LlmRequestError('response') }
-      if (decoded && onChunk(decoded) === false) return
+      if (!await consumeChunk(value)) return
     }
   } finally {
     signal.removeEventListener('abort', onAbort)
@@ -527,7 +651,7 @@ export function chatCompletion(
 export function chatCompletionStream(
   profile: LlmProfile,
   messages: ChatMessage[],
-  onDelta: (delta: string) => void,
+  onDelta: (delta: string) => unknown,
   opts: CallOptions = {}
 ): Promise<string> {
   return request(profile, messages, true, onDelta, opts)

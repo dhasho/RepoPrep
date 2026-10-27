@@ -16,6 +16,7 @@ import type {
   Settings,
   TestConnectionResult
 } from './types'
+import type { GenerationDraftSummary } from './generation-checkpoint'
 import type { StorageDiagnostic } from './storage-contract'
 
 export const IPC = {
@@ -39,7 +40,9 @@ export const IPC = {
   llmListModels: 'llm:listModels',
   exportMarkdown: 'export:markdown',
   storageDiagnostics: 'storage:diagnostics',
-  storageRecover: 'storage:recover'
+  storageRecover: 'storage:recover',
+  generationDraftGet: 'generation:draft:get',
+  generationDraftDiscard: 'generation:draft:discard'
 } as const
 
 /** preload 暴露到 window.api 的接口 */
@@ -65,4 +68,6 @@ export interface ProjectLensApi {
   exportMarkdown(result: InterviewResult): Promise<{ ok: boolean; path?: string; message: string }>
   getStorageDiagnostics(): Promise<StorageDiagnostic[]>
   recoverStorage(id: string): Promise<void>
+  getGenerationDraft(projectPath: string): Promise<GenerationDraftSummary | null>
+  discardGenerationDraft(projectPath: string, draftId: string | null): Promise<void>
 }

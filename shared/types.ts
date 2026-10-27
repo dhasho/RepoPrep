@@ -1,4 +1,5 @@
 // 主进程与渲染进程共享的类型定义
+export type { GenerationDraftSummary } from './generation-checkpoint'
 
 export type Granularity = 'coarse' | 'medium' | 'fine'
 export type RoleFocus = 'general' | 'frontend' | 'backend' | 'algorithm'
@@ -253,6 +254,27 @@ export interface RecentProject {
   granularity?: Granularity
 }
 
+/** Transient report text for the generating page; never published as a saved report. */
+export interface GenerationPreview {
+  projectSummary: string
+  /** Only questions whose checkpoint has been accepted are included here. */
+  sections: Section[]
+  completedQuestions: number
+  targetQuestions: number
+  /** Incomplete text stays separate from the durable question prefix. */
+  activeQuestion?: {
+    key: string
+    sectionTitle: string
+    sectionSummary?: string
+    title?: string
+    question: string
+    answer: string
+    followUps: FollowUp[]
+  }
+  security?: SecurityProtectionSummary
+  contextTruncation?: ContextTruncationMetadata
+}
+
 export interface GenerateProgress {
   step: string
   detail?: string
@@ -261,6 +283,8 @@ export interface GenerateProgress {
   runId: string
   /** 事件产生的时刻（epoch 毫秒）。由主进程发送时写入，渲染层只读它，避免历史日志时间漂移 */
   ts: number
+  /** A bounded snapshot of decoded report fields, excluding raw JSON and model reasoning. */
+  preview?: GenerationPreview
 }
 
 export interface GenerateOptions {
@@ -273,6 +297,8 @@ export interface GenerateOptions {
 /** 一次生成请求的会话标识；runId 由渲染进程为每次尝试创建。 */
 export interface GenerateRequest extends GenerateOptions {
   runId: string
+  /** Existing generation draft to resume; omitted for a new draft. */
+  resumeDraftId?: string
 }
 
 /** 生成响应封套；result 保持原有持久化格式与类型。 */

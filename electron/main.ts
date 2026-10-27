@@ -3,11 +3,15 @@ import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { IPC } from '@shared/ipc'
-import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, LlmProfileDraft, SettingsSaveRequest } from '@shared/types'
+import { GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
+import type { ExplainRequest, GenerateRequest, GenerateResponse, InterviewResult, LlmProfile, LlmProfileDraft, SettingsSaveRequest, GenerationDraftSummary, GenerationPreview } from '@shared/types'
+import { isGenerationPreview } from '@shared/generation-preview'
+import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { ProjectScanCache } from './services/scan-cache'
 import { GenerationTaskRegistry } from './services/generation-tasks'
+import { beginGenerationDraft, completeGenerationDraft, readGenerationDraft, removeGenerationDraft, saveGenerationDraft } from './services/generation-drafts'
 import { generateInterview, buildExplainMessages } from './services/generator'
 import { chatCompletionStream, isLlmTimeoutError, listModels, testConnection } from './services/llm'
 import { exportMarkdownDialog } from './services/exporter'
@@ -190,6 +194,23 @@ handle(IPC.removeRecent, async (_e, projectPath: string) => {
 
 handle(IPC.loadResult, (_e, projectPath: string) => loadResult(projectPath))
 
+handle(IPC.generationDraftGet, (_e, projectPath: string): GenerationDraftSummary | null =>
+  readGenerationDraft(projectPath)?.summary ?? null
+)
+
+handle(IPC.generationDraftDiscard, (_e, projectPath: string, draftId: string | null) => {
+  if (generationTasks.active) throw new Error('已有生成任务在进行中')
+  if (draftId === null) {
+    removeGenerationDraft(projectPath, null)
+    return
+  }
+  const draft = readGenerationDraft(projectPath)
+  if (!draft || draft.summary.id !== draftId) {
+    throw new Error(GENERATION_DRAFT_MESSAGES.missing)
+  }
+  removeGenerationDraft(projectPath, draftId)
+})
+
 handle(IPC.listAnalyses, (_e, projectPath: string, cursor?: string) => listAnalyses(projectPath, cursor))
 
 handle(IPC.loadAnalysis, (_e, projectPath: string, analysisId: string) => loadAnalysis(projectPath, analysisId))
@@ -219,9 +240,10 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
   }
   // 进度绑定到发起请求的 webContents，并在发送时检查任务和取消状态。
   // ts 保留主进程产生时刻，runId 供 renderer 做任务隔离。
-  const sendProgress = (step: string, detail: string | undefined, percent: number): void => {
+  const sendProgress = (step: string, detail: string | undefined, percent: number, preview?: GenerationPreview): void => {
     if (!isCurrentTask()) return
-    sender.send(IPC.generateProgress, { step, detail, percent, ts: Date.now(), runId })
+    sender.send(IPC.generateProgress, { step, detail, percent, ts: Date.now(), runId,
+      ...(preview && isGenerationPreview(preview) ? { preview } : {}) })
   }
 
   try {
@@ -245,17 +267,64 @@ handle(IPC.generateRun, async (event, request: GenerateRequest): Promise<Generat
       5
     )
 
-    const result = await generateInterview({
+    let draft = readGenerationDraft(options.projectPath)
+    if (options.resumeDraftId) {
+      if (!draft || draft.summary.id !== options.resumeDraftId) {
+        throw new Error(GENERATION_DRAFT_MESSAGES.missing)
+      }
+      if (draft.summary.granularity !== options.granularity || draft.summary.roleFocus !== options.roleFocus || draft.summary.profileId !== profile.id) {
+        throw new Error(GENERATION_DRAFT_MESSAGES.changed)
+      }
+    } else {
+      draft = beginGenerationDraft(options.projectPath, {
+        projectName: cached.scan.name,
+        granularity: options.granularity,
+        roleFocus: options.roleFocus,
+        profileId: profile.id,
+        modelLabel: profile.model
+      })
+    }
+    ensureCurrentTask()
+    if (!draft) throw new Error(GENERATION_DRAFT_MESSAGES.corrupt)
+
+    if (draft.summary.ready && draft.result) {
+      const resultId = createHash('sha256').update(JSON.stringify(draft.result)).digest('hex')
+      let alreadyPublished = false
+      try {
+        const published = loadResult(options.projectPath)
+        alreadyPublished = Boolean(published && createHash('sha256').update(JSON.stringify(published)).digest('hex') === resultId)
+      } catch { /* saveResult remains responsible for existing result recovery and safe errors. */ }
+      const analysisId = alreadyPublished ? resultId : saveResult(options.projectPath, draft.result)
+      ensureCurrentTask()
+      addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
+      ensureCurrentTask()
+      removeGenerationDraft(options.projectPath, draft.summary.id)
+      return { runId, result: draft.result, storagePath: options.projectPath, ...(typeof analysisId === 'string' ? { analysisId } : {}) }
+    }
+    const generationParams = {
       scan: cached.scan,
       granularity: options.granularity,
       roleFocus: options.roleFocus,
       profile,
       signal: abort.signal,
-      onProgress: sendProgress
-    })
+      onProgress: sendProgress,
+      checkpoint: {
+        state: draft.checkpoint,
+        save: (state: GenerationCheckpoint) => {
+          ensureCurrentTask()
+          saveGenerationDraft(options.projectPath, draft!.summary.id, state)
+        }
+      }
+    } as Parameters<typeof generateInterview>[0]
+    const result = await generateInterview(generationParams)
+    ensureCurrentTask()
+    completeGenerationDraft(options.projectPath, draft.summary.id, result)
     ensureCurrentTask()
     const analysisId = saveResult(options.projectPath, result)
+    ensureCurrentTask()
     addRecentProject({ path: options.projectPath, name: cached.scan.name, granularity: options.granularity })
+    ensureCurrentTask()
+    removeGenerationDraft(options.projectPath, draft.summary.id)
     return { runId, result, storagePath: options.projectPath, ...(typeof analysisId === 'string' ? { analysisId } : {}) }
   } catch (err) {
     if (!isCurrentTask()) throw new Error('已取消生成')

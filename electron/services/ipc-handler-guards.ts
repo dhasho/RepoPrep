@@ -12,6 +12,8 @@ import { RESULT_CONTRACT_MESSAGES } from '../../shared/result-contract.ts'
 import { CONTENT_READ_MESSAGES } from '../../shared/content-read.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { STORAGE_MESSAGES } from '../../shared/storage-contract.ts'
+// @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
+import { GENERATION_DRAFT_MESSAGES } from '../../shared/generation-checkpoint.ts'
 
 export type IpcHandler<E extends IpcEventLike = IpcEventLike> = (event: E, ...args: any[]) => unknown
 export interface IpcGuardDependencies {
@@ -25,7 +27,7 @@ export interface IpcGuardDependencies {
   getStorageRecoveryProject?: (id: string) => string | null
 }
 
-const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.listAnalyses, IPC.loadAnalysis, IPC.removeRecent])
+const projectArgumentChannels = new Set<string>([IPC.scanProject, IPC.loadResult, IPC.deleteResult, IPC.listAnalyses, IPC.loadAnalysis, IPC.removeRecent, IPC.generationDraftGet, IPC.generationDraftDiscard])
 const invokeChannels = new Set<string>(INVOKE_CHANNELS)
 /**
  * 可以原样回显给渲染进程的业务提示。判据：消息必须由主进程静态构造、不含任何
@@ -35,6 +37,7 @@ const invokeChannels = new Set<string>(INVOKE_CHANNELS)
 const SAFE_BUSINESS_ERRORS = new Set([
   '已取消生成',
   '已有生成任务在进行中',
+  ...Object.values(GENERATION_DRAFT_MESSAGES),
   '已有相同名词解释请求在进行中',
   '生成面试题时模型请求超时，请检查网络或稍后重试。',
   '项目文件在读取期间发生变化，请重新扫描后重试。',

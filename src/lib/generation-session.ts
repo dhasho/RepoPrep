@@ -1,4 +1,4 @@
-import type { GenerateOptions, GenerateProgress, GenerateRequest, GenerateResponse, InterviewResult, ProjectOverview } from '@shared/types'
+import type { GenerateOptions, GenerateProgress, GenerateRequest, GenerateResponse, GenerationPreview, InterviewResult, ProjectOverview } from '@shared/types'
 
 export interface GenerationApi {
   generate(request: GenerateRequest): Promise<GenerateResponse>
@@ -16,6 +16,7 @@ export interface GenerationTask {
   status: GenerationStatus
   mode: GenerationMode
   progress: GenerateProgress | null
+  preview?: GenerationPreview | null
   logs: readonly GenerateProgress[]
   result: InterviewResult | null
   resultStoragePath?: string
@@ -78,7 +79,7 @@ export class GenerationSession {
     return this.snapshot.tasks.find((task) => task.runId === runId) ?? null
   }
 
-  start(options: GenerateOptions, overview: ProjectOverview, existingResult: InterviewResult | null = null): string | null {
+  start(options: GenerateOptions, overview: ProjectOverview, existingResult: InterviewResult | null = null, resumeDraftId?: string): string | null {
     if (this.disposed || this.snapshot.activeRunId) return null
     const runId = this.makeRunId()
     const frozenOptions = immutableClone(options)
@@ -91,6 +92,7 @@ export class GenerationSession {
       status: 'running',
       mode: 'foreground',
       progress: { runId, step: '准备中…', percent: 1, ts: Date.now() },
+      preview: null,
       logs: [],
       result: null,
       error: null,
@@ -99,7 +101,7 @@ export class GenerationSession {
     // Claim the slot before invoking IPC, then invoke synchronously so an immediate
     // unmount can only cancel a request that has already been sent.
     this.snapshot = { activeRunId: runId, tasks: [task, ...this.snapshot.tasks].slice(0, 10) }
-    const request = { ...frozenOptions, runId }
+    const request = { ...frozenOptions, runId, ...(resumeDraftId ? { resumeDraftId } : {}) } as GenerateRequest
     let pending: Promise<GenerateResponse>
     try {
       pending = this.api.generate(request)
@@ -119,10 +121,12 @@ export class GenerationSession {
     if (this.disposed || !progress.runId || progress.runId !== this.snapshot.activeRunId) return
     const task = this.getTask(progress.runId)
     if (!task || task.status !== 'running') return
-    const stamped = { ...progress }
+    const { preview, ...progressFields } = progress
+    const stamped = { ...progressFields }
     this.replaceTask(task.runId, {
       ...task,
       progress: stamped,
+      preview: preview ? immutableClone(preview) : task.preview,
       logs: [...task.logs.slice(-79), stamped]
     })
   }

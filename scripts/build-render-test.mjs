@@ -36,6 +36,7 @@ const portalShim = {
 const entries = [
   { name: 'app', entry: 'src/App.tsx' },
   { name: 'generation-session', entry: 'src/lib/generation-session.ts' },
+  { name: 'generating-page', entry: 'src/pages/GeneratingPage.tsx' },
   { name: 'result-page', entry: 'src/pages/ResultPage.tsx' },
   { name: 'term-popover', entry: 'src/components/TermPopover.tsx' },
   { name: 'markdown-view', entry: 'src/components/MarkdownView.tsx' },

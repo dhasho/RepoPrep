@@ -95,8 +95,9 @@ const GRANULARITIES = ['coarse', 'medium', 'fine'] as const satisfies readonly G
 const ROLES = ['general', 'frontend', 'backend', 'algorithm'] as const satisfies readonly RoleFocus[]
 function generateRequest(value: unknown): asserts value is GenerateRequest {
   if (!record(value)) fail()
-  exactKeys(value, ['projectPath', 'granularity', 'roleFocus', 'profileId', 'runId'])
+  exactKeys(value, ['projectPath', 'granularity', 'roleFocus', 'profileId', 'runId', 'resumeDraftId'])
   absolutePath(value.projectPath); enumValue(value.granularity, GRANULARITIES); enumValue(value.roleFocus, ROLES); string(value.profileId, 128); requestId(value.runId)
+  if (value.resumeDraftId !== undefined) requestId(value.resumeDraftId)
 }
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function requestId(value: unknown): asserts value is string {
@@ -134,6 +135,8 @@ const validators: Record<string, Validator> = {
   [IPC.settingsGet]: (a) => exactArgs(a, 0),
   [IPC.storageDiagnostics]: (a) => exactArgs(a, 0),
   [IPC.storageRecover]: (a) => { exactArgs(a, 1); if (!isStorageDiagnosticId(a[0])) fail() },
+  [IPC.generationDraftGet]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
+  [IPC.generationDraftDiscard]: (a) => { exactArgs(a, 2); absolutePath(a[0]); if (a[1] !== null) requestId(a[1]) },
   [IPC.scanProject]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.removeRecent]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },
   [IPC.loadResult]: (a) => { exactArgs(a, 1); absolutePath(a[0]) },

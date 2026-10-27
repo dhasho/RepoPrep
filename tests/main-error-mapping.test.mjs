@@ -11,6 +11,8 @@ import * as sharedTypes from '../shared/types.ts'
 import * as resultContract from '../shared/result-contract.ts'
 import * as contentRead from '../shared/content-read.ts'
 import * as storageContract from '../shared/storage-contract.ts'
+import * as generationCheckpoint from '../shared/generation-checkpoint.ts'
+import * as generationPreview from '../shared/generation-preview.ts'
 import { buildExplainMessages, generateInterview } from '../electron/services/generator.ts'
 import { scanProject } from '../electron/services/scanner.ts'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError } from '../electron/services/llm.ts'
@@ -109,12 +111,20 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   }
 
   modules.set('@shared/ipc', { IPC })
+  modules.set('@shared/generation-preview', generationPreview)
   modules.set('@shared/types', sharedTypes)
   modules.set('../../shared/ipc.ts', { IPC })
   modules.set('../../shared/types.ts', sharedTypes)
   modules.set('../../shared/result-contract.ts', resultContract)
   modules.set('../../shared/content-read.ts', contentRead)
   modules.set('../../shared/storage-contract.ts', storageContract)
+  modules.set('../../shared/generation-checkpoint.ts', generationCheckpoint)
+  modules.set('@shared/generation-checkpoint', generationCheckpoint)
+  modules.set('./services/generation-drafts', {
+    readGenerationDraft: () => null,
+    beginGenerationDraft: (projectPath, meta) => ({ version: 1, summary: { ...meta, id: randomUUID(), projectPath, createdAt: '', updatedAt: '', completedBatches: 0, completedQuestions: 0, totalBatches: 0, ready: false }, checkpoint: null }),
+    saveGenerationDraft() {}, completeGenerationDraft() {}, removeGenerationDraft() {}
+  })
   modules.set('./services/scan-cache', {
     ProjectScanCache: class {
       async getFresh() { return { status: 'reused', scan } }

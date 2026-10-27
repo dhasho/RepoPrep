@@ -31,7 +31,9 @@ const api: ProjectLensApi = {
   listModels: (profile) => ipcRenderer.invoke(IPC.llmListModels, profile),
   exportMarkdown: (result) => ipcRenderer.invoke(IPC.exportMarkdown, result),
   getStorageDiagnostics: () => ipcRenderer.invoke(IPC.storageDiagnostics),
-  recoverStorage: (id) => ipcRenderer.invoke(IPC.storageRecover, id)
+  recoverStorage: (id) => ipcRenderer.invoke(IPC.storageRecover, id),
+  getGenerationDraft: (projectPath) => ipcRenderer.invoke(IPC.generationDraftGet, projectPath),
+  discardGenerationDraft: (projectPath, draftId) => ipcRenderer.invoke(IPC.generationDraftDiscard, projectPath, draftId)
 }
 
 contextBridge.exposeInMainWorld('api', api)

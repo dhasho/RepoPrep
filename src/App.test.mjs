@@ -77,6 +77,8 @@ function makeApi({
   loadFailures: initialLoadFailures = new Map(),
   storageDiagnostics: initialStorageDiagnostics = [],
   storageRecoveryFailures: initialStorageRecoveryFailures = new Map(),
+  generationDrafts: initialGenerationDrafts = new Map(),
+  generationDraftFailures: initialDraftFailures = new Map(),
   scanOverview,
   generateImmediately,
   profiles = [{ id: 'profile-1', name: 'Mock', baseUrl: 'https://example.test/v1', apiKey: '', model: 'mock-model' }],
@@ -101,6 +103,10 @@ function makeApi({
   const storageRecoveryFailures = initialStorageRecoveryFailures instanceof Map
     ? new Map(initialStorageRecoveryFailures)
     : new Map(Object.entries(initialStorageRecoveryFailures))
+  const generationDrafts = initialGenerationDrafts instanceof Map ? new Map(initialGenerationDrafts) : new Map(Object.entries(initialGenerationDrafts))
+  const draftReads = []
+  const draftDiscards = []
+  const draftFailures = initialDraftFailures instanceof Map ? new Map(initialDraftFailures) : new Map(Object.entries(initialDraftFailures))
   const delayedStorageRecoveries = new Map()
   const listeners = new Set()
   const delayedScans = new Map()
@@ -140,6 +146,17 @@ function makeApi({
     for (const [projectPath, error] of Object.entries(initialLoadFailures)) queue(loadFailures, projectPath, error)
   }
   const api = {
+    getGenerationDraft: async (projectPath) => {
+      draftReads.push(projectPath)
+      const failures = draftFailures.get(projectPath)
+      if (failures?.length) { const error = failures.shift(); if (!failures.length) draftFailures.delete(projectPath); throw error }
+      return generationDrafts.get(projectPath) ?? null
+    },
+    discardGenerationDraft: async (projectPath, draftId) => {
+      draftDiscards.push({ projectPath, draftId })
+      if (draftId === null) draftFailures.delete(projectPath)
+      else if (generationDrafts.get(projectPath)?.id === draftId) generationDrafts.delete(projectPath)
+    },
     selectFolder: async () => { selectCalls++; return selectedPath },
     scanProject: async (projectPath) => {
       scans.push(projectPath)
@@ -251,6 +268,8 @@ function makeApi({
   return {
     api,
     requests,
+    draftReads,
+    draftDiscards,
     explainRequests,
     explainCancellations,
     cancellations,
@@ -282,6 +301,7 @@ function makeApi({
       return control
     },
     failNextScan: (projectPath, error = new Error('scan failed')) => queue(scanFailures, projectPath, error),
+    failNextDraftRead: (projectPath, error = new Error('draft read failed')) => queue(draftFailures, projectPath, error),
     failNextLoad: (projectPath, error = new Error('load failed')) => queue(loadFailures, projectPath, error),
     failNextAnalysisList: (projectPath, error = new Error('analysis list failed')) => queue(analysisListFailures, projectPath, error),
     failNextAnalysisLoad: (projectPath, error = new Error('analysis load failed'), id) => queue(analysisLoadFailures, id ? `${projectPath}:${id}` : projectPath, error),
@@ -724,17 +744,15 @@ test('back, forward, and question-directory navigation guard a running task; his
     assert.ok(h.host.textContent.includes('大模型配置'))
 
     await clickHistoryButton(h, 'back')
-    assert.ok(h.host.textContent.includes('正在为「ProjectB」生成面试题'), 'back restores the still-running task snapshot')
+    assert.ok(h.host.textContent.includes('正在思考'), 'back restores the still-running task snapshot')
     assert.equal(buttonByLabel(h.host, '下一步')?.disabled, false, 'settings remains the forward destination')
 
     await clickHistoryButton(h, 'forward')
     assert.ok(button(h.host, '留在生成页'), 'forward while generating is guarded')
     await act(h, () => button(h.host, '留在生成页').click())
     const questionDirectory = buttonByLabel(h.host, '最近分析的问题目录')
-    assert.ok(questionDirectory && !questionDirectory.disabled)
-    await act(h, () => questionDirectory.click())
-    assert.ok(button(h.host, '留在生成页'), 'opening the last-analysis question directory while generating is guarded')
-    await act(h, () => button(h.host, '留在生成页').click())
+    assert.ok(questionDirectory?.disabled, 'question directory stays unavailable during generation')
+    assert.equal(buttonByLabel(h.host, '项目分析目录')?.getAttribute('aria-pressed'), 'true', 'generation keeps the project/history sidebar selected')
     await clickHistoryButton(h, 'back')
     assert.ok(button(h.host, '后台继续'), 'back while generating is guarded')
     await act(h, () => button(h.host, '后台继续').click())
@@ -744,7 +762,7 @@ test('back, forward, and question-directory navigation guard a running task; his
     assert.ok(button(h.host, '开始生成面试题'), 'background completion does not steal navigation')
     await clickHistoryButton(h, 'forward')
     assert.ok(h.host.textContent.includes('COMPLETED_TASK_B'), 'forward restores the task result after it has already completed')
-    assert.ok(!h.host.textContent.includes('正在为「ProjectB」生成面试题'), 'a terminal task snapshot cannot revive generation UI')
+    assert.ok(!h.host.textContent.includes('正在思考'), 'a terminal task snapshot cannot revive generation UI')
 
     h.mock.emitProgress({ runId: request.request.runId, step: 'STALE_HISTORY_PROGRESS', percent: 99, ts: Date.now() })
     await act(h, () => {})
@@ -814,7 +832,7 @@ for (const [count, outcome] of [[10, 'succeeded'], [11, 'succeeded'], [11, 'fail
       h.mock.emitProgress({ runId: runs[0].pending.request.runId, step: 'EVICTED_STALE_PROGRESS', percent: 95, ts: Date.now() })
       await act(h, () => {})
       assert.ok(!h.host.textContent.includes('EVICTED_STALE_PROGRESS'))
-      assert.ok(!h.host.textContent.includes('正在为「RetainedHistory1」生成面试题'))
+      assert.ok(!h.host.textContent.includes('正在思考'))
     } finally { await cleanupAndUnmount(h) }
   })
 }
@@ -1036,6 +1054,113 @@ async function startGeneration(harness) {
   return harness.mock.requests.at(-1)
 }
 
+test('saved generation draft is passive until resumed and continuation uses its original options and a fresh run id', async () => {
+  const projectPath = 'C:\\ProjectDraft'
+  const draft = {
+    id: 'draft-123', projectPath, projectName: 'ProjectDraft', granularity: 'fine', roleFocus: 'backend',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 2, completedQuestions: 8, totalBatches: 5, ready: false
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
+  try {
+    await openProject(h, projectPath)
+    await act(h, () => {})
+    assert.ok(h.host.textContent.includes('可继续的生成任务'))
+    assert.ok(button(h.host, '继续生成'), 'an interrupted draft with completed batches can resume')
+    assert.ok(h.host.textContent.includes('已保存 2/5 个完整批次 · 8 道题 · 原模型：mock-model'))
+    assert.equal(h.mock.requests.length, 0, 'checking a draft does not call the model')
+    await act(h, () => button(h.host, '继续生成').click())
+    assert.equal(h.mock.requests.length, 1)
+    const request = h.mock.requests[0].request
+    assert.equal(request.resumeDraftId, draft.id)
+    assert.notEqual(request.runId, draft.id)
+    assert.match(request.runId, /^[0-9a-f-]{36}$/i)
+    assert.deepEqual({ projectPath: request.projectPath, granularity: request.granularity, roleFocus: request.roleFocus, profileId: request.profileId }, {
+      projectPath, granularity: draft.granularity, roleFocus: draft.roleFocus, profileId: draft.profileId
+    })
+  } finally { await unmount(h) }
+})
+
+test('draft with no completed checkpoint batches can still resume', async () => {
+  const projectPath = 'C:\\ProjectEmptyCheckpoint'
+  const draft = {
+    id: 'draft-no-batches', projectPath, projectName: 'ProjectEmptyCheckpoint', granularity: 'medium', roleFocus: 'general',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 0, completedQuestions: 0, totalBatches: 3, ready: false
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('已保存 0/3 个完整批次 · 0 道题'))
+    assert.ok(button(h.host, '继续生成'))
+    await act(h, () => button(h.host, '继续生成').click())
+    assert.equal(h.mock.requests[0].request.resumeDraftId, draft.id)
+  } finally { await unmount(h) }
+})
+
+test('ready draft offers the completed report save action', async () => {
+  const projectPath = 'C:\\ProjectReadyDraft'
+  const draft = {
+    id: 'draft-ready', projectPath, projectName: 'ProjectReadyDraft', granularity: 'medium', roleFocus: 'general',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 3, completedQuestions: 12, totalBatches: 3, ready: true
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]) })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(button(h.host, '保存已完成报告'))
+    assert.equal(h.mock.requests.length, 0, 'reading a ready draft does not send a generation request')
+    await act(h, () => button(h.host, '保存已完成报告').click())
+    assert.equal(h.mock.requests[0].request.resumeDraftId, draft.id, 'the main process receives the ready draft id to finalize its saved result')
+  } finally { await unmount(h) }
+})
+
+test('draft read failure can be retried and discarding sends only the selected project path and draft id', async () => {
+  const projectPath = 'C:\\ProjectDraft'
+  const draft = {
+    id: 'draft-discard', projectPath, projectName: 'ProjectDraft', granularity: 'medium', roleFocus: 'general',
+    profileId: 'profile-1', modelLabel: 'mock-model', createdAt: '2026-10-26T00:00:00.000Z', updatedAt: '2026-10-26T00:01:00.000Z',
+    completedBatches: 1, completedQuestions: 4, totalBatches: 3, ready: true
+  }
+  const h = await mountApp({ generationDrafts: new Map([[projectPath, draft]]), generationDraftFailures: new Map([[projectPath, [new Error('temporary read failure')]]]) })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('读取生成草稿失败'))
+    const start = button(h.host, '开始生成面试题')
+    assert.equal(start.disabled, true, 'starting is blocked while draft state is unknown')
+    await act(h, () => button(h.host, '重试读取').click())
+    assert.ok(h.host.textContent.includes('可继续的生成任务'))
+    await act(h, () => button(h.host, '丢弃草稿').click())
+    assert.deepEqual(h.mock.draftDiscards, [{ projectPath, draftId: draft.id }])
+    assert.equal(h.mock.requests.length, 0, 'discarding a draft does not start a generation')
+    assert.equal(h.mock.deletions.length, 0, 'discarding a draft does not delete analysis history')
+    assert.ok(!h.host.textContent.includes('可继续的生成任务'))
+    assert.equal(button(h.host, '开始生成面试题').disabled, false)
+  } finally { await unmount(h) }
+})
+
+test('corrupt draft can only be explicitly discarded with null and leaves saved analysis history intact', async () => {
+  const projectPath = 'C:\\ProjectCorruptDraft'
+  const historical = makeResult(projectPath)
+  const corruptError = new Error("Error invoking remote method 'generation:draft:get': DisplayableIpcError: 生成草稿损坏或版本不兼容，请丢弃后重新生成。")
+  const h = await mountApp({
+    savedResults: new Map([[projectPath, historical]]),
+    generationDraftFailures: new Map([[projectPath, [corruptError]]])
+  })
+  try {
+    await openProject(h, projectPath)
+    assert.ok(h.host.textContent.includes('丢弃损坏草稿'))
+    assert.equal(h.mock.draftDiscards.length, 0, 'rendering a corrupt draft error does not discard it automatically')
+    assert.equal(h.mock.requests.length, 0, 'checking a corrupt draft does not invoke generation')
+    assert.equal(h.mock.deletions.length, 0)
+    await act(h, () => button(h.host, '丢弃损坏草稿').click())
+    assert.deepEqual(h.mock.draftDiscards, [{ projectPath, draftId: null }])
+    assert.equal(h.mock.deletions.length, 0, 'corrupt draft cleanup does not delete report history')
+    assert.equal(h.mock.requests.length, 0, 'discarding corrupt draft does not invoke generation')
+    assert.equal(h.host.textContent.includes('读取生成草稿失败'), false, 'successful cleanup reloads the draft state')
+  } finally { await unmount(h) }
+})
+
 async function leaveGenerationToSelect(harness) {
   await clickHistoryButton(harness, 'back')
   assert.ok(harness.host.textContent.includes('仍在生成'), '离页时应要求选择生成任务处理方式')
@@ -1181,7 +1306,8 @@ test('App foreground generation resolves to its result', async () => {
     assert.match(request.request.runId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     h.mock.emitProgress({ runId: request.request.runId, step: 'Mock progress', percent: 42, ts: Date.now() })
     await act(h, () => {})
-    assert.ok(h.host.textContent.includes('Mock progress'))
+    assert.ok(h.host.textContent.includes('正在思考'))
+    assert.ok(!h.host.textContent.includes('Mock progress'), 'internal stage logs do not replace the report preview')
     await act(h, () => request.resolve({ runId: request.request.runId, result: makeResult(request.request.projectPath) }))
     assert.ok(h.host.textContent.includes('ProjectA · 面试题'), '当前任务完成后应显示该项目结果')
   } finally { await unmount(h) }
@@ -1225,13 +1351,19 @@ test('background task recovery shows the frozen project A snapshot while project
   try {
     await openProject(h, 'C:\\ProjectA')
     const requestA = await startGeneration(h)
+    h.mock.emitProgress({
+      runId: requestA.request.runId, step: 'partial', percent: 35, ts: Date.now(),
+      preview: { projectSummary: 'BACKGROUND_A_PREVIEW', sections: [], completedQuestions: 1, targetQuestions: 3 }
+    })
     await leaveGenerationToSelect(h)
     await openProject(h, 'C:\\ProjectB')
     assert.ok(h.host.textContent.includes('ProjectB'))
     await act(h, () => button(h.host, '后台生成').click())
     await act(h, () => button(h.host, '恢复任务').click())
-    assert.ok(h.host.textContent.includes('正在为「ProjectA」生成面试题'))
-    assert.ok(!h.host.textContent.includes('正在为「ProjectB」生成面试题'))
+    assert.ok(!h.host.textContent.includes('正在思考'), 'received report content replaces the initial waiting indicator')
+    assert.ok(h.host.textContent.includes('BACKGROUND_A_PREVIEW'), 'the detached task restores its latest report snapshot')
+    assert.ok(h.host.textContent.includes('ProjectA'))
+    assert.ok([...h.host.querySelectorAll('button[data-project-path]')].some((item) => item.getAttribute('data-project-path') === 'C:\\ProjectB'), 'restoring A preserves B in the project directory')
     await act(h, () => requestA.reject(new Error('已取消')))
     assert.ok(h.host.textContent.includes('ProjectA'), '任务恢复后仍以 A 的冻结快照返回其配置')
   } finally { await unmount(h) }
@@ -1252,10 +1384,10 @@ test('restoring A while project B loadResult is pending invalidates B navigation
     assert.ok(h.host.textContent.includes('选择一个项目，我们开始分析'), 'B scan should still be waiting on loadResult')
     await act(h, () => button(h.host, '后台生成').click())
     await act(h, () => button(h.host, '恢复任务').click())
-    assert.ok(h.host.textContent.includes('正在为「ProjectA」生成面试题'))
+    assert.ok(h.host.textContent.includes('正在思考'))
     delayedB.resolve()
     await act(h, () => {})
-    assert.ok(h.host.textContent.includes('正在为「ProjectA」生成面试题'), 'stale B load must not replace restored task A')
+    assert.ok(h.host.textContent.includes('正在思考'), 'stale B load must not replace restored task A')
     await act(h, () => requestA.reject(new Error('已取消')))
   } finally { await unmount(h) }
 })
@@ -1273,16 +1405,20 @@ test('cancelling restored A returns to A with A history, ignores late progress, 
     assert.ok((await recentAnalysisRows(h, 'C:\\ProjectB')).length > 0, 'B should have its own saved history in the project sidebar')
     await act(h, () => button(h.host, '后台生成').click())
     await act(h, () => button(h.host, '恢复任务').click())
-    assert.ok(h.host.textContent.includes('正在为「ProjectA」生成面试题'))
+    assert.ok(h.host.textContent.includes('正在思考'))
 
     const cancelButton = button(h.host, '取消生成')
     await act(h, () => cancelButton.click())
     assert.deepEqual(h.mock.cancellations, [requestA.request.runId], 'foreground cancel must target A runId')
     assert.equal(cancelButton.disabled, true)
     assert.equal(cancelButton.textContent.trim(), '正在取消…')
-    h.mock.emitProgress({ runId: requestA.request.runId, step: 'late after cancel', percent: 95, ts: Date.now() })
+    h.mock.emitProgress({
+      runId: requestA.request.runId, step: 'late after cancel', percent: 95, ts: Date.now(),
+      preview: { projectSummary: 'LATE_CANCEL_PREVIEW', sections: [], completedQuestions: 2, targetQuestions: 3 }
+    })
     await act(h, () => {})
     assert.ok(!h.host.textContent.includes('late after cancel'), 'cancelling task must ignore late progress')
+    assert.ok(!h.host.textContent.includes('LATE_CANCEL_PREVIEW'), 'cancelling task must ignore late previews')
 
     await act(h, () => requestA.reject(new Error('已取消生成')))
     assert.ok(h.host.textContent.includes('ProjectA'), 'cancellation should return to A configuration')
@@ -1335,10 +1471,10 @@ test('choosing stay while opening A keeps foreground B running in the task panel
     await act(h, () => button(h.host, '后台生成').click())
     await act(h, () => button(h.host, '查看结果').click())
     await act(h, () => button(h.host, '留在生成页').click())
-    assert.ok(h.host.textContent.includes('正在为「ProjectB」生成面试题'))
+    assert.ok(h.host.textContent.includes('正在思考'))
     assert.deepEqual(h.mock.cancellations, [])
     await act(h, () => button(h.host, '关闭').click())
-    assert.ok(h.host.textContent.includes('正在为「ProjectB」生成面试题'))
+    assert.ok(h.host.textContent.includes('正在思考'))
     await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: makeResult(requestB.request.projectPath) }))
     assert.ok(h.host.textContent.includes('ProjectB · 面试题'))
   } finally { await unmount(h) }
@@ -1374,7 +1510,7 @@ test('cancel-and-leave does not navigate when A cancellation settles after proje
     await openProject(h, 'C:\\ProjectB')
     await act(h, () => requestA.reject(new Error('已取消生成')))
     assert.ok(h.host.textContent.includes('ProjectB'), 'late foreground cancellation must not navigate away from B')
-    assert.ok(!h.host.textContent.includes('正在为「ProjectA」生成面试题'))
+    assert.ok(!h.host.textContent.includes('正在思考'))
   } finally { await unmount(h) }
 })
 
@@ -1388,14 +1524,55 @@ test('old run progress is ignored while a newer project run is foreground', asyn
     await act(h, () => requestA.resolve({ runId: requestA.request.runId, result: makeResult(requestA.request.projectPath) }))
     assert.ok(h.host.textContent.includes('ProjectB'))
     const requestB = await startGeneration(h)
-    h.mock.emitProgress({ runId: requestA.request.runId, step: 'OLD A PROGRESS', percent: 90, ts: Date.now() })
-    h.mock.emitProgress({ runId: requestB.request.runId, step: 'B PROGRESS', percent: 33, ts: Date.now() })
+    h.mock.emitProgress({
+      runId: requestA.request.runId, step: 'OLD A PROGRESS', percent: 90, ts: Date.now(),
+      preview: { projectSummary: 'OLD_A_PREVIEW', sections: [], completedQuestions: 1, targetQuestions: 2 }
+    })
+    h.mock.emitProgress({ runId: requestB.request.runId, step: 'B PROGRESS', percent: 33, ts: Date.now(),
+      preview: { projectSummary: 'CURRENT_B_PREVIEW', sections: [], completedQuestions: 0, targetQuestions: 20 } })
     await act(h, () => {})
     assert.ok(!h.host.textContent.includes('OLD A PROGRESS'))
-    assert.ok(h.host.textContent.includes('B PROGRESS'))
+    assert.ok(!h.host.textContent.includes('OLD_A_PREVIEW'))
+    assert.ok(h.host.textContent.includes('CURRENT_B_PREVIEW'))
+    assert.ok(!h.host.textContent.includes('B PROGRESS'))
     await act(h, () => requestB.resolve({ runId: requestB.request.runId, result: makeResult(requestB.request.projectPath) }))
     assert.ok(h.host.textContent.includes('ProjectB · 面试题'))
   } finally { await unmount(h) }
+})
+
+test('generation keeps the project directory visible, renders partial preview, then opens the result directory', async () => {
+  const pathA = 'C:\\ProjectA'
+  const pathB = 'C:\\ProjectB'
+  const resultA = makeResult(pathA)
+  const h = await mountApp({
+    recent: [{ path: pathA, name: 'ProjectA', lastUsedAt: resultA.createdAt }],
+    savedResults: new Map([[pathA, resultA]])
+  })
+  try {
+    await viewRecentResult(h, pathA)
+    await openProject(h, pathB)
+    const request = await startGeneration(h)
+    const preview = {
+      projectSummary: 'PARTIAL_REPORT_SUMMARY', sections: [], completedQuestions: 0, targetQuestions: 2,
+      activeQuestion: {
+        key: 'q1', sectionTitle: '基础问题', title: 'PARTIAL_REPORT_TITLE',
+        question: 'PARTIAL_QUESTION_TEXT', answer: 'PARTIAL_ANSWER_TEXT', followUps: []
+      }
+    }
+    h.mock.emitProgress({ runId: request.request.runId, step: '解析中', percent: 52, ts: Date.now(), preview })
+    await act(h, () => {})
+    assert.ok(h.host.textContent.includes('PARTIAL_REPORT_SUMMARY'))
+    assert.ok(h.host.textContent.includes('PARTIAL_QUESTION_TEXT'))
+    assert.ok(h.host.textContent.includes('正在生成'))
+    assert.ok(!h.host.textContent.includes('正在思考'))
+    assert.equal(buttonByLabel(h.host, '项目分析目录')?.getAttribute('aria-pressed'), 'true')
+    assert.equal(buttonByLabel(h.host, '最近分析的问题目录')?.disabled, true, 'the result question directory is unavailable during generation')
+    assert.ok(h.host.textContent.includes('ProjectA'), 'the project history remains visible while rendering the partial report')
+
+    await act(h, () => request.resolve({ runId: request.request.runId, result: makeResult(pathB) }))
+    assert.ok(h.host.textContent.includes('ProjectB · 面试题'))
+    assert.equal(buttonByLabel(h.host, '最近分析的问题目录')?.disabled, false, 'completion restores the existing result directory')
+  } finally { await cleanupAndUnmount(h) }
 })
 
 test('start immediately invokes IPC; dispose cancels it and stale settlement/cancel cannot affect a newer run', async () => {
@@ -1414,6 +1591,16 @@ test('start immediately invokes IPC; dispose cancels it and stale settlement/can
   const opts = { projectPath: 'C:\\ProjectA', granularity: 'medium', roleFocus: 'general', profileId: 'p1' }
   const overviewA = makeOverview(opts.projectPath)
   const runA = session.start(opts, overviewA)
+  const previewA = {
+    projectSummary: 'SUMMARY_A', sections: [], completedQuestions: 1, targetQuestions: 3,
+    activeQuestion: { key: 'q-a', sectionTitle: 'Basics', question: 'A?', answer: '', followUps: [] }
+  }
+  session.receiveProgress({ runId: runA, step: 'partial', percent: 20, ts: Date.now(), preview: previewA })
+  assert.deepEqual(JSON.parse(JSON.stringify(session.getTask(runA).preview)), previewA)
+  assert.equal('preview' in session.getTask(runA).progress, false, 'progress state excludes the report snapshot')
+  assert.equal('preview' in session.getTask(runA).logs[0], false, 'log entries do not retain the report snapshot')
+  session.receiveProgress({ runId: runA, step: 'heartbeat', percent: 21, ts: Date.now() })
+  assert.deepEqual(JSON.parse(JSON.stringify(session.getTask(runA).preview)), previewA, 'a heartbeat without preview preserves the latest snapshot')
   assert.equal(Object.isFrozen(session.getTask(runA).overview.tree.children[0]), true)
   assert.equal(pending.length, 1, 'generate must be invoked synchronously before start returns')
   assert.equal(session.start({ ...opts, projectPath: 'C:\\ProjectB' }, makeOverview('C:\\ProjectB')), null, 'a second run cannot replace an unsettled run')
@@ -1424,10 +1611,11 @@ test('start immediately invokes IPC; dispose cancels it and stale settlement/can
   session.activate()
   const runB = session.start({ ...opts, projectPath: 'C:\\ProjectB' }, makeOverview('C:\\ProjectB'))
   await new Promise((resolve) => setImmediate(resolve))
-  session.receiveProgress({ runId: runA, step: 'late progress', percent: 99, ts: Date.now() })
+  session.receiveProgress({ runId: runA, step: 'late progress', percent: 99, ts: Date.now(), preview: previewA })
   assert.equal(session.cancel(runA), false)
   assert.equal(session.getSnapshot().activeRunId, runB)
   assert.equal(session.getTask(runB).overview.name, 'ProjectB')
+  assert.equal(session.getTask(runB).preview, null, 'a new run starts without the previous run preview')
   assert.equal(session.getTask(runB).logs.some((entry) => entry.step === 'late progress'), false)
   assert.deepEqual(cancelled, [runA], 'stale cancel must not reach or cancel B')
   pending[0].resolve({ runId: runA, result: makeResult(opts.projectPath) })
@@ -1846,12 +2034,12 @@ test('resuming a background task wins navigation over a pending history scan suc
       await startRecoveryFromVisibleResult(h)
       await act(h, () => button(h.host, '后台生成').click())
       await act(h, () => button(h.host, '恢复任务').click())
-      assert.ok(h.host.textContent.includes('正在为「ProjectA」生成面试题'))
+      assert.ok(h.host.textContent.includes('正在思考'))
 
       if (outcome === 'success') delayed.resolve()
       else delayed.reject(new Error('late history scan failure'))
       await act(h, () => {})
-      assert.ok(h.host.textContent.includes('正在为「ProjectA」生成面试题'), 'task resume must win the pending history navigation')
+      assert.ok(h.host.textContent.includes('正在思考'), 'task resume must win the pending history navigation')
       assert.ok(!h.host.textContent.includes('原项目无法读取'))
       assert.deepEqual(h.mock.cancellations, [], 'resuming the existing task must not cancel it')
       assert.equal(h.mock.requests.length, 1)
@@ -1942,8 +2130,9 @@ test('returning from A history recovery to task B restores B options after cance
       await startRecoveryFromVisibleResult(h)
       assert.ok(h.host.textContent.includes('仍在生成'), 'background B should keep recovered A configuration busy')
       await act(h, () => button(h.host, '查看任务').click())
-      assert.ok(h.host.textContent.includes('正在为「ProjectB」生成面试题'), 'task panel should restore B')
-      assert.ok(h.host.textContent.includes('细粒度 · 后端方向'), 'resumed B should show its frozen task options')
+      assert.ok(h.host.textContent.includes('正在思考'), 'task panel should restore B')
+      const generationHeader = [...h.host.querySelectorAll('header')].find(header => header.textContent.includes('ProjectB · 面试题'))
+      assert.ok(generationHeader?.textContent.includes('细粒度') && generationHeader?.textContent.includes('后端方向'), 'resumed B should show its frozen task options')
 
       if (settlement === 'cancel') {
         await act(h, () => button(h.host, '取消生成').click())

@@ -1,7 +1,9 @@
 // 配置页：项目概览 + 颗粒度/方向选择 + 开始生成
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GenerateOptions, Granularity, ProjectOverview, RoleFocus, PublicSettings } from '@shared/types'
 import { GRANULARITY_META, ROLE_META } from '@shared/types'
+import { GENERATION_DRAFT_MESSAGES, type GenerationDraftSummary } from '@shared/generation-checkpoint'
+import { api } from '../lib/ipc'
 import FileTreeView from '../components/FileTreeView'
 import { AppIcon } from '../components/AppIcon'
 
@@ -10,10 +12,13 @@ interface Props {
   settings: PublicSettings
   initialOptions?: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>
   notice?: string | null
-  onStart: (options: GenerateOptions) => void
+  onStart: (options: GenerateOptions, resumeDraftId?: string) => void
   onOptionsChange?: (options: Pick<GenerateOptions, 'granularity' | 'roleFocus' | 'profileId'>) => void
   busyTask?: { projectName: string; runId: string; cancelling: boolean } | null
   onResumeTask?: () => void
+  onResumeDraft: (draft: GenerationDraftSummary) => void
+  onOpenSettings: () => void
+  projectPath?: string
 }
 
 function formatBytes(n: number): string {
@@ -23,9 +28,68 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)}GB`
 }
 
-export default function ConfigurePage({ overview, settings, initialOptions, notice = null, onStart, onOptionsChange, busyTask = null, onResumeTask }: Props) {
+function draftErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  // Electron invoke wraps main-process errors; compare the known business
+  // message after that wrapper without treating arbitrary read errors as corrupt.
+  return Object.values(GENERATION_DRAFT_MESSAGES).find((known) => message === known || message.endsWith(`: ${known}`)) ?? message
+}
+
+export default function ConfigurePage({ overview, settings, initialOptions, notice = null, onStart, onOptionsChange, busyTask = null, onResumeTask, onResumeDraft, onOpenSettings, projectPath }: Props) {
   const [granularity, setGranularity] = useState<Granularity>(initialOptions?.granularity ?? 'medium')
   const [roleFocus, setRoleFocus] = useState<RoleFocus>(initialOptions?.roleFocus ?? 'general')
+  const [draft, setDraft] = useState<GenerationDraftSummary | null>(null)
+  const [draftStatus, setDraftStatus] = useState<'loading' | 'ready' | 'error' | 'discarding'>('loading')
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const requestId = useRef(0)
+  const currentProjectPath = projectPath ?? overview.root
+  const loadDraft = () => {
+    const ticket = ++requestId.current
+    setDraftStatus('loading')
+    setDraftError(null)
+    const getDraft = (api as unknown as { getGenerationDraft?: (path: string) => Promise<GenerationDraftSummary | null> }).getGenerationDraft
+    if (!getDraft) {
+      setDraft(null)
+      setDraftStatus('ready')
+      return
+    }
+    void getDraft(currentProjectPath).then((value) => {
+      if (ticket !== requestId.current) return
+      setDraft(value)
+      setDraftStatus('ready')
+    }).catch((error: unknown) => {
+      if (ticket !== requestId.current) return
+      setDraft(null)
+      setDraftError(draftErrorMessage(error))
+      setDraftStatus('error')
+    })
+  }
+  useEffect(() => {
+    loadDraft()
+    return () => { requestId.current++ }
+  }, [currentProjectPath])
+  const discardDraft = async (draftId: string | null) => {
+    if ((draftId === null && draftError !== GENERATION_DRAFT_MESSAGES.corrupt) || busyTask || draftStatus === 'discarding') return
+    const ticket = ++requestId.current
+    setDraftStatus('discarding')
+    setDraftError(null)
+    try {
+      const discard = (api as unknown as { discardGenerationDraft?: (path: string, id: string | null) => Promise<void> }).discardGenerationDraft
+      if (!discard) throw new Error('当前版本不支持丢弃生成草稿。')
+      await discard(currentProjectPath, draftId)
+      if (ticket !== requestId.current) return
+      if (draftId === null) {
+        loadDraft()
+      } else {
+        setDraft(null)
+        setDraftStatus('ready')
+      }
+    } catch (error) {
+      if (ticket !== requestId.current) return
+      setDraftError(draftErrorMessage(error))
+      setDraftStatus('error')
+    }
+  }
   const preferredProfileId = initialOptions?.profileId
   const profileId = [preferredProfileId, settings.defaultProfileId, settings.profiles[0]?.id]
     .find((id) => id && settings.profiles.some((profile) => profile.id === id)) ?? ''
@@ -133,6 +197,34 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
                 )}
               </div>
             )}
+            {draftStatus === 'loading' && <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500" role="status">正在检查可继续的生成任务…</div>}
+            {draftStatus === 'error' && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700" role="alert">
+                <p>读取生成草稿失败：{draftError}</p>
+                <div className="mt-2 flex gap-2">
+                  <button className="rounded border border-rose-300 bg-white px-3 py-1.5 text-xs" disabled={Boolean(busyTask)} onClick={loadDraft}>重试读取</button>
+                  {draftError === GENERATION_DRAFT_MESSAGES.corrupt && (
+                    <button className="rounded border border-rose-300 bg-white px-3 py-1.5 text-xs disabled:opacity-50" disabled={Boolean(busyTask)} onClick={() => void discardDraft(null)}>丢弃损坏草稿</button>
+                  )}
+                </div>
+              </div>
+            )}
+            {draft && draftStatus !== 'error' && (
+              <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4" aria-label="可继续的生成任务">
+                <h2 className="text-sm font-semibold text-indigo-950">可继续的生成任务</h2>
+                <p className="mt-1 text-xs leading-5 text-indigo-900">已保存 {draft.completedBatches}/{draft.totalBatches} 个完整批次 · {draft.completedQuestions} 道题 · 原模型：{draft.modelLabel}</p>
+                {!settings.profiles.some((item) => item.id === draft.profileId) && (
+                  <p className="mt-2 text-xs text-amber-800">原模型配置当前不可用。请先在设置中恢复相同配置，再继续；不会自动替换模型。</p>
+                )}
+                {draftError && <p className="mt-2 text-xs text-rose-700" role="alert">操作失败：{draftError}</p>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {settings.profiles.some((item) => item.id === draft.profileId)
+                    ? <button className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={Boolean(busyTask) || draftStatus === 'discarding'} onClick={() => onResumeDraft(draft)}>{draft.ready ? '保存已完成报告' : '继续生成'}</button>
+                    : <button className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" disabled={Boolean(busyTask)} onClick={onOpenSettings}>前往设置恢复配置</button>}
+                  <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 disabled:opacity-50" disabled={Boolean(busyTask) || draftStatus === 'discarding'} onClick={() => void discardDraft(draft.id)}>{draftStatus === 'discarding' ? '正在丢弃…' : '丢弃草稿'}</button>
+                </div>
+              </section>
+            )}
             <section>
               <h2 className="mb-3 text-[15px] font-semibold text-slate-900">① 问题颗粒度</h2>
               <div className="space-y-2.5">
@@ -221,7 +313,7 @@ export default function ConfigurePage({ overview, settings, initialOptions, noti
 
             <button
               className="w-full rounded-xl bg-indigo-600 py-3.5 text-[15px] font-medium text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-              disabled={!profile || Boolean(busyTask)}
+              disabled={!profile || Boolean(busyTask) || draftStatus !== 'ready' || Boolean(draft)}
               onClick={() =>
                 onStart({
                   projectPath: overview.root,

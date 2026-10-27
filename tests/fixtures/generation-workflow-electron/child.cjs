@@ -35,7 +35,7 @@ const evidence = {
   proofBoundary: {
     rendererInteraction: 'executeJavaScript DOM clicks and input events; not trusted native mouse/keyboard input',
     bridgeCalls: ['settings save/read', 'analysis list/load', 'result read'],
-    model: 'loopback synthetic OpenAI-compatible HTTP JSON; no external model service'
+    model: 'loopback synthetic OpenAI-compatible HTTP SSE; no external model service'
   },
   uiActions: [],
   checks: {},
@@ -207,18 +207,67 @@ async function runWorkflow() {
   await waitForPage('project selection page', (text) => text.includes('选择一个项目'))
 
   const firstProjectName = path.basename(projectA)
+  const draftDirectory = assertSafeFixturePath(path.join(app.getPath('userData'), 'generation-drafts'))
+  const corruptDraftFile = path.join(draftDirectory, `${require('node:crypto').createHash('sha256').update(projectA).digest('hex')}.json`)
+  await fs.mkdir(draftDirectory, { recursive: true })
+  await fs.writeFile(corruptDraftFile, '{synthetic interrupted checkpoint')
   activeFolder = projectA
   await click('button[aria-label="新建分析"]', 'select and scan project A through UI')
   await waitForPage('project A configuration', (text) => text.includes(firstProjectName) && text.includes('开始生成面试题'))
+  await waitForPage('corrupt draft is actionable over actual Electron IPC', (text) => text.includes('丢弃损坏草稿'))
+  await clickButton('丢弃损坏草稿', 'explicitly archive corrupt generation draft')
+  await waitForPage('corrupt draft discarded without generation', (text) => !text.includes('读取生成草稿失败') && !text.includes('正在检查可继续'))
+  const archivedDrafts = (await fs.readdir(draftDirectory)).filter((name) => name.includes('.corrupt-'))
+  assert.equal(archivedDrafts.length, 1)
+  assert.equal(await fs.readFile(path.join(draftDirectory, archivedDrafts[0]), 'utf8'), '{synthetic interrupted checkpoint')
+  assert.equal((await modelState()).requests.length, 0, 'corrupt cleanup never invokes a model')
+  evidence.checks.corruptDraft = { explicitArchive: true, originalBytesPreserved: true, modelCalls: 0 }
   const recentAfterScan = await bridge('window.api.getRecentProjects()', 'verify project A entered recents')
   assert.ok(recentAfterScan.some((project) => project.path === projectA))
   await clickButton('后端', 'choose backend direction')
-  const startGeneration = () => clickButton('开始生成面试题', 'start generation', 'starts')
+  const startGeneration = async () => {
+    await waitFor('draft inspection settled', () => activeWindow.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).some(b=>!b.disabled && (b.innerText==='继续生成' || b.innerText.startsWith('开始生成面试题')))`))
+    if ((await bodyText()).includes('可继续的生成任务')) await clickButton('继续生成', 'resume saved generation draft')
+    else await clickButton('开始生成面试题', 'start generation', 'starts')
+  }
 
-  // Cancel while the production request is held open by the loopback service.
+  // Wait for three durable streamed questions before cancelling the held request.
   await startGeneration()
   await waitForRequest(1)
-  await waitForPage('active generation UI', (text) => text.includes('正在为') && text.includes('取消生成'))
+  await waitForPage('report header and waiting state', (text) => text.includes(`${firstProjectName} · 面试题`) && text.includes('正在思考') && text.includes('取消生成'))
+  assert.equal(await activeWindow.webContents.executeJavaScript('Boolean(document.querySelector(\'aside[aria-label="项目"]\'))'), true, 'project sidebar stays visible during generation')
+  assert.equal(await activeWindow.webContents.executeJavaScript('Boolean(document.querySelector(\'input[aria-label="搜索问题、答案或名词"]\'))'), false, 'question directory is not shown during generation')
+  await activeWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  const thinkingImage = await activeWindow.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
+  await fs.writeFile(path.join(path.dirname(process.env.REPOPREP_WORKFLOW_SCREENSHOT), 'thinking-preview-latest.png'), thinkingImage.toPNG())
+  await fetch(`${modelControlUrl}/__workflow/advance/1/initial`, { method: 'POST' }).then((response) => assert.equal(response.ok, true))
+  await waitForPage('partial answer visible before first question finishes', (text) => text.includes('Synthetic answer 1 describes'))
+  const beforeFirstQuestion = await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'partial text is visible before its first checkpoint')
+  assert.equal(beforeFirstQuestion.completedQuestions, 0)
+  const partialText = await bodyText()
+  assert.ok(!partialText.includes('上下文就绪') && !partialText.includes('本批目标'), 'technical logs are absent from the preview')
+  assert.ok(!partialText.includes('"sections":') && !partialText.includes('"answer":'), 'raw model JSON is never shown')
+  await activeWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  const partialImage = await activeWindow.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
+  await fs.writeFile(path.join(path.dirname(process.env.REPOPREP_WORKFLOW_SCREENSHOT), 'partial-report-latest.png'), partialImage.toPNG())
+  await fetch(`${modelControlUrl}/__workflow/advance/1/prefix`, { method: 'POST' }).then((response) => assert.equal(response.ok, true))
+  await waitForPage('three saved streamed questions', (text) => text.includes('已保存 3 题'))
+  const partialDraft = await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'verify three-question progress through guarded draft IPC')
+  assert.equal(partialDraft.completedQuestions, 3)
+  assert.equal(partialDraft.completedBatches, 0)
+  assert.equal(partialDraft.totalBatches, 1)
+  assert.equal(Object.hasOwn(partialDraft, 'checkpoint'), false, 'public draft summary must not expose private checkpoint contents')
+  const partialDraftBytes = await fs.readFile(corruptDraftFile)
+  const partialRecord = JSON.parse(partialDraftBytes.toString('utf8'))
+  const initialQuestions = partialRecord.checkpoint.pending.batch.sections.flatMap((section) => section.questions)
+  assert.equal(initialQuestions.length, 3)
+  const initialQuestionBytes = initialQuestions.map((question) => JSON.stringify(question))
+  evidence.checks.partialStream = { savedQuestions: 3, completedBatches: 0, modelCalls: 1, checkpointPrivate: true }
+  evidence.checks.reportPreview = { reportHeader: true, projectSidebarDuringGeneration: true, incompleteAnswerVisibleBeforeCheckpoint: true, rawJsonAndLogsHidden: true }
+  await activeWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  const progressImage = await activeWindow.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
+  await fs.writeFile(path.join(path.dirname(process.env.REPOPREP_WORKFLOW_SCREENSHOT), 'stream-progress-latest.png'), progressImage.toPNG())
   await clickButton('取消生成', 'cancel generation through production UI')
   await waitForPage('cancelled generation returns to configuration', (text) => text.includes('开始生成面试题') && !text.includes('正在为'))
   await waitFor('first model stream abort', async () => (await modelState()).aborted.includes(1))
@@ -226,12 +275,26 @@ async function runWorkflow() {
   const afterCancelResult = await bridge(`window.api.loadResult(${JSON.stringify(projectA)})`, 'verify cancelled run has no latest result')
   assert.equal(afterCancelAnalyses.items.length, 0)
   assert.equal(afterCancelResult, null)
-  evidence.checks.cancel = { requestAborted: true, analysisCount: 0, latestResultNull: true }
+  const cancelledDraft = await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'verify cancelled run preserves a private draft')
+  assert.ok(cancelledDraft && !cancelledDraft.ready)
+  assert.equal(cancelledDraft.completedBatches, 0)
+  assert.equal(cancelledDraft.completedQuestions, 3)
+  assert.deepEqual(await fs.readFile(corruptDraftFile), partialDraftBytes, 'cancellation leaves the last complete-question snapshot byte-identical')
+  assert.equal(Object.hasOwn(cancelledDraft, 'checkpoint'), false)
+  evidence.checks.cancel = { requestAborted: true, analysisCount: 0, latestResultNull: true, resumableDraftQuestions: 3, snapshotByteIdentical: true }
 
-  // Retry in the same configured UI. The loopback server returns exactly 20 unique medium questions.
+  // Resume the saved prefix with one stream that supplies only the remaining 17 questions.
   await startGeneration()
   await waitForRequest(2)
-  await waitForPage('successful result', (text) => text.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
+  const resumedModelState = await modelState()
+  assert.equal(resumedModelState.requests[1].stream, true)
+  assert.equal(resumedModelState.requests[1].requestedQuota, 17)
+  assert.equal(resumedModelState.requests[1].includesSavedQuestion01, true)
+  assert.equal(resumedModelState.requests[1].includesSavedQuestion02, true)
+  assert.equal(resumedModelState.requests[1].includesSavedQuestion03, true)
+  assert.equal(resumedModelState.requests[1].model, resumedModelState.requests[0].model)
+  await waitForPage('successful result', (text) => text.includes('SYNTHETIC_WORKFLOW_QUESTION_01') && text.includes('导出 Markdown'))
+  assert.equal(await activeWindow.webContents.executeJavaScript('Boolean(document.querySelector(\'input[aria-label="搜索问题、答案或名词"]\'))'), true, 'question directory appears after completion')
   const savedAnalyses = await bridge(`window.api.listAnalyses(${JSON.stringify(projectA)})`, 'list saved analyses for project A')
   assert.equal(savedAnalyses.items.length, 1)
   const analysisId = savedAnalyses.items[0].id
@@ -242,6 +305,11 @@ async function runWorkflow() {
   const totalQuestions = loadedResult.sections.reduce((sum, section) => sum + section.questions.length, 0)
   assert.equal(totalQuestions, 20)
   assert.ok(loadedResult.sections[0].questions[0].question.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
+  assert.deepEqual(loadedResult.sections[0].questions.slice(0, 3), initialQuestions, 'resumption preserves the accepted question objects, including IDs and metadata')
+  assert.deepEqual(loadedResult.sections[0].questions.slice(0, 3).map((question) => JSON.stringify(question)), initialQuestionBytes, 'published questions retain their exact serialized snapshots')
+  assert.equal(await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'published report no longer needs a draft'), null)
+  assert.equal((await modelState()).requests.length, 2, 'resume adds exactly one model request')
+  assert.equal((await modelState()).completed, 1)
   assert.equal(loadedResult.generationDiagnostics.status, 'succeeded')
   assert.equal(loadedResult.generationDiagnostics.requestCount, 1)
   assert.equal(loadedResult.generationDiagnostics.inputTokenBudget, 64_000)
@@ -308,7 +376,7 @@ async function runWorkflow() {
   await new Promise((resolve) => setTimeout(resolve, 1_200))
   assert.ok(rendererErrors.length === 0, `renderer lifecycle errors: ${rendererErrors.join('; ')}`)
 
-  evidence.checks.generation = { cancelledThenRetried: true, savedQuestionCount: totalQuestions, analysisCountAfterBackgroundCompletion: aHistory.items.length }
+  evidence.checks.generation = { cancelledThenResumed: true, resumedQuota: resumedModelState.requests[1].requestedQuota, savedQuestionCount: totalQuestions, analysisCountAfterBackgroundCompletion: aHistory.items.length }
   evidence.checks.projectSwitch = { currentProject: path.basename(projectB), lateACompletionDidNotNavigate: true }
   evidence.requests = await modelState()
   assert.equal(evidence.requests.requests.length, 3)

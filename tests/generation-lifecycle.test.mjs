@@ -5,8 +5,9 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
 import ts from 'typescript'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { IPC } from '../shared/ipc.ts'
+import { isGenerationPreview } from '../shared/generation-preview.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const deferred = () => {
@@ -25,12 +26,13 @@ async function loadTypescriptModule(filename, requireModule, context = {}) {
   return module.exports
 }
 
-async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true } = {}) {
+async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true, storedResult = null } = {}) {
   const handlers = new Map()
   const appEvents = new Map()
   const windows = []
   const saves = []
   const recents = []
+  const drafts = new Map()
   const userDataPaths = []
   let ready
   const readyPromise = new Promise((resolve) => { ready = resolve })
@@ -64,14 +66,35 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   const modules = {
     electron: { app, BrowserWindow: FakeWindow, dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showErrorBox() {} }, ipcMain: { handle: (channel, listener) => handlers.set(channel, listener) }, session: { defaultSession: {} } },
     '@shared/ipc': { IPC },
+    '@shared/generation-preview': { isGenerationPreview },
+    '@shared/generation-checkpoint': { GENERATION_DRAFT_MESSAGES: {
+      exists: '存在可恢复的生成任务，请继续或先丢弃该任务。', missing: '未找到此生成草稿，请重新打开项目。',
+      changed: '项目上下文或模型配置已变化，无法继续原任务。请丢弃草稿后重新生成。',
+      corrupt: '生成草稿损坏或版本不兼容，请丢弃后重新生成。', unreadable: '无法读取生成草稿，请检查应用数据目录权限。',
+      save: '无法保存生成检查点，请检查磁盘空间和权限后重试。', discard: '无法丢弃生成草稿，请稍后重试。'
+    } },
     '@shared/types': {},
     './services/scan-cache': { ProjectScanCache: class { async getFresh(...args) { return scan(...args) } async refresh() { return { scan: { name: 'demo' } } } async invalidate() {} } },
     './services/generation-tasks': null,
+    './services/generation-drafts': {
+      readGenerationDraft: (projectPath) => drafts.get(projectPath) ?? null,
+      beginGenerationDraft: (projectPath, meta) => {
+        if (drafts.has(projectPath)) throw new Error('存在可恢复的生成任务，请继续或先丢弃该任务。')
+        const record = { version: 1, summary: { ...meta, projectPath, id: randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), completedBatches: 0, completedQuestions: 0, totalBatches: 1, ready: false }, checkpoint: { version: 1, fingerprint: 'synthetic', totalBatches: 1, entries: [] } }
+        drafts.set(projectPath, record)
+        return record
+      },
+      saveGenerationDraft: (projectPath, _id, state) => { drafts.get(projectPath).checkpoint = state },
+      completeGenerationDraft: (projectPath, _id, value) => { const draft = drafts.get(projectPath); draft.result = value; draft.summary.ready = true },
+      removeGenerationDraft: (projectPath, id) => {
+        if (id === null || drafts.get(projectPath)?.summary.id === id) drafts.delete(projectPath)
+      }
+    },
     './services/generator': { generateInterview: (...args) => generate(...args), buildExplainMessages() {} },
     './services/llm': { chatCompletionStream: async () => {}, isLlmTimeoutError: () => false, listModels: async () => ({}), testConnection: async () => ({}) },
     './services/exporter': { exportMarkdownDialog: async () => ({}) },
     './window-security': { getTrustedDevUrl: () => null, installPermissionDenials() {}, installWindowSecurity() {} },
-    './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getPrivateProfile: async (id) => ({ id, name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic', model: 'mock' }), getRecentProjects: () => [], getSettings: async () => ({ profiles: [], defaultProfileId: null, scanLimits: { maxFiles: 12 } }), loadResult: () => null, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },
+    './services/store': { addRecentProject: (value) => recents.push(value), deleteResult() {}, getPrivateProfile: async (id) => ({ id, name: 'Mock', baseUrl: 'https://provider.invalid/v1', apiKey: 'synthetic', model: 'mock' }), getRecentProjects: () => [], getSettings: async () => ({ profiles: [], defaultProfileId: null, scanLimits: { maxFiles: 12 } }), loadResult: () => storedResult, removeRecentProject: async () => {}, saveResult: (...args) => saves.push(args), saveSettings() {} },
     './services/ipc-authority': { AuthorizedProjectRegistry: class { registerRecent() {} registerSelected() {} removeRecent() {} requireAuthorized(value) { return value } } },
     './services/ipc-handler-guards': { ExplainAbortRegistry: class { begin() { return new AbortController() } finish() {} cancel() {} }, registerGuardedIpcHandler: (_ipc, channel, _deps, handler) => handlers.set(channel, handler) }
   }
@@ -79,7 +102,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
     if (id === 'node:path') return path
     if (id === 'node:fs') return { mkdirSync() {} }
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
-    if (id === 'node:crypto') return { randomUUID }
+    if (id === 'node:crypto') return { randomUUID, createHash }
     if (!modules[id]) throw new Error(`unexpected require: ${id}`)
     return modules[id]
   }
@@ -88,7 +111,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   await loadTypescriptModule('electron/main.ts', requireModule, { BrowserWindow: FakeWindow })
   ready()
   await new Promise((resolve) => setImmediate(resolve))
-  return { handlers, appEvents, windows, saves, recents, userDataPaths, IPC }
+  return { handlers, appEvents, windows, saves, recents, userDataPaths, drafts, IPC }
 }
 
 const options = { projectPath: '/authorized/demo', granularity: 'coarse', roleFocus: 'general', profileId: 'p' }
@@ -112,10 +135,11 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
   const firstRunId = randomUUID().toUpperCase()
   const nextRunId = randomUUID().toUpperCase()
   const canonicalNextRunId = nextRunId.toLowerCase()
+  const preview = { projectSummary: 'partial summary', sections: [], completedQuestions: 0, targetQuestions: 4 }
   const harness = await createHarness({ generate: async (args) => {
     calls += 1
     if (calls === 1) { onProgress = args.onProgress; return generation.promise }
-    args.onProgress('新任务进度', undefined, 25)
+    args.onProgress('新任务进度', undefined, 25, preview)
     return result
   } })
   const oldWindow = harness.windows[0]
@@ -135,6 +159,8 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
   generation.resolve(result)
   await assert.rejects(pending, /已取消生成/)
   assert.equal(harness.saves.length, 0)
+  const oldDraft = await harness.handlers.get(harness.IPC.generationDraftGet)({ sender: oldWindow.webContents }, options.projectPath)
+  await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender: oldWindow.webContents }, options.projectPath, oldDraft.id)
   const response = await harness.handlers.get(harness.IPC.generateRun)({ sender: newWindow.webContents }, request(nextRunId))
   assert.equal(response.runId, canonicalNextRunId)
   assert.equal(response.result, result)
@@ -145,6 +171,7 @@ test('关闭窗口期间旧生成占槽，迟到的进度和结果都不能污�
   assert.equal(progress[0].payload.runId, canonicalNextRunId)
   assert.equal(progress[2].payload.runId, canonicalNextRunId)
   assert.equal(progress[2].payload.step, '新任务进度')
+  assert.deepEqual(progress[2].payload.preview, preview, 'the bounded report snapshot reaches the renderer progress event')
   assert.equal(harness.saves.length, 1)
   assert.equal(harness.recents.length, 1)
 })
@@ -177,6 +204,9 @@ test('普通取消后忽略迟到进度和结果，finally 释放任务槽位', 
   await assert.rejects(pending, /已取消生成/)
   assert.equal(window.sent.some((event) => event.payload.step === '迟到'), false)
   assert.equal(harness.saves.length, 0)
+  assert.equal(harness.drafts.has(options.projectPath), true, 'cancelled generation keeps its recovery draft')
+  const draft = await harness.handlers.get(harness.IPC.generationDraftGet)({ sender }, options.projectPath)
+  await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, draft.id)
   const response = await harness.handlers.get(harness.IPC.generateRun)({ sender }, request(retryRunId))
   assert.equal(response.runId, retryRunId)
   assert.equal(response.result, result)
@@ -204,8 +234,73 @@ test('扫描仍在等待时取消会丢弃迟到扫描，生成失败也由 fina
   await assert.rejects(canceled, /已取消生成/)
   assert.equal(generateCalls, 0, '取消后的迟到扫描不会继续调用生成器')
   await assert.rejects(harness.handlers.get(harness.IPC.generateRun)({ sender }, request(failureRunId)), /model failure/)
+  assert.equal(harness.drafts.has(options.projectPath), true, 'model failure keeps its recovery draft')
+  const failedDraft = await harness.handlers.get(harness.IPC.generationDraftGet)({ sender }, options.projectPath)
+  await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, failedDraft.id)
   const response = await harness.handlers.get(harness.IPC.generateRun)({ sender }, request(successRunId))
   assert.equal(response.runId, successRunId)
   assert.equal(response.result, result)
   assert.equal(harness.saves.length, 1)
+})
+
+test('草稿 IPC 只返回摘要、按精确 ID 丢弃，并在任务活动时拒绝丢弃', async () => {
+  const generation = deferred()
+  const harness = await createHarness({ generate: async () => generation.promise })
+  const sender = harness.windows[0].webContents
+  assert.equal(await harness.handlers.get(harness.IPC.generationDraftGet)({ sender }, options.projectPath), null)
+  const pending = harness.handlers.get(harness.IPC.generateRun)({ sender }, request(randomUUID()))
+  await new Promise((resolve) => setImmediate(resolve))
+  const summary = await harness.handlers.get(harness.IPC.generationDraftGet)({ sender }, options.projectPath)
+  assert.equal(summary.projectPath, options.projectPath)
+  assert.equal(Object.hasOwn(summary, 'checkpoint'), false)
+  assert.equal(Object.hasOwn(summary, 'result'), false)
+  await assert.rejects(Promise.resolve().then(() =>
+    harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, summary.id)
+  ), /已有生成任务在进行中/)
+  generation.reject(new Error('synthetic model failure'))
+  await assert.rejects(pending, /synthetic model failure/)
+  await assert.rejects(Promise.resolve().then(() =>
+    harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, randomUUID())
+  ), /未找到此生成草稿/)
+  await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, summary.id)
+  assert.equal(await harness.handlers.get(harness.IPC.generationDraftGet)({ sender }, options.projectPath), null)
+  harness.drafts.set(options.projectPath, { corrupt: true })
+  await harness.handlers.get(harness.IPC.generationDraftDiscard)({ sender }, options.projectPath, null)
+  assert.equal(harness.drafts.has(options.projectPath), false, 'null ID delegates corrupt-draft removal without resolving a valid draft ID')
+})
+
+test('ready 草稿重试只幂等保存已有结果，不再次调用 generator', async () => {
+  let calls = 0
+  const harness = await createHarness({ generate: async () => { calls += 1; return result } })
+  const draftId = randomUUID()
+  const readyResult = { projectName: 'demo', projectPath: options.projectPath, sections: [] }
+  harness.drafts.set(options.projectPath, {
+    version: 1,
+    summary: { ...options, id: draftId, projectName: 'demo', modelLabel: 'mock', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), completedBatches: 1, completedQuestions: 0, totalBatches: 1, ready: true },
+    checkpoint: null,
+    result: readyResult
+  })
+  const response = await harness.handlers.get(harness.IPC.generateRun)({ sender: harness.windows[0].webContents }, { ...request(randomUUID()), resumeDraftId: draftId })
+  assert.equal(response.result, readyResult)
+  assert.equal(calls, 0)
+  assert.equal(harness.saves.length, 1)
+  assert.equal(harness.recents.length, 1)
+  assert.equal(harness.drafts.has(options.projectPath), false)
+})
+
+test('crash after publication reuses the already-saved report without another write or history archive', async () => {
+  const readyResult = { projectName: 'demo', projectPath: options.projectPath, sections: [] }
+  let generationCalls = 0
+  const harness = await createHarness({ storedResult: readyResult, generate: async () => { generationCalls++; return result } })
+  const draftId = randomUUID()
+  harness.drafts.set(options.projectPath, {
+    version: 1,
+    summary: { ...options, id: draftId, projectName: 'demo', modelLabel: 'mock', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), completedBatches: 1, completedQuestions: 0, totalBatches: 1, ready: true },
+    checkpoint: null, result: readyResult
+  })
+  const response = await harness.handlers.get(harness.IPC.generateRun)({ sender: harness.windows[0].webContents }, { ...request(randomUUID()), resumeDraftId: draftId })
+  assert.equal(generationCalls, 0)
+  assert.equal(harness.saves.length, 0)
+  assert.equal(response.analysisId, createHash('sha256').update(JSON.stringify(readyResult)).digest('hex'))
+  assert.equal(harness.drafts.has(options.projectPath), false)
 })
