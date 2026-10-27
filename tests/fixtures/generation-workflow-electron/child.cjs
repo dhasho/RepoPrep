@@ -247,7 +247,8 @@ async function runWorkflow() {
   assert.equal(initialQuestions.length, 3)
   const initialQuestionBytes = initialQuestions.map((question) => JSON.stringify(question))
   evidence.checks.partialStream = { savedQuestions: 3, completedBatches: 0, modelCalls: 1, checkpointPrivate: true }
-  const progressImage = await activeWindow.webContents.capturePage()
+  await activeWindow.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  const progressImage = await activeWindow.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
   await fs.writeFile(path.join(path.dirname(process.env.REPOPREP_WORKFLOW_SCREENSHOT), 'stream-progress-latest.png'), progressImage.toPNG())
   await clickButton('取消生成', 'cancel generation through production UI')
   await waitForPage('cancelled generation returns to configuration', (text) => text.includes('开始生成面试题') && !text.includes('正在为'))
