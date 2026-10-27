@@ -43,7 +43,21 @@ npm run dev
 
 ### 专业名词解释
 
+点击正文中的专业名词，可查看本地术语表解释。
+
 ![术语解释弹卡](docs/images/term-popover.png)
+
+### 划词向 AI 提问
+
+选中正文片段后，可选择「向 AI 提问」。
+
+![选中文本后显示向 AI 提问操作条](docs/images/selection-ask-ai.png)
+
+### 结合项目的 AI 解释
+
+右侧解释栏展示结合项目内容的 AI 说明，原文仍可对照阅读。
+
+![右侧 AI 解释栏与原文对照](docs/images/ai-explain-sidebar.png)
 
 ## 更多说明
 
