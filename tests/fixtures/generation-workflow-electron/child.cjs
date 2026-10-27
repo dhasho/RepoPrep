@@ -231,10 +231,22 @@ async function runWorkflow() {
     else await clickButton('开始生成面试题', 'start generation', 'starts')
   }
 
-  // Cancel while the production request is held open by the loopback service.
+  // Wait for three durable streamed questions before cancelling the held request.
   await startGeneration()
   await waitForRequest(1)
   await waitForPage('active generation UI', (text) => text.includes('正在为') && text.includes('取消生成'))
+  await waitForPage('three saved streamed questions', (text) => text.includes('已保存 3/20 题'))
+  const partialDraft = await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'verify three-question progress through guarded draft IPC')
+  assert.equal(partialDraft.completedQuestions, 3)
+  assert.equal(partialDraft.completedBatches, 0)
+  assert.equal(partialDraft.totalBatches, 1)
+  assert.equal(Object.hasOwn(partialDraft, 'checkpoint'), false, 'public draft summary must not expose private checkpoint contents')
+  const partialDraftBytes = await fs.readFile(corruptDraftFile)
+  const partialRecord = JSON.parse(partialDraftBytes.toString('utf8'))
+  const initialQuestions = partialRecord.checkpoint.pending.batch.sections.flatMap((section) => section.questions)
+  assert.equal(initialQuestions.length, 3)
+  const initialQuestionBytes = initialQuestions.map((question) => JSON.stringify(question))
+  evidence.checks.partialStream = { savedQuestions: 3, completedBatches: 0, modelCalls: 1, checkpointPrivate: true }
   await clickButton('取消生成', 'cancel generation through production UI')
   await waitForPage('cancelled generation returns to configuration', (text) => text.includes('开始生成面试题') && !text.includes('正在为'))
   await waitFor('first model stream abort', async () => (await modelState()).aborted.includes(1))
@@ -245,12 +257,21 @@ async function runWorkflow() {
   const cancelledDraft = await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'verify cancelled run preserves a private draft')
   assert.ok(cancelledDraft && !cancelledDraft.ready)
   assert.equal(cancelledDraft.completedBatches, 0)
+  assert.equal(cancelledDraft.completedQuestions, 3)
+  assert.deepEqual(await fs.readFile(corruptDraftFile), partialDraftBytes, 'cancellation leaves the last complete-question snapshot byte-identical')
   assert.equal(Object.hasOwn(cancelledDraft, 'checkpoint'), false)
-  evidence.checks.cancel = { requestAborted: true, analysisCount: 0, latestResultNull: true, resumableDraft: true }
+  evidence.checks.cancel = { requestAborted: true, analysisCount: 0, latestResultNull: true, resumableDraftQuestions: 3, snapshotByteIdentical: true }
 
-  // Retry in the same configured UI. The loopback server returns exactly 20 unique medium questions.
+  // Resume the saved prefix with one stream that supplies only the remaining 17 questions.
   await startGeneration()
   await waitForRequest(2)
+  const resumedModelState = await modelState()
+  assert.equal(resumedModelState.requests[1].stream, true)
+  assert.equal(resumedModelState.requests[1].requestedQuota, 17)
+  assert.equal(resumedModelState.requests[1].includesSavedQuestion01, true)
+  assert.equal(resumedModelState.requests[1].includesSavedQuestion02, true)
+  assert.equal(resumedModelState.requests[1].includesSavedQuestion03, true)
+  assert.equal(resumedModelState.requests[1].model, resumedModelState.requests[0].model)
   await waitForPage('successful result', (text) => text.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
   const savedAnalyses = await bridge(`window.api.listAnalyses(${JSON.stringify(projectA)})`, 'list saved analyses for project A')
   assert.equal(savedAnalyses.items.length, 1)
@@ -262,6 +283,11 @@ async function runWorkflow() {
   const totalQuestions = loadedResult.sections.reduce((sum, section) => sum + section.questions.length, 0)
   assert.equal(totalQuestions, 20)
   assert.ok(loadedResult.sections[0].questions[0].question.includes('SYNTHETIC_WORKFLOW_QUESTION_01'))
+  assert.deepEqual(loadedResult.sections[0].questions.slice(0, 3), initialQuestions, 'resumption preserves the accepted question objects, including IDs and metadata')
+  assert.deepEqual(loadedResult.sections[0].questions.slice(0, 3).map((question) => JSON.stringify(question)), initialQuestionBytes, 'published questions retain their exact serialized snapshots')
+  assert.equal(await bridge(`window.api.getGenerationDraft(${JSON.stringify(projectA)})`, 'published report no longer needs a draft'), null)
+  assert.equal((await modelState()).requests.length, 2, 'resume adds exactly one model request')
+  assert.equal((await modelState()).completed, 1)
   assert.equal(loadedResult.generationDiagnostics.status, 'succeeded')
   assert.equal(loadedResult.generationDiagnostics.requestCount, 1)
   assert.equal(loadedResult.generationDiagnostics.inputTokenBudget, 64_000)
@@ -328,7 +354,7 @@ async function runWorkflow() {
   await new Promise((resolve) => setTimeout(resolve, 1_200))
   assert.ok(rendererErrors.length === 0, `renderer lifecycle errors: ${rendererErrors.join('; ')}`)
 
-  evidence.checks.generation = { cancelledThenRetried: true, savedQuestionCount: totalQuestions, analysisCountAfterBackgroundCompletion: aHistory.items.length }
+  evidence.checks.generation = { cancelledThenResumed: true, resumedQuota: resumedModelState.requests[1].requestedQuota, savedQuestionCount: totalQuestions, analysisCountAfterBackgroundCompletion: aHistory.items.length }
   evidence.checks.projectSwitch = { currentProject: path.basename(projectB), lateACompletionDidNotNavigate: true }
   evidence.requests = await modelState()
   assert.equal(evidence.requests.requests.length, 3)

@@ -37,6 +37,7 @@ function syntheticResult() {
       title: 'Synthetic workflow checks',
       summary: 'Returned only by the loopback fixture service.',
       questions: Array.from({ length: 20 }, (_, index) => ({
+        title: `${syntheticQuestionPrefix}${String(index + 1).padStart(2, '0')}_TITLE`,
         question: `${syntheticQuestionPrefix}${String(index + 1).padStart(2, '0')}: how does request ${index + 1} behave?`,
         answer: `Synthetic answer ${index + 1} describes one distinct behavior from the local project fixture.`,
         followUps: []
@@ -56,6 +57,39 @@ function jsonBody(response, result) {
     choices: [{ message: { content: JSON.stringify(result) } }],
     usage: { prompt_tokens: 37, completion_tokens: 19, total_tokens: 56 }
   }))
+}
+
+function sseData(response, payload) {
+  response.write(`data: ${JSON.stringify(payload)}\n\n`)
+}
+
+function sseContent(response, content) {
+  sseData(response, { choices: [{ index: 0, delta: { content }, finish_reason: null }] })
+}
+
+function sseFinish(response) {
+  sseData(response, { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+  sseData(response, { choices: [], usage: { prompt_tokens: 37, completion_tokens: 19, total_tokens: 56 } })
+  response.end('data: [DONE]\n\n')
+}
+
+function streamPrefix(result, questions) {
+  const section = result.sections[0]
+  const root = `{"projectSummary":${JSON.stringify(result.projectSummary)},"sections":[{"title":${JSON.stringify(section.title)},"summary":${JSON.stringify(section.summary)},"questions":[`
+  const fragments = [root]
+  for (const [index, question] of questions.entries()) {
+    fragments.push(`${index === 0 ? '' : ','}${JSON.stringify(question)}`)
+  }
+  return fragments
+}
+
+function streamSuffix(result) {
+  return `]}],"glossary":${JSON.stringify(result.glossary)}}`
+}
+
+function streamResult(response, result, questions) {
+  for (const fragment of [...streamPrefix(result, questions), streamSuffix(result)]) sseContent(response, fragment)
+  sseFinish(response)
 }
 
 async function readRequestBody(request) {
@@ -83,7 +117,12 @@ async function startSyntheticServer() {
         return
       }
       state.held.delete(index)
-      jsonBody(held, syntheticResult())
+      if (held.stream) {
+        sseContent(held.response, held.suffix)
+        sseFinish(held.response)
+      } else {
+        jsonBody(held.response, syntheticResult())
+      }
       state.completed++
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ released: index }))
@@ -107,10 +146,15 @@ async function startSyntheticServer() {
       ? body.messages.map((message) => typeof message?.content === 'string' ? message.content : '').join('\n')
       : ''
     const index = state.requests.length + 1
+    const resumeQuota = /本次只补充剩余\s+(\d+)\s+道/.exec(joinedPrompt)?.[1]
     state.requests.push({
       index,
       model: typeof body.model === 'string' ? body.model : '',
       stream: body.stream === true,
+      requestedQuota: resumeQuota ? Number(resumeQuota) : null,
+      includesSavedQuestion01: joinedPrompt.includes(`${syntheticQuestionPrefix}01:`),
+      includesSavedQuestion02: joinedPrompt.includes(`${syntheticQuestionPrefix}02:`),
+      includesSavedQuestion03: joinedPrompt.includes(`${syntheticQuestionPrefix}03:`),
       messageCount: Array.isArray(body.messages) ? body.messages.length : 0,
       containsProjectA: joinedPrompt.includes('WORKFLOW_PROJECT_A_SOURCE_MARKER'),
       containsProjectB: joinedPrompt.includes('WORKFLOW_PROJECT_B_SOURCE_MARKER')
@@ -121,11 +165,24 @@ async function startSyntheticServer() {
         state.held.delete(index)
       }
     })
+    if (body.stream === true) {
+      response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
+      response.flushHeaders?.()
+      const result = syntheticResult()
+      if (index === 1 || index === 3) {
+        const prefix = streamPrefix(result, result.sections[0].questions.slice(0, 3))
+        for (const fragment of prefix) sseContent(response, fragment)
+        const remainingQuestions = result.sections[0].questions.slice(3).map((question) => `,${JSON.stringify(question)}`).join('')
+        state.held.set(index, { response, stream: true, suffix: `${remainingQuestions}${streamSuffix(result)}` })
+        return
+      }
+      streamResult(response, result, index === 2 ? result.sections[0].questions.slice(3) : result.sections[0].questions)
+      state.completed++
+      return
+    }
     if (index === 1 || index === 3) {
-      response.writeHead(200, body.stream === true
-        ? { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' }
-        : { 'content-type': 'application/json' })
-      state.held.set(index, response)
+      response.writeHead(200, { 'content-type': 'application/json' })
+      state.held.set(index, { response, stream: false, suffix: '' })
       return
     }
     jsonResponse(response, syntheticResult())
@@ -143,7 +200,7 @@ async function startSyntheticServer() {
     state,
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: async () => {
-      for (const response of state.held.values()) response.destroy()
+      for (const held of state.held.values()) held.response.destroy()
       server.closeAllConnections?.()
       await new Promise((resolve) => server.close(() => resolve()))
     }
