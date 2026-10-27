@@ -199,10 +199,40 @@ test('Anthropic SSE handles initial text, deltas, thinking, ping, tools, and fut
     assert.equal(body.temperature, undefined)
     return response.response
   }, async () => {
-    assert.equal(await chatCompletionStream(profile, messages, (delta) => deltas.push(delta)), 'Hello 世界')
+    assert.equal(await chatCompletionStream(profile, messages, (delta) => { deltas.push(delta) }), 'Hello 世界')
   })
   assert.deepEqual(deltas, ['Hello', ' 世界'])
   assert.equal(response.response.body?.locked, false)
+})
+
+test('Anthropic streaming usage accumulates across message_start and message_delta', async () => {
+  const response = streamResponse([
+    event('message_start', { type: 'message_start', message: { type: 'message', role: 'assistant', content: [], usage: { input_tokens: 11 } } }),
+    event('content_block_delta', { type: 'content_block_delta', delta: { type: 'text_delta', text: 'answer' } }),
+    event('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 5 } }),
+    event('message_stop', { type: 'message_stop' })
+  ])
+  const receipts: unknown[] = []
+  await withFetch(async () => response.response, async () => {
+    assert.equal(await chatCompletionStream(profile, messages, () => {}, { onUsage: (usage) => receipts.push(usage) }), 'answer')
+  })
+  assert.deepEqual(receipts, [{ inputTokens: 11, outputTokens: 5, totalTokens: 16 }])
+})
+
+test('Anthropic stream fallback accepts one JSON response and invokes the callback once', async () => {
+  let calls = 0
+  const deltas: string[] = []
+  await withFetch(async () => {
+    calls++
+    return new Response(JSON.stringify({
+      type: 'message', content: [{ type: 'text', text: 'whole answer' }], stop_reason: 'end_turn',
+      usage: { input_tokens: 8, output_tokens: 4 }
+    }))
+  }, async () => {
+    assert.equal(await chatCompletionStream(profile, messages, async (delta) => { deltas.push(delta) }), 'whole answer')
+  })
+  assert.equal(calls, 1)
+  assert.deepEqual(deltas, ['whole answer'])
 })
 
 test('Anthropic SSE rejects errors, malformed data, max_tokens truncation, missing terminal events, and empty output', async () => {
@@ -235,9 +265,7 @@ test('Anthropic SSE callback errors retain the existing failure and reader clean
   const callbackError = new Error('synthetic callback error')
   await withFetch(async () => response.response, async () => {
     await assert.rejects(chatCompletionStream(profile, messages, () => { throw callbackError }), (error: unknown) => {
-      assert.ok(error instanceof LlmRequestError)
-      assert.equal(error.kind, 'network')
-      return true
+      return error === callbackError
     })
   })
   assert.equal(response.response.body?.locked, false)
