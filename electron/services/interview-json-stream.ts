@@ -1,3 +1,5 @@
+import { RESULT_LIMITS } from '@shared/result-contract'
+
 export interface StreamedInterviewQuestion {
   sectionIndex: number
   questionIndex: number
@@ -9,6 +11,22 @@ const MAX_CHARS = 1_000_000
 const MAX_DEPTH = 128
 const UNKNOWN_SECTION = '未命名主题'
 const UTF8 = new TextEncoder()
+const PREVIEW_LIMIT = RESULT_LIMITS.totalChars - 250_000
+type PreviewFollowUp = { question: string; answer: string; followUps: PreviewFollowUp[] }
+
+export interface InterviewJsonPreview {
+  projectSummary: string
+  activeQuestion?: {
+    sectionIndex: number
+    questionIndex: number
+    sectionTitle?: string
+    sectionSummary?: string
+    title?: string
+    question?: string
+    answer?: string
+    followUps: PreviewFollowUp[]
+  }
+}
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 type Frame = {
@@ -54,6 +72,65 @@ export class InterviewJsonStream {
 
   metadata(): { projectSummary: string; glossary: Record<string, string> } {
     return { projectSummary: this.summary ?? '', glossary: { ...this.glossary } }
+  }
+
+  /** Return only safe, user-facing report fields currently available in the open JSON object. */
+  preview(): InterviewJsonPreview {
+    const root = this.root as Record<string, JsonValue> | undefined
+    const projectSummary = (this.summary ?? this.partialStringAt(['projectSummary']) ?? '').replaceAll('\0', '')
+    const questionFrame = [...this.frames].reverse().find(frame =>
+      frame.kind === 'object' && frame.path.length === 4 && frame.path[0] === 'sections' &&
+      typeof frame.path[1] === 'number' && frame.path[2] === 'questions' && typeof frame.path[3] === 'number'
+    )
+    if (!questionFrame) return { projectSummary: projectSummary.slice(0, RESULT_LIMITS.projectSummary) }
+
+    const [sectionIndex, questionIndex] = [questionFrame.path[1], questionFrame.path[3]] as [number, number]
+    const sections = root && Array.isArray(root.sections) ? root.sections : []
+    const section = sections[sectionIndex]
+    const sectionObject = isRecord(section) ? section : {}
+    const question = questionFrame.value as Record<string, JsonValue>
+    const followUpsFrame = [...this.frames].reverse().find(frame => frame.kind === 'array' && frame.path.length === 5 &&
+      frame.path[0] === 'sections' && frame.path[1] === sectionIndex && frame.path[2] === 'questions' &&
+      frame.path[3] === questionIndex && frame.path[4] === 'followUps')
+    const followUpValues = followUpsFrame ? followUpsFrame.value as JsonValue[] : question.followUps
+    const followUps = safeFollowUps(followUpValues)
+    const activeFollowUpFrame = [...this.frames].reverse().find(frame => frame.kind === 'object' && frame.path.length === 6 &&
+      frame.path[0] === 'sections' && frame.path[1] === sectionIndex && frame.path[2] === 'questions' &&
+      frame.path[3] === questionIndex && frame.path[4] === 'followUps' && typeof frame.path[5] === 'number')
+    if (activeFollowUpFrame) {
+      const followValue = activeFollowUpFrame.value as Record<string, JsonValue>
+      const followQuestion = typeof followValue.question === 'string' ? followValue.question : this.partialStringAt([...activeFollowUpFrame.path, 'question'])
+      const followAnswer = typeof followValue.answer === 'string' ? followValue.answer : this.partialStringAt([...activeFollowUpFrame.path, 'answer'])
+      if (followQuestion?.trim() && !followUps.some(item => item.question === followQuestion && item.answer === (followAnswer ?? ''))) {
+        followUps.push({ question: followQuestion.slice(0, RESULT_LIMITS.question), answer: (followAnswer ?? '').replaceAll('\0', '').slice(0, RESULT_LIMITS.answer), followUps: [] })
+      }
+    }
+    const read = (source: Record<string, JsonValue>, key: string, path: Array<string | number>, limit: number): string | undefined => {
+      const value = source[key]
+      const partial = this.partialStringAt(path)
+      const text = typeof value === 'string' ? value : partial
+      return typeof text === 'string' ? text.replaceAll('\0', '').slice(0, limit) : undefined
+    }
+    const sectionTitle = read(sectionObject, 'title', ['sections', sectionIndex, 'title'], RESULT_LIMITS.sectionTitle)
+    const sectionSummary = read(sectionObject, 'summary', ['sections', sectionIndex, 'summary'], RESULT_LIMITS.sectionSummary)
+    const title = read(question, 'title', [...questionFrame.path, 'title'], RESULT_LIMITS.questionTitle)
+    const questionText = read(question, 'question', [...questionFrame.path, 'question'], RESULT_LIMITS.question)
+    const answer = read(question, 'answer', [...questionFrame.path, 'answer'], RESULT_LIMITS.answer)
+    const result: InterviewJsonPreview = {
+      projectSummary: projectSummary.slice(0, RESULT_LIMITS.projectSummary),
+      activeQuestion: {
+        sectionIndex,
+        questionIndex,
+        sectionTitle: sectionTitle || UNKNOWN_SECTION,
+        ...(sectionSummary ? { sectionSummary } : {}),
+        ...(title ? { title } : {}),
+        ...(questionText !== undefined ? { question: questionText } : {}),
+        ...(answer !== undefined ? { answer } : {}),
+        followUps
+      }
+    }
+    trimPreview(result, PREVIEW_LIMIT)
+    return result
   }
 
   finish(): unknown {
@@ -239,6 +316,13 @@ export class InterviewJsonStream {
     }
   }
 
+  private partialStringAt(path: Array<string | number>): string | undefined {
+    if (this.token?.kind !== 'string' || this.token.raw.startsWith('\u0001KEY')) return undefined
+    const tokenPath = this.valuePath()
+    if (tokenPath.length !== path.length || tokenPath.some((part, index) => part !== path[index])) return undefined
+    return decodePartialJsonString(this.token.raw)
+  }
+
   private closeFrame(frame: Frame): void {
     if (frame.state === 'colon' || frame.state === 'value' || frame.state === 'key') this.fail()
     this.frames.pop()
@@ -255,4 +339,90 @@ export class InterviewJsonStream {
     }
     if (!this.frames.length) this.complete = true
   }
+}
+
+function isRecord(value: unknown): value is Record<string, JsonValue> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function safeFollowUps(value: JsonValue | undefined, depth = 1): PreviewFollowUp[] {
+  if (!Array.isArray(value) || depth > 2) return []
+  const result: PreviewFollowUp[] = []
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.question !== 'string' || typeof item.answer !== 'string') continue
+    const question = item.question.replaceAll('\0', '').slice(0, RESULT_LIMITS.question)
+    if (!question.trim()) continue
+    result.push({
+      question,
+      answer: item.answer.replaceAll('\0', '').slice(0, RESULT_LIMITS.answer),
+      followUps: depth < 2 ? safeFollowUps(item.followUps, depth + 1) : []
+    })
+    if (result.length >= RESULT_LIMITS.followUpsPerItem) break
+  }
+  return result
+}
+
+function trimPreview(preview: InterviewJsonPreview, budget: number): void {
+  let used = preview.projectSummary.length
+  const active = preview.activeQuestion
+  if (!active) return
+  for (const key of ['sectionTitle', 'sectionSummary', 'title', 'question', 'answer'] as const) {
+    const value = active[key]
+    if (value === undefined) continue
+    active[key] = value.slice(0, Math.max(0, budget - used))
+    used += active[key]!.length
+  }
+  const trimFollow = (items: NonNullable<InterviewJsonPreview['activeQuestion']>['followUps']): void => {
+    for (const follow of items) {
+      const remaining = Math.max(0, budget - used)
+      if (!remaining) { items.length = 0; break }
+      follow.question = follow.question.slice(0, remaining)
+      used += follow.question.length
+      follow.answer = follow.answer.slice(0, Math.max(0, budget - used))
+      used += follow.answer.length
+      trimFollow(follow.followUps)
+    }
+  }
+  trimFollow(active.followUps)
+}
+
+/** Decode only the complete, valid prefix of an unfinished JSON string token. */
+function decodePartialJsonString(raw: string): string {
+  let decoded = ''
+  for (let index = 1; index < raw.length; index++) {
+    const ch = raw[index]
+    if (ch === '"') break
+    if (ch !== '\\') {
+      if (ch.charCodeAt(0) < 0x20) break
+      decoded += ch
+      continue
+    }
+    const escape = raw[index + 1]
+    if (escape === undefined) break
+    if (escape === '"' || escape === '\\' || escape === '/') { decoded += escape; index++; continue }
+    if (escape === 'b' || escape === 'f' || escape === 'n' || escape === 'r' || escape === 't') {
+      decoded += ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' } as const)[escape]
+      index++
+      continue
+    }
+    if (escape !== 'u' || index + 5 >= raw.length) break
+    const hex = raw.slice(index + 2, index + 6)
+    if (!/^[0-9a-fA-F]{4}$/.test(hex)) break
+    const code = Number.parseInt(hex, 16)
+    if (code >= 0xd800 && code <= 0xdbff) {
+      if (raw.slice(index + 6, index + 8) !== '\\u' || index + 11 >= raw.length) break
+      const lowHex = raw.slice(index + 8, index + 12)
+      if (!/^[0-9a-fA-F]{4}$/.test(lowHex)) break
+      const low = Number.parseInt(lowHex, 16)
+      if (low < 0xdc00 || low > 0xdfff) break
+      decoded += String.fromCharCode(code, low)
+      index += 11
+      continue
+    }
+    if (code >= 0xdc00 && code <= 0xdfff) break
+    decoded += String.fromCharCode(code)
+    index += 5
+  }
+  if (decoded.length && /[\uD800-\uDBFF]$/.test(decoded)) return decoded.slice(0, -1)
+  return decoded
 }

@@ -98,3 +98,51 @@ test('uses a stable placeholder section when the question arrives before section
   assert.equal(emitted.length, 1)
   assert.equal(emitted[0].section.title, '未命名主题')
 })
+
+test('preview safely decodes an open report field and clears it when the question closes', () => {
+  const head = JSON.stringify({ projectSummary: '概述\n世界 "quote" 中文', reasoning_content: 'private' }).slice(0, -1)
+  const answer = JSON.stringify('答案\n"引号" 😀').slice(0, -1)
+  const source = `${head},"sections":[{"title":"主题","questions":[{"title":"标题","question":"问题 世界","answer":${answer}`
+  const parser = new InterviewJsonStream()
+  for (const char of source) parser.push(char)
+  const preview = parser.preview()
+  assert.equal(preview.projectSummary, '概述\n世界 "quote" 中文')
+  assert.deepEqual(preview.activeQuestion, {
+    sectionIndex: 0,
+    questionIndex: 0,
+    sectionTitle: '主题',
+    title: '标题',
+    question: '问题 世界',
+    answer: '答案\n"引号" 😀',
+    followUps: []
+  })
+  assert.equal(JSON.stringify(preview).includes('hidden'), false)
+  assert.equal(JSON.stringify(preview).includes('private'), false)
+  parser.push('","apiKey":"hidden","raw":"hidden","followUps":[{"question":"追问","answer":"追答"}]}]}],"glossary":{}}')
+  assert.equal(parser.preview().activeQuestion, undefined)
+})
+
+test('preview withholds incomplete escapes and never emits an unpaired surrogate', () => {
+  const parser = new InterviewJsonStream()
+  parser.push('{"projectSummary":"ready","sections":[{"questions":[{"question":"Q","answer":"visible\\uD83D')
+  assert.equal(parser.preview().activeQuestion?.answer, 'visible')
+  parser.push('\\uDE00tail')
+  assert.equal(parser.preview().activeQuestion?.answer, 'visible😀tail')
+})
+
+test('preview enforces its aggregate text budget across summary and active answer', () => {
+  const parser = new InterviewJsonStream()
+  parser.push(`{"projectSummary":"${'概'.repeat(60_000)}","sections":[{"title":"主题","questions":[{"question":"问题","answer":"${'答'.repeat(60_000)}`)
+  const preview = parser.preview()
+  const active = preview.activeQuestion!
+  const chars = preview.projectSummary.length + (active.sectionTitle?.length ?? 0) + (active.question?.length ?? 0) + (active.answer?.length ?? 0)
+  assert.ok(chars <= 750_000, `preview text budget exceeded: ${chars}`)
+})
+
+test('preview streams only recognized partial follow-up fields', () => {
+  const parser = new InterviewJsonStream()
+  parser.push('{"sections":[{"title":"主题","questions":[{"question":"主问题","answer":"主答案","followUps":[{"question":"追问已到","answer":"追答正在到')
+  assert.deepEqual(parser.preview().activeQuestion?.followUps, [{ question: '追问已到', answer: '追答正在到', followUps: [] }])
+  parser.push('达","apiKey":"hidden"}]}]}],"glossary":{}}')
+  assert.deepEqual(parser.preview().activeQuestion, undefined)
+})

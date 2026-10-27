@@ -8,6 +8,7 @@ import type {
   QuestionItem,
   RoleFocus,
   Section,
+  GenerationPreview,
   GenerationDiagnostics,
   LlmUsage
 } from '@shared/types'
@@ -16,7 +17,7 @@ import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CO
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
 import { contentReadWarning } from '@shared/content-read'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
-import { InterviewJsonStream, type StreamedInterviewQuestion } from './interview-json-stream'
+import { InterviewJsonStream, type InterviewJsonPreview, type StreamedInterviewQuestion } from './interview-json-stream'
 import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
 import { buildCompensationInstruction, normalizeQuestionKey, selectUniqueQuestions } from './question-dedupe'
@@ -32,7 +33,7 @@ export interface GenerateParams {
   roleFocus: RoleFocus
   profile: LlmProfile
   signal: AbortSignal
-  onProgress: (step: string, detail: string | undefined, percent: number) => void
+  onProgress: (step: string, detail: string | undefined, percent: number, preview?: GenerationPreview) => void
   onDiagnostics?: (diagnostics: GenerationDiagnostics) => void
   checkpoint?: { state?: GenerationCheckpoint | null; save: (state: GenerationCheckpoint) => void | Promise<void> }
 }
@@ -191,6 +192,103 @@ type ParsedBatch = {
   glossary: Record<string, string>
 }
 
+const PREVIEW_TOTAL_CHARS = RESULT_LIMITS.totalChars - 250_000
+
+function followUpTextChars(items: FollowUp[]): number {
+  return items.reduce((sum, item) => sum + item.question.length + item.answer.length + followUpTextChars(item.followUps ?? []), 0)
+}
+
+function capFollowUps(items: FollowUp[], available: { chars: number }): FollowUp[] {
+  const result: FollowUp[] = []
+  for (const item of items) {
+    if (available.chars <= 0) break
+    const question = item.question.slice(0, Math.min(RESULT_LIMITS.question, available.chars))
+    available.chars -= question.length
+    const answer = item.answer.slice(0, Math.min(RESULT_LIMITS.answer, available.chars))
+    available.chars -= answer.length
+    result.push({ question, answer, ...(item.followUps?.length ? { followUps: capFollowUps(item.followUps, available) } : {}) })
+  }
+  return result
+}
+
+function makeGenerationPreview(
+  batches: ParsedBatch[],
+  projectSummary: string,
+  activeQuestion: GenerationPreview['activeQuestion'],
+  targetQuestions: number,
+  security?: GenerationPreview['security'],
+  contextTruncation?: GenerationPreview['contextTruncation']
+): GenerationPreview {
+  const sections: Section[] = []
+  const seen = new Set<string>()
+  let completedQuestions = 0
+  let chars = Math.min(projectSummary.length, RESULT_LIMITS.projectSummary)
+  for (const batch of batches) {
+    for (const section of batch.sections) {
+      let target = sections.find(item => item.id === section.id)
+      if (!target) {
+        const title = section.title.slice(0, Math.min(RESULT_LIMITS.sectionTitle, Math.max(1, PREVIEW_TOTAL_CHARS - chars)))
+        chars += title.length
+        const summary = section.summary?.slice(0, Math.min(RESULT_LIMITS.sectionSummary, Math.max(0, PREVIEW_TOTAL_CHARS - chars)))
+        chars += summary?.length ?? 0
+        target = { id: section.id, title, ...(summary ? { summary } : {}), questions: [] }
+        sections.push(target)
+      }
+      for (const question of section.questions) {
+        const key = normalizeQuestionKey(question.question)
+        if (seen.has(key)) continue
+        const followChars = followUpTextChars(question.followUps)
+        const questionChars = question.question.length + question.answer.length + (question.title?.length ?? 0) + followChars
+        if (chars + questionChars > PREVIEW_TOTAL_CHARS) break
+        seen.add(key)
+        target.questions.push({
+          id: question.id,
+          ...(question.title ? { title: question.title.slice(0, RESULT_LIMITS.questionTitle) } : {}),
+          question: question.question.slice(0, RESULT_LIMITS.question),
+          answer: question.answer.slice(0, RESULT_LIMITS.answer),
+          followUps: question.followUps.map(follow => ({ question: follow.question.slice(0, RESULT_LIMITS.question), answer: follow.answer.slice(0, RESULT_LIMITS.answer), ...(follow.followUps?.length ? { followUps: follow.followUps } : {}) }))
+        })
+        completedQuestions++
+        chars += questionChars
+      }
+    }
+  }
+  const preview: GenerationPreview = {
+    projectSummary: projectSummary.slice(0, RESULT_LIMITS.projectSummary),
+    sections: sections.filter(section => section.questions.length > 0),
+    completedQuestions,
+    targetQuestions,
+    ...(security ? { security } : {}),
+    ...(contextTruncation && hasContextTruncation(contextTruncation) ? { contextTruncation: { ...contextTruncation } } : {})
+  }
+  if (activeQuestion && ([activeQuestion.sectionTitle, activeQuestion.sectionSummary, activeQuestion.title, activeQuestion.question, activeQuestion.answer].some(value => value?.trim()) || activeQuestion.followUps.length > 0)) {
+    const available = { chars: Math.max(0, PREVIEW_TOTAL_CHARS - chars) }
+    const cap = (value: string | undefined, max: number): string | undefined => {
+      if (!value) return undefined
+      const result = value.slice(0, Math.min(max, available.chars))
+      available.chars -= result.length
+      return result
+    }
+    const sectionTitle = cap(activeQuestion.sectionTitle || '未命名主题', RESULT_LIMITS.sectionTitle)
+    if (sectionTitle) {
+      const sectionSummary = cap(activeQuestion.sectionSummary, RESULT_LIMITS.sectionSummary)
+      const title = cap(activeQuestion.title?.trim() ? activeQuestion.title : undefined, RESULT_LIMITS.questionTitle)
+      const question = cap(activeQuestion.question, RESULT_LIMITS.question) ?? ''
+      const answer = cap(activeQuestion.answer, RESULT_LIMITS.answer) ?? ''
+      preview.activeQuestion = {
+        key: activeQuestion.key,
+        question,
+        answer,
+        ...(title ? { title } : {}),
+        sectionTitle,
+        ...(sectionSummary ? { sectionSummary } : {}),
+        followUps: capFollowUps(activeQuestion.followUps, available)
+      }
+    }
+  }
+  return preview
+}
+
 export function normalizeParsed(raw: unknown, allowEmpty = false): ParsedBatch {
   if (!raw || typeof raw !== 'object') throw new Error('模型输出不是 JSON 对象')
   const obj = raw as RawResult
@@ -282,6 +380,7 @@ interface StreamingBatchState {
   excluded: Set<string>
   save: (batch: ParsedBatch) => Promise<void>
   activity: (receivedChars: number, elapsedMs: number) => void
+  preview: (preview?: InterviewJsonPreview) => void
 }
 
 /** 调用大模型并解析出结构化结果，失败自动带错误重试一次 */
@@ -313,8 +412,17 @@ async function callForJson(
     const estimated = estimateMessageTokens(fitted.messages)
     const requestStarted = Date.now()
     const parser = new InterviewJsonStream()
+    streaming.preview(parser.preview())
     let formatFailure: unknown
     let receivedChars = 0
+    let lastPreviewSent = 0
+    const emitPreview = (force = false): void => {
+      if (signal.aborted) return
+      const now = Date.now()
+      if (!force && now - lastPreviewSent < 125) return
+      lastPreviewSent = now
+      streaming.preview(parser.preview())
+    }
     const accept = async (fragment: StreamedInterviewQuestion): Promise<void> => {
       if (signal.aborted) throw new LlmRequestError('cancelled')
       let normalized: ParsedBatch
@@ -344,9 +452,10 @@ async function callForJson(
         let fragments: StreamedInterviewQuestion[] = []
         if (formatFailure === undefined) {
           try { fragments = parser.push(delta) }
-          catch (error) { formatFailure = error; fragments = parser.drain() }
+          catch (error) { formatFailure = error; fragments = parser.drain(); streaming.preview(undefined) }
         }
         for (const fragment of fragments) await accept(fragment)
+        emitPreview(fragments.length > 0)
         streaming.activity(receivedChars, Date.now() - requestStarted)
       }, {
         signal, timeoutMs: 600_000,
@@ -371,6 +480,9 @@ async function callForJson(
           counters.usageCount++
         }
       })
+    } catch (error) {
+      streaming.preview(undefined)
+      throw error
     } finally {
       clearInterval(timer)
       counters.modelMs += Date.now() - requestStarted
@@ -384,6 +496,7 @@ async function callForJson(
     } catch (error) {
       lastError = error instanceof Error ? error.message : '结果格式无效'
       previousReply = reply
+      streaming.preview(undefined)
       continue
     }
     const candidate = supplementMetadata(streaming.current, parsed)
@@ -471,9 +584,10 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     try { params.onDiagnostics?.(diagnostics) } catch { /* callbacks are observational only */ }
   }
   let latestPercent = 0
+  let currentPreview: GenerationPreview | undefined
   const reportProgress = (step: string, detail: string | undefined, percent: number): void => {
     latestPercent = Math.max(latestPercent, Math.min(100, Math.max(0, percent)))
-    onProgress(step, detail, latestPercent)
+    onProgress(step, detail, latestPercent, currentPreview)
   }
   let failedStage: GenerationDiagnostics['failedStage'] = 'validation'
   let contextBuildMs = 0
@@ -495,9 +609,32 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   } finally { contextBuildMs = Date.now() - contextStarted }
   if (signal.aborted) throw new Error('生成已取消。')
   for (const filePath of built.eligibleFilePaths ?? []) counters.eligibleFiles.add(filePath)
+  const security = {
+    excludedFiles: scan.security.excludedFiles,
+    redactedFiles: built.contentSecurity.redactedFiles,
+    redactionMatches: built.contentSecurity.redactionMatches,
+    categories: Object.fromEntries([
+      ...Object.entries(scan.security.categories),
+      ...Object.entries(built.contentSecurity.matchesByCategory)
+    ].reduce((entries, [category, count]) => {
+      const existing = entries.find(([name]) => name === category)
+      if (existing) existing[1] += Number(count)
+      else entries.push([category, Number(count)])
+      return entries
+    }, [] as Array<[string, number]>))
+  }
+  currentPreview = makeGenerationPreview([], '', undefined, GRANULARITY_QUESTION_BUDGET[granularity].target, security, built.contextTruncation)
   const markRequestTruncation = (): void => {
     if (built.contextTruncation.requestTruncated) return
     built.contextTruncation.requestTruncated = true
+    currentPreview = makeGenerationPreview(
+      previewSavedBatches,
+      previewSavedBatches.map(batch => batch.projectSummary).find(Boolean) ?? currentPreview?.projectSummary ?? '',
+      undefined,
+      GRANULARITY_QUESTION_BUDGET[granularity].target,
+      security,
+      built.contextTruncation
+    )
     reportProgress('分析提示', formatContextTruncationWarning(built.contextTruncation), latestPercent)
   }
   const readWarning = built.contentReadSummary.failedReads > 0
@@ -522,6 +659,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   const resumed = Boolean(checkpoint)
   let checkpointState: GenerationCheckpoint | undefined
   let checkpointEntries: GenerationCheckpoint['entries'] = []
+  let previewSavedBatches: ParsedBatch[] = []
   let replayCursor = 0
   let requestOrdinal = 0
   if (checkpoint) {
@@ -554,6 +692,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
       throw new Error(GENERATION_DRAFT_MESSAGES.changed)
     }
     checkpointEntries = prior ? JSON.parse(JSON.stringify(prior.entries)) as GenerationCheckpoint['entries'] : []
+    previewSavedBatches = checkpointEntries.map(entry => validateCheckpointBatch(entry.batch))
     if (prior) {
       try { for (const entry of checkpointEntries) validateCheckpointBatch(entry.batch) }
       catch { throw new Error(GENERATION_DRAFT_MESSAGES.changed) }
@@ -575,6 +714,19 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     ...(checkpointState?.pending ? [checkpointState.pending.batch] : [])
   ]) for (const section of batch.sections) for (const question of section.questions) progressQuestions.add(normalizeQuestionKey(question.question))
   const generationPercent = (): number => Math.round(15 + Math.min(1, progressQuestions.size / Math.max(1, plan.total)) * 80)
+
+  currentPreview = makeGenerationPreview(
+    [
+      ...previewSavedBatches,
+      ...(checkpointState?.pending ? [validateCheckpointBatch(checkpointState.pending.batch)] : [])
+    ],
+    checkpointEntries.map(entry => entry.batch.projectSummary).find(Boolean) ?? checkpointState?.pending?.batch.projectSummary ?? '',
+    undefined,
+    plan.total,
+    security,
+    built.contextTruncation
+  )
+  reportProgress('准备生成预览', '已载入已保存的报告内容', generationPercent())
 
   // 合并各批次产出，并在总量低于下限时对"少给的批次"发起一轮补偿请求。
   failedStage = 'merge'
@@ -677,6 +829,30 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           if (signal.aborted) throw new LlmRequestError('cancelled')
           checkpointState = snapshot
         },
+        preview: (parserPreview) => {
+          if (signal.aborted) return
+          const active = parserPreview?.activeQuestion
+          const activeIsAlreadySaved = Boolean(active?.question && progressQuestions.has(normalizeQuestionKey(active.question)))
+          const hasActiveText = active && ([active.title, active.question, active.answer].some(value => value?.trim()) || active.followUps.length > 0)
+          const requestPreview = active && hasActiveText && !activeIsAlreadySaved ? {
+            key: `${callOrder}:${index}:${active.sectionIndex}:${active.questionIndex}`,
+            sectionTitle: active.sectionTitle || '未命名主题',
+            ...(active.sectionSummary?.trim() ? { sectionSummary: active.sectionSummary } : {}),
+            ...(active.title?.trim() ? { title: active.title } : {}),
+            question: active.question ?? '',
+            answer: active.answer ?? '',
+            followUps: active.followUps
+          } : undefined
+          currentPreview = makeGenerationPreview(
+            [...previewSavedBatches, streaming.current],
+            streaming.current.projectSummary || previewSavedBatches.map(batch => batch.projectSummary).find(Boolean) || parserPreview?.projectSummary || '',
+            requestPreview,
+            plan.total,
+            security,
+            built.contextTruncation
+          )
+          reportProgress(`正在接收生成内容（${index + 1}/${built.batches.length}）`, `已${checkpoint ? '保存' : '校验'} ${progressQuestions.size}/${plan.total} 题`, generationPercent())
+        },
         activity: (() => {
           let lastSent = 0
           let lastCount = -1
@@ -726,6 +902,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         catch { throw new Error(GENERATION_DRAFT_MESSAGES.save) }
         checkpointState = snapshot
       }
+      previewSavedBatches.push(cloneBatch(parsed))
       failedStage = 'merge'
       return parsed
     }
@@ -768,20 +945,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     sections: capped.sections,
     glossary,
     ...(hasContextTruncation(built.contextTruncation) ? { contextTruncation: built.contextTruncation } : {}),
-    security: {
-      excludedFiles: scan.security.excludedFiles,
-      redactedFiles: built.contentSecurity.redactedFiles,
-      redactionMatches: built.contentSecurity.redactionMatches,
-      categories: Object.fromEntries([
-        ...Object.entries(scan.security.categories),
-        ...Object.entries(built.contentSecurity.matchesByCategory)
-      ].reduce((entries, [category, count]) => {
-        const existing = entries.find(([name]) => name === category)
-        if (existing) existing[1] += Number(count)
-        else entries.push([category, Number(count)])
-        return entries
-      }, [] as Array<[string, number]>))
-    },
+    security,
     ...(built.contentReadSummary.failedReads > 0 ? { contentReadSummary: built.contentReadSummary } : {})
   }
   failedStage = 'validation'
