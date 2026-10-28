@@ -49,7 +49,7 @@ async function loadTypescriptModule(filename, requireModule) {
     module,
     fullPath,
     path.dirname(fullPath),
-    { on() {}, platform: process.platform, env: {} }
+    { on() {}, platform: process.platform, env: {}, resourcesPath: path.join(root, 'resources') }
   )
   return module.exports
 }
@@ -185,6 +185,7 @@ async function createHarness({ scan: suppliedScan, projectPath = PROJECT_PATH, g
   modules.set('electron', {
     app: {
       isPackaged: true,
+      commandLine: { hasSwitch: () => false },
       getPath: (name) => name === 'appData' ? appDataPath : null,
       setPath() {},
       whenReady: () => readyPromise,

@@ -21,12 +21,12 @@ async function loadTypescriptModule(filename, requireModule, context = {}) {
   const source = await readFile(path.join(root, filename), 'utf8')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
   const module = { exports: {} }
-  const sandbox = { module, exports: module.exports, require: requireModule, __dirname: path.dirname(path.join(root, filename)), __filename: path.join(root, filename), console, AbortController, process: { on() {}, platform: 'darwin', env: {} }, ...context }
+  const sandbox = { module, exports: module.exports, require: requireModule, __dirname: path.dirname(path.join(root, filename)), __filename: path.join(root, filename), console, AbortController, process: { on() {}, platform: 'darwin', env: {}, resourcesPath: path.join(root, 'resources') }, ...context }
   vm.runInNewContext(`(function(exports, require, module, __filename, __dirname) { ${js}\n})`, sandbox)(module.exports, requireModule, module, sandbox.__filename, sandbox.__dirname)
   return module.exports
 }
 
-async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true, storedResult = null } = {}) {
+async function createHarness({ scan = async () => ({ status: 'reused', scan: { name: 'demo' } }), generate, isPackaged = true, storedResult = null, userDataDir = null } = {}) {
   const handlers = new Map()
   const appEvents = new Map()
   const windows = []
@@ -34,6 +34,9 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   const recents = []
   const drafts = new Map()
   const userDataPaths = []
+  const createdDirectories = []
+  const appDataPath = path.join(path.parse(root).root, 'AppData', 'Roaming')
+  const initialUserDataPath = userDataDir ?? path.join(appDataPath, 'Electron')
   let ready
   const readyPromise = new Promise((resolve) => { ready = resolve })
   class FakeWindow {
@@ -57,7 +60,8 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   }
   const app = {
     isPackaged,
-    getPath: (name) => name === 'appData' ? path.join(path.parse(root).root, 'AppData', 'Roaming') : null,
+    commandLine: { hasSwitch: (name) => name === 'user-data-dir' && userDataDir !== null },
+    getPath: (name) => name === 'appData' ? appDataPath : name === 'userData' ? initialUserDataPath : null,
     setPath: (name, value) => userDataPaths.push([name, value]),
     whenReady: () => readyPromise,
     on: (name, listener) => appEvents.set(name, listener),
@@ -100,7 +104,7 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   }
   const requireModule = (id) => {
     if (id === 'node:path') return path
-    if (id === 'node:fs') return { mkdirSync() {} }
+    if (id === 'node:fs') return { mkdirSync: (...args) => createdDirectories.push(args) }
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
     if (id === 'node:crypto') return { randomUUID, createHash }
     if (!modules[id]) throw new Error(`unexpected require: ${id}`)
@@ -111,20 +115,30 @@ async function createHarness({ scan = async () => ({ status: 'reused', scan: { n
   await loadTypescriptModule('electron/main.ts', requireModule, { BrowserWindow: FakeWindow })
   ready()
   await new Promise((resolve) => setImmediate(resolve))
-  return { handlers, appEvents, windows, saves, recents, userDataPaths, drafts, IPC }
+  return { handlers, appEvents, windows, saves, recents, userDataPaths, createdDirectories, initialUserDataPath, drafts, IPC }
 }
 
 const options = { projectPath: '/authorized/demo', granularity: 'coarse', roleFocus: 'general', profileId: 'p' }
 const result = { projectName: 'demo' }
 const request = (runId) => ({ ...options, runId })
 
-test('启动时继续使用重命名前的 userData 目录名称', async () => {
+test('未指定 user-data-dir 时继续使用重命名前的 userData 目录名称', async () => {
   for (const [isPackaged, legacyName] of [[true, 'ProjectLens'], [false, 'projectlens']]) {
     const harness = await createHarness({ isPackaged })
     assert.deepEqual(harness.userDataPaths, [[
       'userData',
       path.join(path.parse(root).root, 'AppData', 'Roaming', legacyName)
     ]])
+  }
+})
+
+test('显式 user-data-dir 保留 Electron 解析后的 userData 路径', async () => {
+  for (const isPackaged of [true, false]) {
+    const explicitUserDataDir = path.join(path.parse(root).root, 'isolated-user-data')
+    const harness = await createHarness({ isPackaged, userDataDir: explicitUserDataDir })
+    assert.equal(harness.initialUserDataPath, explicitUserDataDir)
+    assert.deepEqual(harness.userDataPaths, [])
+    assert.deepEqual(harness.createdDirectories, [])
   }
 })
 

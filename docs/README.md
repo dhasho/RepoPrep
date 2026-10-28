@@ -5,6 +5,7 @@
 ## 开发与日常
 
 - [开发指南](development.md)：环境、启动、常见问题。
+- [打包与桌面验证](packaged-desktop-validation.md)：Windows 安装包构建、独立数据目录和真实桌面验收。
 - [密钥保护](credential-security.md)：API Key 的存储方式与 IPC 边界。
 
 ## 技术参考

@@ -22,6 +22,8 @@ import * as contentRead from '../../shared/content-read.ts'
 import * as storageContract from '../../shared/storage-contract.ts'
 // @ts-ignore Node direct TypeScript tests require runtime .ts suffixes.
 import * as generationPreview from '../../shared/generation-preview.ts'
+// @ts-ignore Node direct TypeScript tests require runtime .ts suffixes.
+import { GENERATION_DRAFT_MESSAGES } from '../../shared/generation-checkpoint.ts'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -41,7 +43,7 @@ function loadTypescriptModule(filename: string, requireModule: (id: string) => u
     console,
     URL,
     AbortController,
-    process: { on() {}, platform: 'win32', env: {} },
+    process: { on() {}, platform: 'win32', env: {}, resourcesPath: path.join(projectRoot, 'resources') },
     ...context
   }
   vm.runInThisContext(`(function(exports, require, module, __filename, __dirname, process) { ${js}\n})`, { filename: absolutePath })(
@@ -135,6 +137,7 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
   const electron = {
     app: {
       isPackaged: true,
+      commandLine: { hasSwitch: () => false },
       getPath: (name: string) => name === 'appData' ? path.join(path.parse(projectRoot).root, 'AppData', 'Roaming') : null,
       setPath() {},
       whenReady: () => ready,
@@ -178,6 +181,7 @@ async function loadMainHarness(store: ReturnType<typeof loadStore>, selectedPath
     if (id === 'node:url') return { fileURLToPath, pathToFileURL }
     if (id === 'node:crypto') return { randomUUID }
     if (id === '../../shared/types.ts') return { SCAN_LIMIT_BOUNDS }
+    if (id === '../../shared/generation-checkpoint.ts') return { GENERATION_DRAFT_MESSAGES }
     if (id === '../../shared/result-contract.ts') return resultContract
     if (id === '../../shared/content-read.ts') return contentRead
     if (id === '../../shared/storage-contract.ts') return storageContract

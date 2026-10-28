@@ -36,9 +36,11 @@ import { ExplainAbortRegistry, registerGuardedIpcHandler } from './services/ipc-
 
 // Preserve the existing Electron userData directory across the product rename.
 // Development used the npm package name; packaged builds used productName.
-const legacyUserDataPath = path.join(app.getPath('appData'), app.isPackaged ? 'ProjectLens' : 'projectlens')
-mkdirSync(legacyUserDataPath, { recursive: true })
-app.setPath('userData', legacyUserDataPath)
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  const legacyUserDataPath = path.join(app.getPath('appData'), app.isPackaged ? 'ProjectLens' : 'projectlens')
+  mkdirSync(legacyUserDataPath, { recursive: true })
+  app.setPath('userData', legacyUserDataPath)
+}
 
 process.on('uncaughtException', (err) => console.error('[main] uncaughtException:', err))
 

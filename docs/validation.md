@@ -59,6 +59,7 @@
 - `test:native-credentials` 用合成密钥和临时目录验证本机 `safeStorage` 与实际设置服务的加密往返、明文隔离和公开回读；不调用模型、不使用用户密钥，也不证明 Windows DPAPI 数据可迁移到其他账户或设备。
 - `test:eval`、`eval:offline` 与 `eval:review` 只覆盖合成 fixture、loopback 响应、评分器和人工评分导入规则，不能当作真实模型质量或事实正确性验证。
 - `dist` 当前只生成 Windows 安装包；生成成功不等于安装验收，后者需实际安装并检查启动、保存/导出和卸载。
+- 安装态功能验证见[打包与桌面验证](packaged-desktop-validation.md)：用独立 `--user-data-dir` 和本机合成模型，通过真实安装版及原生文件对话框检查生成、恢复、解释、历史和导出；安装与卸载分别记录，不把 ASAR 冒烟视作安装验收。
 - `audit:deps` 只检查查询到的适用 HIGH/CRITICAL 公告：完整且无命中为 `status=clean`/退出码 0；完整且有命中为 `status=findings`/退出码 1；查询或报告不完整为 `status=incomplete`/退出码 2。部分查询的零命中不能解释为干净；已撤回公告单独记录、不计入有效命中。执行前用 `gh auth status` 确认身份（预期 `dhasho`）。该检查不是默认离线检查。
 - 验收真实 API、模型兼容性或额度需明确授权和真实服务配置；不要用 fixture、mock 或 smoke 结果代替。
 - 网络或依赖条件不满足时，写明跳过/失败原因；不因缺少依赖自动 `npm install` 后当作干净环境成功。
