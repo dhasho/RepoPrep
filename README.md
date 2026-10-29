@@ -20,11 +20,7 @@ RepoPrep 是一款 Windows 桌面应用：读取本地项目代码与文档，�
 
 ## 安装使用（Windows）
 
-运行 `RepoPrep Setup <版本>.exe`，按向导选择安装目录，安装完成后从桌面快捷方式或开始菜单启动。Windows x64 安装包自带 Electron 运行环境，无需安装 Node.js、npm 或其他开发工具链，也无需下载项目源码。
-
-首次启动后，在设置中填写模型服务地址、模型名和 API Key；Ollama 等本地服务可留空 Key。生成和 AI 解释需要可用的模型服务。
-
-安装包的构建方式和独立数据目录验收步骤见[打包与桌面验证](docs/packaged-desktop-validation.md)。
+从 [Releases](https://github.com/dhasho/RepoPrep/releases/latest) 下载 `RepoPrep-<版本>-x64-Setup.exe` 直接运行，不需要管理员权限。适用于 Windows 11 x64。
 
 ## 源码启动
 

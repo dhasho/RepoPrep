@@ -15,12 +15,20 @@ files:
   - package.json
 win:
   icon: resources/icon.ico
+  requestedExecutionLevel: asInvoker
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
 nsis:
+  artifactName: RepoPrep-${version}-${arch}-Setup.${ext}
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
   oneClick: false
   allowToChangeInstallationDirectory: true
+  perMachine: false
+  allowElevation: false
+  selectPerMachineByDefault: false
+  packElevateHelper: false
   createDesktopShortcut: true
   shortcutName: RepoPrep
