@@ -6,6 +6,8 @@ export interface SourceRegion {
   end: number
   text: string
   label: string
+  /** Lexical owner for standalone methods or nested declarations. */
+  qualifiedName?: string
   complete: boolean
   priority: number
 }
@@ -52,7 +54,26 @@ function regionForSymbol(content: string, symbol: CodeSymbol, priority: number):
   const start = clamp(symbol.start, 0, content.length)
   const end = clamp(symbol.end, start, content.length)
   if (end <= start) return undefined
-  return { start, end, text: content.slice(start, end), label: symbol.name || symbol.kind, complete: true, priority }
+  return {
+    start,
+    end,
+    text: content.slice(start, end),
+    label: symbol.name || symbol.kind,
+    qualifiedName: symbol.parentName ? `${symbol.parentName}.${symbol.name}` : undefined,
+    complete: true,
+    priority
+  }
+}
+
+export function formatSourceRegions(regions: readonly SourceRegion[], extension = ''): string {
+  const python = extension.replace(/^\./, '').toLowerCase() === 'py'
+  const comment = python ? '# 代码单元：' : '// 代码单元：'
+  return regions.map((region, index) => {
+    const owner = region.qualifiedName && region.qualifiedName !== region.label
+      ? `${comment}${region.qualifiedName}\n`
+      : ''
+    return `${index ? '…（其他位置省略）…\n' : ''}${owner}${region.text}`
+  }).join('\n')
 }
 
 const PYTHON_IDENT_CHAR = /[A-Za-z0-9_]/
@@ -68,6 +89,7 @@ interface PythonDeclaration {
   startLine: number
   indent: number
   name: string
+  qualifiedName: string
   kind: string
   colonSeen: boolean
   // Hierarchy and stub metadata only feed candidate priority; region
@@ -155,7 +177,7 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
               } else classChain.push(String(scope.slot))
             }
             const slot = declarations.length
-            pendingHeader = { index: i, startLine, indent, name: match[2], kind: match[1], colonSeen: false, overload, defDepth, ownerClasses: classChain.join('.'), parentSlot, callees: undefined, inlineStubBody: false }
+            pendingHeader = { index: i, startLine, indent, name: match[2], qualifiedName: [...scopes.map((scope) => scope.name), match[2]].join('.'), kind: match[1], colonSeen: false, overload, defDepth, ownerClasses: classChain.join('.'), parentSlot, callees: undefined, inlineStubBody: false }
             declarations.push(pendingHeader)
             scopes.push({ indent, name: match[2], kind: match[1], decl: pendingHeader, slot })
           }
@@ -303,7 +325,7 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
     // Without a confirmed depth-0 colon (or with the file ending mid-logical-line)
     // the header cannot be trusted as a complete body.
     const complete = decl.colonSeen && !(endIndex === lines.length && fileEndsOpen)
-    return { start, end, text: content.slice(start, end), label: decl.name, complete, priority }
+    return { start, end, text: content.slice(start, end), label: decl.name, qualifiedName: decl.qualifiedName, complete, priority }
   })
 }
 
@@ -355,7 +377,10 @@ export function selectSourceRegions(
   const selected: SourceRegion[] = []
   let used = 0
   for (const region of candidates) {
-    const cost = region.text.length + (selected.length ? 20 : 0)
+    const annotation = region.qualifiedName && region.qualifiedName !== region.label
+      ? (options.extension?.replace(/^\./, '').toLowerCase() === 'py' ? '# 代码单元：' : '// 代码单元：').length + region.qualifiedName.length + 1
+      : 0
+    const cost = region.text.length + annotation + (selected.length ? 20 : 0)
     if (used + cost > budget) continue
     // Avoid spending all the budget in one neighborhood when alternatives exist.
     if (selected.some((item) => item.start < region.end && item.end > region.start)) continue
@@ -367,7 +392,10 @@ export function selectSourceRegions(
     const shortSignature = analysis?.symbols.find((symbol) => symbol.signatureEnd && symbol.signatureEnd - symbol.start <= maxChars)
     if (shortSignature?.signatureEnd) {
       const region = regionForSymbol(content.slice(0, shortSignature.signatureEnd), { ...shortSignature, end: shortSignature.signatureEnd }, 0)
-      if (region) return { regions: [{ ...region, complete: false, label: `${region.label} (signature)` }], truncated: true }
+      const signature = region && { ...region, complete: false, label: `${region.label} (signature)` }
+      if (signature && formatSourceRegions([signature], options.extension).length <= budget) {
+        return { regions: [signature], truncated: true }
+      }
     }
     // Keep one honest partial fragment with explicit omitted text marker.
     const fullMarker = '…（中间内容省略）…'

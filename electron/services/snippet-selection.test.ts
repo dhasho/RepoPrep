@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { selectSourceRegions, sourceRegionCandidates } from './snippet-selection.ts'
+import { formatSourceRegions, selectSourceRegions, sourceRegionCandidates } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { renderBatchWithinBudget, type ContextBatch } from './context-builder.ts'
+import { renderBatch, renderBatchWithinBudget, type ContextBatch } from './context-builder.ts'
 
 test('structure selection keeps complete late and referenced units rather than the file head', () => {
   const content = `${'// front matter\n'.repeat(180)}function lateCore() { return 'late-core-marker' }\n`
@@ -35,6 +35,80 @@ test('class methods in later source positions remain independently selectable', 
   }
   const picked = selectSourceRegions(content, analysis, 200, { referencedSymbols: new Set(['saveRecord']) })
   assert.ok(picked.regions.some((region) => region.text.includes('save-marker')))
+})
+
+test('JavaScript method regions retain distinct class owners for duplicate method names', () => {
+  const content = `class Request {\n  prepare() { return 'REQUEST_PREPARE' }\n}\nclass PreparedRequest {\n  prepare() { return 'PREPARED_PREPARE' }\n}\n`
+  const analysis = analyzeSource('src/models.ts', content)
+  assert.ok(analysis?.parseable)
+  const methods = sourceRegionCandidates(content, analysis).filter((region) => region.label === 'prepare')
+  assert.deepEqual(methods.map((region) => region.qualifiedName).sort(), ['PreparedRequest.prepare', 'Request.prepare'])
+})
+
+test('Python regions retain nested class and function scopes', () => {
+  const content = `def factory():\n    class Outer:\n        class Inner:\n            def run(self):\n                return 'NESTED_RUN'\n        def create(self):\n            return Inner()\n    def helper():\n        return 1\n`
+  const regions = sourceRegionCandidates(content, null, { extension: 'py' })
+  assert.equal(regions.find((region) => region.label === 'run')?.qualifiedName, 'factory.Outer.Inner.run')
+  assert.equal(regions.find((region) => region.label === 'create')?.qualifiedName, 'factory.Outer.create')
+  assert.equal(regions.find((region) => region.label === 'helper')?.qualifiedName, 'factory.helper')
+})
+
+test('final fitting keeps TS and Python method owners within budget while whole files stay byte-identical', () => {
+  const tsFiller = '  cached: string = "filler-value"\n'.repeat(100)
+  const tsSource = `class Request {\n${tsFiller}  prepare() { return 'REQUEST_PREPARE' }\n}\nclass PreparedRequest {\n${tsFiller}  prepare() { return 'PREPARED_PREPARE' }\n}\n`
+  const tsAnalysis = analyzeSource('src/models.ts', tsSource)
+  assert.ok(tsAnalysis?.parseable)
+  const tsCandidates = sourceRegionCandidates(tsSource, tsAnalysis, { extension: 'ts' })
+  const tsBatch: ContextBatch = {
+    label: 'global', kind: 'global', weight: 1, totalChars: tsSource.length,
+    files: [{ relPath: 'src/models.ts', content: tsSource, truncated: false, redacted: false, redactionMatches: 0, selectionCandidates: tsCandidates }]
+  }
+  const tsBase = renderBatchWithinBudget('header', 'tree', { ...tsBatch, files: [] }, 10_000).text
+  const tsMaxChars = tsBase.length + 500
+  assert.ok(renderBatch('header', 'tree', tsBatch).length > tsMaxChars, 'the full request must exceed the final-fit limit')
+  const tsFitted = renderBatchWithinBudget('header', 'tree', tsBatch, tsMaxChars)
+  assert.equal(tsFitted.truncated, true)
+  assert.ok(tsFitted.text.length <= tsMaxChars)
+  assert.ok(tsFitted.text.includes('// 代码单元：Request.prepare'))
+  assert.ok(tsFitted.text.includes('// 代码单元：PreparedRequest.prepare'))
+
+  const pyFiller = '    cached = "filler-value"\n'.repeat(100)
+  const pySource = `class Request:\n${pyFiller}    def prepare(self):\n        return 'REQUEST_PREPARE'\nclass PreparedRequest:\n${pyFiller}    def prepare(self):\n        return 'PREPARED_PREPARE'\n`
+  const pyCandidates = sourceRegionCandidates(pySource, null, { extension: 'py' })
+  const pyBatch: ContextBatch = {
+    label: 'global', kind: 'global', weight: 1, totalChars: pySource.length,
+    files: [{ relPath: 'src/models.py', content: pySource, truncated: false, redacted: false, redactionMatches: 0, selectionCandidates: pyCandidates }]
+  }
+  const pyBase = renderBatchWithinBudget('header', 'tree', { ...pyBatch, files: [] }, 10_000).text
+  const pyMaxChars = pyBase.length + 500
+  assert.ok(renderBatch('header', 'tree', pyBatch).length > pyMaxChars, 'the full Python request must exceed the final-fit limit')
+  const pyFitted = renderBatchWithinBudget('header', 'tree', pyBatch, pyMaxChars)
+  assert.equal(pyFitted.truncated, true)
+  assert.ok(pyFitted.text.length <= pyMaxChars)
+  assert.ok(pyFitted.text.includes('# 代码单元：Request.prepare'))
+  assert.ok(pyFitted.text.includes('# 代码单元：PreparedRequest.prepare'))
+
+  const whole = renderBatchWithinBudget('header', 'tree', tsBatch, 10_000)
+  assert.equal(whole.text, renderBatch('header', 'tree', tsBatch))
+  assert.ok(!whole.text.includes('代码单元：'))
+})
+
+test('a scoped signature fallback is rejected when its owner annotation exceeds the budget', () => {
+  const owner = 'VeryLongCacheOwnerNameThatMakesTheQualifiedAnnotationLong'
+  const longBody = 'long-body'.repeat(40)
+  const content = `class ${owner} extends VeryLongBaseClassNameThatKeepsTheClassSignatureOutsideTheBudget {\n  prepare(input: string) { return input + '${longBody}' }\n}\n`
+  const analysis = analyzeSource('src/cache.ts', content)
+  assert.ok(analysis?.parseable)
+  const method = analysis.symbols.find((symbol) => symbol.kind === 'method' && symbol.name === 'prepare')
+  assert.ok(method?.signatureEnd)
+  const signatureLength = method.signatureEnd - method.start
+  const budget = signatureLength + 2
+  assert.ok(signatureLength <= budget)
+  assert.ok(formatSourceRegions([{ start: method.start, end: method.signatureEnd, text: content.slice(method.start, method.signatureEnd), label: 'prepare', qualifiedName: `${owner}.prepare`, complete: false, priority: 0 }], 'ts').length > budget)
+  const selected = selectSourceRegions(content, analysis, budget)
+  assert.ok(selected.truncated)
+  assert.ok(!selected.regions.some((region) => region.label.endsWith('(signature)')))
+  assert.ok(selected.regions.every((region) => region.text.length <= budget))
 })
 
 test('actual TS analysis prioritizes intact late class methods from an oversized class', () => {
@@ -209,7 +283,7 @@ test('Python real implementation outranks overload stubs and inner closures unde
   assert.ok(stub.complete, 'a signature-only region is still textually complete, just ranked lower')
   assert.ok(real.priority > stub.priority, 'the real implementation outranks its @overload signature stubs')
   assert.ok(real.priority > closure.priority, 'the parent method outranks its inner closure')
-  const picked = selectSourceRegions(content, null, real.text.length + 30, { extension: 'py' })
+  const picked = selectSourceRegions(content, null, formatSourceRegions([real], 'py').length + 30, { extension: 'py' })
   const pickedReal = picked.regions.find((region) => region.label === 'iter_chunks')
   assert.ok(pickedReal?.complete)
   assert.ok(pickedReal.text.includes('REAL_ITER_CHUNKS_BODY'))
@@ -224,7 +298,7 @@ test('Python oversized parents keep a bounded nested fallback instead of nothing
   const giant = candidates.find((region) => region.label === 'giant_parent')
   assert.ok(nested && giant)
   assert.ok(giant.priority < nested.priority + 10, 'the fallback stays explainable: the parent is not buried infinitely far below')
-  const picked = selectSourceRegions(content, null, nested.text.length + 10, { extension: 'py' })
+  const picked = selectSourceRegions(content, null, formatSourceRegions([nested], 'py').length + 10, { extension: 'py' })
   assert.ok(picked.truncated)
   assert.equal(picked.regions.length, 1)
   assert.equal(picked.regions[0].label, 'useful_nested')
@@ -387,7 +461,7 @@ test('Python fallback prefers the nearest fitting parent over a deeper coupled c
   const source = `def one(): ...\ndef two(): ...\ndef three(): ...\ndef combine(a,b,c): ...\ndef public_api():\n${'  # outer-only background\n'.repeat(60)}  def middle():\n    def leaf():\n      return combine(one(), two(), three())\n    return leaf()\n  return middle()\n`
   const middle = sourceRegionCandidates(source, null, { extension: 'py' }).find(region => region.label === 'middle')
   assert.ok(middle)
-  const selected = selectSourceRegions(source, null, middle.text.length, { extension: 'py' })
+  const selected = selectSourceRegions(source, null, formatSourceRegions([middle], 'py').length, { extension: 'py' })
   assert.ok(selected.regions.some(region => region.label === 'middle' && region.text === middle.text))
   assert.ok(!selected.regions.some(region => region.label === 'public_api'), 'the outer ancestor genuinely exceeds the budget')
 })

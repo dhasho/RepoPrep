@@ -27,7 +27,7 @@ import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles, type FileSelectionSignals } from './file-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
+import { formatSourceRegions, selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -401,7 +401,7 @@ async function pickFiles(
     const selectionCandidates = isDocumentOrConfigPath(file.relPath)
       ? undefined
       : sourceRegionCandidates(redaction.content, analysis, { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext })
-    const renderedContent = truncated ? formatRegions(regions) : redaction.content
+    const renderedContent = truncated ? formatRegions(regions, file.ext) : redaction.content
     out.push({
       relPath: file.relPath,
       content: renderedContent,
@@ -649,8 +649,8 @@ export async function buildContext(scan: ScanResult, granularity: Granularity, o
   }
 }
 
-function formatRegions(regions: readonly SourceRegion[]): string {
-  return regions.map((region, index) => `${index ? '…（其他位置省略）…\n' : ''}${region.text}`).join('\n')
+function formatRegions(regions: readonly SourceRegion[], extension = ''): string {
+  return formatSourceRegions(regions, extension)
 }
 
 function eligibleContextFilePaths(scan: ScanResult, granularity: Granularity): string[] {
@@ -761,8 +761,8 @@ export function renderBatchWithinBudget(
         content = file.content
         regionCount = content.length ? 1 : 0
       } else {
-        const regions = regionsWithinBudget(candidates, allocation)
-        content = formatRegions(regions)
+        const regions = regionsWithinBudget(candidates, allocation, file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? '')
+        content = formatRegions(regions, file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? '')
         regionCount = regions.length
       }
     } else if (allocation >= file.content.length) {
@@ -790,13 +790,13 @@ export function renderBatchWithinBudget(
   }
 }
 
-function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number): SourceRegion[] {
+function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number, extension = ''): SourceRegion[] {
   const selected: SourceRegion[] = []
   const ranked = [...regions].sort((a, b) => b.priority - a.priority || a.start - b.start)
   for (const region of ranked) {
     if (selected.some((item) => item.start < region.end && item.end > region.start)) continue
     const candidate = [...selected, region]
-    if (formatRegions(candidate).length <= maxChars) selected.push(region)
+    if (formatRegions(candidate, extension).length <= maxChars) selected.push(region)
   }
   return selected.sort((a, b) => a.start - b.start)
 }
@@ -806,7 +806,8 @@ function canRenderPlannedFile(plan: { kind: 'document' | 'regions' | 'whole'; fi
   if (plan.kind === 'regions') {
     if (!plan.file.truncated && allocation >= plan.file.content.length) return true
     const candidates = plan.file.selectionCandidates?.length ? plan.file.selectionCandidates : plan.file.selectionRegions ?? []
-    return regionsWithinBudget(candidates, allocation).length > 0 || plan.file.content.length === 0
+    const extension = plan.file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? ''
+    return regionsWithinBudget(candidates, allocation, extension).length > 0 || plan.file.content.length === 0
   }
   return allocation >= plan.file.content.length
 }
