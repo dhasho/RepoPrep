@@ -99,7 +99,7 @@ async function readRequestBody(request) {
   return text ? JSON.parse(text) : {}
 }
 
-async function startSyntheticServer() {
+async function startSyntheticServer(syntheticApiKey) {
   const state = { requests: [], completed: 0, aborted: [], held: new Map() }
   const server = createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1')
@@ -163,6 +163,8 @@ async function startSyntheticServer() {
     state.requests.push({
       index,
       model: typeof body.model === 'string' ? body.model : '',
+      reasoningEffort: typeof body.reasoning_effort === 'string' ? body.reasoning_effort : null,
+      syntheticAuthorization: request.headers.authorization === `Bearer ${syntheticApiKey}`,
       stream: body.stream === true,
       requestedQuota: resumeQuota ? Number(resumeQuota) : null,
       includesSavedQuestion01: joinedPrompt.includes(`${syntheticQuestionPrefix}01:`),
@@ -257,7 +259,8 @@ async function run() {
   const exportPath = path.join(fixtureRoot, 'exported-workflow-a.md')
   await createProject(projectA, 'WORKFLOW_PROJECT_A_SOURCE_MARKER')
   await createProject(projectB, 'WORKFLOW_PROJECT_B_SOURCE_MARKER')
-  const syntheticServer = await startSyntheticServer()
+  const syntheticApiKey = 'workflow-synthetic-key-only'
+  const syntheticServer = await startSyntheticServer(syntheticApiKey)
   let output = ''
   let exitCode = 1
   let childClosed = false
@@ -279,6 +282,7 @@ async function run() {
   env.REPOPREP_WORKFLOW_PROJECT_B = projectB
   env.REPOPREP_WORKFLOW_EXPORT = exportPath
   env.REPOPREP_WORKFLOW_MODEL_URL = `${syntheticServer.baseUrl}/v1`
+  env.REPOPREP_WORKFLOW_API_KEY = syntheticApiKey
   env.REPOPREP_WORKFLOW_CONTROL_URL = syntheticServer.baseUrl
   await fs.mkdir(evidenceDirectory, { recursive: true })
   env.REPOPREP_WORKFLOW_SCREENSHOT = path.join(evidenceDirectory, 'scope-latest.png')

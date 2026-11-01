@@ -108,6 +108,34 @@ async function setInputByPlaceholder(placeholder, value, description) {
   evidence.uiActions.push(description)
 }
 
+async function setInputBySelector(selector, value, description) {
+  const result = await activeWindow.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector(${JSON.stringify(selector)})
+    if (!(input instanceof HTMLInputElement)) return false
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    setter.call(input, ${JSON.stringify(value)})
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
+  })()`)
+  assert.equal(result, true, `missing UI input: ${description}`)
+  evidence.uiActions.push(description)
+}
+
+async function setSelectByLabel(label, value, description) {
+  const result = await activeWindow.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('select[aria-label="${label}"]')
+    if (!(select instanceof HTMLSelectElement)) return false
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+    setter.call(select, ${JSON.stringify(value)})
+    select.dispatchEvent(new Event('input', { bubbles: true }))
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    return select.value === ${JSON.stringify(value)}
+  })()`)
+  assert.equal(result, true, `missing UI selector: ${description}`)
+  evidence.uiActions.push(description)
+}
+
 async function bridge(expression, description) {
   evidence.proofBoundary.bridgeCalls.push(description)
   return activeWindow.webContents.executeJavaScript(expression)
@@ -183,7 +211,7 @@ async function runWorkflow() {
   assert.ok(runtime.rootChildren > 0, 'the production React renderer must mount')
   evidence.checks.renderer = { url: actualUrl, title: runtime.title, rootChildren: runtime.rootChildren, preloadApi: runtime.api, nodeBridgeUnavailable: runtime.nodeBridgeUnavailable }
 
-  // Create a no-secret profile through the actual Settings UI and real settings IPC.
+  // Create a synthetic-key profile through the actual Settings UI and real settings IPC.
   await click('button[aria-label="设置"]', 'open settings page')
   await waitForPage('settings page', (text) => text.includes('新增配置') && text.includes('扫描安全上限'))
   await clickButton('新增配置', 'add synthetic profile')
@@ -191,6 +219,8 @@ async function runWorkflow() {
   await setInputByPlaceholder('如：DeepSeek 日常用', profileName, 'set profile name')
   await setInputByPlaceholder('https://api.deepseek.com/v1', process.env.REPOPREP_WORKFLOW_MODEL_URL, 'set loopback endpoint')
   await setInputByPlaceholder('deepseek-chat，或点右侧按钮检测', 'workflow-synthetic-model', 'set synthetic model')
+  await setInputBySelector('input[type="password"]', process.env.REPOPREP_WORKFLOW_API_KEY, 'set synthetic API key')
+  await setSelectByLabel('推理强度（可选）', 'low', 'select low reasoning effort')
   await activeWindow.webContents.executeJavaScript(`(() => { const input = [...document.querySelectorAll('input[type="checkbox"]')].find((item) => item.closest('label')?.innerText.includes('设为默认')); if (!input) return false; if (!input.checked) input.click(); return true })()`).then((ok) => assert.equal(ok, true))
   evidence.uiActions.push('set synthetic profile as default')
   await clickButton('保存', 'save synthetic profile', 'starts')
@@ -198,11 +228,13 @@ async function runWorkflow() {
   const settings = await bridge('window.api.getSettings()', 'get public settings')
   const profile = settings.profiles.find((item) => item.name === profileName)
   assert.ok(profile, 'saved profile must round-trip over the public settings API')
-  assert.equal(profile.hasApiKey, false)
+  assert.equal(profile.reasoningEffort, 'low', 'selected effort must round-trip through public settings readback')
+  assert.equal(profile.hasApiKey, true, 'synthetic API key must be stored through the real settings service')
   assert.equal(Object.hasOwn(profile, 'apiKey'), false, 'public settings must not expose credentials')
   const settingsFile = await fs.readFile(path.join(app.getPath('userData'), 'settings.json'), 'utf8')
   assert.ok(!settingsFile.includes('apiKey'))
-  evidence.checks.profile = { idPresent: Boolean(profile.id), defaultProfileIdMatches: settings.defaultProfileId === profile.id, credentialAbsent: true }
+  assert.ok(!settingsFile.includes(process.env.REPOPREP_WORKFLOW_API_KEY), 'synthetic key must not be persisted in plaintext')
+  evidence.checks.profile = { idPresent: Boolean(profile.id), defaultProfileIdMatches: settings.defaultProfileId === profile.id, credentialAbsent: !Object.hasOwn(profile, 'apiKey'), syntheticCredentialStored: profile.hasApiKey, reasoningEffort: profile.reasoningEffort }
   await clickButton('返回', 'return from settings')
   await waitForPage('project selection page', (text) => text.includes('选择一个项目'))
 
@@ -382,6 +414,10 @@ async function runWorkflow() {
   assert.equal(evidence.requests.requests.length, 3)
   assert.equal(evidence.requests.completed, 2)
   assert.deepEqual(evidence.requests.aborted, [1])
+  assert.ok(evidence.requests.requests.every((request) => request.reasoningEffort === 'low'), 'all production OpenAI requests must carry the saved low effort')
+  assert.ok(evidence.requests.requests.every((request) => request.syntheticAuthorization), 'the loopback requests must use the synthetic saved credential')
+  assert.ok(!JSON.stringify(evidence).includes(process.env.REPOPREP_WORKFLOW_API_KEY), 'workflow evidence must not contain the synthetic key')
+  evidence.checks.reasoningEffortRequest = { publicReadback: 'low', productionRequestValues: evidence.requests.requests.map((request) => request.reasoningEffort) }
   evidence.checks.ipcBoundary = 'settings and storage assertions used real window.api → preload → guarded main-process IPC; only picker dialogs were replaced'
   evidence.checks.rendererErrors = rendererErrors
 }
