@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { scanProject } from '../../electron/services/scanner.ts'
 import { generateInterview } from '../../electron/services/generator.ts'
+import { SseDecoder } from '../../electron/services/sse-parser.ts'
 import { GRANULARITY_QUESTION_BUDGET } from '../../shared/types.ts'
 import { DEFAULT_OUTPUT_RESERVE, DEEPSEEK_THINKING_RESERVE, INPUT_TOKEN_TARGETS, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 import { scoreCase, flattenQuestions, fingerprintQuestion } from './scorer.mjs'
@@ -233,7 +234,7 @@ async function hashSources(manifestPath) {
   return Object.fromEntries(Object.entries(sourceHashes).sort(([a], [b]) => a.localeCompare(b)))
 }
 
-async function boundedUsage(response, deadline) {
+async function boundedUsage(response, deadline, protocol) {
   try {
     const reader = response.clone().body?.getReader()
     if (!reader) return null
@@ -256,7 +257,9 @@ async function boundedUsage(response, deadline) {
       chunks.push(value)
     }
     const text = Buffer.concat(chunks.map(chunk => Buffer.from(chunk))).toString('utf8')
-    const usage = JSON.parse(text).usage
+    let usage
+    try { usage = JSON.parse(text).usage } catch { usage = usageFromSse(text, protocol) }
+    if (!usage) return null
     const input = usage?.prompt_tokens ?? usage?.input_tokens
     const output = usage?.completion_tokens ?? usage?.output_tokens
     const total = usage?.total_tokens ?? input + output
@@ -267,10 +270,61 @@ async function boundedUsage(response, deadline) {
   } catch { return null }
 }
 
+function usageFromSse(text, protocol) {
+  let input
+  let output
+  let total
+  let anthropicFinalOutputSeen = false
+  let anthropicMessageStopped = false
+  const decoder = new SseDecoder(({ data }) => {
+    if (!data || data === '[DONE]') return
+    let event
+    try { event = JSON.parse(data) } catch { return }
+    if (protocol === 'anthropic') {
+      const type = event?.type
+      if (type === 'message_start' || event?.event === 'message_start') {
+        const receipt = event?.message?.usage
+        const candidate = receipt?.input_tokens
+        input = Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= MAX_USAGE_TOKENS ? candidate : undefined
+      } else if (type === 'message_delta' || event?.event === 'message_delta') {
+        const receipt = event?.delta?.usage ?? event?.usage
+        if (receipt && typeof receipt === 'object') {
+          anthropicFinalOutputSeen = Object.hasOwn(receipt, 'output_tokens')
+          const candidate = receipt.output_tokens
+          output = Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= MAX_USAGE_TOKENS ? candidate : undefined
+          const candidateTotal = receipt.total_tokens
+          total = candidateTotal === undefined
+            ? undefined
+            : Number.isSafeInteger(candidateTotal) && candidateTotal >= 0 && candidateTotal <= MAX_USAGE_TOKENS
+              ? candidateTotal
+              : Number.NaN
+        }
+      } else if (type === 'message_stop' || event?.event === 'message_stop') {
+        anthropicMessageStopped = true
+      }
+      return
+    }
+    const receipt = event?.usage ?? event?.message?.usage
+    if (!receipt || typeof receipt !== 'object') return
+    const nextInput = receipt.prompt_tokens ?? receipt.input_tokens
+    const nextOutput = receipt.completion_tokens ?? receipt.output_tokens
+    const nextTotal = receipt.total_tokens
+    if (Number.isSafeInteger(nextInput) && nextInput >= 0) input = nextInput
+    if (Number.isSafeInteger(nextOutput) && nextOutput >= 0) output = nextOutput
+    if (Number.isSafeInteger(nextTotal) && nextTotal >= 0) total = nextTotal
+  }, { maxBufferChars: MAX_USAGE_BYTES })
+  try { decoder.push(text); decoder.finish() } catch { return null }
+  const anthropicComplete = protocol !== 'anthropic' || (anthropicFinalOutputSeen && anthropicMessageStopped)
+  return anthropicComplete && input !== undefined && output !== undefined && !Number.isNaN(total)
+    ? { prompt_tokens: input, completion_tokens: output, ...(total !== undefined ? { total_tokens: total } : {}) }
+    : null
+}
+
 export function installFetchObserver(profile, limit, deadline) {
   const nativeFetch = globalThis.fetch
   const origin = new URL(profile.baseUrl).origin
   const metrics = { requests: [], blockedRequests: 0, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, usageAvailable: true }
+  const pending = new Set()
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
     if (url.origin !== origin || (init.method ?? (typeof input === 'object' && input.method) ?? 'GET').toUpperCase() !== 'POST') {
@@ -292,19 +346,27 @@ export function installFetchObserver(profile, limit, deadline) {
       try { response = await nativeFetch(input, { ...init, signal: init.signal ? AbortSignal.any([init.signal, timeoutController.signal]) : timeoutController.signal }) }
       finally { clearTimeout(timeout) }
       request.status = response.status
-      const usage = await boundedUsage(response, deadline)
-      request.elapsedMs = Date.now() - started
-      request.usage = usage
-      if (usage) for (const key of Object.keys(metrics.usage)) metrics.usage[key] += usage[key]
-      else metrics.usageAvailable = false
+      const observation = boundedUsage(response, deadline, profile.protocol).then(usage => {
+        request.elapsedMs = Date.now() - started
+        request.usage = usage
+        if (usage) for (const key of Object.keys(metrics.usage)) metrics.usage[key] += usage[key]
+        else metrics.usageAvailable = false
+      }).catch(() => { request.elapsedMs = Date.now() - started; metrics.usageAvailable = false })
+      pending.add(observation)
+      void observation.finally(() => pending.delete(observation))
       return response
     } catch (error) {
       request.elapsedMs = Date.now() - started
       request.errorType = safeErrorType(error)
+      metrics.usageAvailable = false
       throw new Error('model request failed')
     }
   }
-  return { metrics, restore: () => { globalThis.fetch = nativeFetch } }
+  return {
+    metrics,
+    async drain() { await Promise.all([...pending]) },
+    restore: () => { globalThis.fetch = nativeFetch }
+  }
 }
 
 function sanitizeProfile(profile) {
@@ -438,6 +500,7 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
             onProgress: () => {},
             onDiagnostics: value => { diagnostics = sanitizeGenerationDiagnostics(value) }
           })
+          await observer.drain()
           if (Date.now() >= deadline) throw new Error('duration limit reached')
           stage = 'scoring'
           const requests = observer.metrics.requests.slice(start)
@@ -465,6 +528,7 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
           if (variant === 'generation') item.output = item.generation.output
           await persist()
         } catch (error) {
+          await observer.drain()
           const requests = observer.metrics.requests.slice(start)
           item[variant] = {
             status: 'failed',
@@ -485,6 +549,7 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
     failure = safeErrorType(error)
     run.failure = { type: failure, reason: error?.message === 'request limit reached' ? 'request_limit' : error?.message === 'duration limit reached' ? 'duration_limit' : 'evaluation_failed' }
   } finally {
+    await observer.drain()
     observer.restore()
     run.network = { blockedRequests: observer.metrics.blockedRequests, requests: observer.metrics.requests, usage: observer.metrics.usageAvailable ? observer.metrics.usage : null }
     run.status = failure ? 'partial' : 'complete'

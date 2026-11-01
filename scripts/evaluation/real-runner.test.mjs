@@ -243,6 +243,7 @@ test('observes bounded request metadata and usage without retaining credentials 
   const observer = installFetchObserver({ baseUrl: 'https://api.example.test/v1', apiKey: 'private-key', model: 'm' }, 1, Date.now() + 5000)
   t.after(observer.restore)
   const response = await globalThis.fetch('https://api.example.test/v1/chat/completions', { method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: 'private prompt' }] }) })
+  await observer.drain()
   assert.equal(response.status, 200)
   assert.equal(observer.metrics.requests[0].inputChars, 14)
   assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 4, outputTokens: 2, totalTokens: 6 })
@@ -261,6 +262,7 @@ test('reports unavailable provider usage as null', async t => {
   const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
   t.after(observer.restore)
   await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  await observer.drain()
   assert.equal(observer.metrics.usageAvailable, false)
   observer.restore()
 })
@@ -272,6 +274,7 @@ test('does not report out-of-range provider token counters as actual usage', asy
   const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
   t.after(observer.restore)
   await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  await observer.drain()
   assert.equal(observer.metrics.requests[0].usage, null)
   assert.equal(observer.metrics.usageAvailable, false)
 })
@@ -285,8 +288,76 @@ test('returns promptly when bounded usage reads an oversized streaming body', as
   const started = Date.now()
   await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
   assert.ok(Date.now() - started < 1000)
+  await observer.drain()
   assert.equal(observer.metrics.usageAvailable, false)
   observer.restore()
+})
+
+test('returns streaming responses before EOF and records final SSE usage after draining', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  let controller
+  globalThis.fetch = async () => new Response(new ReadableStream({ start(value) { controller = value } }), {
+    status: 200, headers: { 'content-type': 'text/event-stream' }
+  })
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
+  t.after(observer.restore)
+  const response = await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  const reader = response.body.getReader()
+  controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"first"}}]}\n\n'))
+  const first = await reader.read()
+  assert.match(new TextDecoder().decode(first.value), /first/u)
+  controller.enqueue(new TextEncoder().encode('data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}\n\ndata: [DONE]\n\n'))
+  controller.close()
+  await reader.read()
+  await observer.drain()
+  assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 11, outputTokens: 7, totalTokens: 18 })
+  assert.deepEqual(observer.metrics.usage, { inputTokens: 11, outputTokens: 7, totalTokens: 18 })
+  observer.restore()
+})
+
+test('merges Anthropic SSE input and final output usage across CRLF events without summing interim counters', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  const encoder = new TextEncoder()
+  const chunks = [
+    'event: message_start\r',
+    '\ndata: {"type":"message_start","message":{"usage":{"input_tokens":13,"output_tokens":0}}}\r\n\r',
+    '\nevent: message_delta\r\ndata: {"type":"message_delta","usage":{"output_tokens":5}}\r\n\r\n',
+    'event: message_stop\r\ndata: {"type":"message_stop"}\r\n\r\n'
+  ].map(value => encoder.encode(value))
+  globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
+    for (const chunk of chunks) controller.enqueue(chunk)
+    controller.close()
+  } }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
+  t.after(observer.restore)
+  await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  await observer.drain()
+  assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 13, outputTokens: 5, totalTokens: 18 })
+  observer.restore()
+})
+
+test('Anthropic input-only or invalid final usage never becomes a complete receipt', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  const encoder = new TextEncoder()
+  const prefix = 'event: message_start\r\ndata: {"type":"message_start","message":{"usage":{"input_tokens":13,"output_tokens":0}}}\r\n\r\n'
+  const priorOutput = 'event: message_delta\r\ndata: {"type":"message_delta","usage":{"output_tokens":5}}\r\n\r\n'
+  const cases = [
+    prefix,
+    `${prefix}${priorOutput}event: message_delta\r\ndata: {"type":"message_delta","usage":{"output_tokens":-1}}\r\n\r\nevent: message_stop\r\ndata: {"type":"message_stop"}\r\n\r\n`,
+    `${prefix}${priorOutput}event: message_delta\r\ndata: {"type":"message_delta","usage":{"output_tokens":10000001}}\r\n\r\nevent: message_stop\r\ndata: {"type":"message_stop"}\r\n\r\n`
+  ]
+  for (const sse of cases) {
+    globalThis.fetch = async () => new Response(encoder.encode(sse), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'anthropic' }, 1, Date.now() + 5000)
+    await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+    await observer.drain()
+    assert.equal(observer.metrics.requests[0].usage, null)
+    assert.equal(observer.metrics.usageAvailable, false)
+    observer.restore()
+  }
 })
 
 test('human review digest binds the generation output field', () => {
@@ -311,6 +382,7 @@ test('runs production generation and README baseline while keeping gold outside 
   assert.equal(run.cases[0].generation.diagnostics.status, 'succeeded')
   assert.equal(run.cases[0].generation.diagnostics.usageComplete, true)
   assert.deepEqual(run.cases[0].generation.diagnostics.actualUsage, { inputTokens: 30, outputTokens: 40, totalTokens: 70 })
+  assert.deepEqual(run.cases[0].generation.tokens, { inputTokens: 30, outputTokens: 40, totalTokens: 70 })
   assert.equal(run.cases[0].baseline.scored.quota.actual, 20)
   assert.equal(run.cases[0].output.projectPath, '/public-corpus/case')
   assert.equal(run.cases[0].output.profileId, 'real-eval')
@@ -373,6 +445,9 @@ test('retains generation report as partial when baseline model call fails', asyn
   assert.equal(run.cases[0].baseline.failureStage, 'model')
   assert.equal(run.cases[0].baseline.diagnostics.status, 'failed')
   assert.equal(run.cases[0].baseline.diagnostics.failedStage, 'model')
+  assert.deepEqual(run.cases[0].generation.tokens, { inputTokens: 30, outputTokens: 40, totalTokens: 70 })
+  assert.equal(run.cases[0].baseline.tokens, null)
+  assert.equal(run.network.usage, null, 'one failed request makes aggregate actual usage unknown')
   assert.equal(run.failure.type, 'ModelRequestError')
   assert.equal(run.failure.reason, 'evaluation_failed')
   const report = JSON.parse(await readFile(path.join(outputDir, 'report.json'), 'utf8'))
@@ -382,6 +457,42 @@ test('retains generation report as partial when baseline model call fails', asyn
   assert.ok(await readFile(path.join(outputDir, 'report.md'), 'utf8'))
   assert.ok(await readFile(path.join(outputDir, 'review-template.json'), 'utf8'))
   assert.doesNotMatch(JSON.stringify(report), /API_KEY_RAW_SECRET_SENTINEL|UPSTREAM_RAW_SECRET_SENTINEL/u)
+})
+
+test('production runner captures synthetic streaming usage before per-case persistence', async t => {
+  const values = await productionFixture(t)
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  const encoder = new TextEncoder()
+  globalThis.fetch = async (_url, init) => {
+    const request = JSON.parse(init.body)
+    assert.equal(request.stream, true)
+    const content = syntheticCompletion()
+    const frames = [
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: content.slice(0, 120) } }] })}\r\n\r\n`,
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: content.slice(120) }, finish_reason: 'stop' }] })}\r\n\r\n`,
+      'data: {"choices":[],"usage":{"prompt_tokens":41,"completion_tokens":29,"total_tokens":70}}\r\n\r\n',
+      'data: [DONE]\r\n\r\n'
+    ].join('')
+    const bytes = encoder.encode(frames)
+    return new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(bytes.slice(0, 137))
+      controller.enqueue(bytes.slice(137, 619))
+      controller.enqueue(bytes.slice(619))
+      controller.close()
+    } }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  }
+  const run = await runRealEvaluation({
+    ...values,
+    outputDir: path.join(values.base, 'streaming-report'),
+    profile: testProfile,
+    caseIds: ['case'],
+    variants: ['generation'],
+    maxRequests: 2
+  })
+  assert.equal(run.status, 'complete')
+  assert.deepEqual(run.cases[0].generation.tokens, { inputTokens: 41, outputTokens: 29, totalTokens: 70 })
+  assert.deepEqual(run.network.usage, { inputTokens: 41, outputTokens: 29, totalTokens: 70 })
 })
 
 test('CLI accepts top-level help and missing credentials fail nonzero without echoing secrets', async t => {
