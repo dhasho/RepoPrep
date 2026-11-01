@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { calculateReportDigest } from './review.mjs'
-import { compareRealRuns, comparisonMarkdown } from './compare-real-runs.mjs'
+import { compareRealRuns, comparisonMarkdown, parseCompareArgs } from './compare-real-runs.mjs'
 
-function run({ runId, questions, sourceHash, contextWindowTokens = null, fixtureHash = 'a'.repeat(64), budget = { min: 1, max: 1 } }) {
+function run({ runId, questions, sourceHash, contextWindowTokens = null, reasoningEffort, fixtureHash = 'a'.repeat(64), budget = { min: 1, max: 1 } }) {
   const outputQuestions = questions.map(question => ({ question, answer: 'A', followUps: [] }))
   const output = { projectSummary: `result-${runId}`, sections: [{ title: 'Example', questions: outputQuestions }] }
   const diagnostics = runId === 'old' ? undefined : { estimatedInputTokens: 12, usageComplete: false, actualUsage: null, repairRequestCount: 0, compensationRequestCount: 0 }
@@ -29,6 +29,7 @@ function run({ runId, questions, sourceHash, contextWindowTokens = null, fixture
     config: {
       variants: runId === 'old' ? ['generation', 'baseline'] : ['generation'],
       granularity: 'medium', budget, temperature: 0.4,
+      ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
       contextWindowTokens, maxOutputTokens: null,
       applicationInputTokenBudget: contextWindowTokens ?? 32000,
       contextStrategy: runId === 'old' ? null : 'structure-v1',
@@ -48,7 +49,8 @@ function run({ runId, questions, sourceHash, contextWindowTokens = null, fixture
     report.configHashInputs = {
       baseUrlOriginSha256: createHash('sha256').update('https://model.example.test').digest('hex'),
       model: report.model,
-      protocol: report.protocol
+      protocol: report.protocol,
+      ...(reasoningEffort !== undefined ? { reasoningEffort } : {})
     }
     report.configHash = createHash('sha256').update(JSON.stringify({ config: report.config, ...report.configHashInputs })).digest('hex')
   }
@@ -72,6 +74,31 @@ test('compares complete same-fixture generation runs while recording source and 
   assert.match(comparisonMarkdown(comparison), /Baseline report SHA-256/u)
   assert.match(comparisonMarkdown(comparison), /not factual accuracy/u)
   assert.match(comparisonMarkdown(comparison), /Actual provider token totals are null/u)
+})
+
+test('normalizes legacy default effort and gates low/high comparisons unless explicitly allowed', () => {
+  const legacy = run({ runId: 'old', questions: ['Q1'], sourceHash: 'old' })
+  const providerDefault = run({ runId: 'new', questions: ['Q1'], sourceHash: 'new', reasoningEffort: 'provider-default' })
+  assert.equal(compareRealRuns(legacy, providerDefault).config.reasoningEffort, 'provider-default')
+
+  const low = run({ runId: 'low', questions: ['Q1'], sourceHash: 'low', reasoningEffort: 'low' })
+  assert.throws(() => compareRealRuns(legacy, low), /reasoning effort differs/u)
+  const comparison = compareRealRuns(legacy, low, { allowReasoningEffortChange: true })
+  assert.deepEqual(comparison.reasoningEffortChange, { baseline: 'provider-default', candidate: 'low' })
+  assert.equal(comparison.conditions.baseline.reasoningEffort, 'provider-default')
+  assert.equal(comparison.conditions.candidate.reasoningEffort, 'low')
+  assert.match(comparisonMarkdown(comparison), /different inference conditions/u)
+})
+
+test('CLI parser only enables cross-effort comparisons with the explicit flag', () => {
+  assert.deepEqual(parseCompareArgs(['base.json', 'low.json']), {
+    baselinePath: 'base.json', candidatePath: 'low.json', allowReasoningEffortChange: false
+  })
+  assert.deepEqual(parseCompareArgs(['base.json', 'low.json', '--allow-reasoning-change']), {
+    baselinePath: 'base.json', candidatePath: 'low.json', allowReasoningEffortChange: true
+  })
+  assert.throws(() => parseCompareArgs(['base.json', 'low.json', '--unknown']), /usage:/u)
+  assert.throws(() => parseCompareArgs(['base.json', 'low.json', '--allow-reasoning-change', '--allow-reasoning-change']), /usage:/u)
 })
 
 test('compares the retained frozen baseline report with itself using its legacy schema', async () => {

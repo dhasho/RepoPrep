@@ -13,6 +13,7 @@ const SAFE_ERROR_CODES = new Set([
   'settings-schema-unsupported', 'settings-plaintext-credential-refused',
   'settings-default-profile-missing', 'settings-profile-missing',
   'settings-encrypted-credential-missing', 'settings-profile-invalid',
+  'reasoning-effort-provider-mismatch',
   'credential-store-unavailable', 'saved-profile-unavailable',
   'os-crypt-state-unavailable', 'os-crypt-state-invalid', 'os-crypt-app-bound-unsupported',
   'credential-fixture-path-required'
@@ -24,6 +25,7 @@ function parseEntryArgs(argv) {
   const variants = []
   let preflight = false
   let credentialPreflight = false
+  let reasoningEffort
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index]
     if (key === '--preflight') { preflight = true; continue }
@@ -34,11 +36,14 @@ function parseEntryArgs(argv) {
     else if (key === '--variant') {
       appendVariant(variants, value, 'invalid-entry-arguments')
       variants.push(value)
+    } else if (key === '--reasoning-effort') {
+      if (reasoningEffort !== undefined || (value !== 'low' && value !== 'high')) throw new Error('invalid-entry-arguments')
+      reasoningEffort = value
     } else if (['--runtime-root', '--repo-root', '--settings-dir', '--profile-id', '--repos-root', '--output', '--max-requests'].includes(key)) values.set(key, value)
     else throw new Error('invalid-entry-arguments')
   }
   if (preflight && credentialPreflight) throw new Error('invalid-entry-arguments')
-  if ((preflight || credentialPreflight) && variants.length) throw new Error('invalid-entry-arguments')
+  if ((preflight || credentialPreflight) && (variants.length || reasoningEffort !== undefined)) throw new Error('invalid-entry-arguments')
   const required = preflight
     ? ['--runtime-root', '--repo-root']
     : credentialPreflight
@@ -59,6 +64,7 @@ function parseEntryArgs(argv) {
     maxRequests,
     caseIds: cases,
     variants: variants.length ? variants : [...DEFAULT_VARIANTS],
+    reasoningEffort,
     preflight,
     credentialPreflight
   }
@@ -135,6 +141,10 @@ async function run(options) {
     if (!await credentialCrypto.nativeCredentialCrypto.isAvailable()) throw new Error('credential-store-unavailable')
     const profile = await store.getPrivateProfile(profileId)
     if (!profile || typeof profile.apiKey !== 'string' || !profile.apiKey) throw new Error('saved-profile-unavailable')
+    if (options.reasoningEffort !== undefined) {
+      if (profile.protocol === 'anthropic') throw new Error('reasoning-effort-provider-mismatch')
+      profile.reasoningEffort = options.reasoningEffort
+    }
     if (options.credentialPreflight) {
       const expected = /^synthetic-stage-sha256-([a-f0-9]{64})$/u.exec(profile.name)?.[1]
       const actual = createHash('sha256').update(profile.apiKey).digest('hex')

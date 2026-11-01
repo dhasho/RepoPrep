@@ -457,12 +457,13 @@ test('reasoning effort is enum-validated, OpenAI-only, persisted, and publicly/p
   await assert.rejects(store.saveSettings({
     profiles: [{ ...base, reasoningEffort: 'medium' as never, apiKey: '', credentialAction: 'keep' }],
     defaultProfileId: base.id
-  }), /Invalid settings/u)
+  }), /保存本地数据失败/u)
   await assert.rejects(store.saveSettings({
-    profiles: [{ ...base, protocol: 'anthropic', reasoningEffort: 'low', apiKey: '', credentialAction: 'keep' }],
+    profiles: [{ ...base, protocol: 'anthropic', reasoningEffort: 'low', apiKey: '', credentialAction: 'clear' }],
     defaultProfileId: base.id
-  }), /Invalid settings/u)
+  }), /保存本地数据失败/u)
   assert.equal((await store.getPrivateProfile(base.id))?.reasoningEffort, 'high', 'rejected values do not replace the valid stored profile')
+  assert.equal((await store.getPrivateProfile(base.id))?.apiKey, 'effort-secret', 'rejected protocol metadata does not clear the saved credential')
 })
 
 test('legacy profiles default to OpenAI without adding an undefined protocol property', async () => {
@@ -479,6 +480,8 @@ test('legacy profiles default to OpenAI without adding an undefined protocol pro
   const privateBeforeSave = await store.getPrivateProfile('legacy-openai')
   assert.equal(Object.hasOwn(publicBeforeSave.profiles[0], 'protocol'), false)
   assert.equal(Object.hasOwn(privateBeforeSave, 'protocol'), false)
+  assert.equal(Object.hasOwn(publicBeforeSave.profiles[0], 'reasoningEffort'), false)
+  assert.equal(Object.hasOwn(privateBeforeSave, 'reasoningEffort'), false)
   assert.equal(await fs.promises.readFile(file, 'utf8'), legacyBytes, 'reading legacy metadata does not rewrite it')
 
   await store.saveSettings({ profiles: [{ ...legacy.profiles[0], apiKey: '', credentialAction: 'keep' }], defaultProfileId: 'legacy-openai' })
@@ -486,6 +489,8 @@ test('legacy profiles default to OpenAI without adding an undefined protocol pro
   const privateAfterSave = await store.getPrivateProfile('legacy-openai')
   assert.equal(Object.hasOwn(publicAfterSave.profiles[0], 'protocol'), false)
   assert.equal(Object.hasOwn(privateAfterSave, 'protocol'), false)
+  assert.equal(Object.hasOwn(publicAfterSave.profiles[0], 'reasoningEffort'), false)
+  assert.equal(Object.hasOwn(privateAfterSave, 'reasoningEffort'), false)
   assert.equal(privateAfterSave.apiKey, '')
 
   await store.saveSettings({

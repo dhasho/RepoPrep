@@ -115,7 +115,8 @@ function buildReport({ runId, status = 'complete', caseIds, stubCaseIds = [], wi
     report.configHashInputs = {
       baseUrlOriginSha256: sha256('https://model.example.test'),
       model: report.model,
-      protocol: report.protocol
+      protocol: report.protocol,
+      ...(config.reasoningEffort !== undefined ? { reasoningEffort: config.reasoningEffort } : {})
     }
     report.configHash = sha256(JSON.stringify({ config: report.config, ...report.configHashInputs }))
   }
@@ -150,6 +151,7 @@ function buildProof({ current, reuse, reusedCaseIds = ['gamma', 'delta'], entryO
       temperature: current.config.temperature,
       contextWindowTokens: current.config.contextWindowTokens ?? null,
       profileMaxOutputTokens: current.config.profileMaxOutputTokens ?? null,
+      reasoningEffort: current.config.reasoningEffort ?? 'provider-default',
       ...overrides
     }
   }
@@ -191,7 +193,7 @@ test('composes a 2-fresh 2-reuse cohort with provenance, measured totals, and ma
   })
   assert.deepEqual(cohort.summary.actualUsage, { inputTokens: 400, outputTokens: 800, totalTokens: 1200 })
   assert.equal(cohort.summary.questions, 8)
-  assert.deepEqual(cohort.config, { granularity: 'medium', budget: BUDGET, temperature: 0.4 })
+  assert.deepEqual(cohort.config, { granularity: 'medium', budget: BUDGET, temperature: 0.4, reasoningEffort: 'provider-default' })
   assert.ok(/^\d{4}-\d{2}-\d{2}T/u.test(cohort.composedAt))
   for (const item of cohort.cases) {
     const expectedRole = item.source === 'fresh' ? 'current' : 'reuse'
@@ -216,6 +218,17 @@ test('composes a 2-fresh 2-reuse cohort with provenance, measured totals, and ma
   assert.match(markdown, /\| gamma \| reused \|/u)
   assert.match(markdown, /not itself a repoprep-eval-report-v2 run/u)
   assert.match(markdown, /not factual accuracy/u)
+})
+
+test('normalizes missing legacy effort and rejects effort changes for cohort reuse', () => {
+  const scenario = buildScenario()
+  assert.equal(composeRealCohort(scenario).config.reasoningEffort, 'provider-default')
+  const lowReuse = buildReport({
+    runId: 'reuse-run', caseIds: CASE_IDS, withDiagnostics: true, withConfigHashInputs: true,
+    configExtras: { ...TOKEN_CONFIG, reasoningEffort: 'low' }
+  })
+  const lowProof = buildProof({ current: scenario.current, reuse: lowReuse })
+  assert.throws(() => composeRealCohort({ ...scenario, reuse: lowReuse, reuseProof: lowProof }), /generation settings differ/u)
 })
 
 test('fresh network totals include README controls outside selected generation measurements', () => {

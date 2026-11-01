@@ -440,6 +440,7 @@ function sanitizeProfile(profile) {
     model: profile.model,
     temperature: profile.temperature,
     protocol: profile.protocol,
+    ...(profile.reasoningEffort !== undefined ? { reasoningEffort: profile.reasoningEffort } : {}),
     ...(safeTokenSetting(profile.contextWindowTokens) ? { contextWindowTokens: safeTokenSetting(profile.contextWindowTokens) } : {}),
     ...(safeTokenSetting(profile.maxOutputTokens) ? { maxOutputTokens: safeTokenSetting(profile.maxOutputTokens) } : {})
   }
@@ -471,6 +472,7 @@ function reportMarkdown(run) {
     `- Model: ${run.model}`, `- Status: ${run.status}`, '- Human review: pending',
     `- Context window setting: ${run.config.contextWindowTokens ?? 'unknown'}`,
     `- Configured output cap: ${run.config.maxOutputTokens ?? 'provider controlled'}`,
+    `- Reasoning effort: ${run.config.reasoningEffort ?? 'provider-default'}`,
     `- Application input budget: ${run.config.applicationInputTokenBudget ?? 'unknown'} estimated tokens`,
     `- Reserved output: ${run.config.reservedOutputTokens ?? 'unknown'} tokens (${run.config.reservedOutputPolicy ?? 'unknown policy'})`,
     '', '| Case | Variant | Status | Questions | Requests | Elapsed ms | Context ms | Model ms | Actual tokens | Estimated input tokens | Failure stage | Alerts |',
@@ -484,6 +486,10 @@ function reportMarkdown(run) {
 export async function runRealEvaluation({ reposRoot, outputDir, profile, manifestPath, caseIds, variants = DEFAULT_VARIANTS, maxRequests = 16, maxDurationMs = 20 * 60 * 1000 } = {}) {
   if (!reposRoot || !outputDir || !profile?.apiKey || !profile?.baseUrl || !profile?.model) throw new Error('reposRoot, outputDir, and a complete profile are required')
   if (!Array.isArray(variants) || variants.length === 0 || new Set(variants).size !== variants.length || variants.some(value => !ALLOWED_VARIANTS.has(value)) || !Number.isInteger(maxRequests) || maxRequests < 1 || !Number.isFinite(maxDurationMs) || maxDurationMs < 1) throw new Error('invalid evaluation limits or variants')
+  const protocol = profile.protocol ?? 'openai'
+  if (profile.reasoningEffort !== undefined && profile.reasoningEffort !== 'low' && profile.reasoningEffort !== 'high') throw new Error('invalid reasoning effort')
+  if (protocol === 'anthropic' && profile.reasoningEffort !== undefined) throw new Error('invalid reasoning effort for protocol')
+  const reasoningEffort = profile.reasoningEffort ?? 'provider-default'
   const absoluteOutput = path.resolve(outputDir)
   try { if ((await readdir(absoluteOutput)).length) throw new Error('output directory must be empty') } catch (error) { if (error?.code !== 'ENOENT') throw error }
   const verification = await verifyRealCorpus({ reposRoot, manifestPath })
@@ -492,7 +498,6 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
   if (!selected.length || (caseIds && selected.length !== new Set(caseIds).size)) throw new Error('requested corpus cases were not found')
   const safeProfile = sanitizeProfile(profile)
   new URL(safeProfile.baseUrl)
-  const protocol = profile.protocol ?? 'openai'
   const tokenPolicy = evaluatorTokenPolicy(safeProfile, protocol)
   const config = {
     mode: 'real-model-public-repositories',
@@ -500,6 +505,7 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
     granularity: 'medium',
     budget: GRANULARITY_QUESTION_BUDGET.medium,
     temperature: profile.temperature ?? 0.4,
+    reasoningEffort,
     contextWindowTokens: tokenPolicy.contextWindowTokens,
     profileMaxOutputTokens: tokenPolicy.profileOutputTokens,
     maxOutputTokens: tokenPolicy.maxOutputTokens,
@@ -518,7 +524,8 @@ export async function runRealEvaluation({ reposRoot, outputDir, profile, manifes
   const configHashInputs = {
     baseUrlOriginSha256: hash(new URL(profile.baseUrl).origin),
     model: profile.model,
-    protocol
+    protocol,
+    reasoningEffort
   }
   const configHash = hash(JSON.stringify({ config, ...configHashInputs }))
   const sourceHashes = await hashSources(manifestPath)

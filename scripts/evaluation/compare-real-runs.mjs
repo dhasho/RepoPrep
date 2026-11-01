@@ -17,6 +17,16 @@ function hash(value) {
   return createHash('sha256').update(value).digest('hex')
 }
 
+const DEFAULT_REASONING_EFFORT = 'provider-default'
+function reasoningEffort(run, label) {
+  const configured = run.config.reasoningEffort
+  const hashed = run.configHashInputs?.reasoningEffort
+  const value = configured ?? hashed ?? DEFAULT_REASONING_EFFORT
+  if (!['provider-default', 'low', 'high'].includes(value)) throw new Error(`${label} reasoning effort is invalid`)
+  if (configured !== undefined && hashed !== undefined && configured !== hashed) throw new Error(`${label} reasoning effort differs between config and config hash inputs`)
+  return value
+}
+
 function questionFingerprints(questions, caseId) {
   if (!Array.isArray(questions)) return null
   return questions.map(question => fingerprintQuestion(question.question, {
@@ -48,6 +58,7 @@ function assertComparable(run, label) {
   if (calculateReportDigest(run) !== run.reportDigest) throw new Error(`${label} report digest does not match`)
   if (!Array.isArray(run.cases) || !run.cases.length || !Array.isArray(run.questions) || !run.config || !run.config.variants?.includes('generation')) throw new Error(`${label} report has no generation variant`)
   if (!run.fixtureHashes || typeof run.fixtureHashes !== 'object' || Array.isArray(run.fixtureHashes)) throw new Error(`${label} report has no fixture hashes`)
+  reasoningEffort(run, label)
   if (run.configHashInputs) {
     const expectedConfigHash = hash(JSON.stringify({ config: run.config, ...run.configHashInputs }))
     if (expectedConfigHash !== run.configHash) throw new Error(`${label} config hash does not match its configuration`)
@@ -70,12 +81,14 @@ function comparableSettings(run) {
     protocol: run.protocol,
     granularity: run.config.granularity,
     budget: run.config.budget,
-    temperature: run.config.temperature
+    temperature: run.config.temperature,
+    reasoningEffort: reasoningEffort(run, 'report')
   }
 }
 
 function tokenConditions(run) {
   return {
+    reasoningEffort: reasoningEffort(run, 'report'),
     contextWindowTokens: run.config.contextWindowTokens ?? null,
     profileMaxOutputTokens: run.config.profileMaxOutputTokens ?? null,
     maxOutputTokens: run.config.maxOutputTokens ?? null,
@@ -164,11 +177,18 @@ function runSummary(records) {
   }
 }
 
-export function compareRealRuns(baselineRun, candidateRun) {
+export function compareRealRuns(baselineRun, candidateRun, options = {}) {
+  if (!options || typeof options !== 'object' || (options.allowReasoningEffortChange !== undefined && typeof options.allowReasoningEffortChange !== 'boolean')) throw new Error('comparison options are invalid')
   const baselineCases = assertComparable(baselineRun, 'baseline')
   const candidateCases = assertComparable(candidateRun, 'candidate')
   if (baselineRun.corpusVersion !== candidateRun.corpusVersion) throw new Error('corpus versions differ')
-  if (canonical(comparableSettings(baselineRun)) !== canonical(comparableSettings(candidateRun))) throw new Error('generation settings differ')
+  const baselineSettings = comparableSettings(baselineRun)
+  const candidateSettings = comparableSettings(candidateRun)
+  const { reasoningEffort: baselineEffort, ...baselineCore } = baselineSettings
+  const { reasoningEffort: candidateEffort, ...candidateCore } = candidateSettings
+  if (canonical(baselineCore) !== canonical(candidateCore)) throw new Error('generation settings differ')
+  const reasoningEffortChange = baselineEffort === candidateEffort ? null : { baseline: baselineEffort, candidate: candidateEffort }
+  if (reasoningEffortChange && options.allowReasoningEffortChange !== true) throw new Error('reasoning effort differs; use --allow-reasoning-change to compare different inference conditions')
   if (canonical(baselineRun.fixtureHashes) !== canonical(candidateRun.fixtureHashes)) throw new Error('fixture hashes differ')
   if (baselineCases.size !== candidateCases.size || [...baselineCases.keys()].some(id => !candidateCases.has(id))) throw new Error('case sets differ')
   const cases = [...baselineCases.keys()].sort().map(id => {
@@ -191,6 +211,7 @@ export function compareRealRuns(baselineRun, candidateRun) {
     model: baselineRun.model,
     protocol: baselineRun.protocol,
     config: comparableSettings(candidateRun),
+    reasoningEffortChange,
     inputReportHashes: {
       baseline: hash(canonical(baselineRun)),
       candidate: hash(canonical(candidateRun))
@@ -201,6 +222,7 @@ export function compareRealRuns(baselineRun, candidateRun) {
     candidate: { runId: candidateRun.runId, generatedAt: candidateRun.generatedAt, summary: runSummary(cases.map(item => item.candidate)) },
     cases,
     caveats: [
+      ...(reasoningEffortChange ? [`Reasoning effort changed from ${reasoningEffortChange.baseline} to ${reasoningEffortChange.candidate}; these are different inference conditions.`] : []),
       'Actual provider token totals are null when complete usage receipts are unavailable.',
       'Estimated input tokens are application estimates and are reported separately from provider usage.',
       'Keyword fact coverage counts configured keyword matches; it is not factual accuracy.',
@@ -260,12 +282,19 @@ export function comparisonMarkdown(comparison) {
   return `${lines.join('\n')}\n`
 }
 
+export function parseCompareArgs(args) {
+  const [baselinePath, candidatePath, ...rest] = args
+  if (!baselinePath || !candidatePath || rest.length > 1 || (rest.length === 1 && rest[0] !== '--allow-reasoning-change')) {
+    throw new Error('usage: compare-real-runs.mjs <baseline-report.json> <candidate-report.json> [--allow-reasoning-change]')
+  }
+  return { baselinePath, candidatePath, allowReasoningEffortChange: rest[0] === '--allow-reasoning-change' }
+}
+
 async function main() {
-  const [baselinePath, candidatePath, ...rest] = process.argv.slice(2)
-  if (!baselinePath || !candidatePath || rest.length) throw new Error('usage: compare-real-runs.mjs <baseline-report.json> <candidate-report.json>')
-  const baseline = JSON.parse(await readFile(path.resolve(baselinePath), 'utf8'))
-  const candidate = JSON.parse(await readFile(path.resolve(candidatePath), 'utf8'))
-  process.stdout.write(comparisonMarkdown(compareRealRuns(baseline, candidate)))
+  const options = parseCompareArgs(process.argv.slice(2))
+  const baseline = JSON.parse(await readFile(path.resolve(options.baselinePath), 'utf8'))
+  const candidate = JSON.parse(await readFile(path.resolve(options.candidatePath), 'utf8'))
+  process.stdout.write(comparisonMarkdown(compareRealRuns(baseline, candidate, options)))
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

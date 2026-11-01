@@ -22,6 +22,7 @@ function parseArgs(argv) {
     settingsDir: DEFAULT_SETTINGS_DIR,
     settingsDirSpecified: false,
     profileId: '',
+    reasoningEffort: undefined,
     caseIds: [],
     variants: [],
     maxRequests: 16,
@@ -36,6 +37,7 @@ function parseArgs(argv) {
     ['--output', 'outputDir'],
     ['--settings-dir', 'settingsDir'],
     ['--profile-id', 'profileId'],
+    ['--reasoning-effort', 'reasoningEffort'],
     ['--case', 'caseId'],
     ['--variant', 'variant'],
     ['--max-requests', 'maxRequests']
@@ -51,6 +53,10 @@ function parseArgs(argv) {
     const value = argv[++index]
     if (!value || value.startsWith('--')) throw new Error('missing-argument-value')
     if (key === 'caseId') options.caseIds.push(value)
+    else if (key === 'reasoningEffort') {
+      if (options.reasoningEffort !== undefined || (value !== 'low' && value !== 'high')) throw new Error('invalid-reasoning-effort')
+      options.reasoningEffort = value
+    }
     else if (key === 'variant') {
       options.variants = appendVariant(options.variants, value)
     } else if (key === 'maxRequests') {
@@ -64,7 +70,7 @@ function parseArgs(argv) {
   }
   const modes = Number(options.verify) + Number(options.preflight) + Number(options.credentialPreflight)
   if (modes > 1) throw new Error('incompatible-mode-flags')
-  if (modes && options.variants.length) throw new Error('incompatible-mode-flags')
+  if (modes && (options.variants.length || options.reasoningEffort !== undefined)) throw new Error('incompatible-mode-flags')
   if (!options.variants.length) options.variants = [...DEFAULT_VARIANTS]
   if (options.credentialPreflight && !options.settingsDirSpecified) throw new Error('credential-fixture-path-required')
   if (!options.help && !options.verify && !options.preflight && !options.credentialPreflight && !options.outputDir) throw new Error('missing-output')
@@ -99,6 +105,7 @@ function helpText() {
     `  --repos-root <directory>   Defaults to ${DEFAULT_REPOS_ROOT}`,
     '  --settings-dir <directory> Defaults to this user’s ProjectLens settings directory',
     '  --profile-id <id>          Defaults to the profile selected in settings',
+    '  --reasoning-effort <low|high> Override this run in memory; omitted uses provider default',
     '  --case <id>                Repeat to select cases',
     '  --variant <generation|baseline> Repeat to select variants; defaults to both',
     '  --max-requests <1..16>     Request cap, defaults to 16',
@@ -231,6 +238,7 @@ function buildChildArgs(options, runtimeRoot, repoRoot) {
     '--repos-root', path.resolve(options.reposRoot),
     '--output', path.resolve(options.outputDir),
     '--max-requests', String(options.maxRequests),
+    ...(options.reasoningEffort ? ['--reasoning-effort', options.reasoningEffort] : []),
     ...options.variants.flatMap(variant => ['--variant', variant]),
     ...options.caseIds.flatMap((id) => ['--case', id])
   ]

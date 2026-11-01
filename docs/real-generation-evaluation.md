@@ -23,10 +23,11 @@
 npm run eval:real -- verify --repos-root '..\RepoPrep-Eval-Cases'
 npm run eval:real:saved -- --repos-root '..\RepoPrep-Eval-Cases' --output '.\reports\real-generation-eval\run-next'
 npm run eval:real:saved -- --repos-root '..\RepoPrep-Eval-Cases' --output '.\reports\real-generation-eval\candidate-generation-only' --variant generation
+npm run eval:real:saved -- --repos-root '..\RepoPrep-Eval-Cases' --output '.\reports\real-generation-eval\candidate-reasoning-low' --variant generation --reasoning-effort low
 npm run eval:real:saved -- --preflight
 ```
 
-可用参数：`--case <id>`（重复以选择 case）、`--variant generation|baseline`（重复选择 variant；缺省运行两组）、`--profile-id <id>`、`--settings-dir <directory>`、`--max-requests <1..16>`。不支持的或重复的 variant 会在读取设置和凭据前拒绝。生成组使用完整生产扫描；README 对照组仍只把 README 正文作为候选，同时保留项目树和扫描元数据。`--preflight` 启动真实 Electron、建立隔离目录并导入生产 TypeScript runner，不读取设置或凭据、不发出网络请求；`--credential-preflight` 在同样隔离的流程里额外验证已保存凭据可解密，仍不发出网络请求。使用 `--help` 查看命令。wrapper 子进程以隐藏窗口方式启动，不打开 BrowserWindow，不获取项目单实例锁。运行期间不要退出终端；超过硬时限会终止 Electron 子进程。
+可用参数：`--case <id>`（重复以选择 case）、`--variant generation|baseline`（重复选择 variant；缺省运行两组）、`--profile-id <id>`、`--settings-dir <directory>`、`--max-requests <1..16>`、`--reasoning-effort low|high`。推理强度只对 OpenAI 协议有效；未指定时使用已保存值，缺省等同服务商默认值。CLI 覆盖只用于本次隔离子进程的内存 profile，不保存回用户设置；传入值在读取设置和凭据前校验，协议不兼容时拒绝运行。DeepSeek thinking 模式下 temperature 不生效，但报告仍如实记录配置值。比较运行时缺省要求 reasoning effort 一致，只有显式传入 `--allow-reasoning-change` 才允许跨推理强度对比。报告与配置哈希记录实际强度；low/high 不改变应用现有输入预算及输出预留。其他不支持或重复的 variant 会在读取设置和凭据前拒绝。生成组使用完整生产扫描；README 对照组仍只把 README 正文作为候选，同时保留项目树和扫描元数据。`--preflight` 启动真实 Electron、建立隔离目录并导入生产 TypeScript runner，不读取设置或凭据、不发出网络请求；`--credential-preflight` 在同样隔离的流程里额外验证已保存凭据可解密，仍不发出网络请求。使用 `--help` 查看命令。wrapper 子进程以隐藏窗口方式启动，不打开 BrowserWindow，不获取项目单实例锁。运行期间不要退出终端；超过硬时限会终止 Electron 子进程。
 
 输出报告记录 profile 的 context window、实际输出 token cap、应用输入 token 预算与预留策略。每组还记录独立的输入 token 估算、provider usage receipt、请求/格式修复计数与 context/model 阶段时间。provider 未返回完整 usage 时真实 token 用量为 `null`；输入估算不会冒充真实用量。每 case 失败会记录 failure stage 并使运行不完整。报告不包含 API key、设置快照或认证头。
 
@@ -38,18 +39,19 @@ npm run eval:real:saved -- --preflight
 
 ```powershell
 npm run eval:real:compare -- '.\reports\real-generation-eval\2026-10-23-deepseek-v4-flash\report.json' '.\reports\real-generation-eval\candidate-generation-only\report.json'
+npm run eval:real:compare -- '.\reports\real-generation-eval\provider-default.json' '.\reports\real-generation-eval\reasoning-low.json' --allow-reasoning-change
 npm run test:eval:real
 ```
 
-比较器要求两份完整报告的 corpus version、generation 变体、case revision、fixture hashes、模型/协议、颗粒度和题量预算匹配。它校验 canonical output、generation question 列表与 report question 指纹的对应关系；也记录两份输入报告的整体 SHA-256、source hashes 与 token/context 策略的变化。旧版 review digest 只绑定 canonical output 和 questions，没有绑定 generation metadata，因此比较器会明确报告这项限制。比较结果是整版观察；它不把关键词命中当作准确率，不把代理辅助复核称为人工复核，也不推测费用。
+比较器要求两份完整报告的 corpus version、generation 变体、case revision、fixture hashes、模型/协议、颗粒度和题量预算匹配，并默认要求 reasoning effort 一致。旧报告未记录该字段会按 `provider-default` 解释，和新版显式 `provider-default` 等同。比较不同强度时，CLI 使用 `--allow-reasoning-change`；条件表和 caveat 会明确列出变化，并将其视作不同推理条件。比较器校验 canonical output、generation question 列表与 report question 指纹的对应关系；也记录两份输入报告的整体 SHA-256、source hashes 与 token/context 策略的变化。旧版 review digest 只绑定 canonical output 和 questions，没有绑定 generation metadata，因此比较器会明确报告这项限制。比较结果是整版观察；它不把关键词命中当作准确率，不把代理辅助复核称作人工复核，也不推测费用。
 
-只重新生成受影响的项目时，可把完成的子集运行与先前测量组成显式 cohort（来源报告都必须完整结束；中断运行和未完成 case 会被拒绝）。旧结果仅在当前生产扫描、上下文、提示与客户端构造出的请求体 SHA-256 和原请求完全相同，且模型配置、项目 revision、fixture hashes 及当前源码哈希均绑定后复用；还应审查生成后的解析与归一化代码没有改变旧输出的解释。证明须来自实际的合成传输捕获，不能只把旧哈希填入 JSON。
+只重新生成受影响的项目时，可把完成的子集运行与先前测量组成显式 cohort（来源报告都必须完整结束；中断运行和未完成 case 会被拒绝）。模型配置中的 reasoning effort 也须匹配；旧报告缺省值按 `provider-default` 解释。旧结果仅在当前生产扫描、上下文、提示与客户端构造出的请求体 SHA-256 和原请求完全相同，且模型配置、项目 revision、fixture hashes 及当前源码哈希均绑定后复用；还应审查生成后的解析与归一化代码没有改变旧输出的解释。证明须来自实际的合成传输捕获，不能只把旧哈希填入 JSON。
 
 ```powershell
 npm run eval:real:cohort -- <baseline-report.json> <current-subset-report.json> <prior-report.json> <current-request-proof.json> <new-output-directory>
 ```
 
-该命令生成 `repoprep-real-eval-cohort-v1` 格式的 `cohort.json` 和 `report.md`，保留各 case 的来源 run、报告引用、请求回执与问题指纹。proof 的 `cases` 是以 case id 为键的对象，每项包含 `identical`、`originalPromptHash` 和 `currentPromptHash`，并须提供完整的 `currentSourceHashes` 与 `configuration`。工具校验哈希绑定和输出对应关系；它不会替调用者生成或证明未执行过的观测。
+该命令生成 `repoprep-real-eval-cohort-v1` 格式的 `cohort.json` 和 `report.md`，保留各 case 的来源 run、报告引用、请求回执与问题指纹。proof 的 `cases` 是以 case id 为键的对象，每项包含 `identical`、`originalPromptHash` 和 `currentPromptHash`，并须提供完整的 `currentSourceHashes` 与 `configuration`；其中包含 `reasoningEffort`，旧 proof 缺省按 `provider-default` 处理。工具校验哈希绑定和输出对应关系；它不会替调用者生成或证明未执行过的观测。
 
 `selectedMeasurementsRequests` 是选中 generation 测量所含的调用总数，可能包含历史调用；`freshNetworkRequests` 是 current 来源运行全部捕获的 HTTP 次数，包含其 README 对照等额外调用。缺少总回执且无法确定范围时保留未知。token 汇总仍只对应选中的 generation 测量，不能作为本次研究全部账单。复用结果不重新标成新生成，代理复核也不重新标成人工盲审。
 

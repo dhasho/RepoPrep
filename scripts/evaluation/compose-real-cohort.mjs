@@ -7,6 +7,7 @@ import { flattenQuestions, fingerprintQuestion } from './scorer.mjs'
 
 const REPORT_SCHEMA_VERSION = 'repoprep-eval-report-v2'
 const COHORT_SCHEMA_VERSION = 'repoprep-real-eval-cohort-v1'
+const DEFAULT_REASONING_EFFORT = 'provider-default'
 
 const COHORT_CAVEATS = [
   'Actual provider token totals are null when complete usage receipts are unavailable; missing usage is never filled with zero.',
@@ -29,6 +30,15 @@ function canonical(value) {
 
 function hashCanonical(value) {
   return createHash('sha256').update(canonical(value)).digest('hex')
+}
+
+function reasoningEffort(run) {
+  const configured = run.config.reasoningEffort
+  const hashed = run.configHashInputs?.reasoningEffort
+  const value = configured ?? hashed ?? DEFAULT_REASONING_EFFORT
+  if (!['provider-default', 'low', 'high'].includes(value)) throw new Error('report reasoning effort is invalid')
+  if (configured !== undefined && hashed !== undefined && configured !== hashed) throw new Error('report reasoning effort differs between config and config hash inputs')
+  return value
 }
 
 function isPlainObject(value) {
@@ -105,7 +115,8 @@ function comparableSettings(run) {
     protocol: run.protocol,
     granularity: run.config.granularity,
     budget: run.config.budget,
-    temperature: run.config.temperature
+    temperature: run.config.temperature,
+    reasoningEffort: reasoningEffort(run)
   }
 }
 
@@ -115,7 +126,8 @@ function normalizedReuseConfiguration(configuration) {
     protocol: configuration.protocol ?? null,
     temperature: configuration.temperature ?? null,
     contextWindowTokens: configuration.contextWindowTokens ?? null,
-    profileMaxOutputTokens: configuration.profileMaxOutputTokens ?? null
+    profileMaxOutputTokens: configuration.profileMaxOutputTokens ?? null,
+    reasoningEffort: configuration.reasoningEffort ?? DEFAULT_REASONING_EFFORT
   }
 }
 
@@ -125,7 +137,8 @@ function reuseConfiguration(run) {
     protocol: run.protocol,
     temperature: run.config.temperature,
     contextWindowTokens: run.config.contextWindowTokens,
-    profileMaxOutputTokens: run.config.profileMaxOutputTokens
+    profileMaxOutputTokens: run.config.profileMaxOutputTokens,
+    reasoningEffort: reasoningEffort(run)
   })
 }
 
@@ -137,6 +150,7 @@ function assertBaselineComparable(baseline, current) {
   for (const key of ['granularity', 'budget', 'temperature']) {
     if (canonical(baseline.config[key]) !== canonical(current.config[key])) throw new Error(`baseline ${key} differs from the current report`)
   }
+  if (reasoningEffort(baseline) !== reasoningEffort(current)) throw new Error('baseline reasoning effort differs from the current report')
 }
 
 function assertCurrentReuseComparable(current, reuse) {
@@ -339,7 +353,7 @@ export function composeRealCohort({ baseline, current, reuse, reuseProof, refere
     corpusVersion: current.corpusVersion,
     model: current.model,
     protocol: current.protocol,
-    config: { granularity: current.config.granularity, budget: current.config.budget, temperature: current.config.temperature },
+    config: { granularity: current.config.granularity, budget: current.config.budget, temperature: current.config.temperature, reasoningEffort: reasoningEffort(current) },
     inputReports,
     reuseProof: { canonicalHash: hashCanonical(reuseProof) },
     measurement,
@@ -374,6 +388,7 @@ export function cohortMarkdown(cohort) {
     }),
     '', '## Selection', '',
     `- Cohort cases: ${cohort.measurement.caseCount}`,
+    `- Reasoning effort: ${cohort.config.reasoningEffort ?? 'provider-default'}`,
     `- Fresh measurements from the current run: ${cohort.measurement.freshCases.length} (${cohort.measurement.freshCases.join(', ') || 'none'})`,
     `- Reused measurements from the prior run: ${cohort.measurement.reusedCases.length} (${cohort.measurement.reusedCases.join(', ') || 'none'})`,
     `- Selected measurement requests (raw request count across the selected cases): ${cohort.measurement.selectedMeasurementsRequests}`,

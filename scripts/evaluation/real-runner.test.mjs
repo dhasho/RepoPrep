@@ -86,10 +86,12 @@ function syntheticCompletion() {
 function controlledModel(t, { failOnCall, omitUsage = false } = {}) {
   const originalFetch = globalThis.fetch
   const prompts = []
+  const requests = []
   let callCount = 0
   globalThis.fetch = async (_url, init) => {
     callCount++
     const request = JSON.parse(init.body)
+    requests.push(request)
     prompts.push(request.messages.map(message => message.content).join('\n'))
     if (callCount === failOnCall) throw new Error('UPSTREAM_RAW_SECRET_SENTINEL API_KEY_RAW_SECRET_SENTINEL')
     const body = { choices: [{ message: { content: syntheticCompletion() } }] }
@@ -97,7 +99,7 @@ function controlledModel(t, { failOnCall, omitUsage = false } = {}) {
     return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   t.after(() => { globalThis.fetch = originalFetch })
-  return { prompts, get callCount() { return callCount } }
+  return { prompts, requests, get callCount() { return callCount } }
 }
 
 const testProfile = { id: 'secret-profile-id', name: 'Secret private profile', baseUrl: 'https://model.example.test/v1', apiKey: 'API_KEY_RAW_SECRET_SENTINEL', model: 'synthetic-model', protocol: 'openai' }
@@ -234,6 +236,15 @@ test('rejects empty corpora and facts with missing evidence', async t => {
 test('rejects duplicate variants before any model call', async t => {
   const values = await fixture(t)
   await assert.rejects(runRealEvaluation({ ...values, outputDir: path.join(values.base, 'out'), profile: { baseUrl: 'https://api.example.test', apiKey: 'x', model: 'm' }, variants: ['generation', 'generation'] }), /invalid evaluation limits/u)
+})
+
+test('rejects OpenAI-only reasoning effort for Anthropic profiles before corpus or HTTP work', async () => {
+  await assert.rejects(runRealEvaluation({
+    reposRoot: 'unused',
+    outputDir: 'unused-output',
+    profile: { baseUrl: 'https://api.example.test', apiKey: 'synthetic-key', model: 'synthetic-model', protocol: 'anthropic', reasoningEffort: 'low' },
+    variants: ['generation']
+  }), /invalid reasoning effort for protocol/u)
 })
 
 test('observes bounded request metadata and usage without retaining credentials or prompts', async t => {
@@ -510,6 +521,9 @@ test('runs production generation and README baseline while keeping gold outside 
   assert.equal(run.cases[0].output.projectPath, '/public-corpus/case')
   assert.equal(run.cases[0].output.profileId, 'real-eval')
   assert.equal(run.config.temperature, 0.4)
+  assert.equal(run.config.reasoningEffort, 'provider-default')
+  assert.equal(run.configHashInputs.reasoningEffort, 'provider-default')
+  assert.equal(Object.hasOwn(model.requests[0], 'reasoning_effort'), false)
   assert.equal(run.config.maxOutputTokensPolicy, 'provider-default')
   assert.match(run.sourceHashes['package.json'], /^[a-f0-9]{64}$/u)
   assert.equal(run.humanReview.status, 'pending')
@@ -527,7 +541,7 @@ test('generation-only candidate records real synthetic usage absence and binds c
   const run = await runRealEvaluation({
     ...values,
     outputDir,
-    profile: { ...testProfile, contextWindowTokens: 40_000, maxOutputTokens: 4096 },
+    profile: { ...testProfile, contextWindowTokens: 40_000, maxOutputTokens: 4096, reasoningEffort: 'low' },
     caseIds: ['case'],
     variants: ['generation'],
     maxRequests: 4
@@ -538,6 +552,9 @@ test('generation-only candidate records real synthetic usage absence and binds c
   assert.equal(run.config.contextWindowTokens, 40_000)
   assert.equal(run.config.profileMaxOutputTokens, 4096)
   assert.equal(run.config.maxOutputTokens, 4096)
+  assert.equal(run.config.reasoningEffort, 'low')
+  assert.equal(run.configHashInputs.reasoningEffort, 'low')
+  assert.equal(model.requests[0].reasoning_effort, 'low', 'the sanitized profile retains the selected effort through production request construction')
   assert.equal(run.cases[0].baseline, undefined)
   assert.equal(run.cases[0].generation.status, 'complete')
   assert.equal(run.cases[0].generation.diagnostics.status, 'succeeded')
@@ -554,6 +571,33 @@ test('generation-only candidate records real synthetic usage absence and binds c
   const changed = structuredClone(run)
   changed.cases[0].output.evaluationDiagnostics.estimatedInputTokens++
   assert.notEqual(calculateReportDigest(changed), run.reportDigest)
+})
+
+test('DeepSeek low/high reasoning effort keeps the existing thinking output reserve and input budget', async t => {
+  const values = await productionFixture(t)
+  const model = controlledModel(t)
+  const configurations = []
+  const configHashes = []
+  for (const reasoningEffort of ['low', 'high']) {
+    const run = await runRealEvaluation({
+      ...values,
+      outputDir: path.join(values.base, `reasoning-${reasoningEffort}`),
+      profile: { ...testProfile, model: 'deepseek-v4-flash', reasoningEffort },
+      caseIds: ['case'],
+      variants: ['generation'],
+      maxRequests: 1
+    })
+    assert.equal(run.status, 'complete')
+    assert.equal(run.config.reasoningEffort, reasoningEffort)
+    assert.equal(run.config.reservedOutputTokens, 65_536)
+    assert.equal(run.config.applicationInputTokenBudget, 64_000)
+    configurations.push({ reserve: run.config.reservedOutputTokens, input: run.config.applicationInputTokenBudget })
+    configHashes.push(run.configHash)
+  }
+  assert.deepEqual(configurations[0], configurations[1])
+  assert.notEqual(configHashes[0], configHashes[1], 'the selected reasoning effort is bound into the report configuration hash')
+  assert.equal(model.requests[0].reasoning_effort, 'low')
+  assert.equal(model.requests[1].reasoning_effort, 'high')
 })
 
 test('retains generation report as partial when baseline model call fails', async t => {
