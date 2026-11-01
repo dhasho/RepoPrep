@@ -248,11 +248,13 @@ async function boundedUsage(response, deadline, protocol) {
       const remaining = deadline - Date.now()
       if (remaining <= 0) { void reader.cancel().catch(() => {}); return null }
       let timer
-      const next = await Promise.race([
-        reader.read(),
-        new Promise(resolve => { timer = setTimeout(() => resolve({ deadlineExceeded: true }), remaining) })
-      ])
-      clearTimeout(timer)
+      let next
+      try {
+        next = await Promise.race([
+          reader.read(),
+          new Promise(resolve => { timer = setTimeout(() => resolve({ deadlineExceeded: true }), remaining) })
+        ])
+      } finally { clearTimeout(timer) }
       if (next.deadlineExceeded) { void reader.cancel().catch(() => {}); return null }
       const { done, value } = next
       if (done) break
@@ -276,11 +278,13 @@ async function boundedSseUsage(response, deadline, protocol) {
       const remaining = deadline - Date.now()
       if (remaining <= 0) { void reader.cancel().catch(() => {}); return null }
       let timer
-      const next = await Promise.race([
-        reader.read(),
-        new Promise(resolve => { timer = setTimeout(() => resolve({ deadlineExceeded: true }), remaining) })
-      ])
-      clearTimeout(timer)
+      let next
+      try {
+        next = await Promise.race([
+          reader.read(),
+          new Promise(resolve => { timer = setTimeout(() => resolve({ deadlineExceeded: true }), remaining) })
+        ])
+      } finally { clearTimeout(timer) }
       if (next.deadlineExceeded) { void reader.cancel().catch(() => {}); return null }
       if (next.done) break
       collector.push(decoder.decode(next.value, { stream: true }))

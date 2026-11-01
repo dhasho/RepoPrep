@@ -295,6 +295,28 @@ test('returns promptly when bounded usage reads an oversized streaming body', as
   observer.restore()
 })
 
+test('draining a reset response releases JSON and SSE deadline timers', async () => {
+  const childSource = `
+    import { installFetchObserver } from './scripts/evaluation/real-runner.mjs'
+    for (const contentType of ['application/json', 'text/event-stream']) {
+      globalThis.fetch = async () => new Response(new ReadableStream({
+        start(controller) { controller.error(new Error('synthetic connection reset')) }
+      }), { status: 200, headers: { 'content-type': contentType } })
+      const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'synthetic' }, 1, Date.now() + 10_000)
+      await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+      await observer.drain()
+      observer.restore()
+    }
+    process.stdout.write('DRAIN-COMPLETE')
+  `
+  const result = await exec(process.execPath, [
+    '--experimental-strip-types',
+    '--import', './tests/register-shared-alias.mjs',
+    '--input-type=module', '-e', childSource
+  ], { cwd: process.cwd(), timeout: 3000 })
+  assert.match(result.stdout, /DRAIN-COMPLETE/u)
+})
+
 test('returns streaming responses before EOF and records final SSE usage after draining', async t => {
   const originalFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = originalFetch })
