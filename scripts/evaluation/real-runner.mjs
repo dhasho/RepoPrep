@@ -306,12 +306,9 @@ function usageFromSse(text, protocol) {
     }
     const receipt = event?.usage ?? event?.message?.usage
     if (!receipt || typeof receipt !== 'object') return
-    const nextInput = receipt.prompt_tokens ?? receipt.input_tokens
-    const nextOutput = receipt.completion_tokens ?? receipt.output_tokens
-    const nextTotal = receipt.total_tokens
-    if (Number.isSafeInteger(nextInput) && nextInput >= 0) input = nextInput
-    if (Number.isSafeInteger(nextOutput) && nextOutput >= 0) output = nextOutput
-    if (Number.isSafeInteger(nextTotal) && nextTotal >= 0) total = nextTotal
+    input = receipt.prompt_tokens ?? receipt.input_tokens
+    output = receipt.completion_tokens ?? receipt.output_tokens
+    total = receipt.total_tokens
   }, { maxBufferChars: MAX_USAGE_BYTES })
   try { decoder.push(text); decoder.finish() } catch { return null }
   const anthropicComplete = protocol !== 'anthropic' || (anthropicFinalOutputSeen && anthropicMessageStopped)

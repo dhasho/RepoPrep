@@ -330,7 +330,7 @@ test('merges Anthropic SSE input and final output usage across CRLF events witho
     for (const chunk of chunks) controller.enqueue(chunk)
     controller.close()
   } }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
-  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'anthropic' }, 1, Date.now() + 5000)
   t.after(observer.restore)
   await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
   await observer.drain()
@@ -352,6 +352,33 @@ test('Anthropic input-only or invalid final usage never becomes a complete recei
   for (const sse of cases) {
     globalThis.fetch = async () => new Response(encoder.encode(sse), { status: 200, headers: { 'content-type': 'text/event-stream' } })
     const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'anthropic' }, 1, Date.now() + 5000)
+    await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+    await observer.drain()
+    assert.equal(observer.metrics.requests[0].usage, null)
+    assert.equal(observer.metrics.usageAvailable, false)
+    observer.restore()
+  }
+})
+
+test('OpenAI keeps only the last usage object instead of combining fields across receipts', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  const cases = [
+    [
+      { prompt_tokens: 13, completion_tokens: 5, total_tokens: 18 },
+      { prompt_tokens: 14, completion_tokens: -1, total_tokens: 13 }
+    ],
+    [
+      { prompt_tokens: 13, completion_tokens: 5, total_tokens: 18 },
+      { prompt_tokens: 14, total_tokens: 14 }
+    ]
+  ]
+  for (const receipts of cases) {
+    const frames = receipts.map(usage => `data: ${JSON.stringify({ choices: [], usage })}\r\n\r\n`).join('')
+    globalThis.fetch = async () => new Response(new TextEncoder().encode(frames), {
+      status: 200, headers: { 'content-type': 'text/event-stream' }
+    })
+    const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'openai' }, 1, Date.now() + 5000)
     await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
     await observer.drain()
     assert.equal(observer.metrics.requests[0].usage, null)
