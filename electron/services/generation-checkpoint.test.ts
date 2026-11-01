@@ -114,6 +114,14 @@ test('context changes reject before HTTP; API key rotation is accepted; initial 
   await withFetch(() => { throw new Error('model mismatch must be rejected before HTTP') }, async () => {
     await assert.rejects(generateInterview(params(scan, { ...profile, model: 'changed-model' }, completedState)), /项目上下文或模型配置已变化/)
   })
+  await withFetch(() => { throw new Error('reasoning effort mismatch must be rejected before HTTP') }, async () => {
+    await assert.rejects(generateInterview(params(scan, { ...profile, reasoningEffort: 'low' }, completedState)), /项目上下文或模型配置已变化/)
+  })
+  const oldPromptCheckpoint = structuredClone(completedState)
+  oldPromptCheckpoint.entries[0].key = 'generation-prompt-stream-v2-checkpoint-key'
+  await withFetch(() => { throw new Error('old prompt policy must be rejected before HTTP') }, async () => {
+    await assert.rejects(generateInterview(params(scan, profile, oldPromptCheckpoint)), /项目上下文或模型配置已变化/)
+  })
   const changedFile = path.join(root, 'module0', 'index.ts')
   await fs.appendFile(changedFile, '\nexport const changed = true\n')
   const changedScan = await scanProject(root)

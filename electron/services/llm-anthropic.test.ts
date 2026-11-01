@@ -73,7 +73,7 @@ test('Anthropic Messages uses normalized endpoints, dedicated headers, required 
       { type: 'text', text: '世界' }
     ])
   }, async () => {
-    assert.equal(await chatCompletion(profile, messages), 'Hello 世界')
+    assert.equal(await chatCompletion({ ...profile, reasoningEffort: 'high' }, messages), 'Hello 世界')
   })
 
   assert.equal(captured?.url, 'https://api.anthropic.com/v1/messages')
@@ -87,6 +87,7 @@ test('Anthropic Messages uses normalized endpoints, dedicated headers, required 
   assert.equal(body.max_tokens, 16_384)
   assert.equal(body.stream, false)
   assert.equal(body.temperature, undefined, 'Anthropic must omit sampling temperature')
+  assert.equal(body.reasoning_effort, undefined, 'Anthropic Messages must never receive the OpenAI-only field')
   assert.deepEqual(body.messages, [
     { role: 'user', content: 'Question one.' },
     { role: 'assistant', content: 'Earlier answer.' },

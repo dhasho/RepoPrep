@@ -79,6 +79,7 @@ function requestBody(profile: LlmProfile, messages: ChatMessage[], stream: boole
   return {
     model: profile.model,
     messages,
+    ...(profile.reasoningEffort !== undefined ? { reasoning_effort: profile.reasoningEffort } : {}),
     temperature: profile.temperature ?? 0.4,
     stream,
     ...(stream && opts.includeUsage ? { stream_options: { include_usage: true } } : {}),

@@ -6,9 +6,11 @@ import assert from 'node:assert/strict'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { readFile } from 'node:fs/promises'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
-import { chatCompletionStream, LlmRequestError } from './llm.ts'
+import { chatCompletion, chatCompletionStream, LlmRequestError } from './llm.ts'
+// @ts-ignore TS5097 -- direct Node tests require runtime .ts suffixes.
+import type { LlmProfile } from '../../shared/types.ts'
 
-const profile = {
+const profile: LlmProfile = {
   id: 'p1', name: 'Demo', baseUrl: 'https://private.example/api', apiKey: 'secret-key', model: 'private-model'
 }
 const messages = [{ role: 'user' as const, content: 'hello' }]
@@ -92,6 +94,23 @@ function chatChunk(delta: Record<string, unknown>, finish: unknown = null, index
 async function readFixture(name: string): Promise<Uint8Array> {
   return new Uint8Array(await readFile(new URL(name, fixtureRoot)))
 }
+
+test('OpenAI reasoning effort is optional and only changes the serialized body when set', async () => {
+  const captured: string[] = []
+  const run = async (override: typeof profile) => withFetch(async (_input, init) => {
+    captured.push(String(init?.body))
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
+  }, async () => { assert.equal(await chatCompletion(override, messages), 'ok') })
+
+  await run(profile)
+  await run({ ...profile, reasoningEffort: undefined })
+  await run({ ...profile, reasoningEffort: 'low' })
+  await run({ ...profile, reasoningEffort: 'high' })
+  assert.equal(captured[0], captured[1], 'omitted and undefined values preserve exact default request bytes')
+  assert.equal(Object.hasOwn(JSON.parse(captured[0]), 'reasoning_effort'), false)
+  assert.equal(JSON.parse(captured[2]).reasoning_effort, 'low')
+  assert.equal(JSON.parse(captured[3]).reasoning_effort, 'high')
+})
 
 test('official protocol snapshots complete only with DONE or stop; errors and interruptions reject', async () => {
   const expectedFixtures: Record<string, string> = {
