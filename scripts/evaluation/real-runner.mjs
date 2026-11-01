@@ -20,6 +20,7 @@ const hash = value => createHash('sha256').update(value).digest('hex')
 const { DEFAULT_VARIANTS, appendVariant, resolveVariants } = variantArguments
 const ALLOWED_VARIANTS = new Set(DEFAULT_VARIANTS)
 const MAX_USAGE_BYTES = 1024 * 1024
+const MAX_USAGE_EVENT_CHARS = 64 * 1024
 const MAX_USAGE_TOKENS = 10_000_000
 const MAX_DIAGNOSTIC_VALUE = 1_000_000_000
 
@@ -236,6 +237,9 @@ async function hashSources(manifestPath) {
 
 async function boundedUsage(response, deadline, protocol) {
   try {
+    if (response.headers.get('content-type')?.toLowerCase().includes('text/event-stream')) {
+      return await boundedSseUsage(response, deadline, protocol)
+    }
     const reader = response.clone().body?.getReader()
     if (!reader) return null
     const chunks = []
@@ -257,64 +261,121 @@ async function boundedUsage(response, deadline, protocol) {
       chunks.push(value)
     }
     const text = Buffer.concat(chunks.map(chunk => Buffer.from(chunk))).toString('utf8')
-    let usage
-    try { usage = JSON.parse(text).usage } catch { usage = usageFromSse(text, protocol) }
-    if (!usage) return null
-    const input = usage?.prompt_tokens ?? usage?.input_tokens
-    const output = usage?.completion_tokens ?? usage?.output_tokens
-    const total = usage?.total_tokens ?? input + output
-    const validCount = value => Number.isSafeInteger(value) && value >= 0 && value <= MAX_USAGE_TOKENS
-    return validCount(input) && validCount(output) && validCount(total) && total <= input + output + MAX_USAGE_TOKENS
-      ? { inputTokens: input, outputTokens: output, totalTokens: total }
-      : null
+    try { return normalizeUsageReceipt(JSON.parse(text).usage) }
+    catch { return usageFromSseText(text, protocol) }
   } catch { return null }
 }
 
-function usageFromSse(text, protocol) {
-  let input
-  let output
-  let total
+async function boundedSseUsage(response, deadline, protocol) {
+  const reader = response.clone().body?.getReader()
+  if (!reader) return null
+  const collector = createSseUsageCollector(protocol)
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  try {
+    while (true) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) { void reader.cancel().catch(() => {}); return null }
+      let timer
+      const next = await Promise.race([
+        reader.read(),
+        new Promise(resolve => { timer = setTimeout(() => resolve({ deadlineExceeded: true }), remaining) })
+      ])
+      clearTimeout(timer)
+      if (next.deadlineExceeded) { void reader.cancel().catch(() => {}); return null }
+      if (next.done) break
+      collector.push(decoder.decode(next.value, { stream: true }))
+      if (collector.stopped) {
+        void reader.cancel().catch(() => {})
+        return normalizeUsageReceipt(collector.finish())
+      }
+    }
+    const tail = decoder.decode()
+    if (tail) collector.push(tail)
+    return normalizeUsageReceipt(collector.finish())
+  } catch {
+    void reader.cancel().catch(() => {})
+    return null
+  } finally {
+    try { reader.releaseLock() } catch { /* cleanup must not mask usage observation */ }
+  }
+}
+
+function normalizeUsageReceipt(usage) {
+  if (!usage || typeof usage !== 'object') return null
+  const input = usage.prompt_tokens ?? usage.input_tokens
+  const output = usage.completion_tokens ?? usage.output_tokens
+  const total = usage.total_tokens ?? input + output
+  const validCount = value => Number.isSafeInteger(value) && value >= 0 && value <= MAX_USAGE_TOKENS
+  return validCount(input) && validCount(output) && validCount(total) && total <= input + output + MAX_USAGE_TOKENS
+    ? { inputTokens: input, outputTokens: output, totalTokens: total }
+    : null
+}
+
+function usageFromSseText(text, protocol) {
+  try {
+    const collector = createSseUsageCollector(protocol)
+    collector.push(text)
+    return normalizeUsageReceipt(collector.finish())
+  } catch { return null }
+}
+
+function createSseUsageCollector(protocol) {
+  let latestOpenAiReceipt = null
+  let anthropicInput
+  let anthropicOutput
+  let anthropicTotal
   let anthropicFinalOutputSeen = false
   let anthropicMessageStopped = false
+  let completed = false
   const decoder = new SseDecoder(({ data }) => {
-    if (!data || data === '[DONE]') return
+    if (!data) return
+    if (data === '[DONE]') {
+      if (protocol !== 'anthropic') completed = true
+      return protocol === 'anthropic' ? undefined : false
+    }
     let event
     try { event = JSON.parse(data) } catch { return }
     if (protocol === 'anthropic') {
       const type = event?.type
       if (type === 'message_start' || event?.event === 'message_start') {
         const receipt = event?.message?.usage
-        const candidate = receipt?.input_tokens
-        input = Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= MAX_USAGE_TOKENS ? candidate : undefined
+        anthropicInput = receipt?.input_tokens
       } else if (type === 'message_delta' || event?.event === 'message_delta') {
         const receipt = event?.delta?.usage ?? event?.usage
         if (receipt && typeof receipt === 'object') {
           anthropicFinalOutputSeen = Object.hasOwn(receipt, 'output_tokens')
           const candidate = receipt.output_tokens
-          output = Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= MAX_USAGE_TOKENS ? candidate : undefined
-          const candidateTotal = receipt.total_tokens
-          total = candidateTotal === undefined
-            ? undefined
-            : Number.isSafeInteger(candidateTotal) && candidateTotal >= 0 && candidateTotal <= MAX_USAGE_TOKENS
-              ? candidateTotal
-              : Number.NaN
+          anthropicOutput = candidate
+          anthropicTotal = receipt.total_tokens
         }
       } else if (type === 'message_stop' || event?.event === 'message_stop') {
         anthropicMessageStopped = true
+        completed = true
+        return false
       }
       return
     }
     const receipt = event?.usage ?? event?.message?.usage
     if (!receipt || typeof receipt !== 'object') return
-    input = receipt.prompt_tokens ?? receipt.input_tokens
-    output = receipt.completion_tokens ?? receipt.output_tokens
-    total = receipt.total_tokens
-  }, { maxBufferChars: MAX_USAGE_BYTES })
-  try { decoder.push(text); decoder.finish() } catch { return null }
-  const anthropicComplete = protocol !== 'anthropic' || (anthropicFinalOutputSeen && anthropicMessageStopped)
-  return anthropicComplete && input !== undefined && output !== undefined && !Number.isNaN(total)
-    ? { prompt_tokens: input, completion_tokens: output, ...(total !== undefined ? { total_tokens: total } : {}) }
-    : null
+    latestOpenAiReceipt = {
+      prompt_tokens: receipt.prompt_tokens ?? receipt.input_tokens,
+      completion_tokens: receipt.completion_tokens ?? receipt.output_tokens,
+      total_tokens: receipt.total_tokens
+    }
+  }, { maxBufferChars: MAX_USAGE_EVENT_CHARS })
+  return {
+    push(text) { decoder.push(text) },
+    get stopped() { return completed || decoder.stopped },
+    finish() {
+      decoder.finish()
+      if (protocol === 'anthropic') {
+        return anthropicFinalOutputSeen && anthropicMessageStopped
+          ? { prompt_tokens: anthropicInput, completion_tokens: anthropicOutput, total_tokens: anthropicTotal }
+          : null
+      }
+      return latestOpenAiReceipt
+    }
+  }
 }
 
 export function installFetchObserver(profile, limit, deadline) {

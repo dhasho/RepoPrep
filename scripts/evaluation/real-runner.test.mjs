@@ -282,7 +282,9 @@ test('does not report out-of-range provider token counters as actual usage', asy
 test('returns promptly when bounded usage reads an oversized streaming body', async t => {
   const originalFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = originalFetch })
-  globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(1024 * 1024 + 1)) } }), { status: 200 })
+  globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(1024 * 1024 + 1)) } }), {
+    status: 200, headers: { 'content-type': 'application/json' }
+  })
   const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key' }, 1, Date.now() + 5000)
   t.after(observer.restore)
   const started = Date.now()
@@ -313,6 +315,78 @@ test('returns streaming responses before EOF and records final SSE usage after d
   await observer.drain()
   assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 11, outputTokens: 7, totalTokens: 18 })
   assert.deepEqual(observer.metrics.usage, { inputTokens: 11, outputTokens: 7, totalTokens: 18 })
+  observer.restore()
+})
+
+test('parses bounded SSE usage when the response omits the event-stream content type', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  globalThis.fetch = async () => new Response(
+    'data: {"choices":[],"usage":{"prompt_tokens":19,"completion_tokens":4,"total_tokens":23}}\n\ndata: [DONE]\n\n',
+    { status: 200 }
+  )
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'openai' }, 1, Date.now() + 5000)
+  t.after(observer.restore)
+  await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  await observer.drain()
+  assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 19, outputTokens: 4, totalTokens: 23 })
+  observer.restore()
+})
+
+test('parses final usage after more than 1 MiB of small SSE events', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  const encoder = new TextEncoder()
+  const ignored = 'data: {"choices":[],"padding":"' + 'x'.repeat(80) + '"}\n\n'
+  const finalFrames = 'data: {"choices":[],"usage":{"prompt_tokens":31,"completion_tokens":9,"total_tokens":40}}\n\ndata: [DONE]\n\n'
+  globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
+    for (let batch = 0; batch < 24; batch++) controller.enqueue(encoder.encode(ignored.repeat(500)))
+    controller.enqueue(encoder.encode(finalFrames))
+    controller.close()
+  } }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'openai' }, 1, Date.now() + 10_000)
+  t.after(observer.restore)
+  await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  await observer.drain()
+  assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 31, outputTokens: 9, totalTokens: 40 })
+  observer.restore()
+})
+
+test('stops observer clone at OpenAI DONE even when the HTTP stream stays open', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  let originalController
+  globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) { originalController = controller } }), {
+    status: 200, headers: { 'content-type': 'text/event-stream' }
+  })
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'openai' }, 1, Date.now() + 5000)
+  t.after(observer.restore)
+  const response = await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  originalController.enqueue(new TextEncoder().encode('data: {"choices":[],"usage":{"prompt_tokens":17,"completion_tokens":8,"total_tokens":25}}\n\ndata: [DONE]\n\n'))
+  await observer.drain()
+  assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 17, outputTokens: 8, totalTokens: 25 })
+  await response.body.cancel()
+  observer.restore()
+})
+
+test('stops Anthropic observer clone at message_stop even when the HTTP stream stays open', async t => {
+  const originalFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = originalFetch })
+  let originalController
+  globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) { originalController = controller } }), {
+    status: 200, headers: { 'content-type': 'text/event-stream' }
+  })
+  const observer = installFetchObserver({ baseUrl: 'https://api.example.test', apiKey: 'private-key', protocol: 'anthropic' }, 1, Date.now() + 5000)
+  t.after(observer.restore)
+  const response = await globalThis.fetch('https://api.example.test/call', { method: 'POST', body: '{}' })
+  originalController.enqueue(new TextEncoder().encode([
+    'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":17,"output_tokens":0}}}\n\n',
+    'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":8}}\n\n',
+    'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+  ].join('')))
+  await observer.drain()
+  assert.deepEqual(observer.metrics.requests[0].usage, { inputTokens: 17, outputTokens: 8, totalTokens: 25 })
+  await response.body.cancel()
   observer.restore()
 })
 
