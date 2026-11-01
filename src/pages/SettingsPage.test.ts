@@ -51,6 +51,7 @@ function publicSettingsOf(settings: Settings | PublicSettings): PublicSettings {
         model: profile.model,
         ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
         ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+        ...(profile.reasoningEffort !== undefined ? { reasoningEffort: profile.reasoningEffort } : {}),
         ...(profile.contextWindowTokens !== undefined ? { contextWindowTokens: profile.contextWindowTokens } : {}),
         ...(profile.maxOutputTokens !== undefined ? { maxOutputTokens: profile.maxOutputTokens } : {}),
         hasApiKey,
@@ -67,6 +68,7 @@ function installDomGlobals(dom: JSDOM) {
     navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement,
     HTMLInputElement: dom.window.HTMLInputElement,
+    HTMLSelectElement: dom.window.HTMLSelectElement,
     Event: dom.window.Event,
     IS_REACT_ACT_ENVIRONMENT: true
   }
@@ -104,6 +106,13 @@ function setInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+function setSelect(select: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+  setter.call(select, value)
+  select.dispatchEvent(new Event('input', { bubbles: true }))
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 async function mountSettingsPage(
   settings: Settings | PublicSettings,
   saveSettings: (settings: SettingsSaveRequest) => Promise<void>,
@@ -130,6 +139,7 @@ async function mountSettingsPage(
             id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
             ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
             ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+            ...(profile.reasoningEffort !== undefined ? { reasoningEffort: profile.reasoningEffort } : {}),
             ...(profile.contextWindowTokens !== undefined ? { contextWindowTokens: profile.contextWindowTokens } : {}),
             ...(profile.maxOutputTokens !== undefined ? { maxOutputTokens: profile.maxOutputTokens } : {}),
             hasApiKey, credentialStatus: hasApiKey ? 'stored' : 'missing'
@@ -214,6 +224,7 @@ test('SettingsPage preserves newer edits when an older save completes, then save
           return { id: profile.id, name: profile.name, baseUrl: profile.baseUrl, model: profile.model,
             ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
             ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+            ...(profile.reasoningEffort !== undefined ? { reasoningEffort: profile.reasoningEffort } : {}),
             hasApiKey, credentialStatus: hasApiKey ? 'stored' as const : 'missing' as const }
         })
       }
@@ -364,6 +375,50 @@ test('SettingsPage keeps the draft and retry marker after a save failure', async
     }
     dom.window.close()
     restoreGlobals()
+  }
+})
+
+test('SettingsPage persists reasoning effort, preserves edits during readback, and clears it for unsupported selections', async () => {
+  const initial: Settings = {
+    ...initialSettings,
+    profiles: [{ ...initialSettings.profiles[0], reasoningEffort: 'high' }]
+  }
+  const pending = deferred()
+  const writes: SettingsSaveRequest[] = []
+  const page = await mountSettingsPage(initial, async (next) => {
+    writes.push(structuredClone(next))
+    if (writes.length === 1) await pending.promise
+  })
+  try {
+    const effort = () => page.rootElement.querySelector<HTMLSelectElement>('select[aria-label="推理强度（可选）"]')!
+    const selectProtocol = (name: string) => [...page.rootElement.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === name && button.closest('[aria-label="接口协议"]'))!
+
+    assert.ok(effort(), 'OpenAI profiles expose the optional reasoning selector')
+    assert.equal(effort().value, 'high')
+    await page.React.act(async () => setSelect(effort(), 'low'))
+    await page.React.act(async () => page.saveButton().click())
+    assert.equal(writes[0].profiles[0].reasoningEffort, 'low')
+
+    await page.React.act(async () => setSelect(effort(), 'high'))
+    pending.resolve()
+    await page.React.act(async () => pending.promise)
+    assert.equal(effort().value, 'high', 'readback of the submitted low value must not overwrite the newer high draft')
+    assert.equal(page.savedSettings?.profiles[0].reasoningEffort, 'low', 'the confirmed persisted snapshot remains the submitted value')
+
+    await page.React.act(async () => selectProtocol('Claude').click())
+    assert.equal(page.rootElement.querySelector('select[aria-label="推理强度（可选）"]'), null, 'Anthropic hides the OpenAI-only option')
+    await page.React.act(async () => selectProtocol('OpenAI').click())
+    assert.equal(effort().value, '', 'switching to Anthropic clears a previously selected value')
+
+    await page.React.act(async () => setSelect(effort(), 'high'))
+    const openAiPreset = [...page.rootElement.querySelectorAll<HTMLButtonElement>('[aria-label="OpenAI服务商预设"] button')]
+      .find((button) => button.textContent?.trim() === 'OpenAI')!
+    await page.React.act(async () => openAiPreset.click())
+    assert.equal(effort().value, '', 'applying a different provider preset clears the prior effort')
+    assert.equal(writes.length, 1, 'no extra save is sent during local setting changes')
+  } finally {
+    await page.unmount()
   }
 })
 

@@ -10,7 +10,7 @@ import { parseScanLimitDraft, scanLimitDraftOf, type ScanLimitDraft, type ScanLi
 import { MAX_LLM_PROFILES, profileFieldErrorId, validateProfiles, type ProfileField, type ProfileValidationError } from '../lib/profile-validation'
 import ScanLimitSlider from '../components/ScanLimitSlider'
 import { scanLimitDraftWithDefault, scanLimitDraftWithValue } from '../lib/scan-limit-slider'
-import { canonicalEndpoint, effectiveProtocol, mappedProviderPreset, PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
+import { canonicalEndpoint, effectiveProtocol, findProviderPreset, mappedProviderPreset, PROVIDER_PRESETS, type ProviderPreset } from '../lib/provider-presets'
 import { AppIcon } from '../components/AppIcon'
 
 interface Props {
@@ -115,12 +115,18 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
     patchSelected({
       protocol,
       ...(mappedPreset ? { baseUrl: mappedPreset.preset.baseUrl, model: mappedPreset.model } : {}),
-      ...(protocol === 'anthropic' ? { temperature: undefined } : {})
+      ...(protocol === 'anthropic' ? { temperature: undefined, reasoningEffort: undefined } : {})
     })
   }
 
   const selectProvider = (preset: ProviderPreset, protocol: LlmProtocol) => {
-    patchSelected({ protocol, baseUrl: preset.baseUrl, model: preset.model })
+    const currentPreset = selected ? findProviderPreset(selected) : null
+    patchSelected({
+      protocol,
+      baseUrl: preset.baseUrl,
+      model: preset.model,
+      ...(protocol === 'anthropic' || currentPreset?.id !== preset.id ? { reasoningEffort: undefined } : {})
+    })
   }
 
   /** 调用主进程 GET /models 检测该 Key 可用的模型（竞态处理见 model-detection.ts） */
@@ -215,6 +221,7 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
             model: profile.model === submitted.model ? savedProfile.model : profile.model,
             protocol: profile.protocol === submitted.protocol ? savedProfile.protocol : profile.protocol,
             temperature: profile.temperature === submitted.temperature ? savedProfile.temperature : profile.temperature,
+            reasoningEffort: profile.reasoningEffort === submitted.reasoningEffort ? savedProfile.reasoningEffort : profile.reasoningEffort,
             contextWindowTokens: profile.contextWindowTokens === submitted.contextWindowTokens ? savedProfile.contextWindowTokens : profile.contextWindowTokens,
             maxOutputTokens: profile.maxOutputTokens === submitted.maxOutputTokens ? savedProfile.maxOutputTokens : profile.maxOutputTokens,
             ...(sameCredentialIntent ? {
@@ -537,17 +544,35 @@ export default function SettingsPage({ settings, onSaved, onBack }: Props) {
                 </div>
               </Field>
               {selectedProtocol === 'openai' && (
-                <Field label={`温度 temperature：${selected.temperature ?? 0.4}`}>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={selected.temperature ?? 0.4}
-                    onChange={(e) => patchSelected({ temperature: Number(e.target.value) })}
-                    className="w-full accent-indigo-600"
-                  />
-                </Field>
+                <>
+                  <Field label={`温度 temperature：${selected.temperature ?? 0.4}`}>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={selected.temperature ?? 0.4}
+                      onChange={(e) => patchSelected({ temperature: Number(e.target.value) })}
+                      className="w-full accent-indigo-600"
+                    />
+                  </Field>
+                  <Field label="推理强度（可选）">
+                    <select
+                      className={inputCls}
+                      aria-label="推理强度（可选）"
+                      value={selected.reasoningEffort ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        patchSelected({ reasoningEffort: value === 'low' || value === 'high' ? value : undefined })
+                      }}
+                    >
+                      <option value="">服务商默认</option>
+                      <option value="low">低</option>
+                      <option value="high">高</option>
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">需接口支持；可能影响响应耗时与用量。更高推理强度不保证答案更准确。</p>
+                  </Field>
+                </>
               )}
 
               <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
