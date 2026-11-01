@@ -6,7 +6,7 @@
 
 ## 结果与报告入口
 
-已完成的真实运行与逐事实复核结果统一索引在[报告索引](../reports/README.md)：当前有效对比为 2026-10-24 grounded 运行，原始基线为 2026-10-23 运行。核对存量报告只需读取各目录的 JSON（runId、源码/fixture 哈希、题目指纹、请求回执），不需要发起新的模型调用。
+已完成的真实运行与逐事实复核结果统一索引在[报告索引](../reports/README.md)：最新验证为 2026-11-01 scoped 运行，完整事实覆盖持平而总 token 增加，尚未证明收益；2026-10-24 grounded 保留为较低用量参考，原始基线为 2026-10-23 运行。核对存量报告只需读取各目录的 JSON（runId、源码/fixture 哈希、题目指纹、请求回执），不需要发起新的模型调用。
 
 ## 运行前
 
@@ -29,6 +29,8 @@ npm run eval:real:saved -- --preflight
 可用参数：`--case <id>`（重复以选择 case）、`--variant generation|baseline`（重复选择 variant；缺省运行两组）、`--profile-id <id>`、`--settings-dir <directory>`、`--max-requests <1..16>`。不支持的或重复的 variant 会在读取设置和凭据前拒绝。生成组使用完整生产扫描；README 对照组仍只把 README 正文作为候选，同时保留项目树和扫描元数据。`--preflight` 启动真实 Electron、建立隔离目录并导入生产 TypeScript runner，不读取设置或凭据、不发出网络请求；`--credential-preflight` 在同样隔离的流程里额外验证已保存凭据可解密，仍不发出网络请求。使用 `--help` 查看命令。wrapper 子进程以隐藏窗口方式启动，不打开 BrowserWindow，不获取项目单实例锁。运行期间不要退出终端；超过硬时限会终止 Electron 子进程。
 
 输出报告记录 profile 的 context window、实际输出 token cap、应用输入 token 预算与预留策略。每组还记录独立的输入 token 估算、provider usage receipt、请求/格式修复计数与 context/model 阶段时间。provider 未返回完整 usage 时真实 token 用量为 `null`；输入估算不会冒充真实用量。每 case 失败会记录 failure stage 并使运行不完整。报告不包含 API key、设置快照或认证头。
+
+流式响应立即交给生产生成器，评测观察器异步逐事件读取副本，单事件缓冲限制为 64 Ki 字符；非 SSE JSON 响应仍限制整体 1 MiB。每组写入报告前等待用量汇总，遇协议终止事件即可结束观察，无需等待 HTTP 连接关闭。OpenAI SSE 使用最后一份 usage 对象；Anthropic SSE 合并开始事件中的输入与结束前的输出计数，并要求结束事件。截流、无效回执或网络失败的未知用量保留为 `null`，不会补零。若已有完整的生产生成诊断用量，报告与比较器会独立使用这份 provider 记录，并保留原始 transport 字段的未知状态。
 
 ## 比较与 cohort
 

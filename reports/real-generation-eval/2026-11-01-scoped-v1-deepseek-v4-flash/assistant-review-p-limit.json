@@ -1,0 +1,260 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+  "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+  "caseId": "p-limit",
+  "repository": "sindresorhus/p-limit",
+  "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+  "reviewer": {
+    "executor": "GPT-6 Luna module reviewer with Codex primary source review",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy",
+    "networkCalls": 0,
+    "upstreamCodeExecuted": false,
+    "sourceHashesMatched": [
+      "index.js",
+      "test.js",
+      "package.json"
+    ],
+    "followUpsRead": 60
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "0b799c0d01d3adda691359d6e5802b8b4783d9103c6d0fa654d10041c39276b0",
+        "e23ab49ba013911f70312557e298caddc69da0f55971dabbe4f8af15b1da3a1a",
+        "dd2e70d9558683c0d0794a84db3570aaa7fe714f3861125814cb1c7d996d060c",
+        "0b231ed7bab212525c24afaee658f25813d322af0549140a29321b5a680f9a56",
+        "ad0550bbf6d2f4bb277cb8979535e4a8e7c7a05b12979898e6badd6debddc009",
+        "6fd09286c8573a0b97851f0615a2c5f80173a8505f513bb12a84cb130b8af675",
+        "3bb2f28cb1c584e5dc054c9a63f300f270f95a3a37f34db257f03e787d86cd93",
+        "08bbc1a44100043e3ae51aaf352d56e5e428a86ead3bb02ffa96fdad21926397",
+        "4825e69d2a8a16598899306d267e960405d6580dbb55f738a3985e9b94bb50d6",
+        "fac6a6b5c321a20f713bec4f2cdd0700e8663e2d727bec6bbcf5512e306561fe",
+        "9e2b40b5ff10335ccdfba445ca676cd1ae79d8db0db048e62b4156ca8c3a42c0",
+        "818618bd6f1ec73de98e24ff997665cd6804ddcceec5442b3f69a1a3f3bfcbe9",
+        "64e6d3c1a1c8a11464efa5da9296e800f1b022c512fa17001873e960d62cdb2a",
+        "ebd4dcf5bb3cfb269fcd61b314d3de8bdc7fd739cddd54e95f046421beb4c272",
+        "b8973de72347cfd714139dcd80c23d07f550cf00aed942adb9902aece39da119",
+        "afe315411c320a0dc8ab54d387cedf2bd8aee1c99cdcf25a2119dbd0e52cdc3b",
+        "bf650c25b1b45f12df9ad91a226e4da1608a322463dda4c7ad93f326178f9f99",
+        "2f3c020970e2b0c5f5c46fb3131a218ee7c9ee9c050bca1264c3eeefa4c3629a",
+        "797870feec7d769ecb86b7fd6a726abc20f6977b9ffcf2c2c012a3fe4c58cbaa",
+        "53d68905bddbd85616b900708b658c69ea4598103bab30f3fa623b7885fb5cee"
+      ],
+      "factReviews": [
+        {
+          "factId": "plimit-validation",
+          "coverage": "covered",
+          "questionNumbers": [
+            6,
+            10,
+            16
+          ],
+          "reason": "Positive integers and positive Infinity are accepted; invalid values and rejectOnClear type are checked at construction/setter. The runtime object-options path is also covered by Q10 and the type/runtime comparison by Q16.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 3,
+              "endLine": 15
+            },
+            {
+              "path": "index.js",
+              "startLine": 144,
+              "endLine": 148
+            }
+          ]
+        },
+        {
+          "factId": "plimit-active-queue",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            5,
+            8,
+            9
+          ],
+          "reason": "Closure state, activeCount/queue gating, dequeue and slot release are accurately described, including the distinction between queued and already-dequeued tasks.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 16,
+              "endLine": 30
+            },
+            {
+              "path": "index.js",
+              "startLine": 50,
+              "endLine": 62
+            }
+          ]
+        },
+        {
+          "factId": "plimit-promise-rejection",
+          "coverage": "covered",
+          "questionNumbers": [
+            2,
+            7,
+            20
+          ],
+          "reason": "The caller-facing promise adopts the task result while internal await/catch still reaches next after fulfillment or rejection; unhandled caller-facing rejections remain the caller's responsibility.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 48
+            }
+          ]
+        },
+        {
+          "factId": "plimit-clear",
+          "coverage": "covered",
+          "questionNumbers": [
+            9,
+            11
+          ],
+          "reason": "Default clear discards queued entries without settling their promises; rejectOnClear rejects each queued promise with AbortSignal.abort().reason; running tasks are not cancelled. The graceful-shutdown example's runningPromises tracks only started fetches while its top-level allSettled(promises) can remain pending after clear.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "recipes.md",
+              "startLine": 76,
+              "endLine": 110
+            }
+          ]
+        },
+        {
+          "factId": "plimit-concurrency-setter",
+          "coverage": "covered",
+          "questionNumbers": [
+            6
+          ],
+          "reason": "The setter validates and updates the closure value, then uses a microtask loop to fill newly available slots; lowering the value does not cancel active work.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "plimit-map-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            12,
+            14
+          ],
+          "reason": "Array.from submits iterable values and indices into generator; Promise.all preserves result-array input order. The answer correctly distinguishes this eager collection from concurrency and backpressure.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 126
+            },
+            {
+              "path": "test.js",
+              "startLine": 256,
+              "endLine": 269
+            }
+          ]
+        },
+        {
+          "factId": "plimit-wrapper",
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            15,
+            16
+          ],
+          "reason": "Each limitFunction call creates a private pLimit instance shared by that wrapper's invocations; runtime and declaration expose only clearQueue on the wrapper.",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 133,
+              "endLine": 142
+            },
+            {
+              "path": "index.d.ts",
+              "startLine": 135,
+              "endLine": 138
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "reason": "对于同步无限 iterable，map 在没有任何 await 之前执行 Array.from；迭代不会返回，事件循环/微任务因此没有机会运行。已经提交的 p-limit 任务虽排队，但不能在该同步调用期间后台完成。",
+          "questionFingerprint": "ebd4dcf5bb3cfb269fcd61b314d3de8bdc7fd739cddd54e95f046421beb4c272",
+          "claim": "“即使任务在后台完成”",
+          "questionNumber": 14,
+          "kind": "imprecise",
+          "sourceRefs": [
+            {
+              "endLine": 115,
+              "path": "index.js",
+              "startLine": 106
+            },
+            {
+              "endLine": 62,
+              "path": "index.js",
+              "startLine": 50
+            }
+          ],
+          "questionPart": "followUps[1].answer"
+        },
+        {
+          "reason": "基准中做的是随机字节生成和 SHA-256 摘要运算；称为哈希更准确，不能按实质错误处理。其余关于单次默认测量、随机延迟与 I/O 噪声的评述均有源码支持。",
+          "questionFingerprint": "797870feec7d769ecb86b7fd6a726abc20f6977b9ffcf2c2c012a3fe4c58cbaa",
+          "claim": "benchmark 包含加密计算",
+          "questionNumber": 19,
+          "kind": "imprecise",
+          "sourceRefs": [
+            {
+              "endLine": 60,
+              "path": "benchmark.js",
+              "startLine": 53
+            },
+            {
+              "endLine": 77,
+              "path": "benchmark.js",
+              "startLine": 66
+            },
+            {
+              "endLine": 219,
+              "path": "scripts/benchmarker.js",
+              "startLine": 208
+            }
+          ],
+          "questionPart": "answer"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant source review is not independent human blind review.",
+    "Review covers all 20 main answers and their nested follow-ups against the supplied fixed-source revision; it is not exhaustive of every possible factual nuance.",
+    "No model/network calls and no upstream project code execution."
+  ],
+  "reviewedSourceHashes": {
+    "index.js": "edde12a4a4dbdbe8d27161cdd0853db0bab435d5dc6c15f9f4dedc27ee9bca60",
+    "recipes.md": "bc3e6759f7c0953888bdfed68ddee2d8baf964dd21bb263ade6fa50dac859efe",
+    "test.js": "a803c332d9af3a9e14d657d63280c2e059e3fe5c343ab7ab869da8a85276204c",
+    "index.d.ts": "d367543c32631ba661e044b1d1f44deed2bbf54654dd0eb251061337162514ee",
+    "benchmark.js": "ff4678a088f186a55d63ab51f14f02408f5f26480e5493f02385d38b55586647",
+    "scripts/benchmarker.js": "85ed48b4dd7c36e3154eda769138b0a16d07acdb447ded680738f58fbddaf0f7"
+  },
+  "primaryReview": {
+    "method": "Primary agent checked every frozen fact disposition and all retained findings against the pinned source, read every mitt answer and all Requests main answers, and verified run/output/fingerprint bindings. The module reviewers read every answer and nested follow-up.",
+    "deduplication": "Repeated identical claim within one question counts once, with occurrence locations retained."
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+  "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+  "status": "reviewed-by-assistant",
+  "method": "Module reviewers read all 80 answers and nested follow-ups; primary source review validates all 28 compound fact dispositions, all retained findings, and provenance. Non-blind assistant review.",
+  "blind": false,
+  "humanReviewStatus": "pending",
+  "completedCases": [
+    "mitt",
+    "p-limit",
+    "schedule",
+    "requests"
+  ],
+  "pendingCases": [],
+  "reviewedFacts": 28,
+  "questions": 80,
+  "requests": 4,
+  "usage": {
+    "inputTokens": 109986,
+    "outputTokens": 144853,
+    "totalTokens": 254839
+  },
+  "aggregate": {
+    "generation": {
+      "covered": 23,
+      "partial": 3,
+      "missing": 2,
+      "contradicted": 0,
+      "incorrect": 4,
+      "imprecise": 4
+    }
+  },
+  "cases": [
+    {
+      "caseId": "mitt",
+      "covered": 6,
+      "partial": 0,
+      "missing": 0,
+      "contradicted": 0,
+      "incorrect": 2,
+      "imprecise": 0,
+      "questions": 20,
+      "followUps": 60
+    },
+    {
+      "caseId": "p-limit",
+      "covered": 7,
+      "partial": 0,
+      "missing": 0,
+      "contradicted": 0,
+      "incorrect": 0,
+      "imprecise": 2,
+      "questions": 20,
+      "followUps": 60
+    },
+    {
+      "caseId": "schedule",
+      "covered": 7,
+      "partial": 0,
+      "missing": 0,
+      "contradicted": 0,
+      "incorrect": 1,
+      "imprecise": 0,
+      "questions": 20,
+      "followUps": 40
+    },
+    {
+      "caseId": "requests",
+      "covered": 3,
+      "partial": 3,
+      "missing": 2,
+      "contradicted": 0,
+      "incorrect": 1,
+      "imprecise": 2,
+      "questions": 20,
+      "followUps": 60
+    }
+  ],
+  "qualityGate": {
+    "status": "passed-core-coverage-only",
+    "baselineCoveredFacts": 23,
+    "candidateCoveredFacts": 23,
+    "scope": "Frozen compound fact coverage only; factual errors remain and no overall quality improvement is established."
+  },
+  "costObservation": {
+    "baseline": {
+      "inputTokens": 109577,
+      "outputTokens": 103959,
+      "totalTokens": 213536
+    },
+    "candidate": {
+      "inputTokens": 109986,
+      "outputTokens": 144853,
+      "totalTokens": 254839
+    },
+    "inputChangePercent": 0.37,
+    "outputChangePercent": 39.34,
+    "totalChangePercent": 19.34,
+    "conclusion": "No cost reduction observed; token changes are whole-version observations, not a currency bill or attribution to scope annotations."
+  },
+  "primaryReviewAdjustments": [
+    {
+      "caseId": "mitt",
+      "questionNumber": 2,
+      "disposition": "Deduplicate the same numeric-key claim repeated in the answer and follow-up; retain both occurrence locations."
+    },
+    {
+      "caseId": "p-limit",
+      "questionNumber": 14,
+      "disposition": "Retain only the explicit background-completion wording; the answer already states synchronous non-return, so omission of the phrase event loop is not itself a finding."
+    },
+    {
+      "caseId": "p-limit",
+      "factId": "plimit-wrapper",
+      "disposition": "Correct the declaration reference to actual fixed-source lines 135-138; the reviewer range extended past EOF."
+    }
+  ],
+  "reviewFiles": [
+    {
+      "filename": "assistant-review-mitt.json",
+      "sha256": "4f02bc3d22181d34011ba1381e0ca3a339be6c2e0ce3b1ff0636b543d1b2c52e"
+    },
+    {
+      "filename": "assistant-review-p-limit.json",
+      "sha256": "8cd8c30cdba0371dbf20119de50f010d05b4160675a8d856de51d33c330a58ec"
+    },
+    {
+      "filename": "assistant-review-schedule.json",
+      "sha256": "42a5bbb8a3847c5a3297516d251861b02bfd8094cdf9f1fc42e568de33499385"
+    },
+    {
+      "filename": "assistant-review-requests.json",
+      "sha256": "730ed04118fd63b4829a1f607f774a27d620f673e604c708be7debd64c7752e3"
+    }
+  ],
+  "limitations": [
+    "Assistant source review is not independent human blind review or an answer accuracy percentage.",
+    "All four cases have been used for diagnosis; none is an untouched holdout.",
+    "One run per version; model output variability and other production changes prevent isolated causal attribution.",
+    "Raw transport observer usage remains null in this run; complete provider usage is preserved independently in production generation diagnostics. The post-run instrumentation fix was validated without additional paid requests."
+  ]
+}

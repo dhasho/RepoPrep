@@ -1,0 +1,292 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+  "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+  "caseId": "requests",
+  "repository": "psf/requests",
+  "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+  "reviewer": {
+    "executor": "GPT-6 Luna module reviewer with Codex primary source review",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy",
+    "networkCalls": 0,
+    "upstreamCodeExecuted": false,
+    "sourceHashesMatchedAfterNewlineNormalization": [
+      "src/requests/sessions.py",
+      "src/requests/models.py",
+      "pyproject.toml",
+      "tests/test_requests.py"
+    ],
+    "followUpsRead": 60
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "57f979bfe7d64885e7668ebc97d403e01f46171547b1b006f81b9d6dc443cae3",
+        "847ca2f2a5199dcc01fea49a8a6c57bfcd7f4f4d47d1c74e5d43d43c65e2cd0a",
+        "354e6fc4332281adb082f6483eb2d6ef47a592662a18732cd1c6e4769f265df3",
+        "e6d9dc004878c599bc5a401c7f7df0393aef06b59002b0da5479d5a64d724062",
+        "6b9f650250b38616d6e6634b011dcd3ee5960e96461a5020038446e834960d34",
+        "4cf0e4fe16fa9eaf929f0806551125afe13d110595b59e554eaa03fc1c46113b",
+        "d6e674e37b86009231355ec5ab897952d2609ae450f636bbb6dce6502184cf3c",
+        "07bb5136dfd2283e3a7c0ad58c643d27282bfd263cf972c1af244d7597e3fd8b",
+        "e9b9a479b671b0c05b2724fae19f5328096a8bec88df92cf4e0bac0b5100bbb2",
+        "34795be3a6b7074048a75e7bc2fcaeeb5698ea760b2ce0311d14c5ae0024d11c",
+        "303aaf9eaff935f1b6427930b7b0f452103e2693549108eca603e8b6ccc30a68",
+        "929baaf8b5776c361105ef9e0bff09e5aa7a4208a8745a571d16a2e0459278c9",
+        "a5c2fc3556f2c7eca98db947f7a74f7706e8027f3a4cc12e99e7ec706b97c140",
+        "8bd253387e4777aa9394dc64d0a2b86daa40ae3719ec695c05bfcf000d981dc9",
+        "b09fc2385eb906f3a65baeb9dd5f49358c99cf5b5ee575d40567dc685d6fb216",
+        "ddfcc459ed8fe614413ba14c0178da0b15f9c8b76bd7ac1f6420a72533dd8691",
+        "534cd54ed52b4ea1ad69abae4824744d74ce9e101696bfbc6574289fc4f53afc",
+        "40c0e31c7f09bd6c42bfacb11e3758183a96a175cb0e5506da629f4f51f19c0d",
+        "59ae08d5d8341aec2de5b8e5343f247009ba85ed5346c02eca92f7683022f495",
+        "9ef0e8add29ec8d2eb6eeaf382a708925bc1257b37559346a0177957744d2c37"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ],
+          "reason": "Answer gives the exact prepare_method/url/headers/cookies/body/auth/hooks order and explains why auth follows the prepared request fields and precedes hooks.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 454
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "missing",
+          "questionNumbers": [
+            1
+          ],
+          "reason": "Q1 only names prepare_request as a stage. Across the answer and follow-ups, it does not state the merge of request/session cookies or the merge_setting/merge_hooks behavior for request and Session headers, params, auth and hooks; the frozen compound fact is therefore not conveyed.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 417,
+              "endLine": 430
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            4
+          ],
+          "reason": "Q4 accurately covers elapsed, hook dispatch, historical/current cookie extraction, redirect processing, and non-stream content consumption; Q1 places adapter.send in the request flow.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "partial",
+          "questionNumbers": [
+            1,
+            6
+          ],
+          "reason": "Q6 accurately explains trust_env-controlled proxy/no_proxy resolution and explicit proxy setdefault precedence; Q1 names environment settings generically. The answer set does not give the REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE condition or the complete merge of proxies, stream, verify and cert with Session settings, so the compound fact is only partial.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 488,
+              "endLine": 492
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 624,
+              "endLine": 645
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "missing",
+          "questionNumbers": [
+            4
+          ],
+          "reason": "Q4 describes redirect handling and history but never states the max_redirects check or TooManyRedirects boundary; no other answer supplies this fact.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 220,
+              "endLine": 237
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "partial",
+          "questionNumbers": [
+            11
+          ],
+          "reason": "Q11 accurately states the 4xx/5xx raise boundary and that ok is not equivalent to status 200, including 3xx. It does not connect Response.__bool__ to ok, which is part of the frozen compound fact.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1144,
+              "endLine": 1171
+            },
+            {
+              "path": "tests/test_requests.py",
+              "startLine": 930,
+              "endLine": 940
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ],
+          "reason": "Q9 correctly distinguishes the uncached stream, consumed-but-not-cached sentinel and bytes cache; it covers cached slicing and StreamConsumedError on a consumed uncached stream.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 1035,
+              "endLine": 1051
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "partial",
+          "questionNumbers": [
+            19
+          ],
+          "reason": "Q19 correctly identifies charset_normalizer as a declared runtime dependency and chardet as optional, but does not enumerate the four direct runtime dependencies or identify the use_chardet_on_py3 optional group. References to urllib3/idna for compatibility aliases do not establish the full dependency claim.",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 18,
+              "endLine": 22
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 53,
+              "endLine": 57
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 3,
+          "questionPart": "answer",
+          "kind": "imprecise",
+          "claim": "A streamed object with a known length gets Content-Length; otherwise it gets Transfer-Encoding: chunked.",
+          "reason": "The branch tests `if length`, not whether length is known. A known zero length is falsey and therefore selects chunked; the answer omits this boundary while stating the rule generally.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 603,
+              "endLine": 630
+            }
+          ],
+          "questionFingerprint": "354e6fc4332281adb082f6483eb2d6ef47a592662a18732cd1c6e4769f265df3"
+        },
+        {
+          "questionNumber": 16,
+          "questionPart": "answer",
+          "kind": "incorrect",
+          "claim": "It describes body-position recording, response-hook registration, and counter reset as occurring only in the branch where last_nonce already exists.",
+          "reason": "Only building and adding the preemptive Authorization header is conditional on last_nonce. tell/position handling, registering both handle_401 and handle_redirect, and setting num_401_calls=1 happen on every __call__, including the first challenge request. This changes the described first-request retry behavior.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/auth.py",
+              "startLine": 321,
+              "endLine": 342
+            }
+          ],
+          "questionFingerprint": "ddfcc459ed8fe614413ba14c0178da0b15f9c8b76bd7ac1f6420a72533dd8691"
+        },
+        {
+          "questionNumber": 20,
+          "questionPart": "followUps[0]",
+          "kind": "imprecise",
+          "claim": "The runtime no-op exists to avoid repeated assertions on a hot path.",
+          "reason": "The source comment gives a narrower reason: `is_prepared` is a runtime no-op to avoid AssertionError while serving as a TypeIs predicate for static checking. It does not say the helper avoids repeated assertions or that this is a hot-path optimization; the answer turns an unsupported performance rationale into fact.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/_types.py",
+              "startLine": 47,
+              "endLine": 52
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 540,
+              "endLine": 542
+            }
+          ],
+          "questionFingerprint": "9ef0e8add29ec8d2eb6eeaf382a708925bc1257b37559346a0177957744d2c37"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant source review is not independent human blind review.",
+    "Review covers all 20 main answers and all nested follow-ups against the fixed source revision; it is not exhaustive of every factual nuance.",
+    "No model/network calls and no upstream project code execution."
+  ],
+  "reviewedSourceHashes": {
+    "src/requests/models.py": "a3351c3c12a86bf5ed211533875350bc4791e9327a685f8c19ba54343e471e26",
+    "src/requests/sessions.py": "3d2089736ced93b2b405624a943f866d22652b17df06a85eb010f86272fc3e7d",
+    "tests/test_requests.py": "5eacf6341d236e225ce6a37a592f3b410f20e69ec17641f0e2c99b03a79b904d",
+    "pyproject.toml": "345f26b9f691435e39d0eb6f7f4150a390f43175b22f8d61ac95e7f2827f0a77",
+    "src/requests/auth.py": "fdc8bb34a8a5a088b169ca13277d107b0bc94ee63ed5e89dd4f5569d9b2bb04c",
+    "src/requests/_types.py": "84dec9789a8e839807242448a9aa86acd12c440211921e32f43afcbc422a629c"
+  },
+  "primaryReview": {
+    "method": "Primary agent checked every frozen fact disposition and all retained findings against the pinned source, read every mitt answer and all Requests main answers, and verified run/output/fingerprint bindings. The module reviewers read every answer and nested follow-up.",
+    "deduplication": "Repeated identical claim within one question counts once, with occurrence locations retained."
+  }
+}

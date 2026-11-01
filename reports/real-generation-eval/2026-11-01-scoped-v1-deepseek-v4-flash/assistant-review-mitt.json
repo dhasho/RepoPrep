@@ -1,0 +1,406 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+  "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+  "reportStatusAtReview": "complete",
+  "status": "reviewed",
+  "method": "Read all 20 generation answers and all 60 follow-ups against the hash-matched pinned mitt source files and six frozen corpus facts. Type claims checked with the run-bound local TypeScript 5.9.3 virtual-file probes; no upstream code executed.",
+  "reviewer": {
+    "executor": "GPT-6 Luna module reviewer with Codex primary source review",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "repository": "developit/mitt",
+    "sourceCommit": "6b41670516ed8e8b738612f60491995470aa63b3",
+    "questionsRead": 20,
+    "followUpsRead": 60,
+    "reviewedFacts": 6,
+    "evidenceFiles": [
+      {
+        "path": "src/index.ts",
+        "sha256": "1536a2dd71d64785d811076beee6d970583ca555dd34ce839face641a200054b"
+      },
+      {
+        "path": "test/index_test.ts",
+        "sha256": "cc25b9f1d50cf07d0ae99141e592bfe0d1ca7e8a48332bf1870b31ba8e62c43b"
+      }
+    ],
+    "caseId": "mitt",
+    "sourceHashesVerifiedAfterCrlfToLfNormalization": true,
+    "followUpsIncluded": true
+  },
+  "variants": [
+    {
+      "findings": [
+        {
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 17,
+              "endLine": 39
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 45,
+              "endLine": 50
+            }
+          ],
+          "questionFingerprint": "a7f8f73d2335a6833a77f7b0b5c269dff912cf0e3e2563b743aa72d4199cd944",
+          "claim": "Record<EventType, unknown> prevents numeric event keys, repeated in the main answer and numeric-key follow-up.",
+          "reason": "EventType is string | symbol, but that alias alone does not force keyof Events to contain only string or symbol keys under this constraint.",
+          "kind": "incorrect",
+          "evidencePath": "validation-js-language-probes.json",
+          "questionNumber": 2,
+          "questionPart": "answer and followUps[2].answer",
+          "questionParts": [
+            "answer",
+            "followUps[2].answer"
+          ],
+          "repeatedOccurrences": 2
+        },
+        {
+          "sourceRefs": [
+            {
+              "endLine": 39,
+              "path": "src/index.ts",
+              "startLine": 35
+            }
+          ],
+          "questionFingerprint": "4dc07bd1286530761ceb2891d0022e195a35dee2de574c5624a8971c0cbee5a8",
+          "claim": "The follow-up says exactOptionalPropertyTypes changes the read type of an optional string property so the emit omission condition may no longer hold.",
+          "reason": "With exactOptionalPropertyTypes both off and on, the read type remains string | undefined; the probe accepted omitted payload in both modes. The option changes assignment semantics, not this indexed read.",
+          "kind": "incorrect",
+          "evidencePath": "validation-js-language-probes.json",
+          "questionNumber": 4,
+          "questionPart": "followUps[0]"
+        }
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            2,
+            6,
+            12
+          ],
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 21
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            6
+          ],
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 66,
+              "endLine": 73
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 98,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ],
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 138,
+              "endLine": 157
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            8,
+            9,
+            14
+          ],
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 93,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            4
+          ],
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 23,
+              "endLine": 39
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            5,
+            11
+          ],
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 12,
+              "endLine": 22
+            }
+          ]
+        }
+      ],
+      "questionReviews": [
+        {
+          "questionNumber": 1,
+          "questionFingerprint": "e0d2efcc19a03c146687d122f822cf416a32e4c3e0e75697abd26a6967c1fea9",
+          "topic": "closure-held state and emitter methods",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 2,
+          "questionFingerprint": "a7f8f73d2335a6833a77f7b0b5c269dff912cf0e3e2563b743aa72d4199cd944",
+          "topic": "EventType/key constraints and Map boundary",
+          "assessment": "partial",
+          "followUpsRead": 3,
+          "followUpFindings": [
+            {
+              "part": "followUps[2]",
+              "findingId": "numeric-event-type-constraint",
+              "assessment": "incorrect"
+            }
+          ]
+        },
+        {
+          "questionNumber": 3,
+          "questionFingerprint": "0f907aa755bea1f85bb86f8d7d5fd72386d739a283c3a40b4e05b3ecce721d99",
+          "topic": "on/off overload correlations and wildcard handler",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 4,
+          "questionFingerprint": "4dc07bd1286530761ceb2891d0022e195a35dee2de574c5624a8971c0cbee5a8",
+          "topic": "conditional optional-payload emit overload",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": [
+            {
+              "part": "followUps[0]",
+              "findingId": "exact-optional-read-type",
+              "assessment": "incorrect"
+            }
+          ]
+        },
+        {
+          "questionNumber": 5,
+          "questionFingerprint": "510e59e6012b3d1e06e2a1d6d91dd402b734f700f8fb966ed8cacb97331de309",
+          "topic": "public mutable all and encapsulation",
+          "assessment": "mostly-supported",
+          "followUpsRead": 3,
+          "followUpFindings": [],
+          "notes": [
+            "ReadonlyMap exposed view need not prevent writes through a separate internal mutable Map reference; this is a minor imprecision in a proposed design, not counted as a material answer error."
+          ]
+        },
+        {
+          "questionNumber": 6,
+          "questionFingerprint": "ae1a7f816c3d6e8743c3f66bfe17403487a92a8af0d2fbc0ef00cd1e57ff735e",
+          "topic": "registration, duplicates, empty list, case behavior",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 7,
+          "questionFingerprint": "c5c7db1fac6274d4b6af2af1f2da152abf2c3d599815af6b6a96e767dc6b4bbc",
+          "topic": "off splice/remove and retained empty keys",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 8,
+          "questionFingerprint": "3f1d06882e066855d22753d6f1c12b5c42cb1a85ceb2c180ace4711eb6da6043",
+          "topic": "snapshot iteration and mutation timing",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 9,
+          "questionFingerprint": "7110deea96df7b601fea39ea048e50df18f99ec51b3445e0f52bf7097ce39424",
+          "topic": "wildcard order and manual emit star",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 10,
+          "questionFingerprint": "c9faed13427697602efae212da7c19dbf1eeb3933cc712013f3231e3cfb6689d",
+          "topic": "synchronous exception propagation",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 11,
+          "questionFingerprint": "6753b1d6e34180aebe14934b5511194094b414064ee9db36f65ae10902ff74c2",
+          "topic": "injected Map identity and shared state",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 12,
+          "questionFingerprint": "6ee0dfb19a4c318054a8c7561bcffb8668c55a39108e222bcd6456c5c482bbfe",
+          "topic": "case sensitivity, symbol identity, Map keys",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": [],
+          "notes": [
+            "Map uses SameValueZero generally; for the stated string and symbol event keys this matches the described value/identity behavior."
+          ]
+        },
+        {
+          "questionNumber": 13,
+          "questionFingerprint": "1bdcab35976b0f8c14a660e18f4ec7314c11f7dd391211e670803e013b90afcd",
+          "topic": "existing unit-test coverage and gaps",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 14,
+          "questionFingerprint": "14fb09f09616408e849642f274b4bb5cb8797a6e7a35847caba1b94546f263ea",
+          "topic": "tests for listener mutation ordering",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 15,
+          "questionFingerprint": "b5175079648d386aa3e32f5ff80776a9b44a1fb6f44e8754e62c6801d8798998",
+          "topic": "TypeScript expect-error tests and limitations",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 16,
+          "questionFingerprint": "95bed628b23fb3c41c63177de7f7c02fd929e3d6d33c11997f32596f4951801c",
+          "topic": "package entry fields and output formats",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 17,
+          "questionFingerprint": "e9a7b9113ea1f2e17aa07108b61721eb03f1b861f836ece2109aa8915b1488e5",
+          "topic": "IE9 compatibility, Map and polyfills",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 18,
+          "questionFingerprint": "ef9d29527a0b014c5aebc7b5862cb00c1ef05e37fc8246fa7c75d71a854fb7ac",
+          "topic": "CI build, package-root imports, declaration generation",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 19,
+          "questionFingerprint": "f4f66fb84a876029d04ce8c24d3b6e6f1e90df2f614694e9e4da35ae33584841",
+          "topic": "files allowlist vs source entry",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        },
+        {
+          "questionNumber": 20,
+          "questionFingerprint": "8ce34417671f1463bf81081baf9266e6420d6d032878b671fb87dcf4836db4ff",
+          "topic": "compressed-size workflow and limits",
+          "assessment": "supported",
+          "followUpsRead": 3,
+          "followUpFindings": []
+        }
+      ],
+      "variant": "generation",
+      "questionFingerprints": [
+        "e0d2efcc19a03c146687d122f822cf416a32e4c3e0e75697abd26a6967c1fea9",
+        "a7f8f73d2335a6833a77f7b0b5c269dff912cf0e3e2563b743aa72d4199cd944",
+        "0f907aa755bea1f85bb86f8d7d5fd72386d739a283c3a40b4e05b3ecce721d99",
+        "4dc07bd1286530761ceb2891d0022e195a35dee2de574c5624a8971c0cbee5a8",
+        "510e59e6012b3d1e06e2a1d6d91dd402b734f700f8fb966ed8cacb97331de309",
+        "ae1a7f816c3d6e8743c3f66bfe17403487a92a8af0d2fbc0ef00cd1e57ff735e",
+        "c5c7db1fac6274d4b6af2af1f2da152abf2c3d599815af6b6a96e767dc6b4bbc",
+        "3f1d06882e066855d22753d6f1c12b5c42cb1a85ceb2c180ace4711eb6da6043",
+        "7110deea96df7b601fea39ea048e50df18f99ec51b3445e0f52bf7097ce39424",
+        "c9faed13427697602efae212da7c19dbf1eeb3933cc712013f3231e3cfb6689d",
+        "6753b1d6e34180aebe14934b5511194094b414064ee9db36f65ae10902ff74c2",
+        "6ee0dfb19a4c318054a8c7561bcffb8668c55a39108e222bcd6456c5c482bbfe",
+        "1bdcab35976b0f8c14a660e18f4ec7314c11f7dd391211e670803e013b90afcd",
+        "14fb09f09616408e849642f274b4bb5cb8797a6e7a35847caba1b94546f263ea",
+        "b5175079648d386aa3e32f5ff80776a9b44a1fb6f44e8754e62c6801d8798998",
+        "95bed628b23fb3c41c63177de7f7c02fd929e3d6d33c11997f32596f4951801c",
+        "e9a7b9113ea1f2e17aa07108b61721eb03f1b861f836ece2109aa8915b1488e5",
+        "ef9d29527a0b014c5aebc7b5862cb00c1ef05e37fc8246fa7c75d71a854fb7ac",
+        "f4f66fb84a876029d04ce8c24d3b6e6f1e90df2f614694e9e4da35ae33584841",
+        "8ce34417671f1463bf81081baf9266e6420d6d032878b671fb87dcf4836db4ff"
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant source review is not independent human blind review.",
+    "Local static probes use TypeScript 5.9.3, not the upstream declared 4.9 build; no upstream project code was executed.",
+    "Two distinct type-claim errors remain, with one repeated in a follow-up; core fact coverage is not exhaustive answer accuracy."
+  ],
+  "caseId": "mitt",
+  "reviewedSourceHashes": {
+    "src/index.ts": "1536a2dd71d64785d811076beee6d970583ca555dd34ce839face641a200054b",
+    "test/index_test.ts": "cc25b9f1d50cf07d0ae99141e592bfe0d1ca7e8a48332bf1870b31ba8e62c43b"
+  },
+  "primaryReview": {
+    "method": "Primary agent checked every frozen fact disposition and all retained findings against the pinned source, read every mitt answer and all Requests main answers, and verified run/output/fingerprint bindings. The module reviewers read every answer and nested follow-up.",
+    "deduplication": "Repeated identical claim within one question counts once, with occurrence locations retained."
+  }
+}

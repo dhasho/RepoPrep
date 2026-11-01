@@ -6,7 +6,11 @@
 
 普通运行以 `report.json` 保存逐题结果、请求与用量、配置、源码/fixture 哈希和 report digest；`report.md` 提供概览，逐事实复核见已有的 `assistant-review-*.json`。对比产物为 `comparison.md`/`comparison.json`。cohort 目录以 `cohort.json` 汇总已有测量，并保存复用证明和来源引用；它不代表重新执行了一次完整运行。
 
-### 当前有效
+### 最新验证（收益未证实）
+
+- [`2026-11-01-scoped-v1-deepseek-v4-flash/`](real-generation-eval/2026-11-01-scoped-v1-deepseek-v4-flash/report.md) — runId `c87cf61f-cacd-4e5f-821f-be1471372856`。四例全部新生成，80 题、4 次 HTTP 调用，无格式修复或补偿。完整事实覆盖维持 23/28，部分 3、缺失 2；代理源码复核另记 4 类实质错误、4 条不精确表述。相对 2026-10-24 grounded，输入 109,986（+0.37%）、输出 144,853（+39.34%）、总计 254,839 tokens（+19.34%），没有证明质量或成本收益。本轮修复了摘录丢失所属作用域、评测阻塞流式响应及长 SSE 用量漏记；生产客户端保留完整 provider usage，原始 transport `null` 与随后计量修复的源码哈希分别保留于 `provenance.json`。较低用量参考仍为下列 grounded 运行。
+
+### 已有质量与用量参考
 
 - [`2026-10-24-grounded-v1-deepseek-v4-flash/`](real-generation-eval/2026-10-24-grounded-v1-deepseek-v4-flash/report.md) — runId `ee69a921-05fe-4d8d-bf44-2ba4bc72ee21`。mitt、p-limit、schedule、Requests 四例全部新生成：80 题、4 次新鲜 HTTP 调用，无格式修复或补偿请求。逐事实复核完整覆盖 23/28（部分 2、缺失 3、矛盾 0），另记 3 条实质错误、5 条不精确表述。相对原基线 generation 组（输入 146,247、总计 260,433 tokens），本轮输入 109,577（少 25.07%）、总计 213,536（少 18.01%）；token 减少不是费用结论，也不是普遍准确率提升。同语料对比见该目录 `comparison.md`。
 

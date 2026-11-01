@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "repoprep-scoped-run-provenance-v1",
+  "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+  "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+  "reportRawFileSha256": "1d2980271c855851ade5f58d0a96b0fdd55a4008fa595edac81f9d0e9fdda640",
+  "reportCanonicalSha256": "b02f6db5b04d7ab346372373b657d4900e2092196027d71f1fbc66efb4c6865a",
+  "measuredSourceCommit": "f99291570bce4baf4f776a0eb50df0009323018d",
+  "measuredSourceFiles": 105,
+  "currentCommitAfterInstrumentationFix": "99a77aae0d758271a76a3b7a71a06f4b5f95c5b5",
+  "postRunSourceChanges": [
+    {
+      "path": "scripts/evaluation/real-runner.mjs",
+      "measuredSha256": "61540c2b38077e5e244c88f7103c448c3e7be9851ff52ccaea46a4cf61402ee8",
+      "currentSha256": "c7490ab3324af801fda04a28fdca279c0ea9fb6a8224ad94886c488d885f7fc1"
+    },
+    {
+      "path": "scripts/evaluation/real-runner.test.mjs",
+      "measuredSha256": "f43d92cfc933bac30725bc3e6e361867ebcee8e4a7060aa2c0f6265cbeac2870",
+      "currentSha256": "1e12040cd6ec6e4ac09c01cb364fa6a7687cd031914c72249eb33de3b6829f31"
+    }
+  ],
+  "contextAndGenerationProductionSourcesUnchangedAfterRun": true,
+  "paidRequests": 4,
+  "additionalPaidRequestsAfterInstrumentationFix": 0,
+  "usageSource": "Complete provider usage from generation.diagnostics.actualUsage / output.generationDiagnostics.actualUsage, usageComplete=true for all four cases; transport observer fields remain null.",
+  "transportObserverLimitation": "The measured observer stopped reading after the entire SSE transport exceeded 1 MiB; the current observer parses incrementally with a bounded per-event buffer and stops at protocol terminal events.",
+  "validation": {
+    "typecheck": "passed",
+    "fileSelection": {
+      "passed": 83,
+      "failed": 0
+    },
+    "questionBudget": {
+      "passed": 117,
+      "failed": 0
+    },
+    "realEvaluation": {
+      "passed": 54,
+      "failed": 0,
+      "fixture": "synthetic HTTP and encrypted credentials; no model call"
+    },
+    "electronSmoke": {
+      "verdict": "SMOKE-OK",
+      "exitCode": 0,
+      "fixtureCleaned": true
+    }
+  },
+  "sourceReviewScope": "Module reviewers read all 80 answers and nested follow-ups; primary source review validates all 28 compound fact dispositions, all retained findings, and provenance. Non-blind assistant review."
+}

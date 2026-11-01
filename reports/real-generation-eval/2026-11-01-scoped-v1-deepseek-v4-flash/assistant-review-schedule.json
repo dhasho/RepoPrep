@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+  "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+  "caseId": "schedule",
+  "reviewer": {
+    "executor": "GPT-6 Luna module reviewer with Codex primary source review",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy; all 20 questions and nested follow-ups read.",
+    "followUpsIncluded": true,
+    "followUpsRead": 40
+  },
+  "variants": [
+    {
+      "questionFingerprints": [
+        "6759dc48a01d39846040e04bbbb78cb6dacb3ace251cbaba6cb0c55c4ae9dbf9",
+        "7fc5548277c7956a2f3ae17b946e79ea081b838d0804c0e344911aa3846f29dc",
+        "e10ecae200e1b1c612de1cf0d05aa841e39b3c1d7d9b43d1f4573ff5df2be530",
+        "c66f09203fd61f0e5eef1856f1e0298d014422d14369f80ad5b322315a69b57a",
+        "7c61828bf858b5716af020f5f32e021b44271d47d1e60c0f8c5c43f12c29bed7",
+        "a981f307e7be43ad55abbbb4625ed6e06233190ecd38799a73afcf8bc36bfb9e",
+        "37df79902557490b8c334f490bfc81b1611c7b1436d10c48dc54b0dbf882b385",
+        "4f2cae1634d45c8784b8927bb9e8bb4a5ff64cae031efda9811807bb9174a6de",
+        "e1c13d707ea352a26f29b07040c84b9979a0322466a38bf8213d0db6e838db6d",
+        "3f8a1ed20fbf005715c9daa58bea822c15562a36aefcbc5b65745a77ca83093b",
+        "14e331b90486eaf32e0c9a39484b4cf54996be3f336c57a33c2783036e92169b",
+        "774fb7f0133b9626be5825a81b38aad7c2a1e882c59bf214ed84c7a153d29b0f",
+        "5278a0a6f0f5249e5d99315842cb61ac3b15f3726bdc6c61b835a92d7f80aca3",
+        "7a85f5cfb5a3266a83987cbb48029cad4bb95e656ceb303f0463fae047ca964f",
+        "da270ba6177a4ff8b0fdca4523d16f54ed1f95ae93f395942d2aade429f5e0ac",
+        "eabb10842c5c30fff5da9f13565a75ac7ca3ba90a6f4a41d849505b2508316e3",
+        "a5f336054f87f2da80cbc58587a3c5e7d818d47d750da8f6c968db52c749471f",
+        "60cd2e803846b259347cb70199f4f7aa81167e0a19be0f16425932f8ac59b236",
+        "a25c0e7240985668915c5b1987ec08c51a46c4a9076353d4cb26f10f15443e0d",
+        "d3262bf3b9cae2f2400485688e4c48efe13699c9e8140e3370902698356e9306"
+      ],
+      "factReviews": [
+        {
+          "reason": "回答说明筛选 should_run、按 next_run 排序且每轮对逾期任务仅执行一次；实现与文档说明一致。",
+          "factId": "schedule-run-pending",
+          "sourceRefs": [
+            {
+              "startLine": 89,
+              "path": "schedule/__init__.py",
+              "endLine": 101
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ]
+        },
+        {
+          "reason": "回答说明 self.jobs[:] 快照、不按到期筛选，并每个任务执行后 sleep；实现吻合。",
+          "factId": "schedule-run-all",
+          "sourceRefs": [
+            {
+              "startLine": 103,
+              "path": "schedule/__init__.py",
+              "endLine": 120
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            3
+          ]
+        },
+        {
+          "reason": "回答准确说明 Hashable 标签、get_jobs 副本/过滤及 clear 原地清理语义。",
+          "factId": "schedule-tag-management",
+          "sourceRefs": [
+            {
+              "startLine": 122,
+              "path": "schedule/__init__.py",
+              "endLine": 148
+            },
+            {
+              "startLine": 457,
+              "path": "schedule/__init__.py",
+              "endLine": 469
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            15
+          ]
+        },
+        {
+          "reason": "回答准确说明类对象与实例两种 CancelJob 返回形式均触发移除，并处理不存在任务。",
+          "factId": "schedule-cancel-return",
+          "sourceRefs": [
+            {
+              "startLine": 150,
+              "path": "schedule/__init__.py",
+              "endLine": 160
+            },
+            {
+              "startLine": 172,
+              "path": "schedule/__init__.py",
+              "endLine": 175
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            14
+          ]
+        },
+        {
+          "reason": "回答说明日/小时/分钟格式差异，并指出仅 tz 参数非空时在 at() 内导入 pytz。",
+          "factId": "schedule-at",
+          "sourceRefs": [
+            {
+              "startLine": 471,
+              "path": "schedule/__init__.py",
+              "endLine": 559
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            6
+          ]
+        },
+        {
+          "reason": "回答列出 datetime/timedelta/time/受限字符串、截止记录及运行前/运行后截止检查。",
+          "factId": "schedule-until",
+          "sourceRefs": [
+            {
+              "startLine": 576,
+              "path": "schedule/__init__.py",
+              "endLine": 642
+            },
+            {
+              "startLine": 674,
+              "path": "schedule/__init__.py",
+              "endLine": 698
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            8
+          ]
+        },
+        {
+          "reason": "回答指出 to() 延迟到调度计算时取闭区间随机间隔，next_run 推进会越过 <= now 的时间点。",
+          "factId": "schedule-jitter-next",
+          "sourceRefs": [
+            {
+              "startLine": 561,
+              "path": "schedule/__init__.py",
+              "endLine": 574
+            },
+            {
+              "startLine": 700,
+              "path": "schedule/__init__.py",
+              "endLine": 748
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            7
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "reason": "Job(1) 的 unit 初始为 None，do() 首先调用 _schedule_next_run()；该方法在检查 scheduler 前即因 unit 无效抛 ScheduleValueError。只有先给无 scheduler 的 Job 配置有效时间单位并完成 next_run 计算，才会到达 scheduler is None 的 ScheduleError 分支。故此例失败原因和异常类型被混淆。",
+          "kind": "incorrect",
+          "questionPart": "answer",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 227,
+              "endLine": 245
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 644,
+              "endLine": 663
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 708
+            }
+          ],
+          "questionFingerprint": "e1c13d707ea352a26f29b07040c84b9979a0322466a38bf8213d0db6e838db6d",
+          "questionNumber": 9,
+          "claim": "若 scheduler is None，会在计算 next_run 后抛 ScheduleError；因此手工 Job(1).do(f) 会失败。"
+        }
+      ],
+      "variant": "generation"
+    }
+  ],
+  "limitations": [
+    "Assistant source review is not independent human blind review.",
+    "Review covers all 20 main answers and all nested follow-ups, with frozen compound facts and concrete source-backed claims checked; it does not certify every answer as exhaustive.",
+    "No upstream project commands or model calls were executed."
+  ],
+  "reviewedSourceHashes": {
+    "schedule/__init__.py": "b0c93f8ee84cbb8dbb98bcb8284864f4ea04012fdbc216de13f8ad2141d09efa"
+  },
+  "primaryReview": {
+    "method": "Primary agent checked every frozen fact disposition and all retained findings against the pinned source, read every mitt answer and all Requests main answers, and verified run/output/fingerprint bindings. The module reviewers read every answer and nested follow-up.",
+    "deduplication": "Repeated identical claim within one question counts once, with occurrence locations retained."
+  }
+}
