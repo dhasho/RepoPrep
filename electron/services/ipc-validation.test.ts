@@ -98,6 +98,18 @@ test('profile protocol accepts both providers, preserves the legacy optional sha
   }
 })
 
+test('reasoning effort accepts only low/high for OpenAI-compatible profiles', () => {
+  for (const reasoningEffort of ['low', 'high'] as const) {
+    assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [{ ...profile, reasoningEffort }], defaultProfileId: profile.id }]))
+    assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [{ ...profile, protocol: 'openai', reasoningEffort }], defaultProfileId: profile.id }]))
+  }
+  assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [profile], defaultProfileId: profile.id }]), 'omission preserves provider-default behavior')
+  for (const reasoningEffort of ['medium', '', null, 3]) {
+    rejects(IPC.settingsSave, { profiles: [{ ...profile, reasoningEffort }], defaultProfileId: profile.id })
+  }
+  rejects(IPC.settingsSave, { profiles: [{ ...profile, protocol: 'anthropic', reasoningEffort: 'low' }], defaultProfileId: profile.id })
+})
+
 test('token capacity settings accept bounded values and reject invalid pairs', () => {
   assert.doesNotThrow(() => validateIpcArgs(IPC.settingsSave, [{ profiles: [{ ...profile, contextWindowTokens: 8192, maxOutputTokens: 2048 }], defaultProfileId: profile.id }]))
   for (const fields of [{ contextWindowTokens: 4095 }, { contextWindowTokens: 2097153 }, { maxOutputTokens: 255 }, { maxOutputTokens: 393217 }, { contextWindowTokens: 4096, maxOutputTokens: 4096 }, { contextWindowTokens: 4096.5 }]) {

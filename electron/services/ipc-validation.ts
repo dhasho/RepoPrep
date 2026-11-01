@@ -1,6 +1,6 @@
 import path from 'node:path'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
-import type { GenerateRequest, Granularity, LlmProfileDraft, RoleFocus, SettingsSaveRequest } from '../../shared/types.ts'
+import type { GenerateRequest, Granularity, LlmProfileDraft, ReasoningEffort, RoleFocus, SettingsSaveRequest } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
 import { SCAN_LIMIT_BOUNDS } from '../../shared/types.ts'
 // @ts-ignore TypeScript's current project config forbids .ts import suffixes; runtime tests need them.
@@ -58,11 +58,15 @@ function url(value: unknown): asserts value is string {
 }
 function profile(value: unknown): asserts value is LlmProfileDraft {
   if (!record(value)) fail()
-  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'temperature', 'contextWindowTokens', 'maxOutputTokens', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
+  exactKeys(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'reasoningEffort', 'temperature', 'contextWindowTokens', 'maxOutputTokens', 'hasApiKey', 'credentialStatus', 'useSavedCredential', 'credentialAction'])
   string(value.id, LLM_PROFILE_LIMITS.id); string(value.name, LLM_PROFILE_LIMITS.name); url(value.baseUrl)
   if (value.apiKey !== undefined) string(value.apiKey, LLM_PROFILE_LIMITS.apiKey, 0)
   string(value.model, LLM_PROFILE_LIMITS.model)
   if (value.protocol !== undefined) enumValue(value.protocol, ['openai', 'anthropic'] as const)
+  if (value.reasoningEffort !== undefined) {
+    enumValue(value.reasoningEffort, ['low', 'high'] as const satisfies readonly ReasoningEffort[])
+    if (value.protocol === 'anthropic') fail()
+  }
   if (value.hasApiKey !== undefined && typeof value.hasApiKey !== 'boolean') fail()
   if (value.useSavedCredential !== undefined && typeof value.useSavedCredential !== 'boolean') fail()
   if (value.credentialStatus !== undefined) enumValue(value.credentialStatus, ['missing', 'stored', 'locked', 'migration-pending'] as const)

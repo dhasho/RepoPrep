@@ -4,6 +4,7 @@ export type { GenerationDraftSummary } from './generation-checkpoint'
 export type Granularity = 'coarse' | 'medium' | 'fine'
 export type RoleFocus = 'general' | 'frontend' | 'backend' | 'algorithm'
 export type LlmProtocol = 'openai' | 'anthropic'
+export type ReasoningEffort = 'low' | 'high'
 
 /** 大模型配置；缺少 protocol 的旧配置按 OpenAI Chat Completions 处理。 */
 export interface LlmProfile {
@@ -13,6 +14,8 @@ export interface LlmProfile {
   apiKey: string
   model: string
   protocol?: LlmProtocol
+  /** OpenAI reasoning effort; omitted uses the provider default. */
+  reasoningEffort?: ReasoningEffort
   temperature?: number
   contextWindowTokens?: number
   maxOutputTokens?: number

@@ -436,6 +436,35 @@ test('optional token caps survive replace, keep, clear, public readback, and pri
   assert.equal((await store.getPrivateProfile(base.id))?.apiKey, '')
 })
 
+test('reasoning effort is enum-validated, OpenAI-only, persisted, and publicly/private read back', async () => {
+  const { store } = await makeHarness()
+  const base = { id: 'effort-profile', name: 'Effort profile', baseUrl: 'https://example.test/v1', model: 'model' }
+  await store.saveSettings({
+    profiles: [{ ...base, reasoningEffort: 'low', apiKey: 'effort-secret', credentialAction: 'replace' }],
+    defaultProfileId: base.id
+  })
+  assert.equal((await store.getSettings()).profiles[0].reasoningEffort, 'low')
+  assert.equal((await store.getPrivateProfile(base.id))?.reasoningEffort, 'low')
+
+  await store.saveSettings({
+    profiles: [{ ...base, reasoningEffort: 'high', apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: base.id
+  })
+  assert.equal((await store.getSettings()).profiles[0].reasoningEffort, 'high')
+  assert.equal((await store.getPrivateProfile(base.id))?.reasoningEffort, 'high')
+  assert.equal((await store.getPrivateProfile(base.id))?.apiKey, 'effort-secret')
+
+  await assert.rejects(store.saveSettings({
+    profiles: [{ ...base, reasoningEffort: 'medium' as never, apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: base.id
+  }), /Invalid settings/u)
+  await assert.rejects(store.saveSettings({
+    profiles: [{ ...base, protocol: 'anthropic', reasoningEffort: 'low', apiKey: '', credentialAction: 'keep' }],
+    defaultProfileId: base.id
+  }), /Invalid settings/u)
+  assert.equal((await store.getPrivateProfile(base.id))?.reasoningEffort, 'high', 'rejected values do not replace the valid stored profile')
+})
+
 test('legacy profiles default to OpenAI without adding an undefined protocol property', async () => {
   const { store, userData } = await makeHarness()
   const file = path.join(userData, 'settings.json')
