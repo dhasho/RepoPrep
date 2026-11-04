@@ -125,7 +125,9 @@ export function analyzeSource(relPath: string, content: string): SourceAnalysis 
         }
       }
     } else if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && calls.length < 1024) {
-      if (owner) calls.push({ name: node.expression.text, callerStart: owner.start, receiver: 'constructor' })
+      if (owner && !ownerBindings.get(owner.start)?.has(node.expression.text)) {
+        calls.push({ name: node.expression.text, callerStart: owner.start, receiver: 'constructor' })
+      }
     }
 
     if (isTopLevel && (ts.isClassDeclaration(node) || ts.isClassExpression(node))) {

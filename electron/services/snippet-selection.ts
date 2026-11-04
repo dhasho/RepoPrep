@@ -482,7 +482,8 @@ export function sourceRegionCandidates(
       const caller = callersByStart.get(call.callerStart)
       if (!caller) continue
       let targets: CodeSymbol[]
-      if (call.receiver === 'this' && caller.parentStart !== undefined) {
+      if (call.receiver === 'this') {
+        if (caller.parentStart === undefined) continue
         targets = methodsByOwnerAndName.get(`${caller.parentStart}:${call.name}`) ?? []
       } else if (call.receiver === 'constructor') {
         targets = classesByName.get(call.name) ?? []
@@ -520,7 +521,8 @@ export function sourceRegionCandidates(
     })
   }
   const ordered = candidates.sort((a, b) => b.priority - a.priority || a.start - b.start)
-  return options.useCallRelations === false ? ordered : prioritizeDirectCallees(ordered)
+  if (options.useCallRelations === false) return ordered
+  return prioritizeDirectCallees(ordered).sort((a, b) => b.priority - a.priority || a.start - b.start)
 }
 
 export function selectSourceRegions(

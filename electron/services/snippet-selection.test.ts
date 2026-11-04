@@ -130,6 +130,39 @@ test('this calls inside nested ordinary functions are not attributed to the oute
   assert.equal(Boolean(run.calledDeclarationStarts?.includes(finish.start)), false)
 })
 
+test('constructor calls skip parameter shadowing and resolve an unshadowed local class', () => {
+  const content = `class Helper {}\nfunction shadowed(Helper: new () => unknown) { return new Helper() }\nfunction unshadowed() { return new Helper() }\nfunction topLevelThis() { return this.Helper() }\n`
+  const analysis = analyzeSource('src/factory.ts', content)
+  assert.ok(analysis?.parseable)
+  const regions = sourceRegionCandidates(content, analysis, { extension: 'ts' })
+  const helper = regions.find((region) => region.label === 'Helper')
+  const shadowed = regions.find((region) => region.label === 'shadowed')
+  const unshadowed = regions.find((region) => region.label === 'unshadowed')
+  const topLevelThis = regions.find((region) => region.label === 'topLevelThis')
+  assert.ok(helper && shadowed && unshadowed && topLevelThis)
+  assert.equal(shadowed.calledDeclarationStarts?.length ?? 0, 0)
+  assert.deepEqual(unshadowed.calledDeclarationStarts, [helper.start])
+  assert.equal(topLevelThis.calledDeclarationStarts?.length ?? 0, 0)
+})
+
+test('source selection uses the updated callee priority ordering', () => {
+  const largeMiddle = `function middle() {\n${'  const value = 1\n'.repeat(16)}  return value\n}\n`
+  const content = `function helper() { return 'CALLEE' }\n${largeMiddle}function caller() {\n${'  const value = 1\n'.repeat(16)}  return helper()\n}\n`
+  const analysis = analyzeSource('src/flow.ts', content)
+  assert.ok(analysis?.parseable)
+  const candidates = sourceRegionCandidates(content, analysis, { referencedSymbols: new Set(['caller']), extension: 'ts' })
+  const helper = candidates.find((region) => region.label === 'helper')
+  const middle = candidates.find((region) => region.label === 'middle')
+  const caller = candidates.find((region) => region.label === 'caller')
+  assert.ok(helper && middle && caller)
+  assert.ok(helper.priority > middle.priority)
+  const budget = caller.text.length + middle.text.length + 25
+  const picked = selectSourceRegions(content, analysis, budget, { referencedSymbols: new Set(['caller']), extension: 'ts' })
+  assert.ok(picked.regions.some((region) => region.label === 'caller'))
+  assert.ok(picked.regions.some((region) => region.label === 'helper'))
+  assert.ok(!picked.regions.some((region) => region.label === 'middle'))
+})
+
 test('final fitting keeps TS and Python method owners within budget while whole files stay byte-identical', () => {
   const tsFiller = '  cached: string = "filler-value"\n'.repeat(100)
   const tsSource = `class Request {\n${tsFiller}  prepare() { return 'REQUEST_PREPARE' }\n}\nclass PreparedRequest {\n${tsFiller}  prepare() { return 'PREPARED_PREPARE' }\n}\n`
