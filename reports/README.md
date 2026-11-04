@@ -6,9 +6,15 @@
 
 普通运行以 `report.json` 保存逐题结果、请求与用量、配置、源码/fixture 哈希和 report digest；`report.md` 提供概览，逐事实复核见已有的 `assistant-review-*.json`。对比产物为 `comparison.md`/`comparison.json`。cohort 目录以 `cohort.json` 汇总已有测量，并保存复用证明和来源引用；它不代表重新执行了一次完整运行。
 
-### 最新验证（收益未证实）
+### 最新验证（文档节选候选，三例已复核）
 
-- [`2026-11-04-callchain-low-requests/`](real-generation-eval/2026-11-04-callchain-low-requests/report.md) — 仅 Requests 的单例筛查，runId `314d1677-7aee-4e7a-a56e-2000fadcc21c`。20 题、1 次真实请求，显式使用 low 推理强度；完整事实 3/8、部分 3、缺失 2，与上轮该例完整覆盖持平。输入 42,209、输出 42,768、合计 84,977 tokens，比上轮该例多 8.68%，未通过增益筛查，剩余三次计划调用未执行。生产客户端与传输观察器保留相同完整用量。不能把该目录当作四例运行或低强度更省 token 的证明。
+- [`2026-11-04-doc-excerpt-requests/`](real-generation-eval/2026-11-04-doc-excerpt-requests/report.md) — runId `0a84cfe5-0b30-41e0-8ff7-4e30328f9d02`。在预算受限时节选已确认的 Python 长文档字符串，保留其余代码；20 题、1 次真实请求。与上一轮 Requests low 使用相同模型、提示词模板和推理参数，实际上下文随节选改变。完整事实由 3/8 增至 5/8，部分 1、缺失 2；输入 42,465、输出 20,812、合计 63,277 tokens（总量少 25.54%）。实质错误由 1 类增至 2 类，另有 2 条不精确表述；该次覆盖与用量筛查通过不代表整体回答更准确。
+
+- [`2026-11-05-doc-excerpt-mitt-schedule/`](real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.md) — runId `835a902a-59ce-4880-a279-f8ff7abec2b2`。与上述 Requests 使用相同的 107 项生成源码哈希和推理参数；40 题、2 次真实请求，完整事实 mitt 6/6、schedule 7/7。mitt 仍有 4 类实质错误；schedule 未发现计入清单的错误，边界说明保留在复核文件。输入 52,835、输出 47,385、合计 100,220 tokens。
+
+当前候选只测量了上述三例：60 题、完整事实 18/21、部分 1、缺失 2，另记 6 类实质错误、2 条不精确表述；所选测量共 163,497 tokens。p-limit 尚未在本候选的 low 条件下测量，不能组成四例 cohort。原授权 4 次调用已全部使用（含下面保留的失败筛查），研究调用合计 248,474 tokens；这与三例候选的用量口径不同，也不是货币费用。复核均为代理辅助、非盲审，人工评价仍为 pending。
+
+### 最近的四例运行（收益未证实）
 
 - [`2026-11-01-scoped-v1-deepseek-v4-flash/`](real-generation-eval/2026-11-01-scoped-v1-deepseek-v4-flash/report.md) — runId `c87cf61f-cacd-4e5f-821f-be1471372856`。四例全部新生成，80 题、4 次 HTTP 调用，无格式修复或补偿。完整事实覆盖维持 23/28，部分 3、缺失 2；代理源码复核另记 4 类实质错误、4 条不精确表述。相对 2026-10-24 grounded，输入 109,986（+0.37%）、输出 144,853（+39.34%）、总计 254,839 tokens（+19.34%），没有证明质量或成本收益。本轮修复了摘录丢失所属作用域、评测阻塞流式响应及长 SSE 用量漏记；生产客户端保留完整 provider usage，原始 transport `null` 与随后计量修复的源码哈希分别保留于 `provenance.json`。较低用量参考仍为下列 grounded 运行。
 
@@ -22,6 +28,7 @@
 
 ### 历史实验（保留失败与诊断记录，不作为当前结论）
 
+- [`2026-11-04-callchain-low-requests/`](real-generation-eval/2026-11-04-callchain-low-requests/report.md) — 仅 Requests 的前置筛查，runId `314d1677-7aee-4e7a-a56e-2000fadcc21c`。20 题、1 次真实请求，low 推理强度；完整事实 3/8、部分 3、缺失 2，输入 42,209、输出 42,768、合计 84,977 tokens，比上一轮该例多 8.68%，未通过增益筛查。该次停止后，剩余三次授权用于上面的文档节选候选。不能把该目录当作四例运行或低强度更省 token 的证明。
 - [`2026-10-23-structure-v1-deepseek-v4-flash/`](real-generation-eval/2026-10-23-structure-v1-deepseek-v4-flash/report.md) — 32k 输入预算实验。完整事实覆盖仅 14/28，未通过覆盖回归检查。
 - [`2026-10-24-balanced-v1-deepseek-v4-flash/`](real-generation-eval/2026-10-24-balanced-v1-deepseek-v4-flash/report.md) — 64k 预算。复核中发现 Python 多行声明代码单元边界缺陷（函数体被截断仍标记完整），仅完成 mitt、p-limit 两例复核，Python 两例保留为诊断记录。
 - [`2026-10-24-logical-v1-deepseek-v4-flash/`](real-generation-eval/2026-10-24-logical-v1-deepseek-v4-flash/report.md) 与 [`2026-10-24-logical-cohort-v1-deepseek-v4-flash/`](real-generation-eval/2026-10-24-logical-cohort-v1-deepseek-v4-flash/report.md) — 修复单元边界后重生成 Python 两例，与 balanced 的两例 JavaScript（请求体逐字节相同的复用实测）组成显式 cohort；保守完整覆盖 18/28，未通过回归。

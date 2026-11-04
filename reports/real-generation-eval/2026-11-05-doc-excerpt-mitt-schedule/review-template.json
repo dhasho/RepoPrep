@@ -1,0 +1,939 @@
+{
+  "schemaVersion": "repoprep-human-review-v2",
+  "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "configHash": "b1df767e8b9e6a5ff7604b27ab8a023b9c61dd1f2172e4d819f215ae9e69e7f2",
+  "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+  "rubric": {
+    "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.",
+    "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
+    "semanticDuplication": "1 duplicates another question; 2 near duplicate; 3 partial overlap; 4 distinct with minor overlap; 5 clearly distinct."
+  },
+  "ratings": [
+    {
+      "fingerprint": "48aebe70d9367bf4bc5c022aa49eed544099248bb95b84c47ff5bb75cbade8a4",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "请从 `src/index.ts` 说明 mitt 工厂返回了什么，`all` 状态如何创建和共享，为什么 `on`、`off`、`emit` 不需要绑定 `this` 也能调用？",
+      "answer": "要点是：工厂返回一个对象，状态由闭包中的 `all` 持有。\n\n- `mitt(all?)` 中先执行 `all = all || new Map()`，没有传入映射时新建一个 [[Map]]；传入时直接复用外部映射。\n- 返回对象包含 `all` 属性以及 `on`、`off`、`emit` 三个方法；方法定义在对象字面量中，内部通过闭包读取 `all`，没有访问 `this`。\n- 因此 `const { on } = mitt()` 后单独调用 `on('foo', fn)` 仍然可以工作，这也符合 README 中 functional 的描述。\n- 共享状态意味着外部传入的映射会被 emitter 直接修改，多个 emitter 之间可能因为复用同一个映射而产生耦合。\n\n源码中没有额外包装或代理，所有事件名到 handler 数组的读写都直接落在 `all` 上。",
+      "followUps": [
+        {
+          "question": "如果把 `emitter.on` 赋值给另一个变量再调用，会有什么结果？",
+          "answer": "仍然正常调用，因为实现没有使用 `this`。方法内部只依赖闭包 `all`，不依赖调用者对象；这也是函数式 API 的一个直接收益。",
+          "followUps": []
+        },
+        {
+          "question": "传入外部 `Map` 时，mitt 是否会复制它？",
+          "answer": "不会。源码使用 `all = all || new Map()`，传入对象会被直接引用。后续 `on`、`off`、`emit` 都修改这个外部映射，调用方需要意识到共享状态的风险。",
+          "followUps": []
+        },
+        {
+          "question": "这种闭包设计在测试或多实例场景下有什么注意点？",
+          "answer": "每个 emitter 通常应使用独立 `Map`。如果测试复用同一个映射，前一个用例注册的 handler 可能泄漏到后一个用例；多实例共享映射时，事件也会互相可见。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a31b8eb35d36e1a94b3d440e12a2cf9953469d66690317ee636c36e19a15f94a",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "根据 `EventHandlerMap` 的类型定义和运行时行为，`all` 的键和值分别是什么？普通 handler 与通配符 handler 如何存放在同一个 [[Map]] 中？",
+      "answer": "`all` 在类型上是 `Map<keyof Events | '*', EventHandlerList<Events[keyof Events]> | WildCardEventHandlerList<Events>>`。\n\n- 运行时键是具体事件名或保留字符串 `'*'`；值是 handler 数组。\n- `on` 对普通事件把 handler 追加到 `all.get(type)` 对应的数组；对 `'*'` 也走同一套逻辑，只是键是 `'*'`。\n- 普通 handler 数组与通配符 handler 数组在运行时都是数组，但类型上分开声明；读取时实现会根据阶段做类型断言。\n- 这意味着同一个 [[Map]] 同时承载普通监听和全局监听，但两者的调用参数不同：普通 handler 只接收事件值，通配符 handler 接收事件类型和事件值。\n\n类型上的联合值没有把 `'*'` 键精确映射为通配符数组，因此实现中需要断言。",
+      "followUps": [
+        {
+          "question": "为什么使用 `Map` 而不是普通对象来保存事件？",
+          "answer": "`Map` 的键可以是字符串或 Symbol，并且没有原型链上的 `constructor` 等键冲突。测试里专门验证了 `'constructor'` 作为普通事件名可以工作。",
+          "followUps": []
+        },
+        {
+          "question": "`all.get('*')` 返回的数组和普通事件数组在类型上有什么区别？",
+          "answer": "类型上普通数组是 `EventHandlerList<Events[keyof Events]>`，通配符数组是 `WildCardEventHandlerList<Events>`。运行时都是数组，区别只在调用时传参不同。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a26d1f2020999ad8224a3b4f6c7c71c9f5de6c36fd810747dc8fce39ff09bdb6",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "README 宣称方法不依赖 `this`。结合实现说明这种设计对解构、回调和组合有什么实际影响，并指出一个潜在的状态共享风险。",
+      "answer": "实现中的 `on`、`off`、`emit` 是对象字面量方法，内部只使用闭包变量 `all`，没有读取 `this`，所以解构后调用不会丢失上下文。\n\n- 对使用方来说，可以把 `on` 作为回调传递，或者从 emitter 上取出方法使用。\n- 对测试来说，可以直接观察 `all`，因为 `all` 被公开为属性。\n- 风险在于 `all` 是共享可变状态：如果传入外部映射或把 `all` 暴露给其他代码，外部可以绕过 `on/off` 直接改数组，从而影响 emitter 行为。\n\n这种设计让 API 更接近函数式工具，但也把状态管理责任部分交给了调用方。",
+      "followUps": [
+        {
+          "question": "如果改用 class 实现，解构调用会有什么不同？",
+          "answer": "class 方法通常依赖 `this`，解构后需要 `bind` 或箭头函数包装。mitt 当前实现没有这个问题，因为状态在闭包而不是实例属性上。",
+          "followUps": []
+        },
+        {
+          "question": "公开 `all` 对封装性有什么影响？",
+          "answer": "调用方可以直接 `clear`、`set` 或修改数组，绕过 `on/off` 的约束。这提供了调试和批量清理的便利，但也意味着内部状态不是强封装的。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c3760fa392d5f9f9ebcaa301cea5141f33288f8bec12b9a3a30616ac44f63b06",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "说明 `on` 如何为新类型和已有类型注册 handler。重复注册同一个函数会发生什么？这与 Node 的 [[EventEmitter]] 行为有什么一致之处？",
+      "answer": "`on` 先执行 `all.get(type)`：\n\n- 如果返回数组，直接 `push(handler)`；\n- 如果没有，执行 `all.set(type, [handler])`。\n- 实现没有查重，因此同一个函数注册两次会在数组中出现两次，`emit` 时会被调用两次。\n- 测试 `should add duplicate listeners` 明确验证了这一点，注释也说明这与 Node 的 [[EventEmitter]] 行为一致。\n\n这意味着 `off(type, handler)` 一次只移除一个匹配项，重复监听需要多次移除或使用 `off(type)` 清空。",
+      "followUps": [
+        {
+          "question": "如果要实现“同一 handler 只注册一次”，可以怎么改？",
+          "answer": "可以在 `push` 前检查 `handlers.includes(handler)`，但这会改变与 Node 的兼容语义。更稳妥的是提供显式的 once/unique 开关，而不是默认去重。",
+          "followUps": []
+        },
+        {
+          "question": "重复注册后调用一次 `off(type, handler)` 会删除哪一个？",
+          "answer": "会删除数组中第一个匹配位置，因为 `indexOf` 从左到右查找。剩下的同函数仍保留，后续 `emit` 仍会调用一次。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "0267a345b812f7ff86eaf1bd440e7ada110b5d89fe6275555fde22acf0a5b0cb",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`off(type, handler)` 使用 `handlers.splice(handlers.indexOf(handler) >>> 0, 1)`。请解释 `>>> 0` 的作用、handler 不存在时发生什么，以及为什么只移除第一个匹配项。",
+      "answer": "这里的关键是把 `-1` 转成大索引，避免误删数组末尾。\n\n- `indexOf(handler)` 找到返回下标，找不到返回 `-1`。\n- `>>> 0` 是无符号右移零位，会把 `-1` 转成 `4294967295`。\n- `splice(4294967295, 1)` 超出数组长度，不会删除任何元素，因此 handler 不存在时是安全的空操作。\n- 存在时只删除该下标的一个元素，也就是第一个匹配项；重复注册需要多次调用。\n\n这种写法省去了显式的 `if (index !== -1)` 分支，但依赖 [[splice]] 对超大索引的处理。",
+      "followUps": [
+        {
+          "question": "为什么不用 `filter` 来移除 handler？",
+          "answer": "`filter` 会返回新数组，必须重新 `set` 回去。原数组的引用会变化，外部通过 `all.get(type)` 持有的旧引用将不再反映更新。",
+          "followUps": []
+        },
+        {
+          "question": "如果 handler 不是函数而是其他值，会怎样？",
+          "answer": "类型层面限制为函数；运行时 `indexOf` 仍可比较任意值。如果传入不在数组中的值，`>>> 0` 仍使删除成为空操作，不会抛错。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "565e1d240e5fac7947eddd09572d54c39517cd96cd30edeb7595fb85b141d7fe",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`off(type)` 的实现是 `all.set(type, [])`，而 README 也展示了 `emitter.all.clear()`。请比较这两种清理方式在运行时状态上的差异，以及对后续 `on`、`emit` 的影响。",
+      "answer": "两者的清理范围不同。\n\n- `off(type)` 只把该类型的值替换为空数组，键仍然存在；`all.has(type)` 仍为 `true`。\n- 后续 `on(type, fn)` 时 `all.get(type)` 得到空数组，会直接 `push` 到该数组。\n- 后续 `emit(type)` 仍会进入 `handlers` 分支，但因为数组为空，不会调用任何 handler；`'*'` 阶段另算。\n- `all.clear()` 删除所有键；之后 `on` 会走 `set` 新建数组，`emit` 对已删除类型直接跳过。\n\n因此 `off(type)` 保留类型键但清空监听，`all.clear()` 清空整个映射。",
+      "followUps": [
+        {
+          "question": "如果希望 `off(type)` 后 `all.has(type)` 为 false，应该怎么改？",
+          "answer": "应改为 `all.delete(type)`。但要注意这会改变现有语义：当前实现保留了键和空数组，外部观察 `all` 时能看到类型仍存在。",
+          "followUps": []
+        },
+        {
+          "question": "`off(type)` 替换数组后，原先通过 `all.get(type)` 拿到的数组引用还有效吗？",
+          "answer": "旧引用仍然指向旧数组，但已经不在 `Map` 中；它不会被继续更新。外部若继续持有旧引用并 `push`，不会影响 emitter 当前使用的空数组。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "4876174cfb28d38b71f61620ac860f12ae98d5a79cbce2b04d6fbc923bbbb25f",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "结合测试说明 mitt 如何处理事件名大小写和 [[Symbol]] 类型；为什么 `'foo'` 与 `'FOO'` 不会混用，`'constructor'` 也不会被当成特殊属性？",
+      "answer": "mitt 使用 [[Map]] 的键做精确匹配，不做大小写归一化。\n\n- `on('FOO', fn)` 和 `on('foo', fn)` 会落在不同键上；测试验证了二者互不影响。\n- `'constructor'` 只是普通字符串键，因为 `Map` 不继承对象原型链，不会出现普通对象上 `constructor` 被特殊处理的问题。\n- Symbol 也可以作为事件名；测试中用 `Symbol('eventType')` 注册并验证。\n- 类型上 `EventType` 是 `string | symbol`，因此接口层面不承诺 number 事件名。运行时虽然 `Map` 可以接受更多键，但通过 mitt 的类型 API 使用 number 需要额外断言或扩宽类型。\n\n这组行为保证了事件名的精确性和可预测性。",
+      "followUps": [
+        {
+          "question": "如果运行时传入 number 作为事件名，会发生什么？",
+          "answer": "`Map` 本身可以存 number 键，`on/emit` 的运行时逻辑也能工作，但 TypeScript 接口的 `EventType` 不包含 number，类型检查不会通过。属于类型未承诺的运行时能力。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不对事件名做大小写归一化？",
+          "answer": "归一化会让 `'Foo'` 和 `'foo'` 隐式合并，可能破坏调用方对精确事件名的预期。mitt 选择与 Node 的 [[EventEmitter]] 类似，保持原样匹配。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a53645c6e3061967af2feff8ef41f3b289d64e9c10d08bc5affaf0b8fbed296d",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`emit(type, evt)` 如何先调用类型匹配的 handler，再调用 `'*'` handler？如果没有任何 handler，会发生什么？",
+      "answer": "`emit` 分两个阶段：\n\n1. `let handlers = all.get(type)`，如果存在，就 `slice().map(handler => handler(evt))`，调用该类型下的普通 handler。\n2. 然后 `handlers = all.get('*')`，如果存在，就 `slice().map(handler => handler(type, evt))`，调用通配符 handler。\n\n普通 handler 只接收 `evt`；通配符 handler 额外接收事件类型。如果两个列表都不存在，`emit` 直接结束，不会抛错。\n\n这个顺序意味着通配符监听在类型监听之后触发，类型监听中即使没有注册也会继续检查通配符列表。",
+      "followUps": [
+        {
+          "question": "为什么先调用普通 handler，再调用通配符 handler？",
+          "answer": "这是 mitt 定义的顺序，让具体事件监听先处理，通配符监听再做汇总或旁路处理。顺序会影响有副作用的 handler，调用方需要按这个约定编写。",
+          "followUps": []
+        },
+        {
+          "question": "emit 一个完全未注册的类型是否安全？",
+          "answer": "安全。两个 `all.get` 都返回 `undefined`，两个 `if` 分支都跳过，函数正常返回，不会抛错。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "3a279a5ca6e746b5f1ac5df3327f8be9c21e408435a841ff85465100fb2fcb5a",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`emit` 在遍历前使用 `handlers.slice()`。这解决了什么边界问题？如果 handler 内部 `on`/`off` 同一类型，当前 `emit` 还会调用新加或已删的 handler 吗？",
+      "answer": "`slice()` 创建当前 handler 数组的 [[快照]]，遍历的是快照而不是原数组。\n\n- 如果 handler 内部对同一类型 `push` 新 handler，新 handler 不会进入本轮快照，因此本轮不会调用。\n- 如果 handler 内部 `splice` 删除某个 handler，原数组会变，但快照已经复制，已复制的元素仍可能按本轮顺序被调用。\n- 如果不使用快照，遍历时增删原数组可能导致跳过元素、重复调用或索引错位。\n\n需要注意：类型阶段和通配符阶段是分开获取的。类型 handler 中对 `'*'` 列表的修改，会影响随后重新 `all.get('*')` 得到的通配符阶段。",
+      "followUps": [
+        {
+          "question": "这里用 `map` 只是为了副作用，和 `forEach` 有什么区别？",
+          "answer": "在这个实现里 `map` 的返回值没有被使用，语义上更接近 `forEach`。区别主要是 `map` 会创建结果数组，带来少量分配；行为上都按顺序调用，异常都会中断。",
+          "followUps": []
+        },
+        {
+          "question": "如果 handler 内部递归 emit 同一类型，会有什么影响？",
+          "answer": "递归 emit 会再次创建新的快照并重新遍历，可能造成重复调用或无限递归。实现没有递归保护，调用方需要自行控制。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "468ad6caf5607963ec0b2f30d551c076b6ba8c2c6f2f5e6d49e085e93c3cc6e5",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "通配符 handler 的签名是什么？`emit` 时实际传入哪些参数？通配符阶段使用的是否是与普通 handler 相同的数组？",
+      "answer": "`WildcardHandler<T>` 的签名是 `(type: keyof T, event: T[keyof T]) => void`。\n\n- `emit` 第二阶段调用 `handler(type, evt)`，第一个参数是本次事件名，第二个参数是事件值。\n- 通配符数组来自 `all.get('*')`，普通数组来自 `all.get(type)`，它们是同一个 [[Map]] 中不同键对应的数组。\n- 因此普通事件不会误入通配符数组，除非事件名本身就是 `'*'`。\n- 类型上通配符 `type` 是 `keyof Events`，事件值是所有事件值类型的联合。\n\n这使通配符适合做日志、调试或全局统计，但事件值的类型会变宽。",
+      "followUps": [
+        {
+          "question": "为什么通配符 handler 的 `type` 不直接声明为 `string`？",
+          "answer": "使用 `keyof Events` 能保留具体事件键的约束，调用方可以获得更精确的类型提示。代价是不同类型的事件值在第二个参数上变成联合类型。",
+          "followUps": []
+        },
+        {
+          "question": "通配符 handler 能拿到额外参数吗？",
+          "answer": "当前实现只传 `type` 和 `evt` 两个参数，没有额外参数。若需要更多上下文，需要修改 emit 的调用约定或把上下文合并进 `evt`。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c5a1c1ab9f703928daf2b4d168ccb0e627f1adff540e202820c8c3d24b321838",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "README 写手动触发 `'*'` handler 不受支持。如果绕过类型检查执行 `emitter.emit('*', payload)`，按当前源码实际会发生什么？请描述两次遍历和参数差异。",
+      "answer": "按源码，`emit('*', payload)` 会经历两个阶段，且都命中同一个 `'*'` 数组：\n\n1. 先 `handlers = all.get('*')`，把它当作普通类型列表，遍历调用 `handler(payload)`，只传一个参数。\n2. 然后重新 `handlers = all.get('*')`，把它当作通配符列表，遍历调用 `handler('*', payload)`，传两个参数。\n\n结果是同一个通配符 handler 在一次 `emit` 中被调用两次，第一次参数位置不符合通配符签名。类型层面 `emit` 的 `Key extends keyof Events`，通常 `'*'` 不在 `keyof Events` 中，所以正常类型调用会被阻止；但运行时不会主动抛错。文档说的“不支持”与实现行为一致，但实现没有额外的运行时防护。",
+      "followUps": [
+        {
+          "question": "如果 `Events` 类型里真的包含 `'*'` 键，会发生什么？",
+          "answer": "类型上可能允许 `emit('*', ...)`，但运行时仍会走上述两段遍历，导致通配符 handler 被重复调用。这说明保留键与普通事件键在类型层面没有完全隔离。",
+          "followUps": []
+        },
+        {
+          "question": "是否应该在 emit 里加运行时判断阻止手动触发 `'*'`？",
+          "answer": "可以加判断，但会增加运行时体积，并改变现有行为。mitt 当前选择依赖类型和文档约束，而不是运行时抛错；是否值得取决于对体积和防御性的权衡。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "21a8570b9a9cd9719aeb5d402fc752fc064d0e1cd77091df5e7f8a64daaedd2c",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`emit` 调用 handler 时没有 try/catch。如果某个 handler 抛出异常，后续 handler 和通配符阶段会怎样？这对使用方意味着什么？",
+      "answer": "异常会同步向外冒泡，`emit` 本身不隔离错误。\n\n- 当前类型列表的遍历会中断，后续普通 handler 不再执行。\n- 因为异常已经抛出，第二阶段的 `all.get('*')` 和通配符调用也不会执行。\n- 使用方如果希望一个 handler 失败不影响其他 handler，需要自己在 handler 内部捕获，或在外层对 emit 做包装。\n- 异步 handler 中抛出的错误不会被同步 `emit` 捕获，会进入异步错误处理流程。\n\nmitt 没有 Node [[EventEmitter]] 的 `error` 事件约定，也没有承诺错误隔离。",
+      "followUps": [
+        {
+          "question": "如果希望隔离每个 handler 的异常，可以怎么包装？",
+          "answer": "可以在自定义 emit 包装中逐个调用 handler 并 try/catch；或者在注册时包装 handler，让异常被记录而不外抛。注意这会改变同步异常语义。",
+          "followUps": []
+        },
+        {
+          "question": "异步 handler 抛错时，mitt 能感知吗？",
+          "answer": "不能。`emit` 只同步调用 handler，不等待返回的 Promise。异步错误会由 Promise 或运行时处理，与 mitt 的调用栈无关。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "1a5db0a14bc5fc8f0b0be7cbd60783fb9b2338988c708caaf9a0d03f134a3327",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "解释 `Handler<T>` 和 `WildcardHandler<T>` 的参数设计，以及 `on` 的两个重载如何分别约束普通事件和 `'*'`。",
+      "answer": "`Handler<T> = (event: T) => void`，只接收事件值；`WildcardHandler<T> = (type: keyof T, event: T[keyof T]) => void`，同时接收事件名和事件值。\n\n`on` 的两个重载：\n\n- `on<Key extends keyof Events>(type: Key, handler: Handler<Events[Key]>)`：普通事件的 handler 参数类型精确对应该键的值类型。\n- `on(type: '*', handler: WildcardHandler<Events>)`：`'*'` 单独约束为通配符 handler。\n\n这样 `on('foo', handler)` 会把 `handler` 的参数推断为 `Events['foo']`，而 `on('*', handler)` 的第一个参数类型是 `keyof Events`，第二个参数是所有事件值的联合。",
+      "followUps": [
+        {
+          "question": "为什么通配符 handler 的第一个参数不是 `string`？",
+          "answer": "`keyof Events` 能保留具体键的集合，调用方在通配符回调里处理 `type` 时能获得更精确的联合类型。代价是 `type` 不能随意扩宽为任意字符串。",
+          "followUps": []
+        },
+        {
+          "question": "`Handler` 的默认类型参数 `unknown` 有什么作用？",
+          "answer": "在没有显式指定事件映射时，handler 参数默认为 `unknown`，要求调用方先收窄类型才能使用。它避免了默认 `any` 带来的类型不安全。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "48395cb5623ec35f8abb71fad5c1009dcfc4da06c77ba1c980921af9748e714b",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`emit` 有两个重载。解释第二个重载 `emit<Key extends keyof Events>(type: undefined extends Events[Key] ? Key : never): void` 的作用，以及为什么 `emitter.emit('bar')` 对 `bar?: number` 合法，而 `emit('foo')` 对 `foo: string` 不合法。",
+      "answer": "第二个重载允许省略事件值，但只对值类型包含 `undefined` 的键开放。\n\n- `bar?: number` 在开启 `strictNullChecks` 时，`Events['bar']` 是 `number | undefined`，因此 `undefined extends Events['bar']` 为真，`type` 可以是 `'bar'`。\n- `foo: string` 的 `Events['foo']` 不包含 `undefined`，条件结果为 `never`，所以 `emit('foo')` 不能匹配该重载。\n- 第一个重载仍要求传入 `event: Events[Key]`，因此 `emit('foo', 'x')` 合法。\n\n这个设计把“事件值是否可选”编码进类型，避免必须为可选事件传 `undefined`。",
+      "followUps": [
+        {
+          "question": "如果事件类型显式写成 `foo: string | undefined`，`emit('foo')` 会合法吗？",
+          "answer": "会。因为 `undefined extends string | undefined` 为真，第二个重载的 `type` 变为 `'foo'`，允许省略事件值。是否希望这样取决于业务语义。",
+          "followUps": []
+        },
+        {
+          "question": "关闭 `strictNullChecks` 会有什么影响？",
+          "answer": "条件类型对 `undefined` 的判断会变化，可选属性的类型表现也会不同。可能放宽或改变哪些键允许省略事件值，因此类型测试依赖 strict 配置。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "6af98d2022b7f247cd0059f49da2a90ab5933cab0849891a55ae8e68e53d0813",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`EventHandlerMap` 的值类型是 `EventHandlerList<Events[keyof Events]> | WildCardEventHandlerList<Events>` 的联合。这样设计在读取 `all.get(type)` 时有什么类型安全边界？为什么实现中需要类型断言？",
+      "answer": "这个联合表示“某个键可能对应普通 handler 数组，也可能对应通配符数组”，但类型系统没有把键和值精确绑定。\n\n- `all.get(type)` 返回联合数组或 `undefined`，仅凭返回类型无法知道当前键是不是 `'*'`。\n- `on`/`off` 需要把读取到的数组当作 `GenericEventHandler` 数组使用，因此实现中有断言。\n- `emit` 在普通阶段断言为 `EventHandlerList`，在通配符阶段断言为 `WildCardEventHandlerList`，依赖运行时键的约定。\n\n更精确的类型可以用条件类型或映射类型按 `'*'` 键区分值类型，但当前定义选择了更简单的联合。",
+      "followUps": [
+        {
+          "question": "这种联合类型会不会让外部直接操作 `all` 时缺少保护？",
+          "answer": "会。外部 `all.get('*')` 和 `all.get('foo')` 在类型上都可能是联合数组，调用 handler 时需要自行断言。运行时也不会阻止放错类型的数组。",
+          "followUps": []
+        },
+        {
+          "question": "如果要用条件类型改进，思路是什么？",
+          "answer": "可以把键 `'*'` 映射为 `WildCardEventHandlerList`，其他 `keyof Events` 映射为 `EventHandlerList`，再用映射类型构造 `all` 的类型。这样读取时能按字面量键收窄。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "afd9c3b93b951816b611120512028122f1ae1bee817e8de56dc9a8b268bf9321",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`test/test-types-compilation.ts` 使用 `@ts-expect-error` 验证 on/off/emit 的参数类型。请举两个例子说明它验证了什么，并解释为什么 `emitter.on('*', fooHandler)` 可以通过，而 `barHandler` 不行。",
+      "answer": "这个测试只做类型检查，不执行运行时逻辑。\n\n- 例一：`emitter.on('foo', barHandler)` 被标记为错误，因为 `foo` 的值类型是 `string`，而 `barHandler` 接收 `number | undefined`，不兼容。\n- 例二：`emitter.emit('foo')` 被标记为错误，因为 `foo` 是必填值类型，第二个重载只对包含 `undefined` 的键开放。\n\n通配符部分：`wildcardHandler` 的第二个参数是 `string | SomeEventData | number | undefined`。`fooHandler` 只接收一个 `string` 参数；函数参数较少可以赋给参数较多的目标，且第一个参数 `string` 能接收类型联合中的字符串字面量，所以通过。`barHandler` 的第二个参数是 `number | undefined`，无法安全接收联合中的 `string`，所以报错。",
+      "followUps": [
+        {
+          "question": "`@ts-expect-error` 和 `@ts-ignore` 有什么区别？",
+          "answer": "`@ts-expect-error` 要求下一行确实存在类型错误，否则自身会报错；`@ts-ignore` 只是忽略错误。前者更适合做类型回归测试。",
+          "followUps": []
+        },
+        {
+          "question": "这个测试能证明运行时行为也正确吗？",
+          "answer": "不能。它由 `tsc --noEmit` 执行，只验证类型。运行时行为由 mocha 测试覆盖，两者是分开的。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "9cb75d11165aa3f21643920708864758fec6e86789648cf67fdada19250a14df",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "根据 `package.json`，mitt 的 [[ESM]]、[[CommonJS]]、[[UMD]] 入口和类型入口分别是什么？`exports` 条件顺序和 `files` 字段对使用方有什么影响？",
+      "answer": "入口声明如下：\n\n- `module`/`jsnext:main` 指向 `dist/mitt.mjs`；`main` 指向 `dist/mitt.js`；`umd:main` 指向 `dist/mitt.umd.js`。\n- `typings` 指向 `index.d.ts`。\n- `exports` 中依次声明 `types`、`module`、`import`、`require`、`default`，分别对应类型、打包器模块字段、ESM、CommonJS 和默认入口。\n\n`files` 只发布 `dist` 和 `index.d.ts`，源码 `src` 不进入发布包。`exports` 的顺序影响条件解析，`types` 应优先，避免类型入口被运行时条件覆盖。`index.d.ts` 在 `.gitignore` 中，说明它通常由构建生成，当前仓库没有直接提供该文件内容。",
+      "followUps": [
+        {
+          "question": "`exports` 中同时有 `module` 和 `import` 有什么意义？",
+          "answer": "`import` 是 Node/标准条件，`module` 是部分打包器识别的非标准条件。两者都指向 ESM 产物，是为了兼容不同工具链的解析习惯。",
+          "followUps": []
+        },
+        {
+          "question": "如果使用方直接 require 包，会加载哪个文件？",
+          "answer": "在支持 `exports` 的 Node 中会命中 `require` 条件，加载 `dist/mitt.js`。旧解析器可能回退到 `main`，也是同一个 CommonJS 文件。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a8a9d20fed0d6b2e6143468c570924f9bdac46872987e6d91f4acb640eb26ac0",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`build` 脚本如何组合 `clean`、`bundle`、`docs`？[[microbundle]] 生成哪些格式，`documentation` 如何更新 README 的 API 部分？这些步骤在当前仓库中能否证明已经执行成功？",
+      "answer": "`build` 使用 `npm-run-all --silent clean -p bundle -s docs`：先 clean，再并行执行 bundle 和 docs。\n\n- `clean` 用 `rimraf dist` 删除构建目录。\n- `bundle` 执行 `microbundle -f es,cjs,umd`，按命令行指定生成 [[ESM]]、[[CommonJS]]、[[UMD]] 格式产物。\n- `docs` 执行 `documentation readme src/index.ts --section API -q --parse-extension ts`，从源码 [[JSDoc]] 注释生成 README 的 API 段落。\n- `tsconfig.json` 开启 `declaration`，`typings` 指向 `index.d.ts`，但仓库当前没有提供构建产物或 `index.d.ts`，因此无法从当前上下文确认这些命令是否成功运行、产物内容是否与 README 一致。\n\n这里只能确认脚本和配置，不能把 README 的 API 描述当作构建已执行的证据。",
+      "followUps": [
+        {
+          "question": "`-p` 并行执行 `bundle` 和 `docs` 有什么风险？",
+          "answer": "两者都读写项目文件，理论上可能产生竞争。但当前 `bundle` 输出到 `dist`，`docs` 更新 `README.md`，目标路径不同，风险较低；仍需注意工具自身的临时文件。",
+          "followUps": []
+        },
+        {
+          "question": "如何发现 README 的 API 段落与源码注释不一致？",
+          "answer": "可以重新运行 `docs` 并检查 git diff，或在 CI 中执行生成后断言工作区没有变化。当前配置没有显示这种一致性检查。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "b7efbfff9acee95f1607771790d5bb51bf1184ef84b49808f00c55440783c620",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "`.github/workflows/main.yml` 中 CI 会执行哪些命令？结合 `npm test` 的脚本组成，说明它会覆盖哪些检查，以及哪些内容没有被该流水线直接验证。",
+      "answer": "`main.yml` 在 [[CI]] 中执行：`npm install`、`npm run build --if-present`、`npm test`。\n\n- `npm test` 由 `npm-run-all --silent typecheck lint mocha test-types` 组成，覆盖 TypeScript 类型检查、ESLint、mocha 运行时测试和类型编译测试。\n- `mocha` 配置使用 [[ts-node]]/register 和 esm 加载 `test/*_test.ts`，测试中用 [[sinon]] 和 chai 断言。\n- `build` 在 CI 中也会运行，但 `--if-present` 只是防御性写法。\n- 该流水线没有直接执行体积检查；体积检查在另一个 `compressed-size.yml` 工作流中，且只在 pull_request 触发。\n\n当前只提供工作流配置，不能证明这些任务在某个提交上实际成功运行。",
+      "followUps": [
+        {
+          "question": "CI 使用 Node 14 有什么兼容性注意点？",
+          "answer": "Node 14 对较新的 ESM 和工具链支持有限，依赖版本需要匹配。项目通过 `esm` 和 `ts-node` 加载测试，版本组合需要在 Node 14 下验证。",
+          "followUps": []
+        },
+        {
+          "question": "`npm run build --if-present` 在 CI 中是否必要？",
+          "answer": "如果项目没有 build 脚本，它可以避免失败；当前项目有 build 脚本，因此会实际执行。它不能替代对构建产物的断言。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "55e592864f258611e33610850509862d8bc448a0d850c0ad3a1e955b5887689c",
+      "caseId": "mitt",
+      "variant": "generation",
+      "question": "README 和 `package.json` 宣称 mitt 极小，README 徽章提到 gzip 体积。应如何验证这类声明？`compressed-size.yml` 检查的是什么？能否从当前源码直接证明体积声明成立？",
+      "answer": "体积声明应通过构建产物测量，而不是从源码推断。\n\n- 需要先构建出 `dist` 下的 [[ESM]]/[[CommonJS]]/[[UMD]] 文件，再对目标文件做 [[gzip]] 压缩并统计字节数。\n- `compressed-size.yml` 使用 `preactjs/compressed-size-action@v2`，在 pull_request 上匹配 `./dist/*.{js,mjs,cjs}`，报告压缩体积变化，用于防止体积回退。\n- 当前仓库没有提供 `dist` 产物，也没有实际测量日志，因此无法从源码直接证明“小于 200 字节 gzip”成立。\n- 源码行数、类型定义和 README 文案都不能替代构建后的压缩测量。\n\n这类体积承诺属于发布产物的属性，需要构建和测量流程来支撑。",
+      "followUps": [
+        {
+          "question": "为什么不能直接用源码文件大小推断 gzip 体积？",
+          "answer": "源码包含类型、注释和未压缩代码，打包和压缩会删除或重写大量内容。gzip 体积还受代码模式和压缩算法影响，必须对最终产物测量。",
+          "followUps": []
+        },
+        {
+          "question": "体积检查为什么只在 pull_request 触发？",
+          "answer": "它主要用于比较 PR 相对基线的体积变化，防止意外增大。主分支推送不一定需要重复报告；具体行为取决于工作流配置。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "665c8dc8a130833342d386e4d89a410d9aa748eda3881ae1897d99dc547e438a",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "请概述这个项目的整体架构，并说明 `default_scheduler`、`jobs` 和模块级函数之间的关系。使用 `jobs` 这个别名时有什么需要注意的地方？",
+      "answer": "核心是单文件实现：`Scheduler` 持有 `jobs` 列表并负责执行，`Job` 保存单个任务的配置与状态。模块底部创建 [[单例]] `default_scheduler = Scheduler()`，`every()`、`run_pending()`、`clear()` 等模块级函数只是委托给它，方便绝大多数单调度器场景。\n\n`jobs = default_scheduler.jobs` 直接引用同一个列表，不是拷贝。`clear()` 在无标签时使用 `del self.jobs[:]` 原地清空，因此别名能看到清空结果；但如果外部重新给 `default_scheduler.jobs` 赋值，`jobs` 仍指向旧列表。\n\n库本身没有后台线程或事件循环，需要调用方循环执行 `run_pending()`；这一点与 README 的 in-process 描述一致。`schedule/__init__.py` 中也能看到执行路径没有加锁，因此并发安全不在库的默认保证内。",
+      "followUps": [
+        {
+          "question": "为什么模块级函数不直接操作一个全局列表，而是委托给 `Scheduler` 实例？",
+          "answer": "委托给实例可以同时支持默认调度器和多个独立 `Scheduler`。用户既能使用 `schedule.every()`，也能创建 `Scheduler()` 隔离 jobs；执行、清空、取消等逻辑只维护一份。全局列表则难以支持多调度器，也不便于测试时替换或隔离状态。",
+          "followUps": []
+        },
+        {
+          "question": "如果用户在多线程中同时调用模块级 `every()` 和 `clear()`，当前实现有哪些风险？",
+          "answer": "`Scheduler.jobs` 是普通 list，`append`、切片删除和迭代都没有加锁。并发调用可能出现迭代期间列表被修改、计数不一致或作业丢失。当前上下文没有线程安全保证；文档建议用户自行用线程或队列包装，而不是并发直接操作同一个调度器。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "bee05bb6a64b7155a3a8b07458ebb4e8cfdfac1b35c514bba44aee3fd09c809a",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`every()` 返回 `Job` 后，单位属性、`at()`、`to()`、`tag()` 和 `do()` 分别做什么？为什么作业直到 `do()` 才注册到调度器？如果在 `do()` 之前调用 `run_pending()` 会怎样？",
+      "answer": "`every(interval)` 只创建并返回 `Job(interval, self)`，此时没有注册。后续单位属性设置 `unit`，`at()` 设置 `at_time` 和可选时区，`to()` 设置 `latest`，`tag()` 更新标签集合，整体是 [[Builder模式]] 的链式配置。\n\n`do()` 才真正收尾：它创建 [[functools.partial]] 保存函数与参数，调用 `functools.update_wrapper`，执行 `_schedule_next_run()` 计算首次运行时间，检查 `scheduler` 非空，最后把作业追加到 `scheduler.jobs`。因此配置不完整的 `Job` 不会污染调度列表。\n\n如果尚未设置单位就调用 `do()`，`_schedule_next_run()` 会先抛 `ScheduleValueError`；如果 `Job` 没有关联 scheduler，则在计算完 `next_run` 后才抛 `ScheduleError`。在 `do()` 之前，作业不在 `jobs` 中，`run_pending()` 看不到它。",
+      "followUps": [
+        {
+          "question": "为什么 `do()` 中先计算 `next_run`，再检查 `scheduler` 是否为 `None`？这样安排有什么影响？",
+          "answer": "源码顺序确实是先 `_schedule_next_run()`，再检查 `scheduler`。好处是配置错误优先暴露；影响是手工构造、未关联 scheduler 的 `Job` 也会先做一次时间计算，然后才报注册错误。这不是注册成功，也没有 append 到任何列表。",
+          "followUps": []
+        },
+        {
+          "question": "单数单位属性如 `.second` 与复数属性 `.seconds` 有什么区别？",
+          "answer": "`.seconds` 直接设置 `unit='seconds'` 并返回自身；`.second` 在 `interval != 1` 时抛 `IntervalError`，否则转发到 `.seconds`。这避免 `every(2).second` 这种语义含混的写法，强制多数量使用复数单位。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5148fe2e724592fe04f48f8e6d52090fb22294ab3a486d226f89cd863dd15b48",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`Job` 对象包含哪些关键状态字段？从创建、配置、注册到执行、重新调度，这些字段分别在哪一步被更新？",
+      "answer": "`Job` 的关键字段包括：`interval`、`latest`、`job_func`、`unit`、`at_time`、`at_time_zone`、`last_run`、`next_run`、`start_day`、`cancel_after`、`tags` 和 `scheduler`。\n\n生命周期如下：\n- 创建时只设置 `interval` 和 `scheduler`，其余字段为 `None` 或空集合。\n- 链式配置阶段设置 `unit`、`at_time`、`latest`、标签等；星期属性还会设置 `start_day`。\n- `do()` 中生成 `job_func`，计算 `next_run`，并把作业加入调度器。\n- `run()` 中先检查是否 overdue；未过期则调用 `job_func`，把 `last_run` 更新为当前时间，再重新计算 `next_run`。\n- 如果返回 `CancelJob` 或被标记为 overdue，调度器会移除该作业。\n\n`Job.__lt__` 按 `next_run` 排序，因此正常注册后的作业可比较；若手工构造且 `next_run` 为 `None`，比较可能触发 `TypeError`。",
+      "followUps": [
+        {
+          "question": "`__repr__` 中为什么对 `Job` 类型的参数特殊处理？",
+          "answer": "`__repr__` 对参数中的 `Job` 实例使用 `str(x)` 而不是 `repr(x)`，避免一个作业的参数又引用回自身时无限递归。HISTORY 中也提到过修复 `RecursionError` 的相关问题，但具体实现路径正是这里的类型判断。",
+          "followUps": []
+        },
+        {
+          "question": "`last_run` 和 `next_run` 分别在什么时区语义下保存？",
+          "answer": "`last_run` 用 `datetime.datetime.now()` 保存本地 naive 时间；`next_run` 在 `_schedule_next_run()` 最后如果存在 `at_time_zone`，会转回本地时区并去掉 tzinfo，因此对外也是本地 naive 时间。两者都保持历史 API 的 naive 形式。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "dadfe84ab82dc1b5925e090db1e05e45a34ff1cd0c1cbd62fe5b6bd43383f692",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "请说明 `get_jobs()`、`clear()`、`cancel_job()`、`next_run()` 和 `idle_seconds()` 的实际语义与返回值。它们和直接操作 `schedule.jobs` 有什么区别？",
+      "answer": "这些函数都委托给 `default_scheduler`：\n\n- `get_jobs(tag=None)`：无标签时返回 `self.jobs[:]` 拷贝；有标签时返回满足 `tag in job.tags` 的新列表。修改返回列表不会改变调度器，但其中的 `Job` 对象仍共享。\n- `clear(tag=None)`：无标签时 `del self.jobs[:]` 原地清空；有标签时用 [[生成器]] 做切片赋值，过滤掉匹配标签的作业。\n- `cancel_job(job)`：调用 `self.jobs.remove(job)`，捕获 `ValueError` 并静默返回，因此重复取消不会报错。\n- `next_run(tag=None)`：没有作业或过滤后为空时返回 `None`，否则返回最早作业的 `next_run`。\n- `idle_seconds()`：没有下一次运行时返回 `None`，否则返回 `(next_run - now).total_seconds()`。\n\n直接操作 `schedule.jobs` 可以绕过标签与封装，但也容易破坏别名和调度器一致性。",
+      "followUps": [
+        {
+          "question": "`cancel_job()` 静默捕获 `ValueError` 是优点还是缺点？",
+          "answer": "优点是让取消操作更接近幂等，重复取消不会让调用方崩溃。缺点是会吞掉“传入对象根本不在列表中”的信息，可能掩盖逻辑错误。若需要严格校验，可以在调用前用 `get_jobs()` 判断，或在外层记录日志。",
+          "followUps": []
+        },
+        {
+          "question": "`get_jobs()` 返回列表拷贝，是否意味着可以安全地并发修改作业对象？",
+          "answer": "不是。返回的是列表拷贝，但 `Job` 对象本身仍是共享引用。调用方仍可能修改 `next_run`、`tags` 等字段；若另一个线程同时在执行或重新调度该作业，会产生竞态。拷贝只保护列表结构，不提供对象级线程安全。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "5a1af4767a97d2d779890e881de256d4c2ca0330a943fd2d78ab5a584261c6ec",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "请按照源码顺序描述 `_schedule_next_run()` 如何计算下一次运行时间。为什么最后需要一个 `while next_run <= now` 循环？",
+      "answer": "`_schedule_next_run()` 先校验 `unit` 合法，再处理 `latest`：若存在，要求 `latest >= interval`，然后用 `random.randint(interval, latest)` 得到本次间隔；否则使用固定 `interval`。\n\n接着在 `at_time_zone` 上下文中取 `now`，令 `next_run = now`。如果设置了 `start_day`，调用 `_move_to_next_weekday()` 移到最近的星期几；如果设置了 `at_time`，调用 `_move_to_at_time()` 替换时、分、秒并修正 UTC 偏移。\n\n然后构造 `period = timedelta(**{unit: interval})`。若 `interval != 1` 先加一个周期；随后 `while next_run <= now` 持续加 `period`，确保下次运行严格晚于当前时间。最后调用 `_correct_utc_offset()`，并在有 `at_time_zone` 时转回本地时区、去掉 tzinfo。\n\n`while` 循环解决的是“今天的目标时间已经过去”或初次计算仍不晚于当前时间的问题。",
+      "followUps": [
+        {
+          "question": "如果 `every().hour.at(':10')` 在当前时间 12:00 创建，`next_run` 大概是什么？到 12:10 之后执行会怎样？",
+          "answer": "创建时 `_move_to_at_time()` 会把时间设为 12:10，`next_run` 大于 12:00，所以首次运行在 12:10。若在 12:10 之后执行，`run()` 重新计算时目标时间已过，`while` 会推进到 13:10。这正是不补跑、只取未来一次的行为。",
+          "followUps": []
+        },
+        {
+          "question": "`latest < interval` 时源码抛出的错误消息说什么？这有什么问题？",
+          "answer": "源码条件是 `if not (self.latest >= self.interval)`，即 `latest < interval` 时抛 `ScheduleError`，但消息写的是 ``latest is greater than interval``，方向写反了。行为上仍会阻止非法区间，只是错误信息容易误导调用方。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d82139ee509b0663f7f890f98749e213f55495add69e7bb4115b5b735e51a244",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`Job.at()` 对 `time_str` 的格式校验和解析逻辑是怎样的？请分别说明 daily、hourly、minutely 作业下 `\"HH:MM\"`、`\":30\"`、`\"30:30\"` 这类字符串的含义。",
+      "answer": "`at()` 先检查单位：只允许 `days`、`hours`、`minutes`，或者已经通过星期属性设置了 `start_day`。若传入 `tz`，函数内部延迟导入 [[pytz]]，字符串交给 `pytz.timezone()`，`BaseTzInfo` 对象直接使用，其他类型抛 `ScheduleValueError`。\n\n格式校验按单位分支：\n- `days` 或 `start_day`：正则要求 `HH:MM` 或 `HH:MM:SS`，随后额外检查小时在 0 到 23。\n- `hours`：正则要求 `MM:SS` 或 `:SS`。\n- `minutes`：正则要求 `:SS`。\n\n解析时按冒号分段：三段为时、分、秒；两段且单位是 `minutes` 时只取秒；两段且单位是 `hours` 且第一段非空时取分、秒；否则按小时、分钟解析，秒为 0。随后根据单位把不相关字段归零。\n\n因此 `every().hour.at(':30')` 是每小时第 30 分钟整点，`every().minute.at(':15')` 是每分钟第 15 秒，`every().day.at('02:30')` 是每天 02:30:00。",
+      "followUps": [
+        {
+          "question": "为什么 daily 的正则允许 `[0-2]\\d`，后面还要额外检查小时？",
+          "answer": "该正则能匹配 00 到 29，覆盖面比合法小时更宽，因此需要在解析后显式检查 `0 <= hour <= 23`，否则 `25:00` 这类字符串会漏过正则。最终由 `datetime.time(hour, minute, second)` 构造，非法值本也会报错，但显式检查能给出更明确的 `ScheduleValueError`。",
+          "followUps": []
+        },
+        {
+          "question": "`every().hour.at('30:30')` 和 `every().hour.at(':30')` 分别会得到什么 `at_time`？",
+          "answer": "前者两段且第一段非空，按 `hours` 分支解析为分钟 30、秒 30，小时归零，得到 00:30:30。后者第一段为空，走默认小时/分钟分支，随后小时归零，得到 00:30:00。两者的分钟相同，但秒不同。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "bb02b2f4b691e21339d692c178f1a032e25b20b53e49157a160d773f8a011fe6",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`to(latest)` 如何影响下一次运行时间？随机范围是开区间还是闭区间？如果 `latest` 小于 `interval` 会发生什么？",
+      "answer": "`to(latest)` 只设置 `Job.latest`，不立即计算。真正生效在 `_schedule_next_run()`：若 `latest` 不为 `None`，先检查 `latest >= interval`，再用 `random.randint(interval, latest)` 生成本次实际间隔。`randint` 的边界是闭区间，因此 `every(5).to(10).seconds` 的间隔可以是 5 到 10 秒之间的整数。\n\n因为每次 `_schedule_next_run()` 都会重新随机，所以作业每次运行后的间隔独立变化。若 `latest < interval`，源码抛 `ScheduleError`，但错误消息写成了 `latest is greater than interval`，方向与实际条件相反。\n\n随机性也意味着测试不能假定固定时间；可以通过固定随机种子或替换 `random.randint` 来稳定断言。",
+      "followUps": [
+        {
+          "question": "如果希望随机区间包含小数秒，当前实现能直接支持吗？",
+          "answer": "当前实现使用 `random.randint(interval, latest)`，参数是整数，生成的也是整数；`timedelta` 的对应单位接收整数。要支持小数秒需要改变 API 和随机函数，例如使用 `uniform` 并明确浮点精度，但当前源码没有这条路径。",
+          "followUps": []
+        },
+        {
+          "question": "随机区间对 `until()` 截止逻辑会带来什么影响？",
+          "answer": "`until()` 只看 `cancel_after` 与当前/下一次运行时间。随机间隔可能让下一次 `next_run` 提前或推迟，从而更早或更晚触发下一次 overdue 判断。但截止判断本身不感知随机性，仍是 `next_run > cancel_after` 时返回 `CancelJob`。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "390acbd32b04603a4f9237097cab57dfbbcae5c9fc6075f5e2f47dafcf899ee6",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "为什么 `_schedule_next_run()` 在存在时区时还要把 `next_run` 转成本地 naive 时间？`should_run()` 和 `run_pending()` 的排序如何依赖这个表示？",
+      "answer": "在 [[时区]] 场景下，计算先在 `at_time_zone` 中进行，得到带时区信息的 `next_run`。但为了保持历史 API 一致，源码最后执行 `next_run.astimezone()` 转回本地时区，再 `replace(tzinfo=None)` 去掉时区信息，得到 [[naive-datetime]]。这样 `next_run` 和 `last_run` 都表现为 Python 本地时间，调用方不需要处理混合的 aware/naive 比较。\n\n`should_run` 使用 `datetime.datetime.now() >= self.next_run`，两边都是本地 naive，比较语义一致。`run_pending()` 先用生成器筛选 `should_run` 为真的作业，再 `sorted()`，排序依赖 `Job.__lt__` 比较 `next_run`。因此 `next_run` 的表示必须统一，否则排序和比较会混乱。\n\n排序发生在执行之前，之后某个作业重新调度不会改变本轮已排序列表的顺序。",
+      "followUps": [
+        {
+          "question": "如果保留带时区的 `next_run`，会破坏哪些现有行为？",
+          "answer": "会改变公开属性的类型和比较语义：`should_run()` 当前用本地 naive `now` 比较，若 `next_run` 是 aware，直接比较会抛错。`idle_seconds()` 和用户代码中的减法也需要统一。历史 API 和文档都声明 `next_run` 是本地 naive，因此保留 aware 会造成向后不兼容。",
+          "followUps": []
+        },
+        {
+          "question": "`Job.__lt__` 直接比较 `next_run`，在什么情况下可能出问题？",
+          "answer": "如果两个作业的 `next_run` 都是 datetime，比较正常；如果某个作业 `next_run` 为 `None`，`None < datetime` 会触发 `TypeError`。正常通过 `do()` 注册的作业已经计算过 `next_run`，但手工构造并塞入 jobs 列表的作业可能破坏排序。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "921ae102515891c4549371183ba63f2225e6be11ab1379499b6009310acd695c",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`run_pending()` 在错过多个周期时为什么只运行一次？它和 `run_all()` 在执行范围、顺序和延迟上有什么区别？",
+      "answer": "`run_pending()` 先构造 [[生成器]]，只保留 `job.should_run` 为真的作业，再排序执行。`run()` 内部重新计算 `next_run` 时以当前 `now` 为基准，`while next_run <= now` 只把时间推进到未来一次，而不会为过去每个周期补生成运行记录。因此即使错过很多周期，也只会执行一次。\n\n`run_all()` 不检查 `should_run`，遍历 `self.jobs[:]` 副本，对每个作业调用 `_run_job()`，并在每次之后 `sleep(delay_seconds)`。它用于手动全部触发，执行完同样会重新调度。\n\n区别：\n- 执行范围：`run_pending` 只跑到期作业，`run_all` 跑全部。\n- 顺序：`run_pending` 按 `next_run` 排序，`run_all` 按列表当前顺序。\n- 延迟：`run_all` 支持作业间延迟，`run_pending` 没有。\n- 列表副本：`run_all` 用副本，执行中取消自身不会影响本轮迭代结构。",
+      "followUps": [
+        {
+          "question": "`run_pending()` 的筛选生成器在什么时候被消费？执行过程中修改 jobs 会怎样？",
+          "answer": "`runnable_jobs` 是生成器，`sorted(runnable_jobs)` 时会被完整消费并排序。排序完成后得到的是作业列表，后续 for 循环不再检查 `should_run`。因此执行前一个作业时修改另一个作业的 `next_run` 或从 jobs 中移除它，不会改变本轮已选中的执行集合。",
+          "followUps": []
+        },
+        {
+          "question": "`run_all()` 最后一次执行后也会 `sleep(delay_seconds)`，这符合直觉吗？",
+          "answer": "源码的 `for` 循环内先 `_run_job(job)` 再 `time.sleep(delay_seconds)`，所以最后一次作业之后也会等待。它不影响正确性，但会让调用方多等一个延迟周期；如果追求“仅作业之间延迟”，可以改成只在非最后一次后 sleep，但当前实现并非如此。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "b7acc8b8930941d898d8ae1f981fb8127459ceb558a6cf81fec51289ed120c2f",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "作业可以通过哪些方式取消自身？`_run_job()` 如何识别 `CancelJob`？当作业同时满足 `until()` 截止条件并返回了其他值时，哪个结果优先？",
+      "answer": "作业可以返回 `CancelJob` 类或 `CancelJob()` 实例。`_run_job()` 的判断是 `isinstance(ret, CancelJob) or ret is CancelJob`，因此两种形式都会触发 `scheduler.cancel_job(job)`。用户也可以直接调用 `cancel_job()` 从外部取消。\n\n`run()` 中 `until()` 相关逻辑有两次检查：执行前如果当前时间已 overdue，直接返回 `CancelJob`，不调用 `job_func`；执行后重新计算 `next_run`，如果下一次运行已经超过 `cancel_after`，也会返回 `CancelJob`。这第二次检查发生在保存 `job_func` 返回值之后，并且会覆盖返回值，因此 `CancelJob` 优先。\n\n注意 `run_all()` 遍历的是 `jobs[:]` 副本；一个作业执行中取消另一个尚未执行的作业，后者仍可能在本轮副本中被执行。这是需要留意的边界行为。",
+      "followUps": [
+        {
+          "question": "为什么 `_run_job()` 同时判断 `isinstance(ret, CancelJob)` 和 `ret is CancelJob`？",
+          "answer": "因为用户可能返回类本身，也可能返回实例。`isinstance(ret, CancelJob)` 覆盖实例，`ret is CancelJob` 覆盖类对象。两者都表示取消意图，统一处理后调用 `cancel_job()`，避免只支持一种写法造成困惑。",
+          "followUps": []
+        },
+        {
+          "question": "如果作业在 `run_all()` 中取消了自己，后续作业还会执行吗？",
+          "answer": "会。`run_all()` 遍历的是 `self.jobs[:]` 副本，取消操作只是从原列表移除当前作业，不会改变正在迭代的副本结构。循环继续执行副本中的后续作业。若取消的是其他尚未执行的作业，由于它仍在副本中，轮到它时仍会执行。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "c31fecaf9e0214ca3051f3f94abc7bb1bb7eb5e9193eaf7c033c00ca72d4b248",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`until()` 接受哪些参数类型？它如何把字符串或 `time` 对象转换成截止时间？如果传入的时间已经过去，会发生什么？",
+      "answer": "`until()` 接受 `datetime.datetime`、`datetime.timedelta`、`datetime.time` 和字符串。转换规则：\n- `datetime` 直接作为 `cancel_after`。\n- `timedelta` 用 `now() + delta`。\n- `time` 用 `datetime.combine(now(), until_time)` 得到今天该时刻。\n- 字符串依次尝试 `%Y-%m-%d %H:%M:%S`、`%Y-%m-%d %H:%M`、`%Y-%m-%d`、`%H:%M:%S`、`%H:%M`；若解析失败抛 `ScheduleValueError`。如果字符串里不含 `-`，视为仅时间，替换为今天的年、月、日。\n\n转换完成后，如果 `cancel_after < datetime.now()`，抛 `ScheduleValueError`，不允许把截止时间设在过去。注意仅时间字符串若今天该时刻已过，也会触发这个错误。\n\n运行阶段，`run()` 在执行前检查当前时间是否 overdue，执行后检查新的 `next_run` 是否 overdue；任一为真都返回 `CancelJob`。",
+      "followUps": [
+        {
+          "question": "如果 `until(\"18:30\")` 在当天 19:00 调用，会发生什么？",
+          "answer": "字符串不含 `-`，会被替换为今天的 18:30。转换后 `cancel_after` 早于当前 19:00，因此立即抛 `ScheduleValueError`，提示不能调度到过去。若想跨到明天，需要传完整日期或使用 `timedelta`。",
+          "followUps": []
+        },
+        {
+          "question": "`until()` 的第二次 overdue 检查为什么能取消一个刚刚执行完的作业？",
+          "answer": "执行后 `_schedule_next_run()` 会算出下一次运行时间。如果这个下一次时间已经超过 `cancel_after`，说明未来不会再有机会在截止前运行，因此 `run()` 返回 `CancelJob`。即使 `job_func` 返回了普通值，也会被覆盖为取消信号。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "8591defe81542dc335846e42b71a20d7c38b627b86abe7cf037a288c2b5bb90a",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "如果作业函数抛出异常，调度器会怎么处理？库本身是否提供线程安全或后台执行能力？请结合文档和源码说明。",
+      "answer": "源码中 `run()` 直接调用 `self.job_func()`，没有 `try/except`；`run_pending()` 和 `run_all()` 也没有捕获异常。因此作业异常会向上冒泡，中断当前 `run_xyz` 调用，同一轮中尚未执行的作业不会继续。文档 `docs/exception-handling.rst` 也明确说明 Schedule 不捕获异常，建议用户用 [[装饰器]] 包装作业。\n\n关于并发：`Scheduler.jobs` 是普通 list，`run_pending()`、`clear()`、`append` 等都没有锁，因此库本身不提供 [[线程安全]] 保证。`docs/background-execution.rst` 和 `docs/parallel-execution.rst` 给出的是用户自建线程或队列的示例，而不是库内置能力。\n\n如果多个线程同时操作同一个调度器，需要调用方自己加锁或采用队列串行化；当前上下文没有实现层面的并发保护。",
+      "followUps": [
+        {
+          "question": "一个作业抛异常后，它自己的 `next_run` 会怎样？",
+          "answer": "`run()` 中 `job_func()` 在更新 `last_run` 和 `_schedule_next_run()` 之前调用。异常一旦抛出，后续赋值和重新调度都不会执行，因此该作业的 `last_run` 和 `next_run` 保持原值。下一次 `run_pending()` 仍可能再次选中它并再次执行。",
+          "followUps": []
+        },
+        {
+          "question": "如果希望一个作业失败后取消自身，文档建议怎么做？",
+          "answer": "文档示例建议写一个异常捕获装饰器，内部 `try/except` 包住作业函数；如果配置了 `cancel_on_failure`，在异常时返回 `schedule.CancelJob`。这样异常被装饰器吞掉，`_run_job()` 收到取消信号并移除作业，同时不会中断同轮其他作业。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "93bbd00c533cdea8c3bb32a7ed26c9209bae3a0b4a7a4198434d24c547ea4893",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`at()` 如何处理时区参数？为什么 `pytz` 在函数内部导入而不是模块顶层导入？如果用户没有安装 `pytz` 会怎样？",
+      "answer": "`at(time_str, tz)` 中只有 `tz is not None` 时才执行 `import pytz`，这是典型的可选依赖加载路径。传入字符串时调用 `pytz.timezone(tz)`；传入 `pytz.BaseTzInfo` 时直接使用；其他类型抛 `ScheduleValueError`。\n\n不在模块顶层导入，可以让不使用 [[时区]] 功能的用户无需安装 [[pytz]]，符合核心依赖为空的设计。`pyproject.toml` 也把 `pytz` 放在 `timezone` 可选依赖组中。\n\n如果用户传入时区但环境没有安装 `pytz`，函数内的 import 会抛 `ModuleNotFoundError`，文档 FAQ 也提示需要 `pip install pytz`。若 `tz` 为 `None`，完全不会触发该导入。",
+      "followUps": [
+        {
+          "question": "`at()` 接受字符串和 `pytz.BaseTzInfo`，为什么还要拒绝其他类型？",
+          "answer": "后续代码依赖 `pytz` 时区的 `normalize()` 和 `utcoffset()` 行为。接受任意类型可能在计算阶段才失败，错误位置更晚。显式检查并抛 `ScheduleValueError` 能让调用方尽早知道参数不受支持。",
+          "followUps": []
+        },
+        {
+          "question": "如果项目同时使用标准库 `zoneinfo`，当前 `at()` 能直接接受 `ZoneInfo` 对象吗？",
+          "answer": "从源码看不能。`at()` 只接受字符串或 `pytz.BaseTzInfo`，其他类型抛 `ScheduleValueError`。`ZoneInfo` 不是 `pytz.BaseTzInfo`，因此直接传入会失败。若要支持需要扩展类型判断和后续的偏移修正逻辑。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "865db2e045dcdd984f5e4ee9c5fdfe85e42c315aea7e147b9ae4ec645cf2180f",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "请解释 `_correct_utc_offset()` 中 `normalize`、`fixate_time` 和 DST gap 的处理逻辑。为什么需要“先减偏移量，再 normalize，再检查”的过程？",
+      "answer": "该方法只在存在时区时工作。它先用 `self.at_time_zone.normalize(moment)` 让 [[pytz]] 修正 UTC 偏移；比较修正前后的 `utcoffset()`，若无变化直接返回。\n\n若偏移变化且 `fixate_time=False`，说明不需要保持原时分，直接返回 normalize 后的时刻。若 `fixate_time=True`（通常是因为设置了 `at_time`），则要尽量保持原 HH:mm：先计算 `offset_diff = after - before`，用 `moment -= offset_diff` 把时间组件调回原值；再次 normalize 后检查偏移是否又变。如果又变，说明原时间落在 [[DST]] 跳变造成的不存在区间，`moment += offset_diff` 做兜底，把作业安排到跳变后的合法时间，例如 02:30 变成 03:30。\n\n这个过程本质是在“保持绝对时刻”与“保持墙上时间”之间做取舍，`fixate_time` 决定是否优先保持墙上时间。",
+      "followUps": [
+        {
+          "question": "为什么 `_move_to_at_time()` 和 `_schedule_next_run()` 都调用 `_correct_utc_offset()`？",
+          "answer": "`_move_to_at_time()` 替换时分秒后，可能跨入不同的 UTC 偏移，因此立即修正一次。随后 `_schedule_next_run()` 又可能加周期、跨 DST，再次修正。两处调用的 `fixate_time` 也不同：前者固定为 True，后者取决于是否设置了 `at_time`。",
+          "followUps": []
+        },
+        {
+          "question": "DST 回拨导致同一墙上时间出现两次时，当前逻辑会选哪一次？",
+          "answer": "源码没有显式选择 fold，而是依赖 `pytz.normalize()` 和偏移比较。文档 timezones 描述的是作业只在第一次命中该墙上时间时运行，不重复第二次。但从当前代码只能确认它通过偏移修正维持下一次运行，具体 fold 选择由 pytz 的 normalize 行为决定。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "1bc2cc209af7dd5b43976f3574682f4fbcf196bdbf53431473f824173abfb4db",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "当作业用 `.at(\"10:30\", \"America/New_York\")` 在柏林时区运行时，`next_run` 最终表示的是哪个时区的时间？这样设计对调用方有什么影响？",
+      "answer": "计算阶段，`_schedule_next_run()` 使用 `datetime.datetime.now(self.at_time_zone)` 在纽约时区中推算下一次 10:30，并做 DST 修正。计算完成后，如果 `at_time_zone` 不为 `None`，源码执行 `next_run.astimezone()` 转回本地时区，再 `replace(tzinfo=None)` 去掉时区信息。\n\n因此对外暴露的 `next_run` 是调用方本地时区的 [[naive-datetime]]，不是纽约时间。文档 `docs/timezones.rst` 的示例也展示了柏林本地 15:30 对应纽约 10:30。`last_run` 同样用本地 `now()` 保存。\n\n影响是 API 保持统一，调用方无需处理 aware/naive 混用；但调试时不能把 `next_run` 直接当成目标时区时间，需要先知道它已经转成本地时间。",
+      "followUps": [
+        {
+          "question": "如果调用方想显示作业在纽约时区的实际执行时间，应该怎么做？",
+          "answer": "`next_run` 已经丢失时区信息，不能直接反推。调用方需要根据原始 `.at()` 的时区配置和作业的 `unit`/`at_time` 重新计算，或者保存目标时区并自行转换。库当前没有在 `Job` 上暴露“目标时区下的 next_run”字段。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 `next_run` 不直接保存 aware datetime，让调用方自行转换？",
+          "answer": "这是向后兼容选择。历史 API 和文档都声明 `next_run`、`last_run` 是本地 naive；`should_run()` 也用本地 naive `now` 比较。改成 aware 会改变属性类型和比较规则，破坏现有调用方。源码注释也明确说明是为了与旧版本一致。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "98499a23920c8ed7c4aaddfdf7a71b9fd92bff932ffbdc3d90fe56d60df94245",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "测试文件如何隔离全局调度器状态、模拟时间并处理可选依赖 `pytz`？请结合 `setUp()`、`make_tz_mock_job()` 和 `mock_datetime` 的调用形态说明。",
+      "answer": "`SchedulerTests.setUp()` 调用 `schedule.clear()`，在每个测试前清空默认调度器，避免作业跨用例污染。`make_mock_job()` 创建 [[Mock]] 作业函数；`make_tz_mock_job()` 先尝试导入 [[pytz]]，失败时 `skipTest`，保证未安装可选依赖时相关用例跳过而不是报错。\n\n时区测试大量使用 `with mock_datetime(2023, 10, 19, 15, 0, 0, TZ_UTC):` 这样的上下文管理器来固定当前时间，部分调用还传入 `fold=0/1`。从调用形态看，它替换了 `datetime.datetime` 的 now 行为，但 `mock_datetime` 的具体定义未在给定上下文中展示，无法确认其内部实现细节。\n\n测试覆盖了精确秒、跨时区、DST 进入/退出、虚构时区同时跳变等场景，说明设计上把时间源集中替换，并对 [[DST]] 边界做重点验证。",
+      "followUps": [
+        {
+          "question": "为什么时区测试要在 `pytz` 缺失时跳过，而不是让整个测试套件失败？",
+          "answer": "因为 `pytz` 是可选依赖，核心功能不依赖它。测试套件需要在没有安装 pytz 的环境中仍能验证基础调度逻辑；时区用例在缺少依赖时跳过，既保持 CI 双变体（有/无 pytz）可运行，也不会把可选依赖变成硬性测试前提。",
+          "followUps": []
+        },
+        {
+          "question": "`mock_datetime` 传入 `fold=0/1` 暗示了测试关注什么？",
+          "answer": "`fold` 用于区分 DST 回拨时同一墙上时间的第一次和第二次出现。测试在 `test_tz_minutes_year_round` 中分别用 fold=0 和 fold=1 构造时间，说明它要验证作业在重复时间段内的下一次运行计算是否稳定、不会错误重复或跳过。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "3332ca0e84d1bc804cee9d693829cc6e3d4868ed5ab991e71493d1a13e47aa77",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "`Job.tag()` 如何校验标签？为什么用 `collections.abc.Hashable` 而不是直接 `set.update()`？按标签查询和清除作业时分别怎样实现？",
+      "answer": "`tag(*tags)` 先检查 `all(isinstance(tag, Hashable) for tag in tags)`，任一不满足就抛 `TypeError(\"Tags must be hashable\")`，然后 `self.tags.update(tags)`。`Hashable` 来自 `collections.abc`，dict 和 list 不是 [[哈希]] 对象，tuple、字符串、整数和布尔值可以。\n\n先校验再 update 的价值是尽早给出明确错误；如果直接 update，不可哈希对象会在 set 内部抛更底层的 `TypeError`，而且可能在校验多个标签时只处理到一半。标签集合本身会自动去重，重复标签不会增加数量。\n\n查询时 `get_jobs(tag)` 用 `tag in job.tags` 过滤；`clear(tag)` 用生成器做切片赋值，保留不匹配的作业。`cancel_job()` 则按对象身份从列表中移除，并静默捕获 `ValueError`。",
+      "followUps": [
+        {
+          "question": "`tag` 参数允许列表或字典吗？为什么？",
+          "answer": "不允许。源码要求每个标签都是 `Hashable`，list 和 dict 不可哈希，会触发 `TypeError`。这是因为标签最终要放入 set，set 依赖哈希值判重和查找；不可哈希对象无法稳定地作为集合元素。",
+          "followUps": []
+        },
+        {
+          "question": "`clear(tag)` 使用切片赋值而不是新建列表，有什么影响？",
+          "answer": "切片赋值 `self.jobs[:] = (job for job in self.jobs if tag not in job.tags)` 会原地修改列表对象，因此像 `schedule.jobs` 这样的别名仍能看到过滤后的结果。若改成 `self.jobs = [...]`，别名会指向旧列表，默认调度器的 jobs 引用关系就被破坏。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "06abe2bef27395777567b4478e39433f418d93ddff16c52732be628b8cd8e9c1",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "项目的 CI 和 tox 配置如何覆盖不同 Python 版本以及有/无 `pytz` 两种环境？测试本身如何保证全局状态隔离？",
+      "answer": "`tox.ini` 的 `envlist = py3{7,8,9,10,11,12}{,-pytz}` 为每个 Python 版本生成普通环境和带 `pytz` 的环境。`[testenv]` 安装 pytest、pytest-cov、mypy、types-pytz，`pytz: pytz` 表示只有带 pytz 的环境才安装可选依赖。命令同时运行 pytest 和 `python -m mypy -p schedule`。\n\nGitHub Actions 的 [[CI]] 矩阵覆盖 Python 3.7 到 3.12，并额外运行 docs、format、setuppy 三个 [[tox]] 环境。\n\n测试隔离主要靠 `SchedulerTests.setUp()` 中的 `schedule.clear()`，每个用例前清空默认调度器；时区用例通过 `make_tz_mock_job()` 在 [[pytz]] 缺失时跳过。`mock_datetime` 固定时间源，避免依赖真实时钟。整体上，[[CI]] 同时验证核心零依赖路径和可选时区路径。",
+      "followUps": [
+        {
+          "question": "为什么 tox 要为每个 Python 版本跑有/无 pytz 两个环境，而不是只跑有 pytz 的？",
+          "answer": "核心库声明零运行时依赖，只有时区功能需要 pytz。无 pytz 环境验证基础调度、导入和测试在缺少可选依赖时仍能工作；有 pytz 环境验证时区和 DST 路径。两者结合才能防止无意中把 pytz 变成硬依赖。",
+          "followUps": []
+        },
+        {
+          "question": "`mypy` 在 tox 中作为测试命令运行，和 pytest 失败有什么不同影响？",
+          "answer": "pytest 验证运行时行为，mypy 验证类型注解和调用契约。二者在同一 tox 命令中串行执行，任一返回非零都会让环境失败。这意味着类型错误也会阻塞 CI，而不仅是运行时测试失败。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d4e368df783fe33e168c8f19bdb09297afd3ef9aef1ee6e6509d0f1f07fc5825",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "这个项目在 `pyproject.toml` 和 `setup.py` 中分别声明了哪些打包信息？可选依赖 `pytz` 的声明路径是否完全一致？从当前上下文看有哪些需要验证的风险？",
+      "answer": "`pyproject.toml` 使用 PEP 621 的 `[project]` 表，声明 `requires-python >= 3.7`、`dependencies = []`，并把 `pytz` 放在 `[project.optional-dependencies] timezone = [\"pytz\"]`。版本、classifiers、keywords、authors 是 dynamic。`setup.py` 则提供 `packages`、`package_data`（包含 [[py.typed]]）、版本号、描述、classifiers 等元数据。\n\n风险点：\n- `setup.py` 没有显式 `install_requires` 或 `extras_require`，而 `pyproject.toml` 有 optional-dependencies。构建后端如何合并两处元数据，需要检查实际生成的 wheel 元数据，当前上下文无法确认 `pip install schedule[timezone]` 一定可用。\n- 版本号在 `setup.py` 和 `docs/conf.py` 中硬编码为 1.2.2，`pyproject.toml` 又使用 dynamic version，发布时需要同步。\n\n核心依赖为空与 README 的轻量描述一致，但时区路径依赖 [[pytz]]，文档也明确要求安装。",
+      "followUps": [
+        {
+          "question": "如果构建出的 wheel 没有暴露 `timezone` extra，用户安装 `schedule[timezone]` 会怎样？",
+          "answer": "pip 可能提示找不到匹配的 extra，或者忽略 extra 而不安装 pytz，具体取决于元数据。用户随后调用 `.at(..., tz)` 会在函数内 import 时遇到 `ModuleNotFoundError`。因此发布前应检查 wheel 的 `Provides-Extra` 和 `Requires-Dist` 元数据。",
+          "followUps": []
+        },
+        {
+          "question": "`py.typed` 在打包中起什么作用？",
+          "answer": "[[py.typed]] 是 PEP 561 的标记文件，告诉类型检查器该包自带内联类型注解。`setup.py` 通过 `package_data` 把它打进 wheel，这样下游使用 [[mypy]] 等工具时可以读取 `schedule` 的类型信息，而不是把它当作无类型包。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "d3fc4a3adde3b70a138b258732e205544a047da606058815e1a81f05beab1267",
+      "caseId": "schedule",
+      "variant": "generation",
+      "question": "项目如何保证类型标注和代码格式？从当前配置看，发布新版本需要同步哪些文件、执行哪些步骤？",
+      "answer": "类型方面，包内包含 [[py.typed]]，`setup.cfg` 配置 `[mypy] files=schedule`，tox 中运行 `python -m mypy -p schedule --install-types --non-interactive`。这说明 [[mypy]] 检查被纳入测试环境，[[py.typed]] 让下游也能使用这些注解。\n\n格式方面，`requirements-dev.txt` 固定 `black==20.8b1`，`docs/development.rst` 也要求使用该版本，tox 的 `format` 环境执行 `black --check .`。\n\n发布流程在 `docs/development.rst`：更新 `HISTORY.rst` 和 `AUTHORS.rst`，提升 `setup.py` 与 `docs/conf.py` 中的版本号，合并到 master，打 `X.Y.Z` tag 并推送；然后安装 build/twine，执行 `python3 -m build --wheel`，先上传测试仓库再上传正式 PyPI。项目声明遵循语义化版本。注意旧版 black 与较新 Python 的兼容性需要实际验证，不能仅凭配置断言。",
+      "followUps": [
+        {
+          "question": "为什么发布流程要同时修改 `setup.py` 和 `docs/conf.py`？",
+          "answer": "因为 `setup.py` 中的 `SCHEDULE_VERSION` 决定包版本，`docs/conf.py` 中的 `version`/`release` 决定文档版本展示。两者没有自动同步机制；若只改一处，会出现安装包版本与文档版本不一致。发布检查应确认两处一致。",
+          "followUps": []
+        },
+        {
+          "question": "`black --check` 在 CI 中失败意味着什么？应该怎样修复？",
+          "answer": "意味着有文件不符合项目固定的 black 格式。修复方式是在本地使用相同版本的 black 运行 `black .`，然后提交格式化结果。使用相同版本很重要，因为不同 black 版本的格式规则可能不同，会导致 CI 与本地结果不一致。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    }
+  ]
+}

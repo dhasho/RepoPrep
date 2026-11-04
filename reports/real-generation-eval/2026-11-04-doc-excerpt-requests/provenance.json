@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "repoprep-doc-excerpt-provenance-v1",
+  "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+  "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+  "sourceCommit": "6208425e18414bf304e9a3821e02ad0e87648dab",
+  "sourceFiles": 107,
+  "reportRawFileSha256": "dc54d42681dcca5a303cb9f258c667e2f92920e6f8c772b89d1c854da8df94fa",
+  "reportCanonicalSha256": "fad3d0e27a47caaedaaa5623558492a26b723c5fcb9680456dbb47867b206efe",
+  "syntheticAuditRequestHash": "6f0c16713b528f4a0cdbde070b83ca33c9f7171b2b9e64715283e5e44a9d7769",
+  "realRequestHash": "6f0c16713b528f4a0cdbde070b83ca33c9f7171b2b9e64715283e5e44a9d7769",
+  "sourceHashesFrozenAndMatched": true,
+  "sameInferenceAsPrior": true,
+  "networkRequestsThisRun": 1,
+  "providerUsageMatchesTransportObserver": true,
+  "sourceOmission": "Only confirmed long Python docstrings are excerpted, visibly marked with complete=false. Non-documentation AST identity was checked for9 real candidates using isolated Python parsing, not upstream execution; __doc__ text is deliberately not preserved.",
+  "unaffectedCases": [
+    {
+      "caseId": "mitt",
+      "requestHash": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+      "method": "Exact request-body hash unchanged from the pre-excerpt synthetic capture; no fresh provider measurement in this report."
+    },
+    {
+      "caseId": "p-limit",
+      "requestHash": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+      "method": "Exact request-body hash unchanged from the pre-excerpt synthetic capture; no fresh provider measurement in this report."
+    },
+    {
+      "caseId": "schedule",
+      "requestHash": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+      "method": "Exact request-body hash unchanged from the pre-excerpt synthetic capture; no fresh provider measurement in this report."
+    }
+  ],
+  "validation": {
+    "typecheck": "passed",
+    "fileSelection": 96,
+    "questionBudget": 118,
+    "contextAuditSynthetic": 12,
+    "realEvaluationPipelineSynthetic": 61,
+    "security": {
+      "passed": 77,
+      "skipped": 3,
+      "failed": 0
+    },
+    "nativeWorkflow": "WORKFLOW-OK; isolated fixture cleaned",
+    "nativeBuildSmoke": "SMOKE-OK; isolated fixture cleaned"
+  },
+  "contextAudit": {
+    "filename": "context-audit.json",
+    "sha256": "0261deecc5f587529d7bd58dd4960d849f3c346f558803d87d84a1e5b2f5d17f",
+    "mode": "context-only",
+    "providerRequests": 0,
+    "scope": "Four fixed public repositories; dispatch positions and hashes only, not an answer-quality score."
+  },
+  "promptTemplateProof": {
+    "filename": "prompt-template-proof.json",
+    "sha256": "7c1602f2d5a1bca644b5c0558e4f5fa5f8d9ead2ae312d9a011c2cd67917acc8",
+    "scope": "TypeScript syntax-only comparison of stored producer source snapshots, normalized CRLF to LF. Project context text changed; complete request bodies are deliberately different. No compiler host, upstream execution, provider call or credentials."
+  }
+}

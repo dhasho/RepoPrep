@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "repoprep-real-subset-provenance-v1",
+  "verdict": "ARTIFACTS-OK",
+  "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+  "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+  "reportFileSha256": "a360dc183aaf5012b42ce57ba0cad2a3869ff02ae36da69d6d90264b8492b903",
+  "sourceFiles": 107,
+  "snapshot": ".validation/frozen-generation-sources/835a902a-59ce-4880-a279-f8ff7abec2b2",
+  "cases": [
+    {
+      "caseId": "mitt",
+      "questions": 20,
+      "requestHash": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+      "tokens": {
+        "inputTokens": 10162,
+        "outputTokens": 21302,
+        "totalTokens": 31464
+      },
+      "estimatedInputTokens": 14570
+    },
+    {
+      "caseId": "schedule",
+      "questions": 20,
+      "requestHash": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+      "tokens": {
+        "inputTokens": 42673,
+        "outputTokens": 26083,
+        "totalTokens": 68756
+      },
+      "estimatedInputTokens": 63997
+    }
+  ],
+  "observedAt": "2026-11-04T21:35:16.912Z",
+  "sourceCommit": "6208425e18414bf304e9a3821e02ad0e87648dab",
+  "inferenceMatchesRequestsCandidate": true,
+  "same107SourceHashesAsRequests": true,
+  "independentlyStoredSubsetRun": true,
+  "corpusScope": [
+    "mitt",
+    "schedule"
+  ],
+  "notMeasuredHere": [
+    "requests",
+    "p-limit"
+  ],
+  "humanReview": "pending"
+}

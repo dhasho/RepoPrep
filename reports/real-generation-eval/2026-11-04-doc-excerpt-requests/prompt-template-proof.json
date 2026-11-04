@@ -1,0 +1,14 @@
+{
+  "verdict": "PROMPT-TEMPLATE-UNCHANGED",
+  "runs": [
+    "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+    "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02"
+  ],
+  "templateNodesSha256": {
+    "SYSTEM_PROMPT": "be0b8f5fa53926cf3411ca43fb5a021b43f016978342caba9005eafc296ab858",
+    "jsonSchemaRule": "656c74e15cf900d801c56c91adbc9290f0e049e9346cd576d10c3a3fbe4163a0",
+    "GRANULARITY_TASK": "ec1af88255c4ae32f9ba9f6820ca90440943ecd501beec4fe6d8d0873045e9f6",
+    "buildUserPrompt": "943eecbf51cfb8224904f94141ad0554b700fa4dff6a7726a413b6c4aa5da14e"
+  },
+  "scope": "TypeScript syntax-only comparison of stored producer source snapshots, normalized CRLF to LF. Project context text changed; complete request bodies are deliberately different. No compiler host, upstream execution, provider call or credentials."
+}

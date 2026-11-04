@@ -1,0 +1,316 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+  "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+  "caseId": "requests",
+  "repository": "psf/requests",
+  "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+  "reviewer": {
+    "blind": false,
+    "executor": "Codex delegated source reviewer",
+    "independent": false
+  },
+  "reviewScope": {
+    "followUpsIncluded": true,
+    "sourceHashesMatchedAfterNewlineNormalization": [
+      "src/requests/models.py",
+      "src/requests/sessions.py",
+      "pyproject.toml",
+      "tests/test_requests.py"
+    ],
+    "networkCalls": 0,
+    "followUpsRead": 44,
+    "questionsRead": 20,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy",
+    "upstreamCodeExecuted": false
+  },
+  "variants": [
+    {
+      "factReviews": [
+        {
+          "sourceRefs": [
+            {
+              "startLine": 424,
+              "path": "src/requests/models.py",
+              "endLine": 451
+            }
+          ],
+          "reason": "Q2 states the full prepare order and the auth-before-hooks ordering rationale described by the source comment.",
+          "factId": "requests-prepared-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            2
+          ]
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 524,
+              "path": "src/requests/sessions.py",
+              "endLine": 553
+            },
+            {
+              "startLine": 604,
+              "path": "src/requests/cookies.py",
+              "endLine": 623
+            }
+          ],
+          "reason": "Q9 covers request/session cookies and all frozen setting merges: headers, params, auth, and hooks. Its separate dict-cookie follow-up misstates the normalization path and is recorded as an answer finding.",
+          "factId": "requests-session-merge",
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ]
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 752,
+              "path": "src/requests/sessions.py",
+              "endLine": 829
+            }
+          ],
+          "reason": "Q1 and Q3 describe adapter selection/send, elapsed time, response hooks, cookie extraction, redirect handling, and non-stream body consumption.",
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            3
+          ]
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 831,
+              "path": "src/requests/sessions.py",
+              "endLine": 868
+            }
+          ],
+          "reason": "Q10 covers trust_env, setdefault proxy behavior, both CA environment variables, and merging proxies, stream, verify, and cert with Session defaults.",
+          "factId": "requests-env",
+          "coverage": "covered",
+          "questionNumbers": [
+            10
+          ]
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 186,
+              "path": "src/requests/sessions.py",
+              "endLine": 219
+            }
+          ],
+          "reason": "Q3 discusses redirect processing and history but does not state the max_redirects boundary or TooManyRedirects behavior.",
+          "factId": "requests-redirect-limit",
+          "coverage": "missing",
+          "questionNumbers": [
+            3
+          ]
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 837,
+              "path": "src/requests/models.py",
+              "endLine": 874
+            }
+          ],
+          "reason": "No answer explains Response.ok or __bool__ and their less-than-400 / raise_for_status semantics.",
+          "factId": "requests-response-ok",
+          "coverage": "missing",
+          "questionNumbers": []
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 935,
+              "path": "src/requests/models.py",
+              "endLine": 977
+            }
+          ],
+          "reason": "Q17 distinguishes initial streaming, cached-bytes replay, and StreamConsumedError for consumed uncached content. Its separate chunk_size None omission is recorded as an answer finding.",
+          "factId": "requests-stream-content",
+          "coverage": "covered",
+          "questionNumbers": [
+            17
+          ]
+        },
+        {
+          "sourceRefs": [
+            {
+              "startLine": 16,
+              "path": "pyproject.toml",
+              "endLine": 21
+            },
+            {
+              "startLine": 64,
+              "path": "pyproject.toml",
+              "endLine": 67
+            }
+          ],
+          "reason": "Q19 identifies charset_normalizer as a base dependency and chardet as optional, but does not enumerate idna, urllib3, and certifi to establish all four direct runtime dependencies.",
+          "factId": "requests-dependencies",
+          "coverage": "partial",
+          "questionNumbers": [
+            19
+          ]
+        }
+      ],
+      "questionFingerprints": [
+        "919a38e7747450c8c48b77e423d622ae8e685b18194db4ff04164121d75bfde3",
+        "f6ade84b3b2fb3992a056b2c3e428527499cb5b9d68192f0222a625786046680",
+        "e178194120f7a2875331c9e6dd02a8d350b0b387d851d7a1abf9ade00d087a61",
+        "6290f25e3aae851c4fe2794198250ca04c431175d5b29e82fa2ad4200e8db6ca",
+        "7ff9f61a9960ad926b08a638bc7972fe1802feb6ec3e946f950cbb3024f826c7",
+        "90cd39703606294eb7a419f9de975a80ddc24dc45458f49d91ccd1976f23372d",
+        "12859afc27d2c62dc62b164dfa19f4a183dc4ff937d808dfcfe3d0ca1610cc22",
+        "a0431642aa5f381372a13c4f3a2d804cc19b09a8eb0907f10d86b1adeb5ad8ac",
+        "ca417a7353afbda7eddde02d698ace1811db5c3fcd6ec9d0fe2c21e9c45a7462",
+        "ce82be96680186405df5af1a6c5da401e25e4b212e5ec78efb072a6bd10d8a4c",
+        "a83bf1ac4e9d2a46d98585d6800371e9eb9cfa32108d43cfb11ae041828b6910",
+        "cd4221f5318256048a18af67213e48b303fe13b929ce4d936323cdc319ca4a9e",
+        "f985c74ce18b3f6d893e7b26e5c8051df19b872416e7ff49cb7f34910bb81e50",
+        "b2b765c907a648cdbcb69848c8ac15827b9f098204084c1350de24c13c673771",
+        "a8d83fedf2ca5a653e81520cfe9e3ec4cd5bd88c4968b3fb75e3d82590225b32",
+        "4aa5fabfefa9acb3304a6b271ec9a09a498d34e08d7a5fb35823a00368bc1dea",
+        "f5516e9031459f60cf366e9f9e27cf7066bdde3757d059aaa5d047372b38563b",
+        "dfd339efbdb87d6a0b78d6cf760fcab64016db300ab043f4db59a70e9490daac",
+        "3785314e2308ce6e49ab7ed8ea6949f614405d59809826e2fa02262fb0697ba9",
+        "88864f0b28e9de29f727b2366726b3a67de85323b61ae7b86d229c8716566461"
+      ],
+      "findings": [
+        {
+          "questionFingerprint": "f6ade84b3b2fb3992a056b2c3e428527499cb5b9d68192f0222a625786046680",
+          "questionPart": "followUps[0].answer",
+          "reason": "The hook registry appends hooks to the PreparedRequest list, and the built-in Digest handler registers its hooks on the request it receives. The answer gives a concrete loss mechanism not supported by that path; the source only states that authenticators can add hooks and mandates preparing supplied hooks afterward.",
+          "sourceRefs": [
+            {
+              "startLine": 424,
+              "path": "src/requests/models.py",
+              "endLine": 451
+            },
+            {
+              "startLine": 257,
+              "path": "src/requests/models.py",
+              "endLine": 270
+            },
+            {
+              "startLine": 675,
+              "path": "src/requests/models.py",
+              "endLine": 697
+            },
+            {
+              "startLine": 722,
+              "path": "src/requests/models.py",
+              "endLine": 729
+            },
+            {
+              "startLine": 321,
+              "path": "src/requests/auth.py",
+              "endLine": 342
+            }
+          ],
+          "claim": "It says moving prepare_hooks before prepare_auth could lose authenticator-registered response hooks and thereby remove Digest retry or redirect behavior.",
+          "questionNumber": 2,
+          "kind": "incorrect"
+        },
+        {
+          "questionParts": [
+            "answer",
+            "followUps[0].answer"
+          ],
+          "repeatedOccurrences": 2,
+          "questionNumber": 3,
+          "kind": "imprecise",
+          "questionPart": "answer and followUps[0].answer",
+          "reason": "Response.next is a property returning the saved PreparedRequest, not a callable method. The same method-call notation appears in the main answer and first follow-up; counted as one repeated claim.",
+          "questionFingerprint": "e178194120f7a2875331c9e6dd02a8d350b0b387d851d7a1abf9ade00d087a61",
+          "claim": "The answer refers to Response.next as Response.next(), presenting it as a method call.",
+          "sourceRefs": [
+            {
+              "startLine": 817,
+              "path": "src/requests/sessions.py",
+              "endLine": 824
+            },
+            {
+              "startLine": 891,
+              "path": "src/requests/models.py",
+              "endLine": 894
+            }
+          ]
+        },
+        {
+          "questionFingerprint": "ca417a7353afbda7eddde02d698ace1811db5c3fcd6ec9d0fe2c21e9c45a7462",
+          "questionPart": "followUps[1].answer",
+          "reason": "prepare_request first converts non-CookieJar request.cookies dictionaries to a CookieJar, then merges that jar. merge_cookies therefore follows the CookieJar update branch rather than its dict overwrite=False branch; a matching request cookie can replace the Session cookie.",
+          "sourceRefs": [
+            {
+              "startLine": 524,
+              "path": "src/requests/sessions.py",
+              "endLine": 533
+            },
+            {
+              "startLine": 604,
+              "path": "src/requests/cookies.py",
+              "endLine": 623
+            },
+            {
+              "startLine": 391,
+              "path": "src/requests/cookies.py",
+              "endLine": 399
+            }
+          ],
+          "claim": "It says a dict passed as request.cookies directly takes merge_cookies dict overwrite=False semantics, so a same-name Session cookie always remains and the request dict only adds new names.",
+          "questionNumber": 9,
+          "kind": "incorrect"
+        },
+        {
+          "questionFingerprint": "f5516e9031459f60cf366e9f9e27cf7066bdde3757d059aaa5d047372b38563b",
+          "questionPart": "answer",
+          "reason": "The runtime guard checks type only when chunk_size is not None, and the public overload/docstring explicitly allow None. The answer should say int or None.",
+          "sourceRefs": [
+            {
+              "startLine": 907,
+              "path": "src/requests/models.py",
+              "endLine": 927
+            },
+            {
+              "startLine": 958,
+              "path": "src/requests/models.py",
+              "endLine": 965
+            }
+          ],
+          "claim": "It states that iter_content requires chunk_size to be an int.",
+          "questionNumber": 17,
+          "kind": "imprecise"
+        }
+      ],
+      "variant": "generation"
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "All 20 main answers and 44 follow-ups were read against the pinned public source revision; findings are limited to retained concrete source-backed issues, not every nuance.",
+    "No model/network calls and no upstream project code execution."
+  ],
+  "reviewedSourceHashes": {
+    "src/requests/models.py": "a3351c3c12a86bf5ed211533875350bc4791e9327a685f8c19ba54343e471e26",
+    "src/requests/sessions.py": "3d2089736ced93b2b405624a943f866d22652b17df06a85eb010f86272fc3e7d",
+    "src/requests/cookies.py": "05d12b965c76f229803e17aef1c9969d712e4f4d0f6a06c05e0a47212fd5b417",
+    "pyproject.toml": "345f26b9f691435e39d0eb6f7f4150a390f43175b22f8d61ac95e7f2827f0a77",
+    "src/requests/auth.py": "fdc8bb34a8a5a088b169ca13277d107b0bc94ee63ed5e89dd4f5569d9b2bb04c"
+  },
+  "primaryReview": "Primary agent read all20 main answers and44 follow-ups, checked every frozen fact classification and retained finding against fixed source. No upstream execution. Assistant source review, not human blind review or an accuracy percentage.",
+  "runIntegrity": {
+    "sourceFileCount": 107,
+    "requestHash": "6f0c16713b528f4a0cdbde070b83ca33c9f7171b2b9e64715283e5e44a9d7769",
+    "requestHashMatchesSyntheticDispatchAudit": true,
+    "reportRunIdAndDigestMatch": true,
+    "providerUsage": {
+      "outputTokens": 20812,
+      "totalTokens": 63277,
+      "inputTokens": 42465
+    }
+  }
+}

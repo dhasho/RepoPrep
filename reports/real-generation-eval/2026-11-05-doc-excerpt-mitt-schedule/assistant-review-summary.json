@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+  "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+  "status": "reviewed-by-assistant",
+  "humanReviewStatus": "pending",
+  "questions": 40,
+  "requests": 2,
+  "reviewedFacts": 13,
+  "completedCases": [
+    "mitt",
+    "schedule"
+  ],
+  "aggregate": {
+    "generation": {
+      "covered": 13,
+      "partial": 0,
+      "missing": 0,
+      "contradicted": 0,
+      "incorrect": 4,
+      "imprecise": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "mitt",
+      "counts": {
+        "covered": 6,
+        "partial": 0,
+        "missing": 0,
+        "contradicted": 0,
+        "incorrect": 4,
+        "imprecise": 0
+      },
+      "questions": 20,
+      "requests": 1,
+      "usage": {
+        "inputTokens": 10162,
+        "outputTokens": 21302,
+        "totalTokens": 31464
+      },
+      "followUpsRead": 41
+    },
+    {
+      "id": "schedule",
+      "counts": {
+        "covered": 7,
+        "partial": 0,
+        "missing": 0,
+        "contradicted": 0,
+        "incorrect": 0,
+        "imprecise": 0
+      },
+      "questions": 20,
+      "requests": 1,
+      "usage": {
+        "inputTokens": 42673,
+        "outputTokens": 26083,
+        "totalTokens": 68756
+      },
+      "followUpsRead": 40
+    }
+  ],
+  "usage": {
+    "inputTokens": 52835,
+    "outputTokens": 47385,
+    "totalTokens": 100220
+  },
+  "reviewFiles": [
+    {
+      "filename": "assistant-review-mitt.json",
+      "sha256": "784c3459cb523acdbb49afe465f232beaebc09a41d033950376d0ea05e9cb5b9"
+    },
+    {
+      "filename": "assistant-review-schedule.json",
+      "sha256": "f2b4273b030aa7b2a1ca3c93594f8467f4778d69612e720a4820f7ba83462f68"
+    }
+  ],
+  "limitations": [
+    "This is a completed two-case subset run, not a fresh four-case result.",
+    "Core fact coverage does not certify all answers: Mitt has four distinct material errors; non-blocking wording/edge notes remain separately visible.",
+    "Source reviews are assisted, non-blind and not human accuracy percentages.",
+    "Provider usage is recorded, not a monetary bill."
+  ]
+}

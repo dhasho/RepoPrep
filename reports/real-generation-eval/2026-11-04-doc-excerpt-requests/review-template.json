@@ -1,0 +1,494 @@
+{
+  "schemaVersion": "repoprep-human-review-v2",
+  "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "configHash": "1c5704b398eaf20054ed3ceb7c1b5ae9816921cb5827ad53125a2db0b2f92507",
+  "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+  "rubric": {
+    "factualCorrectness": "1 unsupported/false; 2 mostly unsupported; 3 mixed or uncertain; 4 supported with minor issue; 5 every material claim supported by fixture.",
+    "projectRelevance": "1 unrelated; 2 weak relation; 3 generic but applicable; 4 clearly tied to this project; 5 targets a central implementation decision.",
+    "semanticDuplication": "1 duplicates another question; 2 near duplicate; 3 partial overlap; 4 distinct with minor overlap; 5 clearly distinct."
+  },
+  "ratings": [
+    {
+      "fingerprint": "919a38e7747450c8c48b77e423d622ae8e685b18194db4ff04164121d75bfde3",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "请从 `requests.api.request` 开始，描述一次 [[HTTP]] GET 请求到最终发送经过哪些核心对象；入口为什么使用上下文管理器？",
+      "answer": "要点是入口创建临时 [[Session]]，由会话完成准备、环境合并和发送。\n\n1. `api.request` 在 `with sessions.Session() as session` 中调用 `session.request`，退出时依赖会话关闭逻辑释放适配器资源。\n2. `Session.request` 构造 `Request`，把 method 转成大写，调用 `prepare_request` 得到 [[PreparedRequest]]，再断言已准备并调用 `merge_environment_settings` 与 `send`。\n3. `Session.send` 通过 `get_adapter` 选择 [[HTTPAdapter]]，调用 `adapter.send` 进入 [[urllib3]] 连接池；之后计算 elapsed、派发 response hook、提取 cookies、解析重定向，并在非 stream 时读取 `r.content`。\n\n可见的 `Session.close` 会遍历 adapters 调用 close；`__enter__`/`__exit__` 的具体实现未在当前片段展示，不能进一步确认。",
+      "followUps": [
+        {
+          "question": "如果调用方不使用 with，而直接调用 `Session.request`，会有什么资源风险？",
+          "answer": "按可见代码，`Session.close` 才会关闭各 adapter 并清理连接池；不使用 with 且不手动 close 时，池化连接可能延迟释放并触发资源告警。入口 API 使用 with 正是为了在该路径上自动关闭临时会话。",
+          "followUps": []
+        },
+        {
+          "question": "`Session.request` 里的 `assert _is_prepared(prep)` 在运行时真的会校验 URL 和 method 吗？",
+          "answer": "不会。`_types.is_prepared` 在运行时直接返回 True，只在 [[TYPE_CHECKING]] 下检查 url/method 非空，并借助 [[TypeIs]] 做静态收窄。因此该 assert 主要服务于类型检查，不能当作运行时防御。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "f6ade84b3b2fb3992a056b2c3e428527499cb5b9d68192f0222a625786046680",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`PreparedRequest.prepare` 内部的调用顺序是什么？为什么 `prepare_auth` 和 `prepare_hooks` 被放在最后？",
+      "answer": "顺序是：`prepare_method`、`prepare_url`、`prepare_headers`、`prepare_cookies`、`prepare_body`、`prepare_auth`、`prepare_hooks`。\n\n源码注释给出两个关键约束：\n\n- `prepare_auth` 必须最后，以便 [[OAuth]] 等认证方案在完全准备好的请求上工作。\n- `prepare_hooks` 必须在 `prepare_auth` 之后，因为认证器可能向请求添加 [[Hook]]。\n\n因此该顺序不仅是风格问题，而是认证器与 hooks 交互的契约；若提前准备 auth，认证器看到的 URL、body 或 headers 可能不完整。",
+      "followUps": [
+        {
+          "question": "如果把 `prepare_hooks` 放到 `prepare_auth` 之前，会破坏什么？",
+          "answer": "认证器在 `prepare_auth` 中注册的 response hook 可能不会被后续合并进去，导致 401 重试或重定向处理缺失。源码把 hooks 放在 auth 之后正是为了避免这种覆盖问题。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 URL 和 headers 要排在 body 之前？",
+          "answer": "`prepare_body` 会依据 headers 是否已有 Content-Type 决定是否补默认值，也会写入 Content-Length 或 Transfer-Encoding。先准备 URL 和 headers 能让后续 body 编码基于已有上下文做判断。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "e178194120f7a2875331c9e6dd02a8d350b0b387d851d7a1abf9ade00d087a61",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Session.send` 在 `adapter.send` 返回 Response 之后按什么顺序处理 hook、cookies 和重定向？",
+      "answer": "可见顺序如下：\n\n1. 计算 elapsed，然后调用 `dispatch_hook('response', hooks, r, ...)`，用 [[Hook]] 处理响应。\n2. 先对 `r.history` 中的响应提取 cookies，再对当前响应调用 `extract_cookies_to_jar` 写入会话 [[CookieJar]]。\n3. 若 `allow_redirects` 为真，用 `resolve_redirects` 生成 history；有 history 时把原响应插到开头，再弹出最后一个作为最终响应。\n4. 若禁止重定向，仍调用 `resolve_redirects(..., yield_requests=True)` 把下一个请求存到 `r._next`，供 `Response.next()` 使用。\n5. 若非 stream，读取 `r.content`。\n\n要注意 hook 在 cookie 提取和重定向解析之前执行，因此 hook 对响应对象的修改会影响后续步骤。",
+      "followUps": [
+        {
+          "question": "`allow_redirects=False` 时为什么还要调用 `resolve_redirects`？",
+          "answer": "源码用 `yield_requests=True` 只生成下一个 [[PreparedRequest]] 并保存到 `r._next`，不真正发送。这样 `Response.next()` 仍能拿到候选请求，同时保持不自动跟随 [[redirect]] 的语义。",
+          "followUps": []
+        },
+        {
+          "question": "response hook 修改了响应头或 raw，会影响 cookie 提取吗？",
+          "answer": "会可能影响。源码在 `dispatch_hook` 之后才调用 `extract_cookies_to_jar`，后者依赖 `response._original_response.msg`。如果 hook 替换或改动了 raw，后续提取结果可能改变；具体取决于 hook 对对象的改动方式。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "6290f25e3aae851c4fe2794198250ca04c431175d5b29e82fa2ad4200e8db6ca",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Session.mount` 和 `Session.get_adapter` 如何实现按 URL 前缀选择适配器？长前缀为什么优先？",
+      "answer": "`mount` 先把 `prefix` 写入 `self.adapters`，再收集所有长度小于新前缀的已有 key，逐个 pop 后重新插入到字典末尾。由于 `get_adapter` 按字典插入顺序遍历并对 `url.lower()` 做 `startswith`，长前缀被提前，短前缀被后移，从而优先匹配更长、更具体的前缀。\n\n若没有任何前缀匹配，`get_adapter` 抛出 `InvalidSchema`。同长度前缀不会在 mount 中被重排，按可见实现会保持原插入顺序，先插入者先匹配。",
+      "followUps": [
+        {
+          "question": "为什么不用 `urlparse` 的 scheme 直接路由？",
+          "answer": "前缀匹配更灵活，可支持 `http://`、`https://` 乃至自定义字符串前缀，也便于用户挂载自定义 [[HTTPAdapter]]。代价是需要显式维护顺序，否则短前缀可能遮蔽长前缀。",
+          "followUps": []
+        },
+        {
+          "question": "如果两个同长度前缀都能匹配同一 URL，行为是否确定？",
+          "answer": "按可见实现，`mount` 只移动长度更短的前缀，同长度 key 不重排。`get_adapter` 返回插入顺序中第一个 startswith 匹配项，因此先插入者胜出；这是实现观察，不是文档承诺的稳定 API。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "7ff9f61a9960ad926b08a638bc7972fe1802feb6ec3e946f950cbb3024f826c7",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`PreparedRequest.prepare_body` 如何判断 data 是流式 body？流式分支对 Content-Length、Transfer-Encoding 和 files 做了什么？",
+      "answer": "判定条件是：`data` 是 Iterable 或具有 `__iter__`，且不是 `str`、`bytes`、`list`、`tuple`、`Mapping`。满足后进入流式分支：\n\n- 尝试 `super_len(data)` 得到长度；若 body 有 `tell`，记录当前位置到 `_body_position`，失败时用 `object()` 作为哨兵。\n- 若同时传 `files`，直接抛 `NotImplementedError`，因为流式 body 与文件上传互斥。\n- 长度存在且为真时设置 [[Content-Length]]，否则设置 [[Transfer-Encoding]] 为 [[chunked]]。\n\n非流式分支才走 `_encode_files` 或 `_encode_params`，并调用 `prepare_content_length`。",
+      "followUps": [
+        {
+          "question": "为什么 list 和 tuple 不算流式 body？",
+          "answer": "源码把 list/tuple 排除在流式条件外，是为了让它们进入表单编码分支，作为键值对序列交给 `_encode_params`。如果把它们当流式，会改变表单提交语义。",
+          "followUps": []
+        },
+        {
+          "question": "`tell` 失败时为什么设置 `object()` 而不是 None？",
+          "answer": "源码注释说明这是为了区分「没有 tell」和「tell 调用失败」。None 可能表示无需回退，而 object 哨兵可在后续重定向尝试 rewind 时识别失败状态，避免误判。",
+          "followUps": []
+        },
+        {
+          "question": "长度未知时设置 chunked 有什么前提？",
+          "answer": "设置的是请求头 `Transfer-Encoding: chunked`，`HTTPAdapter.send` 还会根据 body 非空且无 Content-Length 计算 `chunked=True` 传给 urllib3。服务端和中间代理必须支持分块传输，否则可能拒绝或解析失败。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "90cd39703606294eb7a419f9de975a80ddc24dc45458f49d91ccd1976f23372d",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`prepare_body` 的 JSON 分支在什么条件下触发？`allow_nan=False` 和 `InvalidJSONError` 分别处理什么情况？",
+      "answer": "触发条件是 `not data and json is not None`，即 data 为假值且传入了 json。此时设置 `Content-Type: application/json`，调用 `complexjson.dumps(json, allow_nan=False)`；若结果不是 bytes，再编码为 UTF-8。\n\n`allow_nan=False` 让 [[JSON]] 序列化在遇到 NaN 或 Infinity 时抛 `ValueError`，避免生成不符合 JSON 标准的文本。该 `ValueError` 被捕获并包装成 `InvalidJSONError(ve, request=self)`。注意若 data 为真值，JSON 分支不会触发，data 会走后续编码逻辑。",
+      "followUps": [
+        {
+          "question": "同时传 data 和 json 时谁生效？",
+          "answer": "JSON 分支要求 `not data`，所以 data 为真值时不会进入 JSON 分支。源码后续按 data 走文件或表单编码，因此实际是 data 生效；json 被忽略。若 data 为空 dict 等假值，则 JSON 仍可触发。",
+          "followUps": []
+        },
+        {
+          "question": "为什么这里不使用默认的 `json.dumps` 宽松行为？",
+          "answer": "默认行为可能输出 NaN、Infinity 等非标准字面量，部分服务端解析器会拒绝。`allow_nan=False` 让客户端尽早失败并抛 `InvalidJSONError`，把错误定位在请求构造阶段。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "12859afc27d2c62dc62b164dfa19f4a183dc4ff937d808dfcfe3d0ca1610cc22",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "非流式 body 中，`_encode_files` 和 `_encode_params` 分别在什么条件下调用？Content-Type 何时不补表单类型？",
+      "answer": "在非流式分支：\n\n- 若有 `files`，调用 `_encode_files(files, raw_data)`，由返回值给出 body 和 content_type。\n- 否则若有 raw_data，调用 `_encode_params(raw_data)`；若 data 是 basestring 或具有 `read`，content_type 置为 None，否则设为 `application/x-www-form-urlencoded`。\n\n之后调用 `prepare_content_length`，并且只在 content_type 存在且 headers 中没有 Content-Type 时补上。`_encode_files` 和 `_encode_params` 的内部实现未在当前上下文完整展示，不能确认其具体编码细节。",
+      "followUps": [
+        {
+          "question": "为什么 str/bytes 或 file-like 不补表单 Content-Type？",
+          "answer": "它们表示原始 body 或外部流，不是键值对表单。若强行标注为 `application/x-www-form-urlencoded`，服务端会按表单解析而得到错误结果，所以源码对这两类保持 content_type 为 None。",
+          "followUps": []
+        },
+        {
+          "question": "流式 body 与 files 的互斥在哪里实现？",
+          "answer": "在流式分支中，如果 `files` 为真直接抛 `NotImplementedError`。这避免同一个请求既要分块读取迭代器又要构造 multipart body，二者边界和长度语义冲突。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a0431642aa5f381372a13c4f3a2d804cc19b09a8eb0907f10d86b1adeb5ad8ac",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`prepare_content_length` 在 body 为 None、body 长度为 0、以及 GET/HEAD 请求下分别如何处理？",
+      "answer": "可见逻辑分三种情况：\n\n1. `body is not None` 时调用 `super_len(body)`；只有长度真值才写入 [[Content-Length]]。长度为 0 时不会在这里写 0。\n2. `body is None` 且 method 不是 GET/HEAD、headers 中又没有 Content-Length 时，写入 ` Content-Length: 0 `。\n3. GET/HEAD 且 body 为 None 时不补 0，避免给无 body 的方法强行声明长度。\n\n因此空 bytes body 与 None body 的行为不同：前者不会走 elif 分支补 0，后者在非 GET/HEAD 时才补 0。",
+      "followUps": [
+        {
+          "question": "为什么 GET/HEAD 的 None body 不补 Content-Length: 0？",
+          "answer": "源码明确排除 GET 和 HEAD，避免为通常无 body 的方法添加可能改变语义的长度头。对非 GET/HEAD 方法补 0 是为了明确告知服务端请求体为空。",
+          "followUps": []
+        },
+        {
+          "question": "body 长度 0 不写 Content-Length 会有什么后果？",
+          "answer": "按可见代码，`if length` 对 0 为假，所以不会设置 Content-Length；若调用方也没有手动设置，`HTTPAdapter.send` 可能据此把请求视为 chunked。具体服务端行为取决于协议和中间件支持。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ca417a7353afbda7eddde02d698ace1811db5c3fcd6ec9d0fe2c21e9c45a7462",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Session.prepare_request` 如何合并 cookies、认证、headers、params 和 hooks？netrc 认证在什么条件下启用？",
+      "answer": "步骤是：\n\n1. 取 `request.cookies or {}`；若不是 [[CookieJar]]，用 `cookiejar_from_dict` 转换。\n2. 先 `merge_cookies(RequestsCookieJar(), self.cookies)`，再合并 request cookies，得到 `merged_cookies`。\n3. `auth = request.auth`；仅当 `trust_env` 为真、request.auth 和 session.auth 都为空时，才调用 `get_netrc_auth(url)` 读取 [[netrc]]。\n4. 构造 [[PreparedRequest]]，调用 `prepare`，其中 headers 用 [[CaseInsensitiveDict]] 合并，params/auth 用 `merge_setting`，hooks 用 `merge_hooks`。\n\n显式认证优先于 netrc；cookies 的冲突语义还取决于 request cookies 是 dict 还是 CookieJar，因为 `merge_cookies` 分支不同。",
+      "followUps": [
+        {
+          "question": "为什么 netrc 只在 request.auth 和 session.auth 都为空时才尝试？",
+          "answer": "显式认证应优先于环境凭据，否则用户传入的 auth 可能被 netrc 覆盖。源码把条件写成 not auth and not self.auth，确保只有完全未指定认证时才回退到 netrc。",
+          "followUps": []
+        },
+        {
+          "question": "request cookies 是 dict 时，同名 cookie 会覆盖 session 的吗？",
+          "answer": "按 `merge_cookies` 对 dict 的分支，会调用 `cookiejar_from_dict(..., overwrite=False)`，已有同名 cookie 不会被替换。因此 session 中已有的同名 cookie 保留，request dict 只补充新名字；CookieJar 分支则走 update，语义需另行核对。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "ce82be96680186405df5af1a6c5da401e25e4b212e5ec78efb072a6bd10d8a4c",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Session.merge_environment_settings` 在 trust_env 为真时如何读取代理和 CA bundle？trust_env 为假时有什么变化？",
+      "answer": "当 `trust_env` 为真时：\n\n- 从传入 proxies 中取 `no_proxy`，调用 `get_environ_proxies(url, no_proxy=...)` 得到环境代理；仅当传入 proxies 不是 None 时，用 `setdefault` 把环境代理补进去。\n- 若 `verify` 为 True 或 None，则按顺序读取 `REQUESTS_CA_BUNDLE`、`CURL_CA_BUNDLE`，都没有才保留原 verify。\n- 最后对 proxies、stream、verify、cert 调用 `merge_setting` 与 session 默认值合并。\n\n当 trust_env 为假时，上述环境代理和 CA 环境变量读取被跳过，只做 session 默认值合并。",
+      "followUps": [
+        {
+          "question": "如果传入的 proxies 是 None，环境代理还会被写入吗？",
+          "answer": "按可见代码，环境代理只在 `if proxies is not None` 时通过 setdefault 写入；proxies 为 None 时不会执行这段写入。后续 `merge_setting(None, self.proxies)` 的具体结果取决于未展示的 merge_setting 实现。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 CA 环境变量只在 verify 为 True 或 None 时读取？",
+          "answer": "因为显式传入的 verify 字符串代表用户指定了 CA 路径，不应被环境变量覆盖。源码只在 verify 为 True 或 None、即未明确指定路径时，才回退到 REQUESTS_CA_BUNDLE 或 CURL_CA_BUNDLE。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a83bf1ac4e9d2a46d98585d6800371e9eb9cfa32108d43cfb11ae041828b6910",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`HTTPAdapter.get_connection_with_tls_context` 如何选择直连或代理连接？SOCKS 代理和普通代理分别走什么管理器？",
+      "answer": "流程是：先断言请求已准备，`select_proxy` 选出代理；`build_connection_pool_key_attributes` 返回 host_params 和 pool_kwargs，若抛 ValueError 转成 `InvalidURL`。\n\n若有代理：\n\n- 用 `prepend_scheme_if_needed` 补 scheme，解析代理 URL；没有 host 抛 `InvalidProxyURL`。\n- 调用 `proxy_manager_for`；[[SOCKS]] 代理使用 `SOCKSProxyManager`，普通代理使用 `proxy_from_url` 并注入 `proxy_headers`。\n- 最后通过代理管理器的 `connection_from_host` 取连接。\n\n无代理时直接调用 [[PoolManager]] 的 `connection_from_host`。连接池键的具体组成由 `_urllib3_request_context` 决定，该辅助函数未在当前上下文完整展示，不能确认全部字段。",
+      "followUps": [
+        {
+          "question": "为什么代理地址要先 `prepend_scheme_if_needed`？",
+          "answer": "用户可能传入不带 scheme 的 host:port 代理。补全 scheme 后才能用 urlparse 正确解析并交给 urllib3 的代理管理器；否则代理 URL 结构不完整。",
+          "followUps": []
+        },
+        {
+          "question": "`proxy_manager_for` 如何复用代理管理器？",
+          "answer": "它先检查 `self.proxy_manager` 字典，命中则直接返回；否则根据是否 socks 创建 [[ProxyManager]] 并写入缓存。这样同一代理 URL 的连接池可跨请求复用。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "cd4221f5318256048a18af67213e48b303fe13b929ce4d936323cdc319ca4a9e",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`HTTPAdapter.send` 如何把 timeout 参数转换成底层超时对象？`MaxRetryError` 的不同 reason 会被转成哪些异常？",
+      "answer": "timeout 处理分三类：\n\n- 若是 tuple，解包 connect/read 并构造 [[TimeoutSauce]]；解包失败抛 ValueError。\n- 若已经是 TimeoutSauce，直接使用。\n- 否则用同一个 timeout 作为 connect 和 read 构造 TimeoutSauce。\n\n随后调用 `conn.urlopen(..., redirect=False, preload_content=False, decode_content=False, retries=self.max_retries, timeout=resolved_timeout, chunked=chunked)`。\n\n[[MaxRetryError]] 的映射：ConnectTimeoutError 转 ConnectTimeout，但 NewConnectionError 有特殊 TODO；ResponseError 转 RetryError；_ProxyError 转 ProxyError；_SSLError 转 SSLError；其余转 ConnectionError。其他分支还会处理 ClosedPoolError、ReadTimeoutError、InvalidHeader 等。",
+      "followUps": [
+        {
+          "question": "为什么这里给 urllib3 传 `redirect=False`？",
+          "answer": "Requests 自己在 `Session.send` 中通过 `resolve_redirects` 处理重定向，需要控制 history、cookie 和 hook。若 urllib3 也跟随重定向，两套逻辑会冲突，因此底层必须关闭自动重定向。",
+          "followUps": []
+        },
+        {
+          "question": "MaxRetryError 中 NewConnectionError 为什么没有直接转 ConnectTimeout？",
+          "answer": "源码中显式判断了 `not isinstance(e.reason, NewConnectionError)`，并留下 TODO 说明到 3.0.0 再处理，见 #2811。因此当前行为是 NewConnectionError 不走 ConnectTimeout 分支，而是继续落到后面的通用处理。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "f985c74ce18b3f6d893e7b26e5c8051df19b872416e7ff49cb7f34910bb81e50",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`HTTPDigestAuth` 如何管理每个线程的 nonce 状态？`handle_401` 在什么条件下重发请求，为什么要回退 body 位置？",
+      "answer": "`HTTPDigestAuth.__init__` 创建 `threading.local()`，`init_per_thread_state` 首次为线程初始化 last_nonce、nonce_count、chal、pos 和 num_401_calls。`__call__` 时若有 last_nonce 就先构造 Digest 头；若 body 有 tell，记录当前位置到 pos；注册 `handle_401` 和 `handle_redirect`，并把 num_401_calls 置 1。\n\n`handle_401` 只在 400 到 499 状态码下处理；若 pos 存在且 body 有 seek，就回退文件位置。它检查 www-authenticate 是否包含 digest 且 num_401_calls < 2，满足才递增、解析 challenge、消费并关闭原响应、复制请求、提取 cookies、重新构建 Digest 头并发送。重发前回退 body 是为了让可 seek 的流从原位置重新读取。",
+      "followUps": [
+        {
+          "question": "`num_401_calls < 2` 的作用是什么？",
+          "answer": "它限制 Digest 认证最多重试一次 401，避免服务端持续返回 401 时无限重发。超过条件后会把计数重置为 1 并直接返回原响应。",
+          "followUps": []
+        },
+        {
+          "question": "为什么重发前要调用 `r.content` 和 `r.close`？",
+          "answer": "源码注释说明这是为了消费内容并释放原连接，使新请求可以复用同一连接。若不消费，底层连接可能因未读完而不能回到连接池。",
+          "followUps": []
+        },
+        {
+          "question": "如果 body 不可 seek，Digest 重试会怎样？",
+          "answer": "源码通过 getattr 检查 seek，没有 seek 就不回退位置。此时重发可能从当前读取位置继续，能否得到正确 body 取决于 body 类型和调用方；代码没有提供通用兜底。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "b2b765c907a648cdbcb69848c8ac15827b9f098204084c1350de24c13c673771",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`RequestsCookieJar.set`、`__getitem__` 和 `_find_no_duplicates` 如何实现字典式访问？同名但多域/多路径时会发生什么？",
+      "answer": "`set` 支持三种情况：value 为 None 时按 name、domain、path 删除；value 是 [[Morsel]] 时用 `morsel_to_cookie` 转换；否则用 `create_cookie` 创建 Cookie 并 `set_cookie`。\n\n`__getitem__` 调用 `_find_no_duplicates`，遍历整个 [[CookieJar]]，按 name、可选 domain、可选 path 过滤。若匹配到多个值，抛 `CookieConflictError`；若没有匹配，抛 KeyError。因此它是 O(n) 查找，源码也明确警告不是 O(1)。",
+      "followUps": [
+        {
+          "question": "为什么 `__getitem__` 遇到同名多 cookie 不随便返回一个？",
+          "answer": "不同 domain 或 path 下的同名 cookie 可能代表不同语义，随便返回会静默出错。源码选择抛 CookieConflictError，要求调用方用 get 并指定 domain/path 精确查询。",
+          "followUps": []
+        },
+        {
+          "question": "`morsel_to_cookie` 如何处理 max-age 和 expires？",
+          "answer": "若存在 max-age，则用当前时间加 max-age 得到 expires，非整数会抛 TypeError；否则若有 expires，则按固定 GMT 模板解析。最终调用 `create_cookie` 组装 Cookie 字段。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "a8d83fedf2ca5a653e81520cfe9e3ec4cd5bd88c4968b3fb75e3d82590225b32",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`CaseInsensitiveDict` 如何在保持原始 key 大小写的同时实现忽略大小写查找？它的相等比较和 copy 怎么工作？",
+      "answer": "`CaseInsensitiveDict` 的 `_store` 是 `OrderedDict`，以 `key.lower()` 为索引，值为 `(原始key, value)`。`__setitem__` 用 lower 键写入并记住最后一次设置的原始大小写；`__getitem__` 和 `__delitem__` 也走 lower 键。`__iter__` 返回保存的原始 key，`lower_items` 返回全小写键值对。\n\n相等比较时，若 other 是 Mapping，就构造另一个 CaseInsensitiveDict，再比较 `dict(self.lower_items())` 与对方的小写项。`copy` 用 `self._store.values()` 重建，因此保留原始大小写和顺序。",
+      "followUps": [
+        {
+          "question": "为什么 `_store` 不只存 lower key？",
+          "answer": "因为迭代、repr 和 headers 展示需要保留用户最后一次设置的原始大小写。只存 lower key 会丢失这一信息；存二元组可以同时满足大小写不敏感查找和原始展示。",
+          "followUps": []
+        },
+        {
+          "question": "对同一个字典先设 Accept 再设 aCCEPT，迭代时看到哪个？",
+          "answer": "lower 键相同，第二次赋值会覆盖 `_store` 中的值，并保存第二次的原始大小写 aCCEPT。因此查找仍不区分大小写，迭代时显示 aCCEPT。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "4aa5fabfefa9acb3304a6b271ec9a09a498d34e08d7a5fb35823a00368bc1dea",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`merge_cookies` 和 `cookiejar_from_dict` 如何合并 cookies？overwrite=False 的实际效果是什么？",
+      "answer": "`merge_cookies` 先校验目标必须是 [[CookieJar]]，否则 ValueError。若 cookies 是 dict，调用 `cookiejar_from_dict(cookies, cookiejar=cookiejar, overwrite=False)`；若 cookies 是 CookieJar，则优先调用目标的 `update`，没有 update 才逐个 `set_cookie`。\n\n`cookiejar_from_dict` 在目标为 None 时新建 RequestsCookieJar，先收集 jar 中已有 cookie 名，再遍历输入 dict：只有 overwrite 为真或名字不在已有集合中时才 `set_cookie(create_cookie(...))`。因此 overwrite=False 时同名旧 cookie 保留，新名字补充进来。",
+      "followUps": [
+        {
+          "question": "为什么 dict 分支使用 overwrite=False，而 CookieJar 分支走 update？",
+          "answer": "dict 常作为补充配置，保留已有 jar 中同名 cookie 更安全；CookieJar 分支则用 update 复制其全部 cookie，RequestsCookieJar.update 会 copy.copy 后 set_cookie，从而整体并入。",
+          "followUps": []
+        },
+        {
+          "question": "如果目标对象没有 update 方法，CookieJar 分支怎么办？",
+          "answer": "源码用 `getattr(cookiejar, 'update', None)` 检查，没有 update 就遍历源 CookieJar 并逐个 `set_cookie`。这样对非 RequestsCookieJar 的标准 CookieJar 也能合并。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "f5516e9031459f60cf366e9f9e27cf7066bdde3757d059aaa5d047372b38563b",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Response.content` 和 `iter_content` 如何协调 `_content`、`_content_consumed`？什么时候会抛 `StreamConsumedError`？",
+      "answer": "`content` 在 `_content is False` 时读取：若已消费则抛 RuntimeError；若 status_code 为 0 或 raw 为 None，则把 `_content` 设为 None；否则 join `iter_content(CONTENT_CHUNK_SIZE)` 或空 bytes。之后把 `_content_consumed` 置 True。\n\n`iter_content` 先检查：若已消费且 `_content` 是 bool，抛 [[StreamConsumedError]]。它还运行时检查 chunk_size 必须是 int。若已消费但 `_content` 是 bytes，则用 `iter_slices` 模拟分块；否则调用内部 generate 流式读取。generate 使用 `raw.stream(..., decode_content=True)` 或标准 read 循环，结束时把 `_content_consumed` 置 True。若传 decode_unicode，则在分块外再套 `stream_decode_response_unicode`。",
+      "followUps": [
+        {
+          "question": "为什么已经消费后有时还能用 iter_content，有时却抛错？",
+          "answer": "取决于消费后 `_content` 的类型：若是 bytes，仍可用 iter_slices 按块切片；若是 bool，表示内容不可再流式读取，抛 StreamConsumedError。源码用 `isinstance(self._content, bool)` 区分。",
+          "followUps": []
+        },
+        {
+          "question": "decode_unicode 是在流式读取的哪一层生效？",
+          "answer": "它在 chunks 生成之后包装：若进入已消费分支，则对切片迭代器套 stream_decode_response_unicode；若走 generate，也对流式 chunks 套同一函数。这样解码不改变底层 raw 的读取方式。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "dfd339efbdb87d6a0b78d6cf760fcab64016db300ab043f4db59a70e9490daac",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`Response.iter_content` 的 generate 对 urllib3 的 ProtocolError、DecodeError、ReadTimeoutError、SSLError 分别转成什么异常？raw 没有 stream 时如何处理？",
+      "answer": "当 `raw` 有 `stream` 方法时，generate 使用 `yield from self.raw.stream(chunk_size, decode_content=True)`，并捕获：\n\n- [[ProtocolError]] 转 `ChunkedEncodingError`。\n- DecodeError 转 `ContentDecodingError`。\n- ReadTimeoutError 转 requests 的 `ConnectionError`。\n- SSLError 转 `RequestsSSLError`。\n\n若 raw 没有 stream，则退化为标准 file-like 循环，反复 `raw.read(chunk_size)` 直到空块，不应用上述 urllib3 异常映射。无论哪个分支，正常结束后都会把 `_content_consumed` 置 True。",
+      "followUps": [
+        {
+          "question": "为什么 ReadTimeoutError 被转成 ConnectionError 而不是 Timeout？",
+          "answer": "按可见代码，generate 捕获 ReadTimeoutError 后直接 raise ConnectionError(e)。这是当前实现行为，源码未解释原因；若需要区分读超时，调用方要依据具体异常链或另行处理。",
+          "followUps": []
+        },
+        {
+          "question": "raw 没有 stream 时还能享受 urllib3 的解码吗？",
+          "answer": "按可见代码，标准 file-like 分支只做 raw.read，不传 decode_content，也不捕获 urllib3 的解码异常。是否已解码取决于 raw 对象自身，当前上下文无法进一步确认。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "3785314e2308ce6e49ab7ed8ea6949f614405d59809826e2fa02262fb0697ba9",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`requests.compat` 如何选择 chardet 和 charset_normalizer？`requests.packages` 的 sys.modules 别名解决什么问题？",
+      "answer": "`_resolve_char_detection` 按顺序尝试导入 [[chardet]]，失败再尝试 [[charset_normalizer]]，返回第一个成功的模块，全部失败则返回 None。[[TYPE_CHECKING]] 下声明为 chardet，运行时用解析结果。项目基础依赖是 charset_normalizer，可选 extra 可安装 chardet；`check_compatibility` 会对两者版本做检查，缺失时发 RequestsDependencyWarning。\n\n`packages.py` 为向后兼容，把 [[urllib3]]、idna 以及字符检测模块的真实模块对象注册到 `requests.packages.*` 的 sys.modules 别名中。这样旧代码 import `requests.packages.urllib3` 时得到同一模块身份，而不是另一份副本。",
+      "followUps": [
+        {
+          "question": "同时安装 chardet 和 charset_normalizer 时优先用哪个？",
+          "answer": "按 `_resolve_char_detection` 的循环顺序，先尝试 chardet；一旦成功，后续 charset_normalizer 不再尝试。因此运行时优先 chardet，尽管基础依赖声明的是 charset_normalizer。",
+          "followUps": []
+        },
+        {
+          "question": "`requests.packages` 为什么要遍历 sys.modules 建立别名？",
+          "answer": "源码注释说明需要保持身份一致，使 `requests.packages.urllib3.*` 与真实 `urllib3.*` 指向同一模块对象。遍历已加载子模块并写别名，可覆盖包内多个模块，而不只是顶层包。",
+          "followUps": []
+        },
+        {
+          "question": "如果两个字符检测库都没有安装，会发生什么？",
+          "answer": "`_resolve_char_detection` 返回 None；`check_compatibility` 在 chardet_version 和 charset_normalizer_version 都缺失时发 RequestsDependencyWarning。后续依赖字符检测的功能可能不可用或降级，具体行为取决于调用点。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    },
+    {
+      "fingerprint": "88864f0b28e9de29f727b2366726b3a67de85323b61ae7b86d229c8716566461",
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`_types.is_prepared` 为什么在运行时直接返回 True？它如何配合 [[TYPE_CHECKING]]、[[TypeIs]] 和 [[Protocol]] 为 PreparedRequest 提供类型收窄？",
+      "answer": "`is_prepared` 的返回注解是 `TypeIs[_ValidatedRequest]`。在 [[TYPE_CHECKING]] 为真时，函数体检查 `request.url is not None and request.method is not None`，让类型检查器把 [[PreparedRequest]] 收窄为 url/method 为 str 的子类型；在运行时直接返回 True，避免 assert 因未准备请求而抛 AssertionError，也避免运行时开销。\n\n因此 `assert _is_prepared(request)` 主要服务于静态检查，不是运行时校验。`_types` 还用 runtime_checkable 的 [[Protocol]] 定义 SupportsRead，`has_read` 通过 isinstance 或 hasattr 检查 read 能力，以兼容基于 `__getattr__` 的代理对象。",
+      "followUps": [
+        {
+          "question": "运行时 is_prepared 永远返回 True，会不会让未准备请求通过？",
+          "answer": "会。运行时没有检查 url/method，assert 也不会失败；真正的错误可能在后续 adapter 或 urlopen 阶段才暴露。该函数的设计目标是类型收窄，不是防御性校验。",
+          "followUps": []
+        },
+        {
+          "question": "TypeIs 和 TypeGuard 在收窄语义上有什么区别？",
+          "answer": "TypeIs 要求被收窄类型是输入类型的子类型，并在真、假两个分支都提供收窄；TypeGuard 只保证真分支，且没有同样严格的子类型约束。这里用 TypeIs 表达「真分支是已准备请求」的契约。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 SupportsRead 用 Protocol 而不是基类？",
+          "answer": "Protocol 是结构化类型，只要求对象具有兼容的 read 方法，不要求显式继承。这样文件、BytesIO、代理对象等都能被接受；runtime_checkable 只检查成员存在，不检查完整签名。",
+          "followUps": []
+        }
+      ],
+      "factualCorrectness": null,
+      "projectRelevance": null,
+      "semanticDuplication": null,
+      "note": ""
+    }
+  ]
+}

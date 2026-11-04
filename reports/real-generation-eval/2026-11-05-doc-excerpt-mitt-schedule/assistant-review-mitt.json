@@ -1,0 +1,377 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+  "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+  "caseId": "mitt",
+  "repository": "developit/mitt",
+  "commit": "6b41670516ed8e8b738612f60491995470aa63b3",
+  "requestHash": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+  "reviewer": {
+    "executor": "Codex delegated source reviewer",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsRead": 41,
+    "questionFingerprintsMatchFinalReport": true,
+    "criterion": "Frozen compound facts and concrete source-backed incorrect or imprecise claims; repeated same claim in one question is counted once with all occurrence locations.",
+    "networkCalls": 0,
+    "upstreamCodeExecuted": false,
+    "actualModelOrSettingsAccess": false,
+    "sourceHashesMatchedAfterNewlineNormalization": [
+      "src/index.ts",
+      "test/index_test.ts"
+    ],
+    "typeProbe": {
+      "path": "validation-ts-language-probes.json",
+      "typescriptVersion": "5.9.3",
+      "method": "In-memory static check using the pinned source and installed standard libraries; no upstream code execution or build.",
+      "limitation": "The upstream package declares TypeScript 4.9.5; this probe does not establish an actual TypeScript 4.9 build.",
+      "sha256": "ed62e9873b1f2ae9c4e27a6581568353299e973c2347f427f49fd69e4770ea9e"
+    }
+  },
+  "reviewedSourceHashes": {
+    "src/index.ts": "1536a2dd71d64785d811076beee6d970583ca555dd34ce839face641a200054b",
+    "test/index_test.ts": "cc25b9f1d50cf07d0ae99141e592bfe0d1ca7e8a48332bf1870b31ba8e62c43b",
+    "test/test-types-compilation.ts": "ea625d6ba9a8bd1b44ab24715bd84745db2a38efec69d3441c1774bd89c67bc8",
+    "package.json": "99966ad2891dfe56614f039f5d03ada4bda6dba810952272ae57359abb527b91"
+  },
+  "primaryReview": "Primary agent checked every frozen fact and retained finding against fixed source, read all main answers and relevant follow-ups, and bound fingerprints to the final complete subset report. Module source review covered all questions and nested follow-ups. Non-blind assistant review, not a human accuracy percentage.",
+  "primaryReviewAdjustments": [
+    {
+      "questionNumber": 7,
+      "disposition": "Do not mark the frozen map-events fact contradicted: EventType permits string and symbol events, while the separate claim that number keys are excluded by the structural generic constraint is incorrect."
+    },
+    {
+      "questionNumber": 5,
+      "disposition": "Retain the falsy-invalid-handler finding because the follow-up explicitly asks about non-function runtime inputs and the truthiness branch clears rather than no-ops."
+    },
+    {
+      "questionNumber": 15,
+      "disposition": "Keep the assertion-location nuance as a non-blocking note: the answer broadly says the implementation contains assertions, which is true, although on/off get reads are typed assignments and the explicit casts are at on.set and emit."
+    },
+    {
+      "factId": "mitt-emit-snapshot",
+      "disposition": "Remove the reviewer test range extending past EOF205. The synchronous slice-and-wildcard ordering is directly supported by src/index.ts:103-120; no mutation test is invented."
+    }
+  ],
+  "nonBlockingNotes": [
+    {
+      "questionNumber": 15,
+      "questionFingerprint": "6af98d2022b7f247cd0059f49da2a90ab5933cab0849891a55ae8e68e53d0813",
+      "note": "The type-safety discussion is sound, but the answer could locate the casts more precisely: on/off read all.get(type) through typed assignments; the explicit casts occur at on's all.set and the two emit phases.",
+      "sourceRefs": [
+        {
+          "path": "src/index.ts",
+          "startLine": 67,
+          "endLine": 72
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 82,
+          "endLine": 84
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 103,
+          "endLine": 118
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "The assistant review is not blind or independent human review.",
+    "TypeScript numeric-key behavior is supported by the provided in-memory 5.9.3 probe and source signatures; the upstream 4.9.5 build was not run.",
+    "No model calls, real settings access, upstream project code execution, npm scripts, or builds were performed."
+  ],
+  "humanReviewStatus": "pending",
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "48aebe70d9367bf4bc5c022aa49eed544099248bb95b84c47ff5bb75cbade8a4",
+        "a31b8eb35d36e1a94b3d440e12a2cf9953469d66690317ee636c36e19a15f94a",
+        "a26d1f2020999ad8224a3b4f6c7c71c9f5de6c36fd810747dc8fce39ff09bdb6",
+        "c3760fa392d5f9f9ebcaa301cea5141f33288f8bec12b9a3a30616ac44f63b06",
+        "0267a345b812f7ff86eaf1bd440e7ada110b5d89fe6275555fde22acf0a5b0cb",
+        "565e1d240e5fac7947eddd09572d54c39517cd96cd30edeb7595fb85b141d7fe",
+        "4876174cfb28d38b71f61620ac860f12ae98d5a79cbce2b04d6fbc923bbbb25f",
+        "a53645c6e3061967af2feff8ef41f3b289d64e9c10d08bc5affaf0b8fbed296d",
+        "3a279a5ca6e746b5f1ac5df3327f8be9c21e408435a841ff85465100fb2fcb5a",
+        "468ad6caf5607963ec0b2f30d551c076b6ba8c2c6f2f5e6d49e085e93c3cc6e5",
+        "c5a1c1ab9f703928daf2b4d168ccb0e627f1adff540e202820c8c3d24b321838",
+        "21a8570b9a9cd9719aeb5d402fc752fc064d0e1cd77091df5e7f8a64daaedd2c",
+        "1a5db0a14bc5fc8f0b0be7cbd60783fb9b2338988c708caaf9a0d03f134a3327",
+        "48395cb5623ec35f8abb71fad5c1009dcfc4da06c77ba1c980921af9748e714b",
+        "6af98d2022b7f247cd0059f49da2a90ab5933cab0849891a55ae8e68e53d0813",
+        "afd9c3b93b951816b611120512028122f1ae1bee817e8de56dc9a8b268bf9321",
+        "9cb75d11165aa3f21643920708864758fec6e86789648cf67fdada19250a14df",
+        "a8a9d20fed0d6b2e6143468c570924f9bdac46872987e6d91f4acb640eb26ac0",
+        "b7efbfff9acee95f1607771790d5bb51bf1184ef84b49808f00c55440783c620",
+        "55e592864f258611e33610850509862d8bc448a0d850c0ad3a1e955b5887689c"
+      ],
+      "factReviews": [
+        {
+          "factId": "mitt-map-events",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            2,
+            7,
+            10,
+            13,
+            15
+          ],
+          "reason": "The answers identify the Map-backed event-to-handler storage and the string/symbol EventType alias. This does not imply that number literal keys are excluded by the structural Events constraint; that separate type nuance is recorded under Q7.",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 1
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 18,
+              "endLine": 24
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            }
+          ]
+        },
+        {
+          "factId": "mitt-register-duplicates",
+          "coverage": "covered",
+          "questionNumbers": [
+            4,
+            5
+          ],
+          "reason": "on pushes into an existing handler array and does not deduplicate; the pinned test explicitly registers the same function twice.",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 67,
+              "endLine": 72
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 88,
+              "endLine": 101
+            }
+          ]
+        },
+        {
+          "factId": "mitt-off",
+          "coverage": "covered",
+          "questionNumbers": [
+            4,
+            5,
+            6
+          ],
+          "reason": "For a concrete Events key, a truthy handler is removed at indexOf's first match, while an omitted handler replaces that key's array with an empty array. The wildcard overload requires a handler unless Events itself includes '*'; the answers do not rely on off('*') without a handler.",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 29,
+              "endLine": 33
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 126,
+              "endLine": 159
+            }
+          ]
+        },
+        {
+          "factId": "mitt-emit-snapshot",
+          "coverage": "covered",
+          "questionNumbers": [
+            8,
+            9,
+            11,
+            12
+          ],
+          "reason": "emit copies and synchronously iterates the specific handler list, then fetches and copies the wildcard list for its second phase; the answers describe both the order and mutation boundary.",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ]
+        },
+        {
+          "factId": "mitt-optional-payload",
+          "coverage": "covered",
+          "questionNumbers": [
+            14,
+            16
+          ],
+          "reason": "The no-payload overload admits keys only when undefined extends Events[Key]; the pinned type test accepts an optional bar payload and rejects omitted foo payload.",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 35,
+              "endLine": 38
+            },
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 63,
+              "endLine": 75
+            }
+          ]
+        },
+        {
+          "factId": "mitt-injected-map",
+          "coverage": "covered",
+          "questionNumbers": [
+            1,
+            3
+          ],
+          "reason": "The optional map is reused by reference, returned as emitter.all, and exercised by a test that passes a Map into mitt.",
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 58
+            },
+            {
+              "path": "test/index_test.ts",
+              "startLine": 8,
+              "endLine": 23
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 5,
+          "questionFingerprint": "0267a345b812f7ff86eaf1bd440e7ada110b5d89fe6275555fde22acf0a5b0cb",
+          "kind": "incorrect",
+          "claim": "The follow-up generalizes the no-op behavior to any non-function value absent from the array.",
+          "reason": "The implementation branches on truthiness before indexOf. A falsy non-function such as null, 0, false, or an empty string skips splice and executes all.set(type, []), clearing valid handlers. The answer's no-op explanation applies only to truthy values not found in the array.",
+          "questionParts": [
+            "followUps[1].answer"
+          ],
+          "repeatedOccurrences": 1,
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 82,
+              "endLine": 91
+            }
+          ],
+          "questionPart": "followUps[1].answer"
+        },
+        {
+          "questionNumber": 7,
+          "questionFingerprint": "4876174cfb28d38b71f61620ac860f12ae98d5a79cbce2b04d6fbc923bbbb25f",
+          "kind": "incorrect",
+          "claim": "EventType being string | symbol is taken to mean number keys are rejected by the mitt type API and require an assertion.",
+          "reason": "EventType is used as the index domain of Record<EventType, unknown>, but the Events constraint does not require keyof Events to be limited to string | symbol. A numeric literal property can satisfy the structural constraint; keyof Events can then include that number, which flows into the on/off/emit key and Map types. The local 5.9.3 in-memory probe reports numericKeyAccepted=true; this is not claimed as an upstream TypeScript 4.9 build.",
+          "questionParts": [
+            "answer",
+            "followUps[0].answer"
+          ],
+          "repeatedOccurrences": 2,
+          "sourceRefs": [
+            {
+              "path": "src/index.ts",
+              "startLine": 1,
+              "endLine": 1
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 18,
+              "endLine": 38
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 46,
+              "endLine": 48
+            }
+          ],
+          "validationArtifactRefs": [
+            {
+              "path": "validation-ts-language-probes.json",
+              "sha256": "ed62e9873b1f2ae9c4e27a6581568353299e973c2347f427f49fd69e4770ea9e",
+              "typescriptVersion": "5.9.3",
+              "scope": "Local in-memory type probe; not upstream4.9 execution"
+            }
+          ],
+          "questionPart": "answer and followUps[0].answer"
+        },
+        {
+          "questionNumber": 16,
+          "questionFingerprint": "afd9c3b93b951816b611120512028122f1ae1bee817e8de56dc9a8b268bf9321",
+          "kind": "incorrect",
+          "claim": "The answer calls barHandler's number | undefined input its second parameter and explains its rejection from the wildcard overload as an event-value argument mismatch.",
+          "reason": "barHandler is a one-parameter function `(x?: number) => void`; when assigned to the two-parameter wildcard callback, its parameter corresponds to the first argument, `type`, not the second event value. The test's event-key union is string-valued, so the incompatibility is at the first parameter position.",
+          "questionParts": [
+            "answer"
+          ],
+          "repeatedOccurrences": 1,
+          "sourceRefs": [
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 10,
+              "endLine": 20
+            },
+            {
+              "path": "test/test-types-compilation.ts",
+              "startLine": 34,
+              "endLine": 38
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 6,
+              "endLine": 9
+            },
+            {
+              "path": "src/index.ts",
+              "startLine": 26,
+              "endLine": 27
+            }
+          ],
+          "questionPart": "answer"
+        },
+        {
+          "questionNumber": 18,
+          "questionFingerprint": "a8a9d20fed0d6b2e6143468c570924f9bdac46872987e6d91f4acb640eb26ac0",
+          "kind": "incorrect",
+          "claim": "The answer and follow-up describe docs as running in parallel with bundle.",
+          "reason": "The script groups `bundle` under -p and then switches to -s for `docs`, so docs runs sequentially after the parallel bundle group has completed. The upstream npm-run-all 4.1.5 documentation confirms mixed groups run in order; no npm script was executed for this review.",
+          "questionParts": [
+            "answer",
+            "followUps[0].answer"
+          ],
+          "repeatedOccurrences": 2,
+          "sourceRefs": [
+            {
+              "path": "package.json",
+              "startLine": 24,
+              "endLine": 27
+            }
+          ],
+          "externalSourceRefs": [
+            {
+              "path": "docs/npm-run-all.md",
+              "url": "https://github.com/mysticatea/npm-run-all/blob/master/docs/npm-run-all.md",
+              "blobSha": "c6f1aaa696ab5c01db0d1d1effdc1e89fa504624",
+              "note": "Official npm-run-all v4.1.5 documentation; confirms -p and -s mixed task groups execute in sequence."
+            }
+          ],
+          "questionPart": "answer and followUps[0].answer"
+        }
+      ]
+    }
+  ]
+}

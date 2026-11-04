@@ -1,0 +1,234 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+  "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+  "caseId": "schedule",
+  "repository": "dbader/schedule",
+  "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651",
+  "reviewer": {
+    "blind": false,
+    "executor": "Codex delegated source reviewer",
+    "independent": false
+  },
+  "reviewScope": {
+    "followUpsRead": 40,
+    "networkCalls": 0,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy",
+    "upstreamCodeExecuted": false,
+    "followUpsIncluded": true,
+    "questionsRead": 20,
+    "sourceHashesMatchedAfterNewlineNormalization": [
+      "schedule/__init__.py",
+      "test_schedule.py",
+      "setup.py"
+    ]
+  },
+  "runIntegrity": {
+    "requestHash": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+    "sourceFileCount": 107,
+    "reportRunIdAndDigestMatch": true,
+    "sourceFileHashesMatchPriorRun": true,
+    "providerUsage": {
+      "inputTokens": 42673,
+      "totalTokens": 68756,
+      "outputTokens": 26083
+    },
+    "requestHashMatchesSyntheticDispatchAudit": true
+  },
+  "variants": [
+    {
+      "factReviews": [
+        {
+          "reason": "Q9 states that run_pending filters due jobs, sorts and runs each once; the frozen no-catch-up behavior is explicit in the implementation docstring.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 89,
+              "endLine": 101
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ],
+          "factId": "schedule-run-pending"
+        },
+        {
+          "reason": "Q9 states run_all uses a jobs-list snapshot, runs regardless of due status, and sleeps after each job.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 103,
+              "endLine": 120
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ],
+          "factId": "schedule-run-all"
+        },
+        {
+          "reason": "Q4 accurately explains get_jobs shallow-copy/filter behavior and clear all/tag behavior; Q17 describes tag validation and set-based membership.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 122,
+              "endLine": 148
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 457,
+              "endLine": 469
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            4,
+            17
+          ],
+          "factId": "schedule-tag-management"
+        },
+        {
+          "reason": "Q10 states both CancelJob class and instance are recognized by _run_job and removed from the scheduler list.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 172,
+              "endLine": 176
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 674,
+              "endLine": 698
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            10
+          ],
+          "factId": "schedule-cancel-return"
+        },
+        {
+          "reason": "Q6 covers unit-specific time formats and parsing; Q13 covers conditional pytz import, supported timezone inputs, and optional-dependency behavior.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 471,
+              "endLine": 559
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 19,
+              "endLine": 20
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            6,
+            13
+          ],
+          "factId": "schedule-at"
+        },
+        {
+          "reason": "Q11 lists accepted types and string formats, date substitution for time-only strings, rejection of past cutoffs, and the pre-run/post-run cancellation checks.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 576,
+              "endLine": 642
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 674,
+              "endLine": 698
+            },
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 819,
+              "endLine": 820
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            11
+          ],
+          "factId": "schedule-until"
+        },
+        {
+          "reason": "Q5/Q7 describe random.randint inclusive endpoints and the loop that advances next_run until strictly after now.",
+          "sourceRefs": [
+            {
+              "path": "schedule/__init__.py",
+              "startLine": 700,
+              "endLine": 748
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            7
+          ],
+          "factId": "schedule-jitter-next"
+        }
+      ],
+      "questionFingerprints": [
+        "665c8dc8a130833342d386e4d89a410d9aa748eda3881ae1897d99dc547e438a",
+        "bee05bb6a64b7155a3a8b07458ebb4e8cfdfac1b35c514bba44aee3fd09c809a",
+        "5148fe2e724592fe04f48f8e6d52090fb22294ab3a486d226f89cd863dd15b48",
+        "dadfe84ab82dc1b5925e090db1e05e45a34ff1cd0c1cbd62fe5b6bd43383f692",
+        "5a1af4767a97d2d779890e881de256d4c2ca0330a943fd2d78ab5a584261c6ec",
+        "d82139ee509b0663f7f890f98749e213f55495add69e7bb4115b5b735e51a244",
+        "bb02b2f4b691e21339d692c178f1a032e25b20b53e49157a160d773f8a011fe6",
+        "390acbd32b04603a4f9237097cab57dfbbcae5c9fc6075f5e2f47dafcf899ee6",
+        "921ae102515891c4549371183ba63f2225e6be11ab1379499b6009310acd695c",
+        "b7acc8b8930941d898d8ae1f981fb8127459ceb558a6cf81fec51289ed120c2f",
+        "c31fecaf9e0214ca3051f3f94abc7bb1bb7eb5e9193eaf7c033c00ca72d4b248",
+        "8591defe81542dc335846e42b71a20d7c38b627b86abe7cf037a288c2b5bb90a",
+        "93bbd00c533cdea8c3bb32a7ed26c9209bae3a0b4a7a4198434d24c547ea4893",
+        "865db2e045dcdd984f5e4ee9c5fdfe85e42c315aea7e147b9ae4ec645cf2180f",
+        "1bc2cc209af7dd5b43976f3574682f4fbcf196bdbf53431473f824173abfb4db",
+        "98499a23920c8ed7c4aaddfdf7a71b9fd92bff932ffbdc3d90fe56d60df94245",
+        "3332ca0e84d1bc804cee9d693829cc6e3d4868ed5ab991e71493d1a13e47aa77",
+        "06abe2bef27395777567b4478e39433f418d93ddff16c52732be628b8cd8e9c1",
+        "d4e368df783fe33e168c8f19bdb09297afd3ef9aef1ee6e6509d0f1f07fc5825",
+        "d3fc4a3adde3b70a138b258732e205544a047da606058815e1a81f05beab1267"
+      ],
+      "variant": "generation",
+      "findings": []
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "All 20 main answers and 40 follow-ups were read against the pinned public source revision; retained findings are source-backed and the report is not an exhaustive accuracy score.",
+    "No model/network calls and no upstream project code execution."
+  ],
+  "reviewedSourceHashes": {
+    "schedule/__init__.py": "b0c93f8ee84cbb8dbb98bcb8284864f4ea04012fdbc216de13f8ad2141d09efa",
+    "pyproject.toml": "a48c79e2096ac67baf58e1107adffbbae9a4d6479ed6c8528a5b97ff76c7d996"
+  },
+  "primaryReview": "Primary agent checked every frozen fact and retained finding against fixed source, read all main answers and relevant follow-ups, and bound fingerprints to the final complete subset report. Module source review covered all questions and nested follow-ups. Non-blind assistant review, not a human accuracy percentage.",
+  "nonBlockingNotes": [
+    {
+      "sourceRefs": [
+        {
+          "path": "schedule/__init__.py",
+          "startLine": 457,
+          "endLine": 468
+        }
+      ],
+      "kind": "imprecise",
+      "reason": "collections.abc.Hashable checks for a hash method, not that calling it succeeds. A tuple containing an unhashable member can pass isinstance(tag, Hashable), after which set.update can still raise TypeError; if earlier tags were added first, the update can be partial. The described guard is therefore not complete for all composite labels.",
+      "claim": "The answer describes the Hashable pre-check as reliably catching invalid tags before set.update, avoiding the lower-level error and partial updates.",
+      "questionNumber": 17,
+      "questionPart": "answer",
+      "questionFingerprint": "3332ca0e84d1bc804cee9d693829cc6e3d4868ed5ab991e71493d1a13e47aa77"
+    }
+  ],
+  "primaryReviewAdjustments": [
+    {
+      "questionNumber": 17,
+      "disposition": "Retain the tuple/Hashable boundary as a limitation note. The answer accurately describes the ABC precheck and does not explicitly promise that every Hashable object can be hashed without error or that tag updates are transactional; omission of that extra edge is not counted as a concrete false assertion."
+    }
+  ]
+}

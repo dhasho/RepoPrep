@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+  "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+  "status": "reviewed-by-assistant",
+  "humanReviewStatus": "pending",
+  "questions": 20,
+  "followUpsRead": 44,
+  "requests": 1,
+  "reviewedFacts": 8,
+  "completedCases": [
+    "requests"
+  ],
+  "aggregate": {
+    "generation": {
+      "covered": 5,
+      "partial": 1,
+      "missing": 2,
+      "contradicted": 0,
+      "incorrect": 2,
+      "imprecise": 2
+    }
+  },
+  "comparison": {
+    "priorRunId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+    "priorCounts": {
+      "covered": 3,
+      "partial": 3,
+      "missing": 2,
+      "incorrect": 1,
+      "imprecise": 2
+    },
+    "inputChangePercent": 0.61,
+    "outputChangePercent": -51.34,
+    "totalChangePercent": -25.54,
+    "baselineUsage": {
+      "inputTokens": 42209,
+      "outputTokens": 42768,
+      "totalTokens": 84977
+    },
+    "candidateUsage": {
+      "inputTokens": 42465,
+      "outputTokens": 20812,
+      "totalTokens": 63277
+    },
+    "sameModelPromptTemplateAndInference": true
+  },
+  "qualityGate": {
+    "status": "passed-core-facts-and-observed-token-screen",
+    "scope": "Single Requests observation only: two more complete frozen facts and lower total tokens, with one more material erroneous claim recorded. Overall answer correctness and four-case regression are not certified.",
+    "materialErrorCountIncreased": true
+  },
+  "reviewFiles": [
+    {
+      "filename": "assistant-review-requests.json",
+      "sha256": "52c437f51eaff9473d1b1a63ea38b9eaaf6ee740ed2b0f16e2ebebef77d12371"
+    }
+  ],
+  "limitations": [
+    "Assistant source review is not independent human blind review or an answer accuracy percentage.",
+    "One run per condition; token and fact differences are observations, not isolated causal estimates.",
+    "Only Requests was measured in this report. Additional raw subset reports must remain separately attributed.",
+    "Input estimates are not provider token usage or a currency bill."
+  ]
+}
