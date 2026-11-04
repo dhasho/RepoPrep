@@ -36,6 +36,16 @@ test('real scan selects a late complete JS/TS unit under a tightened budget and 
     assert.ok(built.eligibleFilePaths?.includes('src/core.ts'))
     assert.equal(built.selection?.providedChars, batch.files.reduce((sum, item) => sum + item.content.length, 0))
     assert.equal(built.selection?.selectedFiles, new Set(built.batches.flatMap((item) => item.files.map((entry) => entry.relPath))).size)
+    const fastDefault = renderBatchWithinBudget(built.headerText, built.treeText, batch, 100_000)
+    assert.equal(fastDefault.selection && 'sourceSelections' in fastDefault.selection, false, 'source metadata stays opt-in')
+    const fastObserved = renderBatchWithinBudget(built.headerText, built.treeText, batch, 100_000, '', true)
+    assert.equal(fastObserved.text, fastDefault.text, 'observability does not change the rendered prompt')
+    const sourceSelection = fastObserved.selection?.sourceSelections?.find((entry) => entry.relPath === 'src/core.ts')
+    assert.equal(sourceSelection?.wholeFile, false)
+    assert.deepEqual(sourceSelection?.regions, (file.selectionRegions ?? []).map((region) => ({
+      start: region.start, end: region.end, complete: region.complete,
+      ...(region.documentationOmitted ? { documentationOmitted: true } : {})
+    })), 'fast-path metadata for an initially clipped file uses source selection offsets')
   } finally {
     const resolved = path.resolve(root)
     assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
@@ -259,13 +269,19 @@ test('real scan second-fit compacts only confirmed Python docstrings to keep bot
     const batch = built.batches.find((item) => item.files.some((file) => file.relPath === 'service.py'))
     assert.ok(batch)
     const sourceBatch = { ...batch, files: [originalFile] }
+    const wholeFit = renderBatchWithinBudget(built.headerText, built.treeText, sourceBatch, 100_000, '', true)
+    assert.equal(wholeFit.text, renderBatch(built.headerText, built.treeText, sourceBatch))
+    assert.deepEqual(wholeFit.selection?.sourceSelections, [{ relPath: 'service.py', wholeFile: true, regions: [] }])
     const base = renderBatchWithinBudget(built.headerText, built.treeText, { ...sourceBatch, files: [] }, 100_000).text
     const extension = 'py'
     const bodyBudget = compacted.reduce((sum, region, index) => sum + formatSourceRegions([region], extension).length + (index ? 20 : 0), 0)
     const title = `### 文件：service.py（内容过长已截断）`
     const finalBudget = base.length + title.length + 10 + bodyBudget
     assert.ok(renderBatch(built.headerText, built.treeText, sourceBatch).length > finalBudget, 'the final fitting path must actually run')
-    const final = renderBatchWithinBudget(built.headerText, built.treeText, sourceBatch, finalBudget)
+    const defaultFinal = renderBatchWithinBudget(built.headerText, built.treeText, sourceBatch, finalBudget)
+    assert.equal(defaultFinal.selection && 'sourceSelections' in defaultFinal.selection, false, 'the default return shape stays unchanged')
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, sourceBatch, finalBudget, '', true)
+    assert.equal(final.text, defaultFinal.text, 'source metadata must not alter any prompt byte')
     assert.equal(final.truncated, true)
     assert.ok(final.text.includes('FIRST_METHOD_BODY'))
     assert.ok(final.text.includes('SECOND_METHOD_BODY'))
@@ -276,6 +292,10 @@ test('real scan second-fit compacts only confirmed Python docstrings to keep bot
     assert.equal(final.selection?.selectedRegions, 2)
     assert.equal(final.selection?.omittedDocumentationRegions, 2)
     assert.equal(final.selection?.providedChars, formatSourceRegions(compacted, extension).length)
+    assert.deepEqual(final.selection?.sourceSelections, [{
+      relPath: 'service.py', wholeFile: false,
+      regions: methods.map((region) => ({ start: region.start, end: region.end, complete: false, documentationOmitted: true })).sort((a, b) => a.start - b.start)
+    }], 'final fit metadata identifies the exact source spans, completeness, and doc omission')
     assert.ok(final.text.length <= finalBudget)
   } finally {
     const resolved = path.resolve(root)
@@ -295,13 +315,18 @@ test('real README survives final second-fit through a budgeted head and tail exc
     const batch = built.batches[0]
     const fullReadme = batch.files.find((file) => file.relPath === 'README.md')
     assert.ok(fullReadme?.content.includes('README_KEEP_END'), 'the first build has room for the complete README')
-    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, 18_000)
+    const defaultFinal = renderBatchWithinBudget(built.headerText, built.treeText, batch, 18_000)
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, 18_000, '', true)
+    assert.equal(final.text, defaultFinal.text)
     assert.ok(final.truncated)
     assert.ok(final.text.includes('README-IMPORTANT-START'))
     assert.ok(final.text.includes('README_KEEP_END'))
     assert.ok(final.text.includes('文档片段已截断'))
     assert.ok(final.text.length <= 18_000)
     assert.ok(final.selection?.filePaths.includes('README.md'))
+    assert.deepEqual(final.selection?.sourceSelections?.find((entry) => entry.relPath === 'README.md'), {
+      relPath: 'README.md', wholeFile: false, regions: []
+    }, 'unknown document excerpt ranges are not labeled as code regions')
     const newline = String.fromCharCode(10)
     const readmeBody = final.text.split('### 文件：README.md（内容过长已截断）' + newline + '```' + newline)[1]?.split(newline + '```')[0] ?? ''
     const manifestBody = final.text.split('### 文件：package.json' + newline + '```' + newline)[1]?.split(newline + '```')[0] ?? ''

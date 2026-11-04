@@ -62,7 +62,14 @@ export interface RenderedSelection {
   selectedRegions: number
   omittedDocumentationRegions?: number
   providedChars: number
+  sourceSelections?: Array<{
+    relPath: string
+    wholeFile: boolean
+    regions: Array<{ start: number; end: number; complete: boolean; documentationOmitted?: boolean }>
+  }>
 }
+
+type RenderedSourceRegion = NonNullable<RenderedSelection['sourceSelections']>[number]['regions'][number]
 
 export interface ContentSecuritySummary {
   redactedFiles: number
@@ -716,10 +723,11 @@ export function renderBatchWithinBudget(
   treeText: string,
   batch: ContextBatch,
   maxChars: number,
-  requestTruncationMarker = ''
+  requestTruncationMarker = '',
+  includeSourceSelections = false
 ): { text: string; truncated: boolean; selection?: RenderedSelection } {
   const text = renderBatch(headerText, treeText, batch)
-  if (text.length <= maxChars) return { text, truncated: false, selection: summarizeRenderedFiles(batch.files) }
+  if (text.length <= maxChars) return { text, truncated: false, selection: summarizeRenderedFiles(batch.files, includeSourceSelections) }
   const outputBudget = maxChars - requestTruncationMarker.length
   const base = renderBatch(headerText, treeText, { ...batch, files: [] })
   if (outputBudget < 0 || base.length > outputBudget) throw new Error('模型请求固定上下文超出支持范围。')
@@ -767,6 +775,7 @@ export function renderBatchWithinBudget(
   const byIndex = new Map(included.map((plan, index) => [plan.index, { plan, allocation: allocations[index] }]))
   const parts = [base]
   const includedFiles: ContextFile[] = []
+  const sourceSelections: NonNullable<RenderedSelection['sourceSelections']> = []
   let selectedRegions = 0
   let omittedDocumentationRegions = 0
   let providedChars = 0
@@ -778,23 +787,30 @@ export function renderBatchWithinBudget(
     const { file, kind } = plan
     let content: string
     let regionCount: number
+    let wholeFile = false
+    let chosenRegions: readonly SourceRegion[] = []
     if (kind === 'document') {
       content = allocation >= file.content.length ? file.content : clipDocumentExcerpt(file.content, allocation)
       regionCount = content.length ? 1 : 0
+      wholeFile = !file.truncated && content === file.content
     } else if (kind === 'regions') {
       const candidates = file.selectionCandidates?.length ? file.selectionCandidates : file.selectionRegions ?? []
       if (!file.truncated && allocation >= file.content.length) {
         content = file.content
         regionCount = content.length ? 1 : 0
+        wholeFile = true
       } else {
         const regions = regionsWithinBudget(candidates, allocation, file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? '')
         content = formatRegions(regions, file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? '')
         regionCount = regions.length
+        chosenRegions = regions
         omittedDocumentationRegions += regions.filter((region) => region.documentationOmitted).length
       }
     } else if (allocation >= file.content.length) {
       content = file.content
       regionCount = content.length ? 1 : 0
+      wholeFile = !file.truncated
+      if (!wholeFile && !isDocumentOrConfigPath(file.relPath)) chosenRegions = file.selectionRegions ?? []
     } else {
       truncated = true
       continue
@@ -805,6 +821,13 @@ export function renderBatchWithinBudget(
     const title = `### 文件：${file.relPath}${file.truncated || wasClipped ? '（内容过长已截断）' : ''}`
     parts.push([title, '```', content, '```'].join('\n'))
     includedFiles.push(file)
+    if (includeSourceSelections) {
+      sourceSelections.push({
+        relPath: file.relPath,
+        wholeFile,
+        regions: wholeFile || isDocumentOrConfigPath(file.relPath) ? [] : chosenRegions.map(sourceRegionMetadata)
+      })
+    }
     selectedRegions += regionCount
     providedChars += content.length
   }
@@ -817,8 +840,18 @@ export function renderBatchWithinBudget(
       filePaths: includedFiles.map((file) => file.relPath),
       selectedRegions,
       ...(omittedDocumentationRegions > 0 ? { omittedDocumentationRegions } : {}),
-      providedChars
+      providedChars,
+      ...(includeSourceSelections ? { sourceSelections } : {})
     }
+  }
+}
+
+function sourceRegionMetadata(region: SourceRegion): RenderedSourceRegion {
+  return {
+    start: region.start,
+    end: region.end,
+    complete: region.complete,
+    ...(region.documentationOmitted ? { documentationOmitted: true } : {})
   }
 }
 
@@ -858,14 +891,22 @@ function canRenderPlannedFile(plan: { kind: 'document' | 'regions' | 'whole'; fi
   return allocation >= plan.file.content.length
 }
 
-function summarizeRenderedFiles(files: readonly ContextFile[]): RenderedSelection {
+function summarizeRenderedFiles(files: readonly ContextFile[], includeSourceSelections = false): RenderedSelection {
+  const sourceSelections = includeSourceSelections ? files.map((file) => ({
+    relPath: file.relPath,
+    wholeFile: !file.truncated,
+    regions: file.truncated && !isDocumentOrConfigPath(file.relPath)
+      ? (file.selectionRegions ?? []).map(sourceRegionMetadata)
+      : []
+  })) : undefined
   return {
     filePaths: files.map((file) => file.relPath),
     selectedRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.length ?? (file.content.length ? 1 : 0)), 0),
     ...(files.reduce((sum, file) => sum + (file.selectionRegions?.filter((region) => region.documentationOmitted).length ?? 0), 0) > 0
       ? { omittedDocumentationRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.filter((region) => region.documentationOmitted).length ?? 0), 0) }
       : {}),
-    providedChars: files.reduce((sum, file) => sum + file.content.length, 0)
+    providedChars: files.reduce((sum, file) => sum + file.content.length, 0),
+    ...(sourceSelections ? { sourceSelections } : {})
   }
 }
 
