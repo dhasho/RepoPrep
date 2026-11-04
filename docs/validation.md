@@ -31,6 +31,7 @@
 | `npm run test:eval` | 离线评分器和人工复核 CLI 单元/命令行测试；不运行生成器或真实模型。 |
 | `npm run test:eval:real` | 真实语料校验、生产生成器对照链路、请求限额与失败报告的定向测试；使用合成 HTTP 响应与合成凭据，不调用真实模型。 |
 | `npm run eval:real -- verify --repos-root <directory>` | 核验公开仓库的固定提交、工作树、来源及源码事实哈希/行号；不访问模型服务。 |
+| `npm run eval:context -- --repos-root <directory> --output <new-directory> [--reference-report <report.json>] [--case <id>]` | 通过生产扫描与生成器构造最终模型请求，用仅允许 `https://context-audit.invalid` 的合成 fetch 捕获请求体哈希；不读取设置/凭据、不访问上游。输出仅用于上下文证据检查，不评价答案质量。 |
 | `npm run eval:real:saved -- --repos-root <directory> --output <new-directory>` | 在隔离 Electron 主进程内读取已保存模型，执行真实仓库生成。会调用配置的模型服务，边界见[真实评测](real-generation-evaluation.md)。 |
 | `npm run eval:real:cohort -- <baseline> <current> <prior> <proof> <new-directory>` | 组合已完成的子集运行与历史测量，不调用模型。 |
 | `npm run eval:offline -- <new-directory>` | 通过 loopback 合成响应器运行固定 fixture、生产生成流程和评分器；不读取用户设置或密钥，独立输出目录可避免覆盖已有报告。 |

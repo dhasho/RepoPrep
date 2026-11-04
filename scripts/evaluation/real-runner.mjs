@@ -218,7 +218,7 @@ export async function verifyRealCorpus({ reposRoot, manifestPath } = {}) {
   return { schemaVersion: manifest.schemaVersion, version: manifest.version, cases: verified }
 }
 
-async function hashSources(manifestPath) {
+export async function hashSources(manifestPath) {
   const sourceHashes = {}
   const roots = ['electron/services', 'shared', 'scripts/evaluation']
   async function walk(directory, relative) {

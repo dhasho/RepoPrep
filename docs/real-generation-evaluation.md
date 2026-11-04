@@ -10,6 +10,10 @@
 
 ## 运行前
 
+### 零网络上下文证据审计
+
+在准备真实评测前，可运行 `npm run eval:context -- --repos-root <公开语料父目录> --output <新目录>`。它先核验固定语料，再通过生产扫描与生成器构造最终请求；进程内 fetch 仅允许 `https://context-audit.invalid` 并返回合成 20 题。该命令不读取设置或凭据，不访问模型服务。可重复传入 `--case <id>`；`--reference-report <report.json>` 只读取模型、协议、温度、推理强度、上下文窗和输出上限等非私密推理配置，并且仅支持 OpenAI 协议。报告标记为 context-only，实际 provider usage 为 null；请求体只记录哈希，不保存完整提示词、未脱敏源码或合成响应。证据字段会记录脱敏的候选区域原文或文档节选。源码证据匹配是文本证据，不等于唯一 AST 节点身份、完整实现保证或答案正确性评分；没有可靠候选边界时只报告文件级状态。
+
 仅在获得明确授权后运行真实评测：此流程会访问真实模型服务，可能产生费用或受账户额度限制。
 
 - 确认目标 profile 已在当前 RepoPrep/ProjectLens 安装中保存，且其凭据状态可由当前 Windows 用户解密。默认使用设置中当前选择的 profile；可使用 `--profile-id` 覆盖。默认设置目录为 `%APPDATA%\ProjectLens`，可用 `--settings-dir` 指定已有目录。
