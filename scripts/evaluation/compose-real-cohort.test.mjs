@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile as execFileCallback } from 'node:child_process'
 import { promisify } from 'node:util'
 import { calculateReportDigest } from './review.mjs'
-import { composeRealCohort, cohortMarkdown } from './compose-real-cohort.mjs'
+import { composeRealCohort, cohortMarkdown, parseCohortArgs } from './compose-real-cohort.mjs'
 
 const execFile = promisify(execFileCallback)
 const CASE_IDS = ['alpha', 'beta', 'gamma', 'delta']
@@ -229,6 +229,41 @@ test('normalizes missing legacy effort and rejects effort changes for cohort reu
   })
   const lowProof = buildProof({ current: scenario.current, reuse: lowReuse })
   assert.throws(() => composeRealCohort({ ...scenario, reuse: lowReuse, reuseProof: lowProof }), /generation settings differ/u)
+})
+
+test('allows only an explicit baseline-to-current effort change and records its conditions', () => {
+  const scenario = buildScenario()
+  scenario.current.config.reasoningEffort = 'low'
+  scenario.current.configHashInputs.reasoningEffort = 'low'
+  recomputeHashes(scenario.current)
+  scenario.reuse.config.reasoningEffort = 'low'
+  scenario.reuse.configHashInputs.reasoningEffort = 'low'
+  recomputeHashes(scenario.reuse)
+  scenario.reuseProof = buildProof({ current: scenario.current, reuse: scenario.reuse })
+
+  assert.throws(() => composeRealCohort(scenario), /baseline reasoning effort differs/u)
+  const cohort = composeRealCohort({ ...scenario, allowReasoningEffortChange: true })
+  assert.deepEqual(cohort.reasoningEffortChange, { baseline: 'provider-default', current: 'low' })
+  assert.ok(cohort.caveats.some(caveat => /different reasoning efforts/u.test(caveat)))
+  assert.match(cohortMarkdown(cohort), /Reasoning effort change: provider-default \(baseline\) → low \(current\)/u)
+
+  const highReuse = structuredClone(scenario.reuse)
+  highReuse.config.reasoningEffort = 'high'
+  highReuse.configHashInputs.reasoningEffort = 'high'
+  recomputeHashes(highReuse)
+  const highProof = buildProof({ current: scenario.current, reuse: highReuse })
+  assert.throws(() => composeRealCohort({ ...scenario, reuse: highReuse, reuseProof: highProof, allowReasoningEffortChange: true }), /generation settings differ/u)
+})
+
+test('cohort CLI accepts one trailing reasoning-change flag only', () => {
+  const paths = ['baseline.json', 'current.json', 'reuse.json', 'proof.json', 'output']
+  assert.deepEqual(parseCohortArgs(paths), {
+    baselinePath: 'baseline.json', currentPath: 'current.json', reusePath: 'reuse.json', proofPath: 'proof.json', outputDir: 'output', allowReasoningEffortChange: false
+  })
+  assert.equal(parseCohortArgs([...paths, '--allow-reasoning-change']).allowReasoningEffortChange, true)
+  assert.throws(() => parseCohortArgs([...paths, '--allow-reasoning-change', '--allow-reasoning-change']), /usage:/u)
+  assert.throws(() => parseCohortArgs([...paths, '--unknown']), /usage:/u)
+  assert.throws(() => parseCohortArgs([...paths.slice(0, 4), '--allow-reasoning-change', paths[4]]), /usage:/u)
 })
 
 test('fresh network totals include README controls outside selected generation measurements', () => {

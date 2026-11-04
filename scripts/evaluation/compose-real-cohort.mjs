@@ -20,6 +20,8 @@ const COHORT_CAVEATS = [
   'Endpoint origin hashes must match when both reports record them; older reports may omit that field.'
 ]
 
+const REASONING_CHANGE_CAVEAT = 'The baseline and current reports use different reasoning efforts; treat them as different inference conditions, and interpret the cohort as an explicit mixed-condition aggregation.'
+
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
   if (value && typeof value === 'object') {
@@ -142,7 +144,7 @@ function reuseConfiguration(run) {
   })
 }
 
-function assertBaselineComparable(baseline, current) {
+function assertBaselineComparable(baseline, current, allowReasoningEffortChange) {
   if (typeof baseline.model !== 'string' || !baseline.model || typeof baseline.protocol !== 'string' || !baseline.protocol) {
     throw new Error('baseline report is missing required model configuration fields (model and protocol)')
   }
@@ -150,7 +152,7 @@ function assertBaselineComparable(baseline, current) {
   for (const key of ['granularity', 'budget', 'temperature']) {
     if (canonical(baseline.config[key]) !== canonical(current.config[key])) throw new Error(`baseline ${key} differs from the current report`)
   }
-  if (reasoningEffort(baseline) !== reasoningEffort(current)) throw new Error('baseline reasoning effort differs from the current report')
+  if (reasoningEffort(baseline) !== reasoningEffort(current) && !allowReasoningEffortChange) throw new Error('baseline reasoning effort differs from the current report')
 }
 
 function assertCurrentReuseComparable(current, reuse) {
@@ -280,15 +282,16 @@ function reportProvenance(role, run, reference) {
   }
 }
 
-export function composeRealCohort({ baseline, current, reuse, reuseProof, references } = {}) {
+export function composeRealCohort({ baseline, current, reuse, reuseProof, references, allowReasoningEffortChange = false } = {}) {
   if (!isPlainObject(baseline) || !isPlainObject(current) || !isPlainObject(reuse)) throw new Error('baseline, current, reuse, and reuseProof inputs are required')
+  if (typeof allowReasoningEffortChange !== 'boolean') throw new Error('allowReasoningEffortChange must be a boolean')
   const baselineCases = assertReport(baseline, 'baseline', { statuses: ['complete'], allowStubs: false })
   const reuseCases = assertReport(reuse, 'reuse', { statuses: ['complete'], allowStubs: false })
   // A completed run of a selected subset is valid. An interrupted run is not:
   // silently filling its uncompleted cases would hide attempted network calls.
   const currentCases = assertReport(current, 'current', { statuses: ['complete'], allowStubs: false })
   if (baseline.corpusVersion !== current.corpusVersion || baseline.corpusVersion !== reuse.corpusVersion) throw new Error('corpus versions differ across input reports')
-  assertBaselineComparable(baseline, current)
+  assertBaselineComparable(baseline, current, allowReasoningEffortChange)
   assertCurrentReuseComparable(current, reuse)
 
   const caseSet = [...baselineCases.keys()].sort()
@@ -347,6 +350,11 @@ export function composeRealCohort({ baseline, current, reuse, reuseProof, refere
   }
   const selectedFreshRequests = cases.filter(item => item.source === 'fresh').reduce((sum, item) => sum + item.metrics.requestCount, 0)
   if (measurement.freshNetworkRequests !== null && measurement.freshNetworkRequests < selectedFreshRequests) throw new Error('current network receipt omits selected generation requests')
+  const baselineReasoningEffort = reasoningEffort(baseline)
+  const currentReasoningEffort = reasoningEffort(current)
+  const reasoningEffortChange = baselineReasoningEffort === currentReasoningEffort
+    ? null
+    : { baseline: baselineReasoningEffort, current: currentReasoningEffort }
   return {
     schemaVersion: COHORT_SCHEMA_VERSION,
     composedAt: new Date().toISOString(),
@@ -354,12 +362,13 @@ export function composeRealCohort({ baseline, current, reuse, reuseProof, refere
     model: current.model,
     protocol: current.protocol,
     config: { granularity: current.config.granularity, budget: current.config.budget, temperature: current.config.temperature, reasoningEffort: reasoningEffort(current) },
+    reasoningEffortChange,
     inputReports,
     reuseProof: { canonicalHash: hashCanonical(reuseProof) },
     measurement,
     cases,
     summary: cohortSummary(cases.map(item => item.metrics)),
-    caveats: COHORT_CAVEATS
+    caveats: reasoningEffortChange ? [...COHORT_CAVEATS, REASONING_CHANGE_CAVEAT] : COHORT_CAVEATS
   }
 }
 
@@ -389,6 +398,7 @@ export function cohortMarkdown(cohort) {
     '', '## Selection', '',
     `- Cohort cases: ${cohort.measurement.caseCount}`,
     `- Reasoning effort: ${cohort.config.reasoningEffort ?? 'provider-default'}`,
+    ...(cohort.reasoningEffortChange ? [`- Reasoning effort change: ${cohort.reasoningEffortChange.baseline} (baseline) → ${cohort.reasoningEffortChange.current} (current)`] : []),
     `- Fresh measurements from the current run: ${cohort.measurement.freshCases.length} (${cohort.measurement.freshCases.join(', ') || 'none'})`,
     `- Reused measurements from the prior run: ${cohort.measurement.reusedCases.length} (${cohort.measurement.reusedCases.join(', ') || 'none'})`,
     `- Selected measurement requests (raw request count across the selected cases): ${cohort.measurement.selectedMeasurementsRequests}`,
@@ -439,10 +449,7 @@ async function prepareOutputDirectory(outputDir, inputPaths) {
 }
 
 async function main() {
-  const [baselinePath, currentPath, reusePath, proofPath, outputDir, ...rest] = process.argv.slice(2)
-  if (!baselinePath || !currentPath || !reusePath || !proofPath || !outputDir || rest.length) {
-    throw new Error('usage: compose-real-cohort.mjs <baseline-report.json> <current-report.json> <reuse-report.json> <reuse-proof.json> <new-output-directory>')
-  }
+  const { baselinePath, currentPath, reusePath, proofPath, outputDir, allowReasoningEffortChange } = parseCohortArgs(process.argv.slice(2))
   const inputs = [
     ['baseline', baselinePath],
     ['current', currentPath],
@@ -453,7 +460,7 @@ async function main() {
   for (const input of inputs) parsed[input.role] = JSON.parse(await readFile(input.absolute, 'utf8'))
   const output = await prepareOutputDirectory(outputDir, inputs.map(input => input.absolute))
   const references = Object.fromEntries(inputs.filter(input => input.role !== 'reuseProof').map(input => [input.role, path.relative(output, input.absolute).split(path.sep).join('/')]))
-  const cohort = composeRealCohort({ ...parsed, references })
+  const cohort = composeRealCohort({ ...parsed, references, allowReasoningEffortChange })
   await mkdir(output, { recursive: true })
   const cohortPath = path.join(output, 'cohort.json')
   const reportPath = path.join(output, 'report.md')
@@ -468,6 +475,16 @@ async function main() {
     freshNetworkRequests: cohort.measurement.freshNetworkRequests,
     reusedMeasurements: cohort.measurement.reusedMeasurements
   })}\n`)
+}
+
+export function parseCohortArgs(args) {
+  const usage = 'usage: compose-real-cohort.mjs <baseline-report.json> <current-report.json> <reuse-report.json> <reuse-proof.json> <new-output-directory> [--allow-reasoning-change]'
+  const allowReasoningEffortChange = args.at(-1) === '--allow-reasoning-change'
+  const positional = allowReasoningEffortChange ? args.slice(0, -1) : args
+  if (positional.length !== 5 || positional.some(value => !value) || args.filter(value => value === '--allow-reasoning-change').length > 1) throw new Error(usage)
+  if (positional.some(value => value.startsWith('--'))) throw new Error(usage)
+  const [baselinePath, currentPath, reusePath, proofPath, outputDir] = positional
+  return { baselinePath, currentPath, reusePath, proofPath, outputDir, allowReasoningEffortChange }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

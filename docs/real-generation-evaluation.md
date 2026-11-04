@@ -49,7 +49,10 @@ npm run test:eval:real
 
 ```powershell
 npm run eval:real:cohort -- <baseline-report.json> <current-subset-report.json> <prior-report.json> <current-request-proof.json> <new-output-directory>
+npm run eval:real:cohort -- <baseline-report.json> <current-subset-report.json> <prior-report.json> <current-request-proof.json> <new-output-directory> --allow-reasoning-change
 ```
+
+默认要求 baseline 与 current 的 reasoning effort 一致。只有 baseline→current 的对照可在显式追加末尾 `--allow-reasoning-change` 后跨强度组合；输出会记录两端强度并加入不同推理条件的 caveat。current 与 reuse 的强度及 reuse proof 配置仍须一致，不能由此开关放宽。
 
 该命令生成 `repoprep-real-eval-cohort-v1` 格式的 `cohort.json` 和 `report.md`，保留各 case 的来源 run、报告引用、请求回执与问题指纹。proof 的 `cases` 是以 case id 为键的对象，每项包含 `identical`、`originalPromptHash` 和 `currentPromptHash`，并须提供完整的 `currentSourceHashes` 与 `configuration`；其中包含 `reasoningEffort`，旧 proof 缺省按 `provider-default` 处理。工具校验哈希绑定和输出对应关系；它不会替调用者生成或证明未执行过的观测。
 
