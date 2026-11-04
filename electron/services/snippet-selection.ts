@@ -106,16 +106,16 @@ function prioritizeDirectCallees(regions: SourceRegion[]): SourceRegion[] {
 }
 
 function pythonDocstringRange(content: string, lines: string[], offsets: number[], declaration: PythonDeclaration, endIndex: number): { start: number; end: number } | undefined {
-  let lineIndex = declaration.index + 1
+  if (declaration.headerEndLine === undefined || declaration.headerInlineBody) return undefined
+  let lineIndex = declaration.headerEndLine + 1
   while (lineIndex < endIndex) {
     const line = lines[lineIndex]
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) { lineIndex++; continue }
     if (line.length - line.trimStart().length <= declaration.indent) return undefined
-    const first = line.match(/^\s*((?:[rR]|[uU]|[rR][uU]|[uU][rR])?)("""|'''|"|')/)
+    const first = line.match(/^\s*(?:[rR]|[uU]|[rR][uU]|[uU][rR])?("""|''')/)
     if (!first) return undefined
-    const prefix = first[1]
-    const quote = first[2]
+    const quote = first[1]
     const opening = line.indexOf(quote, first[0].length - quote.length)
     if (opening < 0) return undefined
     const contentStart = offsets[lineIndex] + opening + quote.length
@@ -162,10 +162,15 @@ const DOCUMENTATION_MARKER = '\n…（文档其余内容省略）…\n'
 /** Compact only offsets supplied by the conservative Python lexer. */
 export function compactRegionDocumentation(region: SourceRegion): SourceRegion {
   if (region.documentationOmitted || !region.documentationRanges?.length) return region
+  const ranges = [...region.documentationRanges].sort((a, b) => a.start - b.start || a.end - b.end)
+  for (let index = 0; index < ranges.length; index++) {
+    const range = ranges[index]
+    if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end < range.start || range.end > region.text.length) return region
+    if (index > 0 && ranges[index - 1].end > range.start) return region
+  }
   let text = region.text
   let omitted = false
-  for (const range of [...region.documentationRanges].sort((a, b) => b.start - a.start)) {
-    if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end < range.start || range.end > text.length) return region
+  for (const range of [...ranges].reverse()) {
     const body = text.slice(range.start, range.end)
     if (body.length <= DOCUMENTATION_LIMIT) continue
     const head = headAtCodePointBoundary(body, DOCUMENTATION_PREFIX)
@@ -192,6 +197,8 @@ interface PythonDeclaration {
   qualifiedName: string
   kind: string
   colonSeen: boolean
+  headerEndLine: number | undefined
+  headerInlineBody: boolean
   // Hierarchy and stub metadata only feed candidate priority; region
   // boundaries and labels stay exactly as the conservative parser finds them.
   overload: boolean
@@ -290,6 +297,8 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
               qualifiedName: [...scopes.map((scope) => scope.name), match[2]].join('.'),
               kind: match[1],
               colonSeen: false,
+              headerEndLine: undefined,
+              headerInlineBody: false,
               overload,
               defDepth,
               ownerClasses: classChain.join('.'),
@@ -384,6 +393,8 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
           else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1)
           else if (ch === ':' && depth === 0 && pendingHeader && (i === pendingHeader.index || !beginsStatement)) {
             pendingHeader.colonSeen = true
+            pendingHeader.headerEndLine = i
+            pendingHeader.headerInlineBody = Boolean(line.slice(j + 1).replace(/#.*$/, '').trim())
             inlineCapture = { decl: pendingHeader, parts: [] }
             pendingHeader = undefined
           } else if (ch === '\\' && (j + 1 >= line.length || line[j + 1] === '\n' || line[j + 1] === '\r')) continuation = true

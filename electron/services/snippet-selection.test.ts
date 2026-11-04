@@ -667,6 +667,24 @@ test('Python docstring compaction is bounded, visible, preserves code, and marks
   assert.ok(compacted.text.includes("return 'KEEP_CODE'"))
   assert.ok(formatSourceRegions([compacted], 'py').includes('文档节选'))
   assert.equal(compactRegionDocumentation({ ...region, text: region.text + 'changed' }).documentationOmitted, true)
+  const overlapping = { ...region, documentationRanges: [{ start: 1, end: 8 }, { start: 7, end: 20 }] }
+  assert.equal(compactRegionDocumentation(overlapping), overlapping, 'overlapping ranges fail closed without altering the region')
+})
+
+test('decorated multiline Python signatures locate the actual triple-quoted docstring', () => {
+  const source = `@decorate(\n  mode='safe',\n)\ndef execute(\n  self,\n  note="not a docstring",\n) -> str:\n  """${'PUBLIC_DOC_SENTINEL '.repeat(40)}"""\n  return 'KEEP_AFTER_DOC'\n`
+  const region = sourceRegionCandidates(source, null, { extension: 'py' }).find(item => item.label === 'execute')
+  assert.ok(region?.documentationRanges, 'the long body docstring is found after the closing signature line')
+  const range = region.documentationRanges[0]
+  assert.ok(region.text.slice(range.start, range.end).startsWith('PUBLIC_DOC_SENTINEL'))
+  const compacted = compactRegionDocumentation(region)
+  assert.ok(compacted.documentationOmitted)
+  assert.ok(compacted.text.includes("return 'KEEP_AFTER_DOC'"))
+  assert.equal(compacted.text.slice(0, range.start), region.text.slice(0, range.start))
+  const marker = '\n…（文档其余内容省略）…\n'
+  const markerStart = compacted.text.indexOf(marker, range.start)
+  assert.ok(markerStart >= range.start)
+  assert.equal(compacted.text.slice(markerStart + marker.length), region.text.slice(range.end), 'everything after the docstring content remains byte-identical')
 })
 
 test('short Python docstrings and whole-file fits remain byte-for-byte unchanged', () => {
@@ -677,6 +695,8 @@ test('short Python docstrings and whole-file fits remain byte-for-byte unchanged
   const whole = selectSourceRegions(source, null, source.length, { extension: 'py' })
   assert.equal(whole.regions[0].text, source)
   assert.equal(whole.regions[0].documentationOmitted, undefined)
+  const singleQuoted = `def ordinary_string():\n  "${'x'.repeat(700)}"\n  return 3\n`
+  assert.equal(sourceRegionCandidates(singleQuoted, null, { extension: 'py' }).find(item => item.label === 'ordinary_string')?.documentationRanges, undefined, 'single-quoted strings stay intact to avoid injecting newlines into their syntax')
 })
 
 test('tight Python selection includes every docstring marker in its actual formatting budget', () => {
