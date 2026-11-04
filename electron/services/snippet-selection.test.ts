@@ -678,3 +678,13 @@ test('short Python docstrings and whole-file fits remain byte-for-byte unchanged
   assert.equal(whole.regions[0].text, source)
   assert.equal(whole.regions[0].documentationOmitted, undefined)
 })
+
+test('tight Python selection includes every docstring marker in its actual formatting budget', () => {
+  const source = `def oversized():\n  """${'D'.repeat(900)}"""\n  return 'CODE_SENTINEL'\n\ndef extra():\n  return 2\n`
+  const budget = 300
+  const selected = selectSourceRegions(source, null, budget, { extension: 'py' })
+  assert.ok(selected.truncated)
+  assert.ok(selected.regions.some(region => region.documentationOmitted))
+  assert.ok(formatSourceRegions(selected.regions, 'py').length <= budget)
+  assert.ok(selected.regions.some(region => region.text.includes('CODE_SENTINEL')))
+})
