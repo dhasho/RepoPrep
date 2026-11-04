@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "repoprep-real-screen-provenance-v1",
+  "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+  "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+  "measuredSourceCommit": "dcd457dc1ad5fe998b787bf76496cd37b635689d",
+  "sourceFiles": 105,
+  "reportFileSha256": "064960f6ed63f40fcfd9ff8320e41dd350a4a7392bbcced732988e5ee36061b8",
+  "syntheticCaptureRequestHashMatches": true,
+  "sourceHashesAndFrozenSnapshotVerified": true,
+  "providerAndObserverUsageAgree": true,
+  "realRequests": 1,
+  "remainingAuthorizedRequestsNotIssued": 3,
+  "originalSettingsAndLocalStateUnchanged": true,
+  "validation": {
+    "typecheck": "passed",
+    "ipc": 268,
+    "renderer": 170,
+    "fileSelection": 89,
+    "questionBudget": 117,
+    "realEvaluationSynthetic": 61,
+    "security": {
+      "passed": 77,
+      "skipped": 3,
+      "failed": 0
+    },
+    "nativeWorkflow": "WORKFLOW-OK; low in all3 synthetic production requests; fixture cleaned"
+  },
+  "gateOutcome": "failed-single-case-screen; overall quality/cost objective remains active"
+}

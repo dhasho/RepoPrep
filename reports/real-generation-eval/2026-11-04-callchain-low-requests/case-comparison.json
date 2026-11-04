@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "repoprep-case-observation-v1",
+  "scope": "Requests generation case only; original complete source reports are linked without synthesizing a four-case run.",
+  "measurements": [
+    {
+      "report": "../2026-10-24-grounded-v1-deepseek-v4-flash/report.json",
+      "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+      "reportFileSha256": "73d704e0f0cd538775e2e59351e7392a720cb0c16b68935dcee601dccedacd31",
+      "caseId": "requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reasoningEffort": "provider-default",
+      "questions": 20,
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 42508,
+        "outputTokens": 18346,
+        "totalTokens": 60854
+      },
+      "modelMs": 93143
+    },
+    {
+      "report": "../2026-11-01-scoped-v1-deepseek-v4-flash/report.json",
+      "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+      "reportFileSha256": "1d2980271c855851ade5f58d0a96b0fdd55a4008fa595edac81f9d0e9fdda640",
+      "caseId": "requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reasoningEffort": "provider-default",
+      "questions": 20,
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 42428,
+        "outputTokens": 35765,
+        "totalTokens": 78193
+      },
+      "modelMs": 190885
+    },
+    {
+      "report": "../2026-11-04-callchain-low-requests/report.json",
+      "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+      "reportFileSha256": "064960f6ed63f40fcfd9ff8320e41dd350a4a7392bbcced732988e5ee36061b8",
+      "caseId": "requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reasoningEffort": "low",
+      "questions": 20,
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 42209,
+        "outputTokens": 42768,
+        "totalTokens": 84977
+      },
+      "modelMs": 218096
+    }
+  ]
+}

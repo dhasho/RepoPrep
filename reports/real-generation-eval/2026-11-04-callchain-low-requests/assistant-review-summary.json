@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+  "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+  "status": "reviewed-by-assistant",
+  "humanReviewStatus": "pending",
+  "questions": 20,
+  "requests": 1,
+  "reviewedFacts": 8,
+  "completedCases": [
+    "requests"
+  ],
+  "pendingCases": [
+    "mitt",
+    "p-limit",
+    "schedule"
+  ],
+  "aggregate": {
+    "generation": {
+      "covered": 3,
+      "partial": 3,
+      "missing": 2,
+      "contradicted": 0,
+      "incorrect": 1,
+      "imprecise": 2
+    }
+  },
+  "usage": {
+    "inputTokens": 42209,
+    "outputTokens": 42768,
+    "totalTokens": 84977
+  },
+  "qualityGate": {
+    "status": "failed-single-case-screen",
+    "completeFacts": 3,
+    "priorScopedCompleteFacts": 3,
+    "result": "No complete fact coverage gain; actual output and total token use increased. Remaining three planned calls were not made."
+  },
+  "caseComparisons": [
+    {
+      "report": "../2026-10-24-grounded-v1-deepseek-v4-flash/report.json",
+      "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+      "reportFileSha256": "73d704e0f0cd538775e2e59351e7392a720cb0c16b68935dcee601dccedacd31",
+      "caseId": "requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reasoningEffort": "provider-default",
+      "questions": 20,
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 42508,
+        "outputTokens": 18346,
+        "totalTokens": 60854
+      },
+      "modelMs": 93143
+    },
+    {
+      "report": "../2026-11-01-scoped-v1-deepseek-v4-flash/report.json",
+      "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+      "reportFileSha256": "1d2980271c855851ade5f58d0a96b0fdd55a4008fa595edac81f9d0e9fdda640",
+      "caseId": "requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reasoningEffort": "provider-default",
+      "questions": 20,
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 42428,
+        "outputTokens": 35765,
+        "totalTokens": 78193
+      },
+      "modelMs": 190885
+    },
+    {
+      "report": "../2026-11-04-callchain-low-requests/report.json",
+      "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+      "reportFileSha256": "064960f6ed63f40fcfd9ff8320e41dd350a4a7392bbcced732988e5ee36061b8",
+      "caseId": "requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reasoningEffort": "low",
+      "questions": 20,
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 42209,
+        "outputTokens": 42768,
+        "totalTokens": 84977
+      },
+      "modelMs": 218096
+    }
+  ],
+  "tokenChanges": {
+    "versusGroundedTotalPercent": 39.64,
+    "versusScopedTotalPercent": 8.68,
+    "versusScopedInputPercent": -0.52
+  },
+  "authorization": {
+    "maximumPaidRequests": 4,
+    "issuedPaidRequests": 1,
+    "remainingNotIssued": 3,
+    "endpoint": "https://api.deepseek.com",
+    "settingsOverride": "low reasoning effort only, in memory"
+  },
+  "reviewFiles": [
+    {
+      "filename": "assistant-review-requests.json",
+      "sha256": "d12ccb0d4ea5ccd98a1acc3104e40d5dcc8031446bcd8cb1b1d62353a5bfc1c9"
+    }
+  ],
+  "limitations": [
+    "This is one screened repository, not a four-case generation run or cohort.",
+    "Reasoning effort changed from provider default to low, alongside context and prompt changes; observations cannot isolate causation.",
+    "One run per condition does not establish general model or cost behavior.",
+    "Token use is provider usage, not a currency bill. Assistant review is not human blind review or an answer accuracy percentage."
+  ]
+}

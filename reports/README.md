@@ -8,6 +8,8 @@
 
 ### 最新验证（收益未证实）
 
+- [`2026-11-04-callchain-low-requests/`](real-generation-eval/2026-11-04-callchain-low-requests/report.md) — 仅 Requests 的单例筛查，runId `314d1677-7aee-4e7a-a56e-2000fadcc21c`。20 题、1 次真实请求，显式使用 low 推理强度；完整事实 3/8、部分 3、缺失 2，与上轮该例完整覆盖持平。输入 42,209、输出 42,768、合计 84,977 tokens，比上轮该例多 8.68%，未通过增益筛查，剩余三次计划调用未执行。生产客户端与传输观察器保留相同完整用量。不能把该目录当作四例运行或低强度更省 token 的证明。
+
 - [`2026-11-01-scoped-v1-deepseek-v4-flash/`](real-generation-eval/2026-11-01-scoped-v1-deepseek-v4-flash/report.md) — runId `c87cf61f-cacd-4e5f-821f-be1471372856`。四例全部新生成，80 题、4 次 HTTP 调用，无格式修复或补偿。完整事实覆盖维持 23/28，部分 3、缺失 2；代理源码复核另记 4 类实质错误、4 条不精确表述。相对 2026-10-24 grounded，输入 109,986（+0.37%）、输出 144,853（+39.34%）、总计 254,839 tokens（+19.34%），没有证明质量或成本收益。本轮修复了摘录丢失所属作用域、评测阻塞流式响应及长 SSE 用量漏记；生产客户端保留完整 provider usage，原始 transport `null` 与随后计量修复的源码哈希分别保留于 `provenance.json`。较低用量参考仍为下列 grounded 运行。
 
 ### 已有质量与用量参考

@@ -1,0 +1,2473 @@
+{
+  "schemaVersion": "repoprep-eval-report-v2",
+  "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "mode": "real-model-public-repositories",
+  "model": "deepseek-v4-flash",
+  "protocol": "openai",
+  "runtime": {
+    "node": "v24.19.0"
+  },
+  "config": {
+    "mode": "real-model-public-repositories",
+    "variants": [
+      "generation"
+    ],
+    "granularity": "medium",
+    "budget": {
+      "min": 15,
+      "target": 20,
+      "max": 25
+    },
+    "temperature": 0.4,
+    "reasoningEffort": "low",
+    "contextWindowTokens": 1000000,
+    "profileMaxOutputTokens": null,
+    "maxOutputTokens": null,
+    "maxOutputTokensPolicy": "provider-default",
+    "applicationInputTokenTarget": 64000,
+    "applicationInputTokenBudget": 64000,
+    "reservedOutputTokens": 65536,
+    "reservedOutputPolicy": "deepseek-reasoning-reserve-65536",
+    "tokenEstimateMethod": "mixed-text-v1",
+    "contextStrategy": "structure-v1",
+    "inputTokenBudgetPolicy": "min(application target, max(0, configured context window - output reserve)); unknown window uses application target",
+    "maxRequests": 1,
+    "maxDurationMs": 1200000,
+    "baseline": "production scan and generation with README candidate only; repository tree and scan metadata remain available"
+  },
+  "configHash": "1c5704b398eaf20054ed3ceb7c1b5ae9816921cb5827ad53125a2db0b2f92507",
+  "configHashInputs": {
+    "baseUrlOriginSha256": "a34e2a4708ed1c61008a151688838dcf1c44d4e7f08054633e72ba7c0b16cfc1",
+    "model": "deepseek-v4-flash",
+    "protocol": "openai",
+    "reasoningEffort": "low"
+  },
+  "sourceHashes": {
+    "electron/services/atomic-json.ts": "772a80f4ec497a588dfcdccc6929a0ef67e06f01ee037e9efe90df0f9bbba2af",
+    "electron/services/config-score.test.ts": "eafb1dcc69d681569866800e9e399363d560176ca106bbeeddfdeb9b080d4d85",
+    "electron/services/content-read-integration.test.ts": "72d88421937b858e802a2544b02e08d894303814fe29c48d6902c8dba7f1f1d5",
+    "electron/services/context-budget-integration.test.ts": "1e277075641be48285c23f61d10b03150396bf0fd9ac7d5bf045ae2f787c35b8",
+    "electron/services/context-builder.ts": "e2cf926d53338b63732d888d85ae6b4701fae1438a49a05f89353e44a583b661",
+    "electron/services/context-selection.test.ts": "6ca385578a14d8c67e2bdbe7ba8053e39897d13f417a2e29f8269ef9ad54add4",
+    "electron/services/credential-vault.test.ts": "910f659aefb8df8eaf494116aa95b43bc04aec5e753260c55f1196c77f550adc",
+    "electron/services/credential-vault.ts": "81c002c1aafd908801b2779960a481147c1fa02b2b168a82a1bfcee181e927b4",
+    "electron/services/exporter.ts": "9159ba016c7d766d69a2f5c0e7a118085b256545de6bd75c3590fad68be4dd3c",
+    "electron/services/file-selection.ts": "c23785a5e42dafaa4ac80e3b8a949f576f90a305f05121c989b085b0f6a5fa99",
+    "electron/services/generation-checkpoint.test.ts": "c83ca898ee93a8c4b896e76a2ba29d2ea38a9f075bb76073dfbf44a103e139c6",
+    "electron/services/generation-draft-store.test.ts": "b5c56fc88bfc177377e39da44f287452190b8e425b6ff6dd83e17861106ad7af",
+    "electron/services/generation-draft-store.ts": "484d98fdcc57ca1e1798a51a0511d8f480cfcf3fb588fbb0d6f7fa8b8485ef18",
+    "electron/services/generation-drafts.ts": "8eb17e99c184e4b29151f4a4fcb2574989ee26fc09c6c63ae1fccec10d9943ee",
+    "electron/services/generation-preview.test.ts": "b0510459b76e02a76abe6290dc625bb3d038c7eb1bb95a583fb9268222275f85",
+    "electron/services/generation-streaming.test.ts": "f7cd30f9cdc7b1087aafd6fd5172a4d286976460918a156303ff47f3ef494045",
+    "electron/services/generation-tasks.test.ts": "ab861e3aeda94aeac38dee03350dcb242488f4cff118d52a61041d7b19512d46",
+    "electron/services/generation-tasks.ts": "1b080f6452143261d24f76494f8d7bf7fc2862ff76c035225929570aecabb35a",
+    "electron/services/generator-grounding.test.ts": "89c68d4bf0669f730cfe62a6b85c8339290f59934b43d7dad7f88a0a394901cc",
+    "electron/services/generator-merge.test.ts": "19f8ca2cdb479ca600c4273e5648f1eb98fb24139570693bc252696102762ec9",
+    "electron/services/generator.ts": "b4ac20ca89d41d30bb85c36eae0f33ffbf333c65eb81bb88eeecb3de17ae647f",
+    "electron/services/interview-json-stream.test.ts": "1e2cf85cc2d8a57ec542fb26efbff55439caa54494734364831127886b915481",
+    "electron/services/interview-json-stream.ts": "333e8f6799ac8b03d289d6e5439e021204b8622a12371bae0a9269656a2fa294",
+    "electron/services/ipc-authority.test.ts": "0ffb43f285398e3e870eb1709c7ba111d0f229005c73b6e9d2b2359e4c9d5fed",
+    "electron/services/ipc-authority.ts": "b3f97d553f6f1472d7e5e765d056836053dbc7ccec7bf8730156f8e03d36ebf1",
+    "electron/services/ipc-handler-guards.test.ts": "24eb034cfa296cbc30432b12d8567abbf14a35a64c81b690c0185f216883a503",
+    "electron/services/ipc-handler-guards.ts": "69c8db7322441b8883f2c38b46076d785c71b83375f5216ecad1faa5889d4ce2",
+    "electron/services/ipc-validation.test.ts": "c2bd7218e6afee0b96be4d25079603466bba2ab6498b6022fa100d07233b1c29",
+    "electron/services/ipc-validation.ts": "6e52587fa0883d4176e408aa4b681dd01244bf5745e25a1433e9d3d90b89d4c4",
+    "electron/services/issue70-result-integration.test.ts": "7065324f27e89c22e54f9b2aa5fee8f4ef045bda9ffe6ea6e52a44a64478f4f6",
+    "electron/services/llm-anthropic.test.ts": "370d8bbd26ca570a00548137cc9e627a93005492ede2abe94fe849767e7d8375",
+    "electron/services/llm-request-lifecycle.test.ts": "c79a7ec168616a046af1860f4b01e4f6a95725c4052c53fb41840800a9dcd75f",
+    "electron/services/llm-response-budget.test.ts": "4c93ebda8b0d8e3f227fe24b52a4f52f4f83b2f66caae68ca79a501bdf1fc391",
+    "electron/services/llm-safe-results.test.ts": "6c1abe292e56bbbcd5a4d5dc2e5818f33fa5f5d575c5b15d7d859c9a21c11938",
+    "electron/services/llm-streaming.test.ts": "52ec80c3739d267afb5727c1be534ef9eeb49430e42258bc52b5f88277125502",
+    "electron/services/llm.ts": "632d636414d55a8cfa69012632a9e47f42c79e80124ede67d8664f49cb91659e",
+    "electron/services/markdown-export.test.ts": "4f36810ce6ea0643c363a4d3aa64584f2d109e67a632639abcea030c670abb64",
+    "electron/services/markdown-export.ts": "e50f2e223177d9f3e761c070bf2049aed946d857beb78080c9a2f7e5d1b367a7",
+    "electron/services/native-credential-crypto.ts": "6edb663418a7966bb6542669304d384ea403ac2c926e652fa8b3b3fd4b62d8c4",
+    "electron/services/project-content-reader.test.ts": "8fbf8347f15e7fa513437f5f337b4e6a08acdcf6126b679ff81bcbf919e1ab54",
+    "electron/services/project-content-reader.ts": "9ddecb2b0ac4984eeabdbac3e072c28587f190bdf6ead49d00cb2270a9c6e3b8",
+    "electron/services/project-display-name.test.ts": "b138d57ff7bfaa5bbe49686470932d8b9e6a11f374cb7d1d9c7f1eae0c623862",
+    "electron/services/project-display-name.ts": "356c77feebe9f7cf60c46780645676227985e4b812d96478dcdc78b347300121",
+    "electron/services/project-file-policy.test.ts": "8596f9a54fb86990ea2ba30187ae526df27c14da3e6fe724397ecf90e1ed6c40",
+    "electron/services/project-file-policy.ts": "d0d6ad031fe1a7ed69d12b81c3eb361ebe00754f7fd08b5bd1ec3a16e5445213",
+    "electron/services/project-snapshot.test.ts": "7705815c9e20525c0598c3b51d1012f755dc7d36cf9fd939e8da65c7bd268ca8",
+    "electron/services/project-snapshot.ts": "af4b41e4ac5da878a16e052e599e0a08a781e55d3d7eebf7f024348854767b35",
+    "electron/services/question-budget-integration.test.ts": "51c38c33fdd218bc9c4a3e2faf1f87ede6f90d19ce745614cf6ff20a44f35d3f",
+    "electron/services/question-budget.test.ts": "20c789cfcf7810ae202c5fc97e202460067b7434e75e4b73dd3a39d8a2d4850a",
+    "electron/services/question-budget.ts": "b249fc0a8df0e7f2fe7f961c178ce80375aa159427188fabc08c01155127c0ed",
+    "electron/services/question-dedupe.test.ts": "511a8d4c697abff6953889caf291f8233221fd53cbbe86944cadbd6e358effdc",
+    "electron/services/question-dedupe.ts": "936b106bf9d9a4e853df828dd80f6c7f3f6172e7d894869a1247623716539267",
+    "electron/services/recent-relocation.test.ts": "32c03bfe36efd28c88c49ccd03d2d30cf8957e292c464b50af7206796d5824a4",
+    "electron/services/result-store-contract.test.ts": "57d2bce984cfe6be3c2e57d80a8bce9fd6bacecbb8456fc27aa48232b9151228",
+    "electron/services/scan-cache.test.ts": "f0939d1ae76dda6cf71dbd6ae048abb06addd323e2c3ca053d4c8e1906f23741",
+    "electron/services/scan-cache.ts": "c47da10ed52e15121ac0455c381fdce862da93f3914fae0ad67293abb014b57f",
+    "electron/services/scan-limits.test.ts": "0b7d016a70fdea8a5797cf310b2e4d39bce2070853db47616799fdb305839215",
+    "electron/services/scanner-gitignore.test.ts": "0c5dd2c8ae0e4c36ce8f0a2cad85d8cf8d1b5d3f1664189835e12214a9bd5e3b",
+    "electron/services/scanner.ts": "220fb827d6981daca30036a7f09c4e34729554858afe4752aaf287b9a14c9afc",
+    "electron/services/security-integration.test.ts": "ad24cbe0525909de1224ba9bb6f9ae54b5f2f01744712cfe0faa1e347062267e",
+    "electron/services/sensitive.test.ts": "a3b1289e5bc03e7afed74ed8d20ed723831b22d3c4e3ae29937c2d68cc1a2708",
+    "electron/services/sensitive.ts": "0b6605b2066d8f627356e29839b8281e1d78af05444194947f4d72e08cfc92cc",
+    "electron/services/snippet-selection-integration.test.ts": "0943f3103a137353a42bea78cb165c6af0b3b855c641fdcf4689732c469473bb",
+    "electron/services/snippet-selection.test.ts": "1d1e2ccb56b5d06259719ef83e94dd2add9449378cc18945efcec8435af41976",
+    "electron/services/snippet-selection.ts": "51d2f1bf66b5a6714d94e1809405f5abacf9189dffe1273cc03a1bbc51a5002b",
+    "electron/services/source-analysis.test.ts": "a1af0f084389b1ca630699d423e28460ebfd9e1c02f4d41f0b586a56714c5591",
+    "electron/services/source-analysis.ts": "b842f0fb940231feed35aca35bd23893bf93171795764dbecbef14d32cf04a52",
+    "electron/services/sse-parser.test.ts": "fcfdbb44cf7051bd9f7824fd38086a16022c4b7840240cb7adf24f1b8ce6fe7a",
+    "electron/services/sse-parser.ts": "27f3d04d279a6c46b788d57b3fc00674f8e8aa9b0973fb6e3c2e152a470dcd8a",
+    "electron/services/storage-recovery.test.ts": "fbcbf7fa13f6d5834e328a11ed4f57529adcfce9a290f6766aa649318b8dc5ed",
+    "electron/services/store.ts": "5c670a371f026a85ff4bccdb7d0a9abbfffc735dcd82d6a164bfb8f9998f88fa",
+    "package-lock.json": "353190be39ebe27401d8c7d7f6796963641f2b5fc455ce5f31fbf9422b93dee4",
+    "package.json": "951d24480002817451ca55f66ac8fc4569b48957b3090234137a9af9778c0f4b",
+    "realCorpusManifest": "d736316d34549783a0e278efca9e5d2ba19a3a1e5cd4b2f8820ff9dd362d1fa5",
+    "scripts/evaluation/compare-real-runs.mjs": "272e7fbe367bc48ebddb74fb4126faa97d09016749342e313103d3fc2cc683a6",
+    "scripts/evaluation/compare-real-runs.test.mjs": "acd74d1bb68795937b39643362a7cd63282a831419b8bee440461f2aeba9f28f",
+    "scripts/evaluation/compose-real-cohort.mjs": "495bb2961e046a1f99c3e330999e5659e4dce0f021872e7ec4277dc9c5567486",
+    "scripts/evaluation/compose-real-cohort.test.mjs": "b0442455d94779c1b042127dfef74290881c9600071befaaae969f2823e7f717",
+    "scripts/evaluation/corpus/node-routes/server.mjs": "1a8681d3cdff1d676a87df1f2e02555dafc56253d60c569488ef74285d4cc1a3",
+    "scripts/evaluation/offline-runner.mjs": "7882102d3d0420b2fc9ea75c9860f23b3a1fa16aa13df055f0202b46c79bd438",
+    "scripts/evaluation/real-runner.mjs": "75afaccbf425d57c866619862bd3c8738e455dc68b5a5b50c4078b8853dcbbf0",
+    "scripts/evaluation/real-runner.test.mjs": "9f1ac347a2cf0f70a175bedc16da4feed11949824e45d2570261f98c50e36185",
+    "scripts/evaluation/review-cli.test.mjs": "54779f97bb5bdeefd0f52aea2e0b491f4c306da6a6fbe9e7dd6804c99412b04b",
+    "scripts/evaluation/review.mjs": "d8a66e8c43bf23ec18c8b2669e4ea85ee89286f6fc84419f2f7c5393a2bb02ee",
+    "scripts/evaluation/run-saved-profile-entry.cjs": "065699889549fc64de381e20af6e6e3794f530adbde512893007591d8deeb750",
+    "scripts/evaluation/run-saved-profile.cjs": "d79d6fb46d5830c95fb7201191387eb6c8fea64551bded4760252c739382f0e3",
+    "scripts/evaluation/run-saved-profile.test.cjs": "6262c450333717826ae6d4e8e84089532cb2870d009e0e0f1fc9aa78b1da4914",
+    "scripts/evaluation/scorer.mjs": "a68bba4123a92012393cc3df3cc469b641c7ec6effc3703044cb59e6c8d29934",
+    "scripts/evaluation/scorer.test.mjs": "16c2c9581ce6566196b956d1ce9eca2f682fb88c4e4e89b8459e8316879b4c8d",
+    "scripts/evaluation/variant-arguments.cjs": "11119a8af013b0f7f12292352f180d7057f4657955419c0e024bb49dd6ce14e2",
+    "shared/answer-markdown.test.ts": "afc872d9c4fc8c2f7bd4609e1b356c0d15bbcb53066afcaf565676d7b5ec4a2d",
+    "shared/answer-markdown.ts": "225af577a256741941d3272c3e7d4b3e042d7c5a6c73586250a969246b01177c",
+    "shared/content-read.ts": "19c8d3864901a84b7619f147603b28f8d43b29b38d02acd9497df90b5776968b",
+    "shared/context-budget.test.ts": "c00f4f7fc94c2ccc38372533d6d128f92383f4d352a62146397a66915bad8558",
+    "shared/context-budget.ts": "63da7ba892cf309e6e484f4052ce1b9a704d7f94ed9828d7a8f9a883980c21d8",
+    "shared/generation-checkpoint.ts": "9e1437013a35a2548cf4285f89f9d8cd0c09df415fc0b6c97649477fbc52d07d",
+    "shared/generation-preview.test.ts": "748533caa2e91eb4ac16b9d4c9e7ae4e2edb2756afae1b24b373160732c92e83",
+    "shared/generation-preview.ts": "2e4c4bb860b95176c3222ed9bc55b740d90f15f3a4a6116a3ee43d8f65a6ecc7",
+    "shared/ipc.ts": "67c600fe55ccb59e51abfd0247c9a3672d3446e4f17aeb8412f105b757d5c742",
+    "shared/result-contract.test.ts": "3bc86746c37da9eaada778f6a6a048fbfe61fda8e573593c0b301b1e2eb5534a",
+    "shared/result-contract.ts": "4939cef594e3f4b4919ae59a1ad981b63219cb915e79147a1f9fdbf523191619",
+    "shared/storage-contract.ts": "13222b409e69877165e521eb912d6d9d3e8b51fc6ac9f78964a965a5051d90d2",
+    "shared/token-budget.test.ts": "f3b2b1e207208ccadda123d971be297eee5cff66c21edd98978e128e1189b184",
+    "shared/token-budget.ts": "9b8e64db0405745d47452a66790a99fa5c264d9463a9a2357c1651dd786886d4",
+    "shared/types.ts": "17ff61acb21296e56354a3f9f15c4877b3d32ab752efe0caa009e56c90a91ca5"
+  },
+  "fixtureHashes": {
+    "requests/src/requests/sessions.py": "3d2089736ced93b2b405624a943f866d22652b17df06a85eb010f86272fc3e7d",
+    "requests/src/requests/models.py": "a3351c3c12a86bf5ed211533875350bc4791e9327a685f8c19ba54343e471e26",
+    "requests/pyproject.toml": "345f26b9f691435e39d0eb6f7f4150a390f43175b22f8d61ac95e7f2827f0a77",
+    "requests/tests/test_requests.py": "5eacf6341d236e225ce6a37a592f3b410f20e69ec17641f0e2c99b03a79b904d"
+  },
+  "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+  "generatedAt": "2026-11-04T08:06:13.407Z",
+  "cases": [
+    {
+      "id": "requests",
+      "repository": "psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "projectPath": "/public-corpus/requests",
+      "granularity": "medium",
+      "budget": {
+        "min": 15,
+        "target": 20,
+        "max": 25
+      },
+      "generation": {
+        "status": "complete",
+        "elapsedMs": 219279,
+        "requestCount": 1,
+        "requests": [
+          {
+            "attempt": "initial",
+            "inputChars": 136524,
+            "promptHash": "164ddca3e0a9203b479d1cd7ee7455bc8a0c0add4bd54740f0ba0db6d0d9b2de",
+            "elapsedMs": 218093,
+            "status": 200,
+            "errorType": null,
+            "usage": {
+              "inputTokens": 42209,
+              "outputTokens": 42768,
+              "totalTokens": 84977
+            }
+          }
+        ],
+        "inputChars": 136524,
+        "tokens": {
+          "inputTokens": 42209,
+          "outputTokens": 42768,
+          "totalTokens": 84977
+        },
+        "diagnostics": {
+          "version": 1,
+          "status": "succeeded",
+          "contextStrategy": "structure-v1",
+          "tokenEstimateMethod": "mixed-text-v1",
+          "estimatedInputTokens": 63934,
+          "inputTokenBudget": 64000,
+          "reservedOutputTokens": 65536,
+          "actualUsage": {
+            "inputTokens": 42209,
+            "outputTokens": 42768,
+            "totalTokens": 84977
+          },
+          "usageComplete": true,
+          "requestCount": 1,
+          "repairRequestCount": 0,
+          "compensationRequestCount": 0,
+          "contextBuildMs": 807,
+          "modelMs": 218096,
+          "totalMs": 219193,
+          "selectedFiles": 61,
+          "selectedRegions": 129,
+          "omittedFiles": 55
+        },
+        "output": {
+          "version": 1,
+          "createdAt": "2026-11-04T08:09:52.684Z",
+          "projectName": "requests",
+          "projectPath": "/public-corpus/requests",
+          "granularity": "medium",
+          "roleFocus": "general",
+          "profileId": "real-eval",
+          "modelUsed": "deepseek-v4-flash",
+          "projectSummary": "这是一个 Python HTTP 客户端库 requests 的源码仓库，核心代码在 src/requests，围绕 Session、PreparedRequest、HTTPAdapter 组织请求准备、连接发送、重定向、cookie、认证、代理与响应消费。项目使用 pyproject.toml 管理依赖与动态版本，配套 pytest、ruff、pyright 和较完整的文档及测试证书。本次扫描不完整，结论仅基于提供的源码与配置片段。",
+          "sections": [
+            {
+              "id": "17f38d35-77ef-4b97-8dc7-a0ae7cc03e9d",
+              "title": "依赖加载与兼容层",
+              "summary": "考察运行时依赖选择、urllib3 版本探测与旧命名空间别名机制。",
+              "questions": [
+                {
+                  "id": "a461c4a4-4092-4ca5-a553-4ebeeadc90c6",
+                  "title": "字符检测依赖加载顺序",
+                  "question": "pyproject.toml 把 [[charset_normalizer]] 列为运行依赖，又提供 [[chardet]] 可选依赖。请结合 `src/requests/compat.py` 说明运行时如何选择字符检测库、两者都安装时谁优先，以及 `src/requests/packages.py` 如何暴露该库。",
+                  "answer": "要点如下：\n\n- `pyproject.toml` 的 dependencies 是 `charset_normalizer>=2,<4`；`use_chardet_on_py3` 才是可选 `chardet>=3.0.2,<8`。\n- `compat._resolve_char_detection` 按 `('chardet', 'charset_normalizer')` 顺序尝试 `importlib.import_module`，只有当前值仍为 None 才继续；因此两者都安装时先导入的 [[chardet]] 胜出，只有它缺失才用 [[charset_normalizer]]。\n- `packages.py` 从 compat 取得该模块；若非 None，就把 [[sys.modules]] 中目标包及其子模块别名到 `requests.packages.*`，并把目标名替换为 `chardet` 再建一组兼容别名。因此选到 `charset_normalizer` 时也会出现 `requests.packages.chardet.*` 指向同一模块对象。\n\n可见代码只证明加载顺序和别名行为；`check_compatibility` 的调用位置未在片段中展示，不能确认最终告警路径。",
+                  "followUps": [
+                    {
+                      "question": "为什么代码先尝试 chardet 而不是声明为强依赖的 charset_normalizer？",
+                      "answer": "从提供代码只能确认顺序，不能确认维护动机；可能是历史兼容策略，但这是推断。若要让主依赖优先，应调整循环顺序并加测试覆盖。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果两个库都没有安装，compat 与 packages 分别会怎样？",
+                      "answer": "`_resolve_char_detection` 返回 None；`packages.py` 因 `chardet is not None` 不执行字符库别名。其他 [[urllib3]]、idna 别名仍执行。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "这种别名机制有什么风险？",
+                      "answer": "它直接改写 [[sys.modules]]，让旧导入路径共享同一模块对象；副作用是导入顺序、重载和第三方 monkeypatch 可能互相影响，且别名不会自动清理。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "1064a5b9-f181-4783-a673-f8bbc9c50be7",
+                  "title": "urllib3 主版本探测边界",
+                  "question": "`src/requests/compat.py` 如何判断 [[urllib3]] 主版本？异常处理覆盖哪些情况？如果版本字符串是 `dev` 会怎样？",
+                  "answer": "`src/requests/compat.py` 读取 [[urllib3]] 的 `__version__`，然后尝试 `int(urllib3_version.split('.')[0]) == 1`。若 `split` 或属性访问失败（`TypeError`、`AttributeError`），就按注释“prefer old functionality”把 `is_urllib3_1` 置为 True。\n\n边界在于异常列表只覆盖这两类：`dev` 这类无法转成 int 的字符串会抛出未被捕获的 `ValueError`，而不是回退 True。若版本是 `2.x`，则结果为 False。当前片段没有展示 `is_urllib3_1` 在别处的使用，因此只能确认探测逻辑，不能确认它具体改变了哪些调用路径。",
+                  "followUps": [
+                    {
+                      "question": "为什么异常时偏向旧版本而不是抛错？",
+                      "answer": "代码注释给出意图：无法辨别版本时偏好旧功能。好处是避免未知版本直接崩溃，代价是可能把新版本误判为旧版本，导致走兼容分支。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "版本字符串 dev 为什么可能出问题？",
+                      "answer": "`int('dev')` 抛 `ValueError`，不在 except 列表中，会在导入 compat 时中断。是否先被 `__init__.check_compatibility` 拦截取决于导入顺序，当前上下文未完整展示。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如何改进版本探测？",
+                      "answer": "可解析 `packaging.version.Version`，对非数字版本显式定义策略，并把版本判断集中到可测试函数；这是建议，不是现有实现。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "ce8b78bb-fe28-48d6-9327-fbb3745ab272",
+                  "title": "旧 packages 命名空间别名",
+                  "question": "`src/requests/packages.py` 为什么遍历 [[sys.modules]]？它怎样保证 `requests.packages.urllib3` 与真实 [[urllib3]] 是同一个模块对象？对字符检测库的别名有什么特别之处？",
+                  "answer": "- 它用于兼容老的 `requests.packages.*` 导入路径。对 [[urllib3]]、[[idna]] 先 `__import__`，再遍历 [[sys.modules]] 中名称等于包名或以 `包名.` 开头的项，把 `requests.packages.<原模块名>` 指向同一个模块对象，因此身份不变。\n- 对字符检测库，先取 `chardet.__name__` 作为 target；遍历目标模块及其子模块，建立 `requests.packages.<target>.*` 别名，再把模块名中的 target 替换成 `chardet` 建第二组别名。选到 [[charset_normalizer]] 时，`requests.packages.chardet.*` 与 `requests.packages.charset_normalizer.*` 会指向同一对象。\n- 这里是直接写 [[sys.modules]]，不是重新导入，所以不会复制模块状态。",
+                  "followUps": [
+                    {
+                      "question": "如果不先 import 目标包会怎样？",
+                      "answer": "[[sys.modules]] 里还没有目标模块项，遍历就找不到可别名对象；代码先 `__import__` 正是为了填充缓存。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "别名是否会让 requests.packages 成为真正的包？",
+                      "answer": "它不是通过常规包文件建立子模块，而是把模块对象挂到 [[sys.modules]] 的合成名称下；是否还能属性访问取决于父包导入机制，当前片段未展示完整 packages 包结构。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "这种兼容层何时可以删除？",
+                      "answer": "需要确认不再有用户依赖旧路径，并按语义化版本主版本变更处理；当前代码注释说明保留到下一主版本，但具体计划未在片段中给出。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "774b75a7-6a7a-4493-9e14-2c098ba074b6",
+              "title": "数据结构与状态码",
+              "summary": "考察大小写映射、状态码查找对象、cookie 冲突与转换行为。",
+              "questions": [
+                {
+                  "id": "8951b52b-4b0a-48b9-8bc6-893f882b13b4",
+                  "title": "大小写不敏感映射实现",
+                  "question": "[[CaseInsensitiveDict]] 如何同时保留原始大小写并实现大小写不敏感查询？`lower_items`、`copy`、`__eq__` 的语义是什么？重复小写键时如何处理？",
+                  "answer": "[[CaseInsensitiveDict]] 的内部 `_store` 是 `[[OrderedDict]][str, tuple[str, value]]`，以小写键索引，值保存“最后一次写入的原始键”和值。\n\n- `__setitem__` 用 `key.lower()` 定位并覆盖；`__getitem__`、`__delitem__` 也先小写化，因此查询大小写不敏感。\n- `__iter__` 返回保存的原始大小写键；`lower_items()` 返回全小写键和值。\n- `__eq__` 只对 `Mapping` 生效，先构造另一个 `CaseInsensitiveDict`，再比较 `dict(lower_items())`；非 Mapping 返回 `NotImplemented`。\n- `copy()` 传入 `_store.values()` 的 `(原始键, 值)` 序列重建对象。\n- 文档明确说重复小写键行为未定义；实现上后写覆盖先写，保留后写的原始键。",
+                  "followUps": [
+                    {
+                      "question": "为什么还要 OrderedDict？",
+                      "answer": "代码在 Python 3.10+ 仍显式使用 [[OrderedDict]] 来保证插入顺序语义和清晰意图；普通 dict 现在也有序，但替换需评估迭代顺序和兼容性。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "非字符串键会怎样？",
+                      "answer": "实现直接调用 `key.lower()`，非字符串键会在设置或查询时抛 `AttributeError`；类型注解也限定为 str。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "copy 为什么不用 copy.copy？",
+                      "answer": "它要重建一个独立的 [[CaseInsensitiveDict]] 并保留大小写键；直接浅拷贝内部 `_store` 可能共享可变值，当前实现通过重新插入构造新容器。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "07490695-d5b9-4ff8-ac95-018428db3bcc",
+                  "title": "状态码查找对象语义",
+                  "question": "`status_codes.py` 的 `codes` 为什么既能 `codes.ok`、`codes['ok']`，又能 `codes.get('ok')`？[[LookupDict]] 的 `__getitem__` 与 `__getattr__` 有哪些容易误解的行为？",
+                  "answer": "[[status_codes]] 的 `_init()` 把每个状态码名称通过 `setattr(codes, title, code)` 写进实例 `__dict__`，并对不以反斜杠或斜杠开头的名称再写一份大写属性。[[LookupDict]] 继承 `dict`，但查询主要走 `__dict__`：\n\n- `codes['ok']` 调用重写的 `__getitem__`，返回 `self.__dict__.get(key, None)`，所以缺失键返回 None 而不是 `KeyError`。\n- `codes.ok` 正常属性查找命中 `__dict__`；未命中才进入 `__getattr__`，那里找不到会抛 `AttributeError`。\n- `get()` 也被重写为查 `__dict__`。\n\n容易误解的是：`codes` 继承的 `dict` 本身没有这些条目，因此 `codes.items()`、`keys()` 看到的是空字典，而不是状态码属性表。",
+                  "followUps": [
+                    {
+                      "question": "为什么 codes['\\o/'] 能工作？",
+                      "answer": "`setattr` 允许把任意字符串作为属性名写入实例字典，`__getitem__` 又直接按字符串查 `__dict__`；点号语法无法书写该名称，但下标可以。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "缺失键返回 None 有什么风险？",
+                      "answer": "调用方可能把未知状态码误当成合法值参与比较或格式化；需要区分“不存在”时应显式检查 `get` 结果或改用普通映射。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "codes.items() 为空是否符合预期？",
+                      "answer": "从实现看是必然结果，因为状态码写入的是属性而非 dict 条目；若需要可枚举映射，应额外维护字典或重写迭代方法。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "7ab65535-5b7d-42df-84ac-3b33fe57a4cb",
+                  "title": "同名 Cookie 冲突处理",
+                  "question": "`RequestsCookieJar.__getitem__` 为什么是 O(n)？同名 cookie 出现在不同域或路径时，`_find_no_duplicates` 会怎样？",
+                  "answer": "`__getitem__` 的实现是 `self._find_no_duplicates(name)`，没有哈希索引，只能遍历 [[CookieJar]] 中所有 cookie，所以是 O(n)。\n\n`_find_no_duplicates` 逐项比较 `cookie.name`，再按可选的 `domain`、`path` 过滤；一旦已经记录到一个匹配值又遇到第二个匹配，就抛 `CookieConflictError`。若没有任何匹配，抛 `KeyError`。因此同名但域或路径不同的 cookie 在只按名称访问时会被视为冲突；它的 docstring 建议使用更明确的 `get`/`set` 并传 domain、path 来消除歧义。",
+                  "followUps": [
+                    {
+                      "question": "怎样避免冲突？",
+                      "answer": "按 docstring 使用带 domain、path 的 `get`/`set` 路径，或直接遍历 jar 比较属性；只按名称的下标访问无法区分同名 cookie。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "冲突异常和 KeyError 的区别？",
+                      "answer": "`CookieConflictError` 表示找到了多个候选，无法唯一选择；`KeyError` 表示没有匹配项。调用方应分别处理歧义与缺失。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "O(n) 在大 jar 中怎样优化？",
+                      "answer": "可维护按名称或 `(name,domain,path)` 的索引，但需在 set/delete/update 时同步；这是设计建议，现有实现没有该索引。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "754b6929-7131-4b89-a959-0e6352b6a956",
+                  "title": "Cookie 构造与删除路径",
+                  "question": "`create_cookie` 和 `morsel_to_cookie` 怎样把 dict 或 [[Morsel]] 转成 [[CookieJar]] 可用的 Cookie？`RequestsCookieJar.set` 对 `value=None` 和带引号值做了什么？",
+                  "answer": "`create_cookie` 先填默认字段（domain 空、path `/`、discard True、rest 中 HttpOnly None 等），拒绝未知关键字参数，然后计算 `port_specified`、`domain_specified`、`domain_initial_dot`、`path_specified`，最后构造 `http.cookiejar.Cookie`。`morsel_to_cookie` 优先用 `max-age` 计算过期时间，非法整数转 `TypeError`；否则用固定格式解析 `expires`，并把 Morsel 的 domain、path、secure、httponly 等映射到 `create_cookie`。\n\n`RequestsCookieJar.set` 在 value 为 None 时调用 `remove_cookie_by_name` 并按传入的 domain、path 删除，返回 None；否则把 Morsel 转 cookie 或创建 cookie，再 `set_cookie`。`set_cookie` 只对首尾都是双引号的值做替换，去掉值中的转义双引号，并未剥掉外层引号。",
+                  "followUps": [
+                    {
+                      "question": "max-age 与 expires 同时存在谁优先？",
+                      "answer": "代码先判断 `morsel['max-age']`，为真就用它计算；只有 max-age 为空才看 expires。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "未知参数为什么直接报错？",
+                      "answer": "`create_cookie` 用 `set(kwargs)-set(result)` 检查，避免把拼写错误静默带入 Cookie 构造；这提高可诊断性。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "comment_url 的处理有什么值得注意？",
+                      "answer": "代码传的是 `bool(morsel['comment'])`，不是 comment 字符串本身；这看起来像历史实现细节，是否预期需结合测试确认，当前片段不能证明是 bug。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "4aa1e833-d7b2-4e0b-b440-3bfb583aa3d0",
+              "title": "请求准备与响应状态",
+              "summary": "考察 PreparedRequest 准备顺序、body 编码、Session 合并与发送、响应消费状态机。",
+              "questions": [
+                {
+                  "id": "081dff65-7e2d-4db9-af6e-417397bfacf5",
+                  "title": "请求准备阶段调用顺序",
+                  "question": "[[PreparedRequest]] 的 `prepare` 调用顺序是什么？为什么 `prepare_auth` 要放在 `prepare_body` 之后、`prepare_hooks` 之前？",
+                  "answer": "顺序是：`prepare_method` → `prepare_url` → `prepare_headers` → `prepare_cookies` → `prepare_body` → `prepare_auth` → `prepare_hooks`。`prepare_method` 会把非 None 方法转成大写。\n\n源码注释给出两个理由：`prepare_auth` 必须靠后，以便 OAuth 等认证方案看到已经完整准备好的请求；`prepare_hooks` 又必须放在 `prepare_auth` 之后，因为认证器可能在准备过程中注册 [[hook]]。若把 hooks 提前，认证器后来添加的 hook 就不会被合并进最终请求。\n\n片段没有展示各 `prepare_*` 的全部实现，因此只能确认顺序和注释声明的意图。",
+                  "followUps": [
+                    {
+                      "question": "如果 method 为 None 会怎样？",
+                      "answer": "`prepare_method` 保持 None；后续 `_is_prepared` 的运行时断言在片段中是无条件 True，因此不会在 prepare 阶段可靠拦截，具体失败点取决于后续使用。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "认证器为什么需要看到 body？",
+                      "answer": "有些认证方案要对请求体、URL 或头部做签名；先准备 body 和 headers 才能让认证逻辑基于最终请求内容计算。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "把 hooks 放在最前会破坏什么？",
+                      "answer": "认证器通过 `register_hook` 添加的响应 [[hook]] 可能不会被后续合并；但具体是否丢失取决于 Session 的 hooks 合并路径。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "8a0e91e0-a0b5-43d7-aea5-00af31c4e04b",
+                  "title": "请求体编码与长度头",
+                  "question": "[[PreparedRequest]] 的 `prepare_body` 如何判定流式 body？[[Content-Length]]、[[Transfer-Encoding]] 与 Content-Type 分别在哪些分支设置？`json` 和 `data` 同时给时谁生效？",
+                  "answer": "判定流式的条件是：`data` 可迭代（`isinstance(data, Iterable)` 或有 `__iter__`），且不是 `str`、`bytes`、`list`、`tuple`、`Mapping`。命中后把 `data` 直接作为 body，记录 `tell()` 位置；若同时有 files 则抛 `NotImplementedError`。长度 `length` 为真时设 [[Content-Length]]，否则设 [[Transfer-Encoding]]: [[chunked]]。\n\n普通分支：有 files 走 `_encode_files`；否则有 raw data 走 `_encode_params`，并根据是否为字符串、字节或可 read 对象决定是否设 `application/x-www-form-urlencoded`。随后 `prepare_content_length` 对非 None body 的真值长度设 [[Content-Length]]；body 为 None 且方法不是 GET/HEAD 时设 `Content-Length: 0`。零长度 body 在该函数里不会补 Content-Length。\n\n`json` 只在 `not data and json is not None` 时序列化，所以 data 为真时 json 分支不执行。这两个 [[HTTP]] 头部和 Content-Type 的最终存在性还受已有 header 影响。",
+                  "followUps": [
+                    {
+                      "question": "为什么 list 和 tuple 不算流式？",
+                      "answer": "它们被显式排除，通常作为表单键值对交给 `_encode_params`；若当流式会把容器本身当 body，语义不对。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "length 为 0 为什么走 chunked？",
+                      "answer": "流式分支用 `if length:` 判断，0 为假，于是设置 Transfer-Encoding chunked；这是代码当前行为，是否符合预期需测试确认。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "json 中出现 NaN 会怎样？",
+                      "answer": "`complexjson.dumps(json, allow_nan=False)` 抛 `ValueError`，代码转成 `InvalidJSONError`，不会发送非法 [[JSON]]。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "3fdc92ec-8c8f-4db1-8ec2-5b7d51e8dff4",
+                  "title": "Session 配置合并流程",
+                  "question": "[[Session]] 的 `prepare_request` 如何合并 cookie、认证、headers、params 和 hooks？`.netrc` 在什么条件下被读取？",
+                  "answer": "`prepare_request` 先处理 cookie：请求 cookie 不是 [[CookieJar]] 时先 `cookiejar_from_dict`，再依次把 session cookie 和请求 cookie 合并进新的 `RequestsCookieJar`。认证上先取 `request.auth`；仅当 `trust_env` 为真、请求没有 auth 且 session 也没有 auth 时，才调用 `get_netrc_auth(url)`。之后用 `merge_setting` 合并 headers（以 [[CaseInsensitiveDict]] 为结果类型）和 params，用 `merge_hooks` 合并 [[hook]]，最后按方法大写、URL、files、data、json 等调用 [[PreparedRequest]] 的 `prepare`。\n\n因此显式 auth 优先于 .netrc，session 级 auth 也会阻止 .netrc。片段未展示 `merge_setting` 与 `merge_hooks` 的内部实现，无法确认空值与覆盖细节。",
+                  "followUps": [
+                    {
+                      "question": "为什么请求 cookie 要在 session cookie 之后合并？",
+                      "answer": "这样请求级 cookie 可以覆盖或补充 session 级 cookie；具体覆盖效果还取决于 `merge_cookies` 对 [[CookieJar]] 的 update 语义。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "trust_env=False 还会读 .netrc 吗？",
+                      "answer": "不会。条件里明确要求 trust_env 为真；代理环境等其他 trust_env 行为也不应被默认启用。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "headers 合并为什么指定 CaseInsensitiveDict？",
+                      "answer": "HTTP 头部名大小写不敏感，用该结构合并能避免 `Content-Type` 与 `content-type` 被当成两个键；片段未展示 merge_setting 的具体冲突策略。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "9c4faa4f-2f31-4606-96e4-edf7aaf27878",
+                  "title": "Session 发送与重定向",
+                  "question": "[[Session]] 的 `send` 完整流程是什么？`allow_redirects` 和 `stream` 分别怎样影响 redirect 历史与响应内容读取？",
+                  "answer": "`send` 先给 kwargs 补 `stream`、`verify`、`cert` 默认值，未显式给 proxies 时调用 `resolve_proxies`；拒绝直接传入 `Request`，并在当前代码里 `assert _is_prepared`。然后取出 hooks 和 allow_redirects，选择 adapter，记录开始时间，调用 `adapter.send`，计算 elapsed，执行 `dispatch_hook('response', ...)`。\n\n之后把历史和当前响应的 cookie 抽取到 session，若 allow_redirects 为真用 `resolve_redirects` 生成 history，插入原响应并取最后一个作为最终 r；若为假则 history 为空，并用 `yield_requests=True` 尝试把下一个请求存到 `r._next`。最后若 `stream` 为假，访问 `r.content` 立即读取完整内容；为真则保留流式读取。",
+                  "followUps": [
+                    {
+                      "question": "hooks 在重定向前还是后执行？",
+                      "answer": "当前代码先对首次响应执行 `dispatch_hook`，再进入 `resolve_redirects`；重定向产生的后续响应是否再走同样 [[hook]] 取决于 resolve_redirects 实现，片段未完整展示。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "allow_redirects=False 时 _next 有什么用？",
+                      "answer": "它保存一个可继续的下一请求，供 `Response.next()` 等接口使用；代码在 StopIteration 时静默跳过。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "stream=False 为什么在 send 末尾读 content？",
+                      "answer": "这样调用方拿到响应时内容已下载完，连接可释放；stream=True 则把读取责任交给调用方。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "ef855c71-1945-4aa7-87cc-87e3d4dc7a4c",
+                  "title": "响应内容消费状态机",
+                  "question": "Response 的 `content` 与 `iter_content` 如何协作维护 `_content` 和 `_content_consumed`？重复读取或 `chunk_size` 非法时会发生什么？",
+                  "answer": "`content` 只在 `_content is False` 时读取：若 `_content_consumed` 已为真则抛 `RuntimeError`；若 status_code 为 0 或 raw 为 None，把 `_content` 设为 None；否则用 `b''.join(iter_content(CONTENT_CHUNK_SIZE)) or b''`。随后把 `_content_consumed` 置 True 并返回。\n\n`iter_content` 先检查：已消费且 `_content` 仍是 bool 时抛 `StreamConsumedError`；`chunk_size` 非 None 且不是 int 时抛 `TypeError`。未消费时走 `generate()`，它优先用 `raw.stream`，否则循环 `raw.read`，并在结束时置 `_content_consumed=True`。已消费但 `_content` 是 bytes 时，用 `iter_slices` 重新切片，不重新读网络。",
+                  "followUps": [
+                    {
+                      "question": "为什么用 False 而不是 None 作为未读哨兵？",
+                      "answer": "代码需要区分未读、已读为空和已读为 None 等状态；`False` 作为哨兵可与 bytes 或 None 区分，但类型注解仍需忽略。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "status_code 为 0 时 content 返回什么？",
+                      "answer": "代码把 `_content` 设为 None 后返回它，尽管注解是 bytes；这是当前实现的可观察行为。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "iter_content 的异常转换有哪些？",
+                      "answer": "`generate` 把 `ProtocolError` 转 `ChunkedEncodingError`、`DecodeError` 转 `ContentDecodingError`、`ReadTimeoutError` 转 `ConnectionError`、`SSLError` 转 `RequestsSSLError`。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "a40782d8-8985-4214-ad00-7761079f1f3c",
+              "title": "适配器、代理与认证",
+              "summary": "考察 HTTPAdapter 发送、TLS 与代理连接选择、Digest 认证状态和 hook 分发。",
+              "questions": [
+                {
+                  "id": "88395966-d764-49ae-94ab-ef7da87c0ca9",
+                  "title": "适配器发送与异常映射",
+                  "question": "[[HTTPAdapter]] 的 `send` 如何构造 timeout 和 chunked 参数？它把哪些 [[urllib3]] 异常映射成 requests 的哪些异常？",
+                  "answer": "`chunked = not (request.body is None or 'Content-Length' in request.headers)`。timeout 为 tuple 时拆成 connect 和 read 构造 `TimeoutSauce`，构造失败抛 `ValueError`；已经是 `TimeoutSauce` 则复用；其他标量则 connect 和 read 都取 timeout。随后调用 `conn.urlopen`，显式设置 `redirect=False`、`assert_same_host=False`、`preload_content=False`、`decode_content=False`、`retries=self.max_retries`。\n\n异常映射包括：`ProtocolError` 和 `OSError` 转 `ConnectionError`；`MaxRetryError` 内部分别可能转 `ConnectTimeout`、`RetryError`、`ProxyError`、`SSLError` 或 `ConnectionError`；`ClosedPoolError` 转 `ConnectionError`；`_ProxyError` 转 `ProxyError`；`_SSLError`、`ReadTimeoutError`、`_InvalidHeader` 分别转 `SSLError`、`ReadTimeout`、`InvalidHeader`。具体分支以代码中的类型判断为准。",
+                  "followUps": [
+                    {
+                      "question": "为什么 preload_content 和 decode_content 都设 False？",
+                      "answer": "让 [[urllib3]] 不提前读完整响应、也不提前解码，requests 的 Response 层再按 stream 与 encoding 控制读取和解码。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "chunked 的判定是否等价于 body 非空？",
+                      "answer": "不等价。body 非空但已有 [[Content-Length]] 时 chunked 为 False；body 为 None 时也为 False。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "timeout 为 tuple 但长度不对会怎样？",
+                      "answer": "解包失败或构造 TimeoutSauce 抛 `ValueError`，代码转成带提示的 `ValueError`；具体消息在异常分支中。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "c9239c93-2e38-43d4-8f9d-06ac491d695e",
+                  "title": "TLS 连接与代理选择",
+                  "question": "`get_connection_with_tls_context` 如何选择直连或 [[proxy]] 连接？`proxy_manager_for` 对 [[SOCKS]] 代理和其他代理分别怎么处理？",
+                  "answer": "`get_connection_with_tls_context` 先 `assert _is_prepared`，用 `select_proxy` 根据 URL 和 proxies 选代理；再调用 `build_connection_pool_key_attributes(request, verify, cert)` 生成 host 参数和 pool 参数，`ValueError` 转 `InvalidURL`。若有代理，先 `prepend_scheme_if_needed(proxy, 'http')`，解析后 host 为空则抛 `InvalidProxyURL`，然后 `proxy_manager_for(proxy)` 并 `connection_from_host`；否则直接用 `poolmanager.connection_from_host`。\n\n`proxy_manager_for` 先查缓存；代理字符串小写后以 `socks` 开头时，拆分用户名密码并创建 `SOCKSProxyManager`；其他代理生成 `proxy_headers` 后调用 `proxy_from_url`。两者都传入连接池大小和 block 参数。这里的 [[TLS]] 校验参数在 pool 属性构建阶段参与，具体校验实现未在片段中展开。",
+                  "followUps": [
+                    {
+                      "question": "代理 URL 缺少 scheme 会怎样？",
+                      "answer": "`prepend_scheme_if_needed` 会补 `http`；随后解析并检查 host，host 为空才抛 `InvalidProxyURL`。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "SOCKS 依赖缺失会怎样？",
+                      "answer": "`pyproject.toml` 把 [[PySocks]] 放在 socks 可选依赖；若未安装，创建或导入 `SOCKSProxyManager` 可能失败。具体异常路径未在当前片段展示。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "close 如何释放连接？",
+                      "answer": "`HTTPAdapter.close` 对 `poolmanager` 和每个代理 manager 调 `clear()`；这会关闭池中连接，但具体连接生命周期由 [[urllib3]] 管理。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "ece7ceeb-28a0-4954-9c21-4913a1c799e9",
+                  "title": "Digest 认证重试状态",
+                  "question": "`HTTPDigestAuth` 为什么使用 `threading.local`？`handle_401` 的重试流程与 body 回绕具体怎样执行？",
+                  "answer": "`HTTPDigestAuth.__init__` 保存用户名、密码和 `_thread_local`；`init_per_thread_state` 只在线程首次调用时初始化 `last_nonce`、`nonce_count`、`chal`、`pos`、`num_401_calls`，避免多线程共享 challenge 和计数。\n\n`__call__` 先初始化状态；若已有 last_nonce 就先构造 Authorization；若 body 有 `tell` 记录位置，否则把 pos 置 None；注册 `handle_401` 和 `handle_redirect` 两个响应 [[hook]]。`handle_401` 只处理 400 到 499；若 pos 非 None 且 body 有 `seek` 就回绕；检查 `www-authenticate` 含 [[Digest]] 且 `num_401_calls < 2`，然后递增、解析 challenge、消费并关闭原响应、复制请求、抽取和重设 cookie、构造 Digest 头并重新发送，把旧响应加入 history。[[nonce]] 计数和 cnonce 在 `build_digest_header` 中参与摘要计算。",
+                  "followUps": [
+                    {
+                      "question": "为什么只重试一次 401？",
+                      "answer": "代码用 `num_401_calls < 2` 限制，避免认证失败时无限循环；重定向 hook 会把计数重置为 1，允许新位置重新挑战。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "body 不可 seek 会怎样？",
+                      "answer": "代码只在 `pos` 非 None 且存在 `seek` 时回绕；否则重发时可能从当前位置读取，具体后果取决于 body 类型。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "不支持的算法或 qop 如何处理？",
+                      "answer": "`build_digest_header` 对不支持的算法返回 None，对 auth-int 等非 auth qop 也返回 None；调用方只在返回值非空时设置 Authorization。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "1a5ea9ea-e4e1-4f5e-a7d1-7672e3e11d13",
+                  "title": "响应钩子分发规则",
+                  "question": "`dispatch_hook` 如何区分单个 callable 和列表？[[hook]] 返回 None 与非 None 对后续 hook 有什么影响？",
+                  "answer": "`dispatch_hook` 从 hooks 字典取 `hook_list`；若为假值（None、空列表等）直接返回原数据。若 `hook_list` 是 `Callable`，先包成单元素列表；然后逐个调用 `hook(hook_data, **kwargs)`。每个返回值若非 None，就用它替换 `hook_data`；若为 None，则保留上一次的数据继续传给下一个 hook。\n\n因此它支持链式变换，也允许某个 hook 只观察不修改。`default_hooks()` 返回 `{'response': []}`；测试 `tests/test_hooks.py` 也验证了单个 hook 和列表混合 None 返回时的结果。",
+                  "followUps": [
+                    {
+                      "question": "hook 抛异常会怎样？",
+                      "answer": "当前实现没有 try/except，异常会直接向上传播，后续 hook 不执行；调用方需自行处理。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "hooks 的值是生成器可以吗？",
+                      "answer": "代码只要求可迭代并逐个 for 循环；生成器可以被消费，但只能消费一次，重复 dispatch 需重新提供。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么允许返回 None？",
+                      "answer": "这样 hook 可以做日志或断言而不改变响应；若强制返回值，观察型 hook 也必须返回原对象。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "97234fbc-3ccf-4d74-a096-7310bd363c10",
+              "title": "工具函数、校验与类型",
+              "summary": "考察代理旁路、请求头校验、类型窄化与异常继承的实现细节。",
+              "questions": [
+                {
+                  "id": "b7f9efd9-9e39-437b-8ed7-9a90f8a29601",
+                  "title": "代理旁路与环境变量",
+                  "question": "`should_bypass_proxies` 如何结合环境变量和 [[no_proxy]]？IPv4 的 [[CIDR]] 与域名后缀匹配分别怎么判断？",
+                  "answer": "`get_proxy` 先读小写环境变量，再读大写；`no_proxy` 参数为 None 时才读环境。解析 URL 后 hostname 为 None 直接返回 True。若 no_proxy 存在，按逗号拆分并去掉空格；hostname 是 IPv4 时，逐项检查是否为合法 CIDR，是则 `address_in_network`，否则精确比较。非 IPv4 时构造带端口的 host，逐项去掉前导点后比较精确相等，或比较 `'.' + host` 后缀。\n\n最后在临时设置 no_proxy 的上下文中调用 `proxy_bypass(hostname)`，捕获 `TypeError` 和 `socket.gaierror` 为 False；若系统判断旁路则返回 True。`resolve_proxies` 再据此决定是否把环境代理写入副本的 scheme 键。",
+                  "followUps": [
+                    {
+                      "question": "为什么小写环境变量优先？",
+                      "answer": "代码注释说与其他 HTTP 项目如 curl、wget 保持一致；小写存在时不再回退大写。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "hostname 带端口时域名匹配怎么做？",
+                      "answer": "代码同时比较 hostname 和 host_with_port 的精确值及后缀，因此 [[no_proxy]] 中可写带端口形式。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "resolve_proxies 会删除 no_proxy 键吗？",
+                      "answer": "它先复制 proxies，no_proxy 键会保留；只是用该值做旁路判断，并在需要时 `setdefault` scheme 代理。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "f62f4bf3-6855-470b-9b00-f0b1cd9f0ee7",
+                  "title": "请求头合法性校验",
+                  "question": "`check_header_validity` 对 header 名称和值分别采用什么校验规则？str、bytes 与非 str/bytes 输入的异常路径是什么？空值允许吗？",
+                  "answer": "`src/requests/_internal_utils.py` 为 str 和 bytes 各准备两条正则：名称不能以冒号或空白开头，后续不能含冒号或 CRLF；值不能以空白开头，后续不能含 CRLF，但允许空串。`check_header_validity` 对 `(name, value)` 分别调用 `_validate_header_part`，索引 0 和 1 选择名称或值校验器。\n\n`_validate_header_part` 若部分是 str 用 str 校验器，是 bytes 用 bytes 校验器，否则直接抛 `InvalidHeader`。正则不匹配也抛 `InvalidHeader`，消息区分 name 与 value。因此空 header 值合法，空名称不合法；前导空白和 CRLF 都会被拒绝。",
+                  "followUps": [
+                    {
+                      "question": "为什么名称不允许冒号？",
+                      "answer": "冒号分隔 header 名和值，名称中出现冒号会破坏解析边界；同时禁止 CRLF 防止头部注入。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "bytes 和 str 为什么要分开正则？",
+                      "answer": "bytes 正则用 bytes 模式匹配 bytes 输入，str 正则匹配 str，避免类型不匹配和隐式解码。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "空值是否意味着可以省略 header？",
+                      "answer": "空值被允许表示 header 存在但值为空；是否需要发送取决于调用方，校验层只判断格式。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "71e4c6e4-f907-4cd0-b0b0-8bbdc27314fe",
+                  "title": "运行时断言与类型窄化",
+                  "question": "`_types.py` 中 `is_prepared` 的 [[TypeIs]] 返回类型与运行时行为是什么？`_ValidatedRequest` 如何窄化 url 和 method？为什么运行时 `assert` 不能当作安全校验？",
+                  "answer": "`is_prepared(request) -> TypeIs[_ValidatedRequest]` 在 `TYPE_CHECKING` 分支检查 `request.url is not None and request.method is not None`，从而让 [[pyright]] 等类型检查器把参数窄化为 `_ValidatedRequest`；但运行时函数体直接 `return True`，不做任何检查。\n\n`_ValidatedRequest` 继承 [[PreparedRequest]]，把 `url: str`、`method: str` 覆盖为更窄类型，并用 type ignore 抑制可变属性不变性冲突。它表达的是“已准备完成”的契约，不是运行时校验。因此 `assert _is_prepared(request)` 在普通运行中恒真，不能防止把未准备的请求传给 adapter；真正的安全边界仍需显式检查字段或捕获后续错误。",
+                  "followUps": [
+                    {
+                      "question": "TypeIs 与 TypeGuard 有什么区别？",
+                      "answer": "[[TypeIs]] 在条件为真和假时都能参与窄化，且要求被窄化变量与输入一致；TypeGuard 主要保证真分支，假分支不一定收窄。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么覆盖可变属性需要 type ignore？",
+                      "answer": "类属性的可变类型在子类中收窄违反 Liskov 不变性，类型检查器会报错；代码用 ignore 表示这是有意契约。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "运行时如何真正校验 PreparedRequest？",
+                      "answer": "可显式检查 `request.url`、`request.method` 等字段，或让 prepare 阶段在缺失时抛异常；当前代码的 assert 不是这种校验。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "877ce812-4def-4a60-9435-fc1540c95d55",
+                  "title": "异常继承与 JSON 解码",
+                  "question": "`RequestException` 如何绑定 request 和 response？`JSONDecodeError` 为什么自定义 `__init__` 和 `__reduce__`？多继承的 [[MRO]] 会带来什么影响？",
+                  "answer": "`RequestException.__init__` 从 kwargs 弹出 `response` 和 `request`，保存为属性；若 response 存在、request 为空且 response 有 `request` 属性，就从 response 取 request，然后调用 `super().__init__(*args, **kwargs)`。\n\n`JSONDecodeError` 同时继承 `InvalidJSONError` 和兼容层的 `CompatJSONDecodeError`。它的 `__init__` 先用全部参数初始化 [[JSON]] 解码异常，再用 `self.args` 初始化 `InvalidJSONError`，以保留 JSON 特定的参数和消息。`__reduce__` 显式委托给 `CompatJSONDecodeError.__reduce__`，否则按 MRO 可能走到 `IOError` 的序列化逻辑，导致 pickle 参数不匹配。\n\n因此这个多继承的关键是初始化顺序和 `__reduce__` 的显式选择，而不是简单复用父类。",
+                  "followUps": [
+                    {
+                      "question": "为什么 RequestException 继承 IOError？",
+                      "answer": "代码把它作为 I/O 类异常体系的一部分，便于旧调用方按 IOError 捕获；具体历史兼容原因需查版本记录。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "ConnectTimeout 的多继承有什么效果？",
+                      "answer": "它同时是 `ConnectionError` 和 `Timeout`，调用方按任一父类捕获都能命中；[[MRO]] 决定方法查找顺序。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "pickle 这个异常时为什么要小心？",
+                      "answer": "JSON 解码异常需要保留原始 args，而 IOError 的 reduce 形状不同；不显式委托可能无法正确反序列化。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "glossary": {
+            "charset_normalizer": "一个 Python 字符集检测库，用于从字节序列猜测文本编码。它通过统计分析和模型判断候选编码，并返回检测结果。",
+            "chardet": "一个 Python 字符编码检测库，用于根据字节内容推测文本编码。它通过概率模型和语言特征给出编码及置信度。",
+            "sys.modules": "Python 解释器维护的已导入模块缓存字典，键是模块名、值是模块对象。导入语句会先查它，因此修改它可影响后续导入解析。",
+            "urllib3": "一个 Python HTTP 客户端库，提供连接池、重试、TLS 和代理等底层能力。requests 常把它作为传输层实现。",
+            "idna": "一个处理国际化域名的 Python 库，把 Unicode 域名转换为 ASCII 兼容形式。它实现 IDNA 编码规则，供 HTTP 客户端在连接前规范化主机名。",
+            "CaseInsensitiveDict": "一种大小写不敏感的映射结构，常用于 HTTP 头部。它用小写键做内部索引，同时保留最后一次写入的原始键大小写。",
+            "OrderedDict": "Python 标准库中的有序字典，按插入顺序保存键值对。它提供顺序迭代和移动、弹出等操作。",
+            "LookupDict": "requests 内部的一种字典子类，用属性保存名称到值的映射。它的下标访问和属性访问可返回默认 None，而不是普通字典的 KeyError。",
+            "status_codes": "requests 中把 HTTP 状态码名称映射为数值的模块和 codes 对象。它通过批量设置属性，让 codes.ok 或 codes['ok'] 等形式可读。",
+            "Morsel": "Python http.cookies 中表示单个 cookie 及其属性的对象。它保存 name、value、expires、domain 等字段，并可序列化为 Set-Cookie 片段。",
+            "CookieJar": "Python 标准库中管理 HTTP cookie 的容器。它按域、路径和策略保存、匹配并生成 Cookie 头。",
+            "PreparedRequest": "requests 中已经完成方法、URL、头部、cookie、body 和认证准备的请求对象。它可直接交给适配器发送。",
+            "Session": "requests 中可跨请求复用配置和连接的对象。它持有默认头部、cookie、认证、代理和适配器，并提供请求发送与重定向处理。",
+            "hook": "在特定事件发生时被调用的回调函数。requests 用 response hook 在收到响应后、处理重定向前修改或观察响应。",
+            "Content-Length": "HTTP 头部，表示消息体的字节长度。接收方据此知道要读取多少字节。",
+            "Transfer-Encoding": "HTTP 头部，表示消息体的传输编码方式。常见值 chunked 允许分块发送而不预先给出总长度。",
+            "chunked": "HTTP/1.1 的分块传输编码，把消息体拆成带长度前缀的块并以终止块结束。它适合长度未知的流式响应。",
+            "JSON": "一种轻量级文本数据交换格式，用对象、数组、字符串、数字、布尔和 null 表示数据。它常作为 HTTP API 的请求与响应体格式。",
+            "HTTPAdapter": "requests 中连接 Session 与 urllib3 的适配器。它负责连接池、代理、TLS 校验、超时和异常转换。",
+            "TLS": "传输层安全协议，为网络连接提供加密、完整性和身份认证。它通过握手协商密钥与证书，然后对应用数据加密传输。",
+            "SOCKS": "一种通过代理服务器转发 TCP 连接的协议。它支持客户端先与代理握手，再由代理连接目标主机。",
+            "proxy": "位于客户端与目标服务器之间的中间服务器，转发请求和响应。HTTP 客户端可通过代理访问外网或统一出口。",
+            "Digest": "HTTP Digest 认证是一种基于挑战-响应的认证机制。服务器发出 nonce 等挑战，客户端用用户名、密码和摘要算法计算响应而不明文发送密码。",
+            "nonce": "认证协议中由服务器生成的一次性随机值。它用于防止重放攻击，并参与客户端摘要计算。",
+            "no_proxy": "一个环境变量，列出不应经过代理的主机、域名或网段。客户端在决定代理前会按它做匹配和旁路。",
+            "CIDR": "无类别域间路由表示法，用地址和前缀长度描述 IP 网段。它可用于判断某个 IP 是否落在指定网络内。",
+            "TypeIs": "Python 类型规范中的类型窄化标记，用于让类型检查器根据布尔函数结果收窄变量类型。它比 TypeGuard 在否定分支上提供更精确的推断。",
+            "pyright": "一个 Python 静态类型检查器，可按照严格模式检查注解和类型流。它常用于在运行前发现类型错误。",
+            "MRO": "方法解析顺序，是 Python 在多继承中查找属性和方法时采用的线性化顺序。它决定同名方法最终调用哪一个基类实现。",
+            "HTTP": "一种应用层请求-响应协议，用于在客户端和服务器之间传输超文本等资源。它通过方法、状态码、头部和消息体组织一次请求与响应。",
+            "PySocks": "一个为 Python 提供 SOCKS 代理支持的第三方库。它让 HTTP 客户端能够通过 SOCKS4 或 SOCKS5 代理建立连接。"
+          },
+          "contextTruncation": {
+            "treeTruncated": false,
+            "contentTruncated": true,
+            "requestTruncated": true
+          },
+          "security": {
+            "excludedFiles": 7,
+            "redactedFiles": 4,
+            "redactionMatches": 10,
+            "categories": {
+              "private-key-file": 7,
+              "secret-assignment": 9,
+              "connection-string": 1
+            }
+          },
+          "generationDiagnostics": {
+            "version": 1,
+            "status": "succeeded",
+            "contextStrategy": "structure-v1",
+            "tokenEstimateMethod": "mixed-text-v1",
+            "estimatedInputTokens": 63934,
+            "inputTokenBudget": 64000,
+            "reservedOutputTokens": 65536,
+            "actualUsage": {
+              "inputTokens": 42209,
+              "outputTokens": 42768,
+              "totalTokens": 84977
+            },
+            "usageComplete": true,
+            "requestCount": 1,
+            "repairRequestCount": 0,
+            "compensationRequestCount": 0,
+            "contextBuildMs": 807,
+            "modelMs": 218096,
+            "totalMs": 219193,
+            "selectedFiles": 61,
+            "selectedRegions": 129,
+            "omittedFiles": 55
+          },
+          "evaluationDiagnostics": {
+            "version": 1,
+            "status": "succeeded",
+            "contextStrategy": "structure-v1",
+            "tokenEstimateMethod": "mixed-text-v1",
+            "estimatedInputTokens": 63934,
+            "inputTokenBudget": 64000,
+            "reservedOutputTokens": 65536,
+            "actualUsage": {
+              "inputTokens": 42209,
+              "outputTokens": 42768,
+              "totalTokens": 84977
+            },
+            "usageComplete": true,
+            "requestCount": 1,
+            "repairRequestCount": 0,
+            "compensationRequestCount": 0,
+            "contextBuildMs": 807,
+            "modelMs": 218096,
+            "totalMs": 219193,
+            "selectedFiles": 61,
+            "selectedRegions": 129,
+            "omittedFiles": 55
+          }
+        },
+        "questions": [
+          {
+            "question": "pyproject.toml 把 [[charset_normalizer]] 列为运行依赖，又提供 [[chardet]] 可选依赖。请结合 `src/requests/compat.py` 说明运行时如何选择字符检测库、两者都安装时谁优先，以及 `src/requests/packages.py` 如何暴露该库。",
+            "answer": "要点如下：\n\n- `pyproject.toml` 的 dependencies 是 `charset_normalizer>=2,<4`；`use_chardet_on_py3` 才是可选 `chardet>=3.0.2,<8`。\n- `compat._resolve_char_detection` 按 `('chardet', 'charset_normalizer')` 顺序尝试 `importlib.import_module`，只有当前值仍为 None 才继续；因此两者都安装时先导入的 [[chardet]] 胜出，只有它缺失才用 [[charset_normalizer]]。\n- `packages.py` 从 compat 取得该模块；若非 None，就把 [[sys.modules]] 中目标包及其子模块别名到 `requests.packages.*`，并把目标名替换为 `chardet` 再建一组兼容别名。因此选到 `charset_normalizer` 时也会出现 `requests.packages.chardet.*` 指向同一模块对象。\n\n可见代码只证明加载顺序和别名行为；`check_compatibility` 的调用位置未在片段中展示，不能确认最终告警路径。",
+            "section": "依赖加载与兼容层",
+            "followUps": [
+              {
+                "question": "为什么代码先尝试 chardet 而不是声明为强依赖的 charset_normalizer？",
+                "answer": "从提供代码只能确认顺序，不能确认维护动机；可能是历史兼容策略，但这是推断。若要让主依赖优先，应调整循环顺序并加测试覆盖。",
+                "followUps": []
+              },
+              {
+                "question": "如果两个库都没有安装，compat 与 packages 分别会怎样？",
+                "answer": "`_resolve_char_detection` 返回 None；`packages.py` 因 `chardet is not None` 不执行字符库别名。其他 [[urllib3]]、idna 别名仍执行。",
+                "followUps": []
+              },
+              {
+                "question": "这种别名机制有什么风险？",
+                "answer": "它直接改写 [[sys.modules]]，让旧导入路径共享同一模块对象；副作用是导入顺序、重载和第三方 monkeypatch 可能互相影响，且别名不会自动清理。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`src/requests/compat.py` 如何判断 [[urllib3]] 主版本？异常处理覆盖哪些情况？如果版本字符串是 `dev` 会怎样？",
+            "answer": "`src/requests/compat.py` 读取 [[urllib3]] 的 `__version__`，然后尝试 `int(urllib3_version.split('.')[0]) == 1`。若 `split` 或属性访问失败（`TypeError`、`AttributeError`），就按注释“prefer old functionality”把 `is_urllib3_1` 置为 True。\n\n边界在于异常列表只覆盖这两类：`dev` 这类无法转成 int 的字符串会抛出未被捕获的 `ValueError`，而不是回退 True。若版本是 `2.x`，则结果为 False。当前片段没有展示 `is_urllib3_1` 在别处的使用，因此只能确认探测逻辑，不能确认它具体改变了哪些调用路径。",
+            "section": "依赖加载与兼容层",
+            "followUps": [
+              {
+                "question": "为什么异常时偏向旧版本而不是抛错？",
+                "answer": "代码注释给出意图：无法辨别版本时偏好旧功能。好处是避免未知版本直接崩溃，代价是可能把新版本误判为旧版本，导致走兼容分支。",
+                "followUps": []
+              },
+              {
+                "question": "版本字符串 dev 为什么可能出问题？",
+                "answer": "`int('dev')` 抛 `ValueError`，不在 except 列表中，会在导入 compat 时中断。是否先被 `__init__.check_compatibility` 拦截取决于导入顺序，当前上下文未完整展示。",
+                "followUps": []
+              },
+              {
+                "question": "如何改进版本探测？",
+                "answer": "可解析 `packaging.version.Version`，对非数字版本显式定义策略，并把版本判断集中到可测试函数；这是建议，不是现有实现。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`src/requests/packages.py` 为什么遍历 [[sys.modules]]？它怎样保证 `requests.packages.urllib3` 与真实 [[urllib3]] 是同一个模块对象？对字符检测库的别名有什么特别之处？",
+            "answer": "- 它用于兼容老的 `requests.packages.*` 导入路径。对 [[urllib3]]、[[idna]] 先 `__import__`，再遍历 [[sys.modules]] 中名称等于包名或以 `包名.` 开头的项，把 `requests.packages.<原模块名>` 指向同一个模块对象，因此身份不变。\n- 对字符检测库，先取 `chardet.__name__` 作为 target；遍历目标模块及其子模块，建立 `requests.packages.<target>.*` 别名，再把模块名中的 target 替换成 `chardet` 建第二组别名。选到 [[charset_normalizer]] 时，`requests.packages.chardet.*` 与 `requests.packages.charset_normalizer.*` 会指向同一对象。\n- 这里是直接写 [[sys.modules]]，不是重新导入，所以不会复制模块状态。",
+            "section": "依赖加载与兼容层",
+            "followUps": [
+              {
+                "question": "如果不先 import 目标包会怎样？",
+                "answer": "[[sys.modules]] 里还没有目标模块项，遍历就找不到可别名对象；代码先 `__import__` 正是为了填充缓存。",
+                "followUps": []
+              },
+              {
+                "question": "别名是否会让 requests.packages 成为真正的包？",
+                "answer": "它不是通过常规包文件建立子模块，而是把模块对象挂到 [[sys.modules]] 的合成名称下；是否还能属性访问取决于父包导入机制，当前片段未展示完整 packages 包结构。",
+                "followUps": []
+              },
+              {
+                "question": "这种兼容层何时可以删除？",
+                "answer": "需要确认不再有用户依赖旧路径，并按语义化版本主版本变更处理；当前代码注释说明保留到下一主版本，但具体计划未在片段中给出。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "[[CaseInsensitiveDict]] 如何同时保留原始大小写并实现大小写不敏感查询？`lower_items`、`copy`、`__eq__` 的语义是什么？重复小写键时如何处理？",
+            "answer": "[[CaseInsensitiveDict]] 的内部 `_store` 是 `[[OrderedDict]][str, tuple[str, value]]`，以小写键索引，值保存“最后一次写入的原始键”和值。\n\n- `__setitem__` 用 `key.lower()` 定位并覆盖；`__getitem__`、`__delitem__` 也先小写化，因此查询大小写不敏感。\n- `__iter__` 返回保存的原始大小写键；`lower_items()` 返回全小写键和值。\n- `__eq__` 只对 `Mapping` 生效，先构造另一个 `CaseInsensitiveDict`，再比较 `dict(lower_items())`；非 Mapping 返回 `NotImplemented`。\n- `copy()` 传入 `_store.values()` 的 `(原始键, 值)` 序列重建对象。\n- 文档明确说重复小写键行为未定义；实现上后写覆盖先写，保留后写的原始键。",
+            "section": "数据结构与状态码",
+            "followUps": [
+              {
+                "question": "为什么还要 OrderedDict？",
+                "answer": "代码在 Python 3.10+ 仍显式使用 [[OrderedDict]] 来保证插入顺序语义和清晰意图；普通 dict 现在也有序，但替换需评估迭代顺序和兼容性。",
+                "followUps": []
+              },
+              {
+                "question": "非字符串键会怎样？",
+                "answer": "实现直接调用 `key.lower()`，非字符串键会在设置或查询时抛 `AttributeError`；类型注解也限定为 str。",
+                "followUps": []
+              },
+              {
+                "question": "copy 为什么不用 copy.copy？",
+                "answer": "它要重建一个独立的 [[CaseInsensitiveDict]] 并保留大小写键；直接浅拷贝内部 `_store` 可能共享可变值，当前实现通过重新插入构造新容器。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`status_codes.py` 的 `codes` 为什么既能 `codes.ok`、`codes['ok']`，又能 `codes.get('ok')`？[[LookupDict]] 的 `__getitem__` 与 `__getattr__` 有哪些容易误解的行为？",
+            "answer": "[[status_codes]] 的 `_init()` 把每个状态码名称通过 `setattr(codes, title, code)` 写进实例 `__dict__`，并对不以反斜杠或斜杠开头的名称再写一份大写属性。[[LookupDict]] 继承 `dict`，但查询主要走 `__dict__`：\n\n- `codes['ok']` 调用重写的 `__getitem__`，返回 `self.__dict__.get(key, None)`，所以缺失键返回 None 而不是 `KeyError`。\n- `codes.ok` 正常属性查找命中 `__dict__`；未命中才进入 `__getattr__`，那里找不到会抛 `AttributeError`。\n- `get()` 也被重写为查 `__dict__`。\n\n容易误解的是：`codes` 继承的 `dict` 本身没有这些条目，因此 `codes.items()`、`keys()` 看到的是空字典，而不是状态码属性表。",
+            "section": "数据结构与状态码",
+            "followUps": [
+              {
+                "question": "为什么 codes['\\o/'] 能工作？",
+                "answer": "`setattr` 允许把任意字符串作为属性名写入实例字典，`__getitem__` 又直接按字符串查 `__dict__`；点号语法无法书写该名称，但下标可以。",
+                "followUps": []
+              },
+              {
+                "question": "缺失键返回 None 有什么风险？",
+                "answer": "调用方可能把未知状态码误当成合法值参与比较或格式化；需要区分“不存在”时应显式检查 `get` 结果或改用普通映射。",
+                "followUps": []
+              },
+              {
+                "question": "codes.items() 为空是否符合预期？",
+                "answer": "从实现看是必然结果，因为状态码写入的是属性而非 dict 条目；若需要可枚举映射，应额外维护字典或重写迭代方法。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`RequestsCookieJar.__getitem__` 为什么是 O(n)？同名 cookie 出现在不同域或路径时，`_find_no_duplicates` 会怎样？",
+            "answer": "`__getitem__` 的实现是 `self._find_no_duplicates(name)`，没有哈希索引，只能遍历 [[CookieJar]] 中所有 cookie，所以是 O(n)。\n\n`_find_no_duplicates` 逐项比较 `cookie.name`，再按可选的 `domain`、`path` 过滤；一旦已经记录到一个匹配值又遇到第二个匹配，就抛 `CookieConflictError`。若没有任何匹配，抛 `KeyError`。因此同名但域或路径不同的 cookie 在只按名称访问时会被视为冲突；它的 docstring 建议使用更明确的 `get`/`set` 并传 domain、path 来消除歧义。",
+            "section": "数据结构与状态码",
+            "followUps": [
+              {
+                "question": "怎样避免冲突？",
+                "answer": "按 docstring 使用带 domain、path 的 `get`/`set` 路径，或直接遍历 jar 比较属性；只按名称的下标访问无法区分同名 cookie。",
+                "followUps": []
+              },
+              {
+                "question": "冲突异常和 KeyError 的区别？",
+                "answer": "`CookieConflictError` 表示找到了多个候选，无法唯一选择；`KeyError` 表示没有匹配项。调用方应分别处理歧义与缺失。",
+                "followUps": []
+              },
+              {
+                "question": "O(n) 在大 jar 中怎样优化？",
+                "answer": "可维护按名称或 `(name,domain,path)` 的索引，但需在 set/delete/update 时同步；这是设计建议，现有实现没有该索引。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`create_cookie` 和 `morsel_to_cookie` 怎样把 dict 或 [[Morsel]] 转成 [[CookieJar]] 可用的 Cookie？`RequestsCookieJar.set` 对 `value=None` 和带引号值做了什么？",
+            "answer": "`create_cookie` 先填默认字段（domain 空、path `/`、discard True、rest 中 HttpOnly None 等），拒绝未知关键字参数，然后计算 `port_specified`、`domain_specified`、`domain_initial_dot`、`path_specified`，最后构造 `http.cookiejar.Cookie`。`morsel_to_cookie` 优先用 `max-age` 计算过期时间，非法整数转 `TypeError`；否则用固定格式解析 `expires`，并把 Morsel 的 domain、path、secure、httponly 等映射到 `create_cookie`。\n\n`RequestsCookieJar.set` 在 value 为 None 时调用 `remove_cookie_by_name` 并按传入的 domain、path 删除，返回 None；否则把 Morsel 转 cookie 或创建 cookie，再 `set_cookie`。`set_cookie` 只对首尾都是双引号的值做替换，去掉值中的转义双引号，并未剥掉外层引号。",
+            "section": "数据结构与状态码",
+            "followUps": [
+              {
+                "question": "max-age 与 expires 同时存在谁优先？",
+                "answer": "代码先判断 `morsel['max-age']`，为真就用它计算；只有 max-age 为空才看 expires。",
+                "followUps": []
+              },
+              {
+                "question": "未知参数为什么直接报错？",
+                "answer": "`create_cookie` 用 `set(kwargs)-set(result)` 检查，避免把拼写错误静默带入 Cookie 构造；这提高可诊断性。",
+                "followUps": []
+              },
+              {
+                "question": "comment_url 的处理有什么值得注意？",
+                "answer": "代码传的是 `bool(morsel['comment'])`，不是 comment 字符串本身；这看起来像历史实现细节，是否预期需结合测试确认，当前片段不能证明是 bug。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "[[PreparedRequest]] 的 `prepare` 调用顺序是什么？为什么 `prepare_auth` 要放在 `prepare_body` 之后、`prepare_hooks` 之前？",
+            "answer": "顺序是：`prepare_method` → `prepare_url` → `prepare_headers` → `prepare_cookies` → `prepare_body` → `prepare_auth` → `prepare_hooks`。`prepare_method` 会把非 None 方法转成大写。\n\n源码注释给出两个理由：`prepare_auth` 必须靠后，以便 OAuth 等认证方案看到已经完整准备好的请求；`prepare_hooks` 又必须放在 `prepare_auth` 之后，因为认证器可能在准备过程中注册 [[hook]]。若把 hooks 提前，认证器后来添加的 hook 就不会被合并进最终请求。\n\n片段没有展示各 `prepare_*` 的全部实现，因此只能确认顺序和注释声明的意图。",
+            "section": "请求准备与响应状态",
+            "followUps": [
+              {
+                "question": "如果 method 为 None 会怎样？",
+                "answer": "`prepare_method` 保持 None；后续 `_is_prepared` 的运行时断言在片段中是无条件 True，因此不会在 prepare 阶段可靠拦截，具体失败点取决于后续使用。",
+                "followUps": []
+              },
+              {
+                "question": "认证器为什么需要看到 body？",
+                "answer": "有些认证方案要对请求体、URL 或头部做签名；先准备 body 和 headers 才能让认证逻辑基于最终请求内容计算。",
+                "followUps": []
+              },
+              {
+                "question": "把 hooks 放在最前会破坏什么？",
+                "answer": "认证器通过 `register_hook` 添加的响应 [[hook]] 可能不会被后续合并；但具体是否丢失取决于 Session 的 hooks 合并路径。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "[[PreparedRequest]] 的 `prepare_body` 如何判定流式 body？[[Content-Length]]、[[Transfer-Encoding]] 与 Content-Type 分别在哪些分支设置？`json` 和 `data` 同时给时谁生效？",
+            "answer": "判定流式的条件是：`data` 可迭代（`isinstance(data, Iterable)` 或有 `__iter__`），且不是 `str`、`bytes`、`list`、`tuple`、`Mapping`。命中后把 `data` 直接作为 body，记录 `tell()` 位置；若同时有 files 则抛 `NotImplementedError`。长度 `length` 为真时设 [[Content-Length]]，否则设 [[Transfer-Encoding]]: [[chunked]]。\n\n普通分支：有 files 走 `_encode_files`；否则有 raw data 走 `_encode_params`，并根据是否为字符串、字节或可 read 对象决定是否设 `application/x-www-form-urlencoded`。随后 `prepare_content_length` 对非 None body 的真值长度设 [[Content-Length]]；body 为 None 且方法不是 GET/HEAD 时设 `Content-Length: 0`。零长度 body 在该函数里不会补 Content-Length。\n\n`json` 只在 `not data and json is not None` 时序列化，所以 data 为真时 json 分支不执行。这两个 [[HTTP]] 头部和 Content-Type 的最终存在性还受已有 header 影响。",
+            "section": "请求准备与响应状态",
+            "followUps": [
+              {
+                "question": "为什么 list 和 tuple 不算流式？",
+                "answer": "它们被显式排除，通常作为表单键值对交给 `_encode_params`；若当流式会把容器本身当 body，语义不对。",
+                "followUps": []
+              },
+              {
+                "question": "length 为 0 为什么走 chunked？",
+                "answer": "流式分支用 `if length:` 判断，0 为假，于是设置 Transfer-Encoding chunked；这是代码当前行为，是否符合预期需测试确认。",
+                "followUps": []
+              },
+              {
+                "question": "json 中出现 NaN 会怎样？",
+                "answer": "`complexjson.dumps(json, allow_nan=False)` 抛 `ValueError`，代码转成 `InvalidJSONError`，不会发送非法 [[JSON]]。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "[[Session]] 的 `prepare_request` 如何合并 cookie、认证、headers、params 和 hooks？`.netrc` 在什么条件下被读取？",
+            "answer": "`prepare_request` 先处理 cookie：请求 cookie 不是 [[CookieJar]] 时先 `cookiejar_from_dict`，再依次把 session cookie 和请求 cookie 合并进新的 `RequestsCookieJar`。认证上先取 `request.auth`；仅当 `trust_env` 为真、请求没有 auth 且 session 也没有 auth 时，才调用 `get_netrc_auth(url)`。之后用 `merge_setting` 合并 headers（以 [[CaseInsensitiveDict]] 为结果类型）和 params，用 `merge_hooks` 合并 [[hook]]，最后按方法大写、URL、files、data、json 等调用 [[PreparedRequest]] 的 `prepare`。\n\n因此显式 auth 优先于 .netrc，session 级 auth 也会阻止 .netrc。片段未展示 `merge_setting` 与 `merge_hooks` 的内部实现，无法确认空值与覆盖细节。",
+            "section": "请求准备与响应状态",
+            "followUps": [
+              {
+                "question": "为什么请求 cookie 要在 session cookie 之后合并？",
+                "answer": "这样请求级 cookie 可以覆盖或补充 session 级 cookie；具体覆盖效果还取决于 `merge_cookies` 对 [[CookieJar]] 的 update 语义。",
+                "followUps": []
+              },
+              {
+                "question": "trust_env=False 还会读 .netrc 吗？",
+                "answer": "不会。条件里明确要求 trust_env 为真；代理环境等其他 trust_env 行为也不应被默认启用。",
+                "followUps": []
+              },
+              {
+                "question": "headers 合并为什么指定 CaseInsensitiveDict？",
+                "answer": "HTTP 头部名大小写不敏感，用该结构合并能避免 `Content-Type` 与 `content-type` 被当成两个键；片段未展示 merge_setting 的具体冲突策略。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "[[Session]] 的 `send` 完整流程是什么？`allow_redirects` 和 `stream` 分别怎样影响 redirect 历史与响应内容读取？",
+            "answer": "`send` 先给 kwargs 补 `stream`、`verify`、`cert` 默认值，未显式给 proxies 时调用 `resolve_proxies`；拒绝直接传入 `Request`，并在当前代码里 `assert _is_prepared`。然后取出 hooks 和 allow_redirects，选择 adapter，记录开始时间，调用 `adapter.send`，计算 elapsed，执行 `dispatch_hook('response', ...)`。\n\n之后把历史和当前响应的 cookie 抽取到 session，若 allow_redirects 为真用 `resolve_redirects` 生成 history，插入原响应并取最后一个作为最终 r；若为假则 history 为空，并用 `yield_requests=True` 尝试把下一个请求存到 `r._next`。最后若 `stream` 为假，访问 `r.content` 立即读取完整内容；为真则保留流式读取。",
+            "section": "请求准备与响应状态",
+            "followUps": [
+              {
+                "question": "hooks 在重定向前还是后执行？",
+                "answer": "当前代码先对首次响应执行 `dispatch_hook`，再进入 `resolve_redirects`；重定向产生的后续响应是否再走同样 [[hook]] 取决于 resolve_redirects 实现，片段未完整展示。",
+                "followUps": []
+              },
+              {
+                "question": "allow_redirects=False 时 _next 有什么用？",
+                "answer": "它保存一个可继续的下一请求，供 `Response.next()` 等接口使用；代码在 StopIteration 时静默跳过。",
+                "followUps": []
+              },
+              {
+                "question": "stream=False 为什么在 send 末尾读 content？",
+                "answer": "这样调用方拿到响应时内容已下载完，连接可释放；stream=True 则把读取责任交给调用方。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "Response 的 `content` 与 `iter_content` 如何协作维护 `_content` 和 `_content_consumed`？重复读取或 `chunk_size` 非法时会发生什么？",
+            "answer": "`content` 只在 `_content is False` 时读取：若 `_content_consumed` 已为真则抛 `RuntimeError`；若 status_code 为 0 或 raw 为 None，把 `_content` 设为 None；否则用 `b''.join(iter_content(CONTENT_CHUNK_SIZE)) or b''`。随后把 `_content_consumed` 置 True 并返回。\n\n`iter_content` 先检查：已消费且 `_content` 仍是 bool 时抛 `StreamConsumedError`；`chunk_size` 非 None 且不是 int 时抛 `TypeError`。未消费时走 `generate()`，它优先用 `raw.stream`，否则循环 `raw.read`，并在结束时置 `_content_consumed=True`。已消费但 `_content` 是 bytes 时，用 `iter_slices` 重新切片，不重新读网络。",
+            "section": "请求准备与响应状态",
+            "followUps": [
+              {
+                "question": "为什么用 False 而不是 None 作为未读哨兵？",
+                "answer": "代码需要区分未读、已读为空和已读为 None 等状态；`False` 作为哨兵可与 bytes 或 None 区分，但类型注解仍需忽略。",
+                "followUps": []
+              },
+              {
+                "question": "status_code 为 0 时 content 返回什么？",
+                "answer": "代码把 `_content` 设为 None 后返回它，尽管注解是 bytes；这是当前实现的可观察行为。",
+                "followUps": []
+              },
+              {
+                "question": "iter_content 的异常转换有哪些？",
+                "answer": "`generate` 把 `ProtocolError` 转 `ChunkedEncodingError`、`DecodeError` 转 `ContentDecodingError`、`ReadTimeoutError` 转 `ConnectionError`、`SSLError` 转 `RequestsSSLError`。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "[[HTTPAdapter]] 的 `send` 如何构造 timeout 和 chunked 参数？它把哪些 [[urllib3]] 异常映射成 requests 的哪些异常？",
+            "answer": "`chunked = not (request.body is None or 'Content-Length' in request.headers)`。timeout 为 tuple 时拆成 connect 和 read 构造 `TimeoutSauce`，构造失败抛 `ValueError`；已经是 `TimeoutSauce` 则复用；其他标量则 connect 和 read 都取 timeout。随后调用 `conn.urlopen`，显式设置 `redirect=False`、`assert_same_host=False`、`preload_content=False`、`decode_content=False`、`retries=self.max_retries`。\n\n异常映射包括：`ProtocolError` 和 `OSError` 转 `ConnectionError`；`MaxRetryError` 内部分别可能转 `ConnectTimeout`、`RetryError`、`ProxyError`、`SSLError` 或 `ConnectionError`；`ClosedPoolError` 转 `ConnectionError`；`_ProxyError` 转 `ProxyError`；`_SSLError`、`ReadTimeoutError`、`_InvalidHeader` 分别转 `SSLError`、`ReadTimeout`、`InvalidHeader`。具体分支以代码中的类型判断为准。",
+            "section": "适配器、代理与认证",
+            "followUps": [
+              {
+                "question": "为什么 preload_content 和 decode_content 都设 False？",
+                "answer": "让 [[urllib3]] 不提前读完整响应、也不提前解码，requests 的 Response 层再按 stream 与 encoding 控制读取和解码。",
+                "followUps": []
+              },
+              {
+                "question": "chunked 的判定是否等价于 body 非空？",
+                "answer": "不等价。body 非空但已有 [[Content-Length]] 时 chunked 为 False；body 为 None 时也为 False。",
+                "followUps": []
+              },
+              {
+                "question": "timeout 为 tuple 但长度不对会怎样？",
+                "answer": "解包失败或构造 TimeoutSauce 抛 `ValueError`，代码转成带提示的 `ValueError`；具体消息在异常分支中。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`get_connection_with_tls_context` 如何选择直连或 [[proxy]] 连接？`proxy_manager_for` 对 [[SOCKS]] 代理和其他代理分别怎么处理？",
+            "answer": "`get_connection_with_tls_context` 先 `assert _is_prepared`，用 `select_proxy` 根据 URL 和 proxies 选代理；再调用 `build_connection_pool_key_attributes(request, verify, cert)` 生成 host 参数和 pool 参数，`ValueError` 转 `InvalidURL`。若有代理，先 `prepend_scheme_if_needed(proxy, 'http')`，解析后 host 为空则抛 `InvalidProxyURL`，然后 `proxy_manager_for(proxy)` 并 `connection_from_host`；否则直接用 `poolmanager.connection_from_host`。\n\n`proxy_manager_for` 先查缓存；代理字符串小写后以 `socks` 开头时，拆分用户名密码并创建 `SOCKSProxyManager`；其他代理生成 `proxy_headers` 后调用 `proxy_from_url`。两者都传入连接池大小和 block 参数。这里的 [[TLS]] 校验参数在 pool 属性构建阶段参与，具体校验实现未在片段中展开。",
+            "section": "适配器、代理与认证",
+            "followUps": [
+              {
+                "question": "代理 URL 缺少 scheme 会怎样？",
+                "answer": "`prepend_scheme_if_needed` 会补 `http`；随后解析并检查 host，host 为空才抛 `InvalidProxyURL`。",
+                "followUps": []
+              },
+              {
+                "question": "SOCKS 依赖缺失会怎样？",
+                "answer": "`pyproject.toml` 把 [[PySocks]] 放在 socks 可选依赖；若未安装，创建或导入 `SOCKSProxyManager` 可能失败。具体异常路径未在当前片段展示。",
+                "followUps": []
+              },
+              {
+                "question": "close 如何释放连接？",
+                "answer": "`HTTPAdapter.close` 对 `poolmanager` 和每个代理 manager 调 `clear()`；这会关闭池中连接，但具体连接生命周期由 [[urllib3]] 管理。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`HTTPDigestAuth` 为什么使用 `threading.local`？`handle_401` 的重试流程与 body 回绕具体怎样执行？",
+            "answer": "`HTTPDigestAuth.__init__` 保存用户名、密码和 `_thread_local`；`init_per_thread_state` 只在线程首次调用时初始化 `last_nonce`、`nonce_count`、`chal`、`pos`、`num_401_calls`，避免多线程共享 challenge 和计数。\n\n`__call__` 先初始化状态；若已有 last_nonce 就先构造 Authorization；若 body 有 `tell` 记录位置，否则把 pos 置 None；注册 `handle_401` 和 `handle_redirect` 两个响应 [[hook]]。`handle_401` 只处理 400 到 499；若 pos 非 None 且 body 有 `seek` 就回绕；检查 `www-authenticate` 含 [[Digest]] 且 `num_401_calls < 2`，然后递增、解析 challenge、消费并关闭原响应、复制请求、抽取和重设 cookie、构造 Digest 头并重新发送，把旧响应加入 history。[[nonce]] 计数和 cnonce 在 `build_digest_header` 中参与摘要计算。",
+            "section": "适配器、代理与认证",
+            "followUps": [
+              {
+                "question": "为什么只重试一次 401？",
+                "answer": "代码用 `num_401_calls < 2` 限制，避免认证失败时无限循环；重定向 hook 会把计数重置为 1，允许新位置重新挑战。",
+                "followUps": []
+              },
+              {
+                "question": "body 不可 seek 会怎样？",
+                "answer": "代码只在 `pos` 非 None 且存在 `seek` 时回绕；否则重发时可能从当前位置读取，具体后果取决于 body 类型。",
+                "followUps": []
+              },
+              {
+                "question": "不支持的算法或 qop 如何处理？",
+                "answer": "`build_digest_header` 对不支持的算法返回 None，对 auth-int 等非 auth qop 也返回 None；调用方只在返回值非空时设置 Authorization。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`dispatch_hook` 如何区分单个 callable 和列表？[[hook]] 返回 None 与非 None 对后续 hook 有什么影响？",
+            "answer": "`dispatch_hook` 从 hooks 字典取 `hook_list`；若为假值（None、空列表等）直接返回原数据。若 `hook_list` 是 `Callable`，先包成单元素列表；然后逐个调用 `hook(hook_data, **kwargs)`。每个返回值若非 None，就用它替换 `hook_data`；若为 None，则保留上一次的数据继续传给下一个 hook。\n\n因此它支持链式变换，也允许某个 hook 只观察不修改。`default_hooks()` 返回 `{'response': []}`；测试 `tests/test_hooks.py` 也验证了单个 hook 和列表混合 None 返回时的结果。",
+            "section": "适配器、代理与认证",
+            "followUps": [
+              {
+                "question": "hook 抛异常会怎样？",
+                "answer": "当前实现没有 try/except，异常会直接向上传播，后续 hook 不执行；调用方需自行处理。",
+                "followUps": []
+              },
+              {
+                "question": "hooks 的值是生成器可以吗？",
+                "answer": "代码只要求可迭代并逐个 for 循环；生成器可以被消费，但只能消费一次，重复 dispatch 需重新提供。",
+                "followUps": []
+              },
+              {
+                "question": "为什么允许返回 None？",
+                "answer": "这样 hook 可以做日志或断言而不改变响应；若强制返回值，观察型 hook 也必须返回原对象。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`should_bypass_proxies` 如何结合环境变量和 [[no_proxy]]？IPv4 的 [[CIDR]] 与域名后缀匹配分别怎么判断？",
+            "answer": "`get_proxy` 先读小写环境变量，再读大写；`no_proxy` 参数为 None 时才读环境。解析 URL 后 hostname 为 None 直接返回 True。若 no_proxy 存在，按逗号拆分并去掉空格；hostname 是 IPv4 时，逐项检查是否为合法 CIDR，是则 `address_in_network`，否则精确比较。非 IPv4 时构造带端口的 host，逐项去掉前导点后比较精确相等，或比较 `'.' + host` 后缀。\n\n最后在临时设置 no_proxy 的上下文中调用 `proxy_bypass(hostname)`，捕获 `TypeError` 和 `socket.gaierror` 为 False；若系统判断旁路则返回 True。`resolve_proxies` 再据此决定是否把环境代理写入副本的 scheme 键。",
+            "section": "工具函数、校验与类型",
+            "followUps": [
+              {
+                "question": "为什么小写环境变量优先？",
+                "answer": "代码注释说与其他 HTTP 项目如 curl、wget 保持一致；小写存在时不再回退大写。",
+                "followUps": []
+              },
+              {
+                "question": "hostname 带端口时域名匹配怎么做？",
+                "answer": "代码同时比较 hostname 和 host_with_port 的精确值及后缀，因此 [[no_proxy]] 中可写带端口形式。",
+                "followUps": []
+              },
+              {
+                "question": "resolve_proxies 会删除 no_proxy 键吗？",
+                "answer": "它先复制 proxies，no_proxy 键会保留；只是用该值做旁路判断，并在需要时 `setdefault` scheme 代理。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`check_header_validity` 对 header 名称和值分别采用什么校验规则？str、bytes 与非 str/bytes 输入的异常路径是什么？空值允许吗？",
+            "answer": "`src/requests/_internal_utils.py` 为 str 和 bytes 各准备两条正则：名称不能以冒号或空白开头，后续不能含冒号或 CRLF；值不能以空白开头，后续不能含 CRLF，但允许空串。`check_header_validity` 对 `(name, value)` 分别调用 `_validate_header_part`，索引 0 和 1 选择名称或值校验器。\n\n`_validate_header_part` 若部分是 str 用 str 校验器，是 bytes 用 bytes 校验器，否则直接抛 `InvalidHeader`。正则不匹配也抛 `InvalidHeader`，消息区分 name 与 value。因此空 header 值合法，空名称不合法；前导空白和 CRLF 都会被拒绝。",
+            "section": "工具函数、校验与类型",
+            "followUps": [
+              {
+                "question": "为什么名称不允许冒号？",
+                "answer": "冒号分隔 header 名和值，名称中出现冒号会破坏解析边界；同时禁止 CRLF 防止头部注入。",
+                "followUps": []
+              },
+              {
+                "question": "bytes 和 str 为什么要分开正则？",
+                "answer": "bytes 正则用 bytes 模式匹配 bytes 输入，str 正则匹配 str，避免类型不匹配和隐式解码。",
+                "followUps": []
+              },
+              {
+                "question": "空值是否意味着可以省略 header？",
+                "answer": "空值被允许表示 header 存在但值为空；是否需要发送取决于调用方，校验层只判断格式。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`_types.py` 中 `is_prepared` 的 [[TypeIs]] 返回类型与运行时行为是什么？`_ValidatedRequest` 如何窄化 url 和 method？为什么运行时 `assert` 不能当作安全校验？",
+            "answer": "`is_prepared(request) -> TypeIs[_ValidatedRequest]` 在 `TYPE_CHECKING` 分支检查 `request.url is not None and request.method is not None`，从而让 [[pyright]] 等类型检查器把参数窄化为 `_ValidatedRequest`；但运行时函数体直接 `return True`，不做任何检查。\n\n`_ValidatedRequest` 继承 [[PreparedRequest]]，把 `url: str`、`method: str` 覆盖为更窄类型，并用 type ignore 抑制可变属性不变性冲突。它表达的是“已准备完成”的契约，不是运行时校验。因此 `assert _is_prepared(request)` 在普通运行中恒真，不能防止把未准备的请求传给 adapter；真正的安全边界仍需显式检查字段或捕获后续错误。",
+            "section": "工具函数、校验与类型",
+            "followUps": [
+              {
+                "question": "TypeIs 与 TypeGuard 有什么区别？",
+                "answer": "[[TypeIs]] 在条件为真和假时都能参与窄化，且要求被窄化变量与输入一致；TypeGuard 主要保证真分支，假分支不一定收窄。",
+                "followUps": []
+              },
+              {
+                "question": "为什么覆盖可变属性需要 type ignore？",
+                "answer": "类属性的可变类型在子类中收窄违反 Liskov 不变性，类型检查器会报错；代码用 ignore 表示这是有意契约。",
+                "followUps": []
+              },
+              {
+                "question": "运行时如何真正校验 PreparedRequest？",
+                "answer": "可显式检查 `request.url`、`request.method` 等字段，或让 prepare 阶段在缺失时抛异常；当前代码的 assert 不是这种校验。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "`RequestException` 如何绑定 request 和 response？`JSONDecodeError` 为什么自定义 `__init__` 和 `__reduce__`？多继承的 [[MRO]] 会带来什么影响？",
+            "answer": "`RequestException.__init__` 从 kwargs 弹出 `response` 和 `request`，保存为属性；若 response 存在、request 为空且 response 有 `request` 属性，就从 response 取 request，然后调用 `super().__init__(*args, **kwargs)`。\n\n`JSONDecodeError` 同时继承 `InvalidJSONError` 和兼容层的 `CompatJSONDecodeError`。它的 `__init__` 先用全部参数初始化 [[JSON]] 解码异常，再用 `self.args` 初始化 `InvalidJSONError`，以保留 JSON 特定的参数和消息。`__reduce__` 显式委托给 `CompatJSONDecodeError.__reduce__`，否则按 MRO 可能走到 `IOError` 的序列化逻辑，导致 pickle 参数不匹配。\n\n因此这个多继承的关键是初始化顺序和 `__reduce__` 的显式选择，而不是简单复用父类。",
+            "section": "工具函数、校验与类型",
+            "followUps": [
+              {
+                "question": "为什么 RequestException 继承 IOError？",
+                "answer": "代码把它作为 I/O 类异常体系的一部分，便于旧调用方按 IOError 捕获；具体历史兼容原因需查版本记录。",
+                "followUps": []
+              },
+              {
+                "question": "ConnectTimeout 的多继承有什么效果？",
+                "answer": "它同时是 `ConnectionError` 和 `Timeout`，调用方按任一父类捕获都能命中；[[MRO]] 决定方法查找顺序。",
+                "followUps": []
+              },
+              {
+                "question": "pickle 这个异常时为什么要小心？",
+                "answer": "JSON 解码异常需要保留原始 args，而 IOError 的 reduce 形状不同；不显式委托可能无法正确反序列化。",
+                "followUps": []
+              }
+            ]
+          }
+        ],
+        "scored": {
+          "contract": {
+            "pass": true
+          },
+          "quota": {
+            "pass": true,
+            "actual": 20,
+            "min": 15,
+            "target": 20,
+            "max": 25
+          },
+          "duplicateRate": {
+            "count": 0,
+            "denominator": 20,
+            "rate": 0
+          },
+          "knownFactCoverage": {
+            "covered": 7,
+            "total": 8,
+            "facts": {
+              "requests-prepared-order": {
+                "covered": true,
+                "keywords": [
+                  "PreparedRequest",
+                  "prepare_method",
+                  "prepare_url",
+                  "prepare_auth",
+                  "must be last"
+                ]
+              },
+              "requests-session-merge": {
+                "covered": true,
+                "keywords": [
+                  "prepare_request",
+                  "merge_cookies",
+                  "merge_setting",
+                  "self.cookies"
+                ]
+              },
+              "requests-send-flow": {
+                "covered": true,
+                "keywords": [
+                  "get_adapter",
+                  "adapter.send",
+                  "dispatch_hook",
+                  "resolve_redirects",
+                  "if not stream"
+                ]
+              },
+              "requests-env": {
+                "covered": true,
+                "keywords": [
+                  "trust_env",
+                  "get_environ_proxies",
+                  "REQUESTS_CA_BUNDLE",
+                  "merge_setting"
+                ]
+              },
+              "requests-redirect-limit": {
+                "covered": true,
+                "keywords": [
+                  "resolve_redirects",
+                  "max_redirects",
+                  "TooManyRedirects"
+                ]
+              },
+              "requests-response-ok": {
+                "covered": false,
+                "keywords": [
+                  "Response.ok",
+                  "__bool__",
+                  "raise_for_status",
+                  "status_code < 400"
+                ]
+              },
+              "requests-stream-content": {
+                "covered": true,
+                "keywords": [
+                  "iter_content",
+                  "raw.stream",
+                  "_content_consumed",
+                  "StreamConsumedError"
+                ]
+              },
+              "requests-dependencies": {
+                "covered": true,
+                "keywords": [
+                  "dependencies",
+                  "charset_normalizer",
+                  "urllib3",
+                  "optional-dependencies",
+                  "chardet"
+                ]
+              }
+            }
+          },
+          "forbiddenAssertionHits": [],
+          "alerts": [
+            "known_fact_keyword_missing"
+          ]
+        }
+      },
+      "output": {
+        "version": 1,
+        "createdAt": "2026-11-04T08:09:52.684Z",
+        "projectName": "requests",
+        "projectPath": "/public-corpus/requests",
+        "granularity": "medium",
+        "roleFocus": "general",
+        "profileId": "real-eval",
+        "modelUsed": "deepseek-v4-flash",
+        "projectSummary": "这是一个 Python HTTP 客户端库 requests 的源码仓库，核心代码在 src/requests，围绕 Session、PreparedRequest、HTTPAdapter 组织请求准备、连接发送、重定向、cookie、认证、代理与响应消费。项目使用 pyproject.toml 管理依赖与动态版本，配套 pytest、ruff、pyright 和较完整的文档及测试证书。本次扫描不完整，结论仅基于提供的源码与配置片段。",
+        "sections": [
+          {
+            "id": "17f38d35-77ef-4b97-8dc7-a0ae7cc03e9d",
+            "title": "依赖加载与兼容层",
+            "summary": "考察运行时依赖选择、urllib3 版本探测与旧命名空间别名机制。",
+            "questions": [
+              {
+                "id": "a461c4a4-4092-4ca5-a553-4ebeeadc90c6",
+                "title": "字符检测依赖加载顺序",
+                "question": "pyproject.toml 把 [[charset_normalizer]] 列为运行依赖，又提供 [[chardet]] 可选依赖。请结合 `src/requests/compat.py` 说明运行时如何选择字符检测库、两者都安装时谁优先，以及 `src/requests/packages.py` 如何暴露该库。",
+                "answer": "要点如下：\n\n- `pyproject.toml` 的 dependencies 是 `charset_normalizer>=2,<4`；`use_chardet_on_py3` 才是可选 `chardet>=3.0.2,<8`。\n- `compat._resolve_char_detection` 按 `('chardet', 'charset_normalizer')` 顺序尝试 `importlib.import_module`，只有当前值仍为 None 才继续；因此两者都安装时先导入的 [[chardet]] 胜出，只有它缺失才用 [[charset_normalizer]]。\n- `packages.py` 从 compat 取得该模块；若非 None，就把 [[sys.modules]] 中目标包及其子模块别名到 `requests.packages.*`，并把目标名替换为 `chardet` 再建一组兼容别名。因此选到 `charset_normalizer` 时也会出现 `requests.packages.chardet.*` 指向同一模块对象。\n\n可见代码只证明加载顺序和别名行为；`check_compatibility` 的调用位置未在片段中展示，不能确认最终告警路径。",
+                "followUps": [
+                  {
+                    "question": "为什么代码先尝试 chardet 而不是声明为强依赖的 charset_normalizer？",
+                    "answer": "从提供代码只能确认顺序，不能确认维护动机；可能是历史兼容策略，但这是推断。若要让主依赖优先，应调整循环顺序并加测试覆盖。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果两个库都没有安装，compat 与 packages 分别会怎样？",
+                    "answer": "`_resolve_char_detection` 返回 None；`packages.py` 因 `chardet is not None` 不执行字符库别名。其他 [[urllib3]]、idna 别名仍执行。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "这种别名机制有什么风险？",
+                    "answer": "它直接改写 [[sys.modules]]，让旧导入路径共享同一模块对象；副作用是导入顺序、重载和第三方 monkeypatch 可能互相影响，且别名不会自动清理。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "1064a5b9-f181-4783-a673-f8bbc9c50be7",
+                "title": "urllib3 主版本探测边界",
+                "question": "`src/requests/compat.py` 如何判断 [[urllib3]] 主版本？异常处理覆盖哪些情况？如果版本字符串是 `dev` 会怎样？",
+                "answer": "`src/requests/compat.py` 读取 [[urllib3]] 的 `__version__`，然后尝试 `int(urllib3_version.split('.')[0]) == 1`。若 `split` 或属性访问失败（`TypeError`、`AttributeError`），就按注释“prefer old functionality”把 `is_urllib3_1` 置为 True。\n\n边界在于异常列表只覆盖这两类：`dev` 这类无法转成 int 的字符串会抛出未被捕获的 `ValueError`，而不是回退 True。若版本是 `2.x`，则结果为 False。当前片段没有展示 `is_urllib3_1` 在别处的使用，因此只能确认探测逻辑，不能确认它具体改变了哪些调用路径。",
+                "followUps": [
+                  {
+                    "question": "为什么异常时偏向旧版本而不是抛错？",
+                    "answer": "代码注释给出意图：无法辨别版本时偏好旧功能。好处是避免未知版本直接崩溃，代价是可能把新版本误判为旧版本，导致走兼容分支。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "版本字符串 dev 为什么可能出问题？",
+                    "answer": "`int('dev')` 抛 `ValueError`，不在 except 列表中，会在导入 compat 时中断。是否先被 `__init__.check_compatibility` 拦截取决于导入顺序，当前上下文未完整展示。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如何改进版本探测？",
+                    "answer": "可解析 `packaging.version.Version`，对非数字版本显式定义策略，并把版本判断集中到可测试函数；这是建议，不是现有实现。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "ce8b78bb-fe28-48d6-9327-fbb3745ab272",
+                "title": "旧 packages 命名空间别名",
+                "question": "`src/requests/packages.py` 为什么遍历 [[sys.modules]]？它怎样保证 `requests.packages.urllib3` 与真实 [[urllib3]] 是同一个模块对象？对字符检测库的别名有什么特别之处？",
+                "answer": "- 它用于兼容老的 `requests.packages.*` 导入路径。对 [[urllib3]]、[[idna]] 先 `__import__`，再遍历 [[sys.modules]] 中名称等于包名或以 `包名.` 开头的项，把 `requests.packages.<原模块名>` 指向同一个模块对象，因此身份不变。\n- 对字符检测库，先取 `chardet.__name__` 作为 target；遍历目标模块及其子模块，建立 `requests.packages.<target>.*` 别名，再把模块名中的 target 替换成 `chardet` 建第二组别名。选到 [[charset_normalizer]] 时，`requests.packages.chardet.*` 与 `requests.packages.charset_normalizer.*` 会指向同一对象。\n- 这里是直接写 [[sys.modules]]，不是重新导入，所以不会复制模块状态。",
+                "followUps": [
+                  {
+                    "question": "如果不先 import 目标包会怎样？",
+                    "answer": "[[sys.modules]] 里还没有目标模块项，遍历就找不到可别名对象；代码先 `__import__` 正是为了填充缓存。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "别名是否会让 requests.packages 成为真正的包？",
+                    "answer": "它不是通过常规包文件建立子模块，而是把模块对象挂到 [[sys.modules]] 的合成名称下；是否还能属性访问取决于父包导入机制，当前片段未展示完整 packages 包结构。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "这种兼容层何时可以删除？",
+                    "answer": "需要确认不再有用户依赖旧路径，并按语义化版本主版本变更处理；当前代码注释说明保留到下一主版本，但具体计划未在片段中给出。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "774b75a7-6a7a-4493-9e14-2c098ba074b6",
+            "title": "数据结构与状态码",
+            "summary": "考察大小写映射、状态码查找对象、cookie 冲突与转换行为。",
+            "questions": [
+              {
+                "id": "8951b52b-4b0a-48b9-8bc6-893f882b13b4",
+                "title": "大小写不敏感映射实现",
+                "question": "[[CaseInsensitiveDict]] 如何同时保留原始大小写并实现大小写不敏感查询？`lower_items`、`copy`、`__eq__` 的语义是什么？重复小写键时如何处理？",
+                "answer": "[[CaseInsensitiveDict]] 的内部 `_store` 是 `[[OrderedDict]][str, tuple[str, value]]`，以小写键索引，值保存“最后一次写入的原始键”和值。\n\n- `__setitem__` 用 `key.lower()` 定位并覆盖；`__getitem__`、`__delitem__` 也先小写化，因此查询大小写不敏感。\n- `__iter__` 返回保存的原始大小写键；`lower_items()` 返回全小写键和值。\n- `__eq__` 只对 `Mapping` 生效，先构造另一个 `CaseInsensitiveDict`，再比较 `dict(lower_items())`；非 Mapping 返回 `NotImplemented`。\n- `copy()` 传入 `_store.values()` 的 `(原始键, 值)` 序列重建对象。\n- 文档明确说重复小写键行为未定义；实现上后写覆盖先写，保留后写的原始键。",
+                "followUps": [
+                  {
+                    "question": "为什么还要 OrderedDict？",
+                    "answer": "代码在 Python 3.10+ 仍显式使用 [[OrderedDict]] 来保证插入顺序语义和清晰意图；普通 dict 现在也有序，但替换需评估迭代顺序和兼容性。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "非字符串键会怎样？",
+                    "answer": "实现直接调用 `key.lower()`，非字符串键会在设置或查询时抛 `AttributeError`；类型注解也限定为 str。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "copy 为什么不用 copy.copy？",
+                    "answer": "它要重建一个独立的 [[CaseInsensitiveDict]] 并保留大小写键；直接浅拷贝内部 `_store` 可能共享可变值，当前实现通过重新插入构造新容器。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "07490695-d5b9-4ff8-ac95-018428db3bcc",
+                "title": "状态码查找对象语义",
+                "question": "`status_codes.py` 的 `codes` 为什么既能 `codes.ok`、`codes['ok']`，又能 `codes.get('ok')`？[[LookupDict]] 的 `__getitem__` 与 `__getattr__` 有哪些容易误解的行为？",
+                "answer": "[[status_codes]] 的 `_init()` 把每个状态码名称通过 `setattr(codes, title, code)` 写进实例 `__dict__`，并对不以反斜杠或斜杠开头的名称再写一份大写属性。[[LookupDict]] 继承 `dict`，但查询主要走 `__dict__`：\n\n- `codes['ok']` 调用重写的 `__getitem__`，返回 `self.__dict__.get(key, None)`，所以缺失键返回 None 而不是 `KeyError`。\n- `codes.ok` 正常属性查找命中 `__dict__`；未命中才进入 `__getattr__`，那里找不到会抛 `AttributeError`。\n- `get()` 也被重写为查 `__dict__`。\n\n容易误解的是：`codes` 继承的 `dict` 本身没有这些条目，因此 `codes.items()`、`keys()` 看到的是空字典，而不是状态码属性表。",
+                "followUps": [
+                  {
+                    "question": "为什么 codes['\\o/'] 能工作？",
+                    "answer": "`setattr` 允许把任意字符串作为属性名写入实例字典，`__getitem__` 又直接按字符串查 `__dict__`；点号语法无法书写该名称，但下标可以。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "缺失键返回 None 有什么风险？",
+                    "answer": "调用方可能把未知状态码误当成合法值参与比较或格式化；需要区分“不存在”时应显式检查 `get` 结果或改用普通映射。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "codes.items() 为空是否符合预期？",
+                    "answer": "从实现看是必然结果，因为状态码写入的是属性而非 dict 条目；若需要可枚举映射，应额外维护字典或重写迭代方法。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "7ab65535-5b7d-42df-84ac-3b33fe57a4cb",
+                "title": "同名 Cookie 冲突处理",
+                "question": "`RequestsCookieJar.__getitem__` 为什么是 O(n)？同名 cookie 出现在不同域或路径时，`_find_no_duplicates` 会怎样？",
+                "answer": "`__getitem__` 的实现是 `self._find_no_duplicates(name)`，没有哈希索引，只能遍历 [[CookieJar]] 中所有 cookie，所以是 O(n)。\n\n`_find_no_duplicates` 逐项比较 `cookie.name`，再按可选的 `domain`、`path` 过滤；一旦已经记录到一个匹配值又遇到第二个匹配，就抛 `CookieConflictError`。若没有任何匹配，抛 `KeyError`。因此同名但域或路径不同的 cookie 在只按名称访问时会被视为冲突；它的 docstring 建议使用更明确的 `get`/`set` 并传 domain、path 来消除歧义。",
+                "followUps": [
+                  {
+                    "question": "怎样避免冲突？",
+                    "answer": "按 docstring 使用带 domain、path 的 `get`/`set` 路径，或直接遍历 jar 比较属性；只按名称的下标访问无法区分同名 cookie。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "冲突异常和 KeyError 的区别？",
+                    "answer": "`CookieConflictError` 表示找到了多个候选，无法唯一选择；`KeyError` 表示没有匹配项。调用方应分别处理歧义与缺失。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "O(n) 在大 jar 中怎样优化？",
+                    "answer": "可维护按名称或 `(name,domain,path)` 的索引，但需在 set/delete/update 时同步；这是设计建议，现有实现没有该索引。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "754b6929-7131-4b89-a959-0e6352b6a956",
+                "title": "Cookie 构造与删除路径",
+                "question": "`create_cookie` 和 `morsel_to_cookie` 怎样把 dict 或 [[Morsel]] 转成 [[CookieJar]] 可用的 Cookie？`RequestsCookieJar.set` 对 `value=None` 和带引号值做了什么？",
+                "answer": "`create_cookie` 先填默认字段（domain 空、path `/`、discard True、rest 中 HttpOnly None 等），拒绝未知关键字参数，然后计算 `port_specified`、`domain_specified`、`domain_initial_dot`、`path_specified`，最后构造 `http.cookiejar.Cookie`。`morsel_to_cookie` 优先用 `max-age` 计算过期时间，非法整数转 `TypeError`；否则用固定格式解析 `expires`，并把 Morsel 的 domain、path、secure、httponly 等映射到 `create_cookie`。\n\n`RequestsCookieJar.set` 在 value 为 None 时调用 `remove_cookie_by_name` 并按传入的 domain、path 删除，返回 None；否则把 Morsel 转 cookie 或创建 cookie，再 `set_cookie`。`set_cookie` 只对首尾都是双引号的值做替换，去掉值中的转义双引号，并未剥掉外层引号。",
+                "followUps": [
+                  {
+                    "question": "max-age 与 expires 同时存在谁优先？",
+                    "answer": "代码先判断 `morsel['max-age']`，为真就用它计算；只有 max-age 为空才看 expires。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "未知参数为什么直接报错？",
+                    "answer": "`create_cookie` 用 `set(kwargs)-set(result)` 检查，避免把拼写错误静默带入 Cookie 构造；这提高可诊断性。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "comment_url 的处理有什么值得注意？",
+                    "answer": "代码传的是 `bool(morsel['comment'])`，不是 comment 字符串本身；这看起来像历史实现细节，是否预期需结合测试确认，当前片段不能证明是 bug。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "4aa1e833-d7b2-4e0b-b440-3bfb583aa3d0",
+            "title": "请求准备与响应状态",
+            "summary": "考察 PreparedRequest 准备顺序、body 编码、Session 合并与发送、响应消费状态机。",
+            "questions": [
+              {
+                "id": "081dff65-7e2d-4db9-af6e-417397bfacf5",
+                "title": "请求准备阶段调用顺序",
+                "question": "[[PreparedRequest]] 的 `prepare` 调用顺序是什么？为什么 `prepare_auth` 要放在 `prepare_body` 之后、`prepare_hooks` 之前？",
+                "answer": "顺序是：`prepare_method` → `prepare_url` → `prepare_headers` → `prepare_cookies` → `prepare_body` → `prepare_auth` → `prepare_hooks`。`prepare_method` 会把非 None 方法转成大写。\n\n源码注释给出两个理由：`prepare_auth` 必须靠后，以便 OAuth 等认证方案看到已经完整准备好的请求；`prepare_hooks` 又必须放在 `prepare_auth` 之后，因为认证器可能在准备过程中注册 [[hook]]。若把 hooks 提前，认证器后来添加的 hook 就不会被合并进最终请求。\n\n片段没有展示各 `prepare_*` 的全部实现，因此只能确认顺序和注释声明的意图。",
+                "followUps": [
+                  {
+                    "question": "如果 method 为 None 会怎样？",
+                    "answer": "`prepare_method` 保持 None；后续 `_is_prepared` 的运行时断言在片段中是无条件 True，因此不会在 prepare 阶段可靠拦截，具体失败点取决于后续使用。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "认证器为什么需要看到 body？",
+                    "answer": "有些认证方案要对请求体、URL 或头部做签名；先准备 body 和 headers 才能让认证逻辑基于最终请求内容计算。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "把 hooks 放在最前会破坏什么？",
+                    "answer": "认证器通过 `register_hook` 添加的响应 [[hook]] 可能不会被后续合并；但具体是否丢失取决于 Session 的 hooks 合并路径。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "8a0e91e0-a0b5-43d7-aea5-00af31c4e04b",
+                "title": "请求体编码与长度头",
+                "question": "[[PreparedRequest]] 的 `prepare_body` 如何判定流式 body？[[Content-Length]]、[[Transfer-Encoding]] 与 Content-Type 分别在哪些分支设置？`json` 和 `data` 同时给时谁生效？",
+                "answer": "判定流式的条件是：`data` 可迭代（`isinstance(data, Iterable)` 或有 `__iter__`），且不是 `str`、`bytes`、`list`、`tuple`、`Mapping`。命中后把 `data` 直接作为 body，记录 `tell()` 位置；若同时有 files 则抛 `NotImplementedError`。长度 `length` 为真时设 [[Content-Length]]，否则设 [[Transfer-Encoding]]: [[chunked]]。\n\n普通分支：有 files 走 `_encode_files`；否则有 raw data 走 `_encode_params`，并根据是否为字符串、字节或可 read 对象决定是否设 `application/x-www-form-urlencoded`。随后 `prepare_content_length` 对非 None body 的真值长度设 [[Content-Length]]；body 为 None 且方法不是 GET/HEAD 时设 `Content-Length: 0`。零长度 body 在该函数里不会补 Content-Length。\n\n`json` 只在 `not data and json is not None` 时序列化，所以 data 为真时 json 分支不执行。这两个 [[HTTP]] 头部和 Content-Type 的最终存在性还受已有 header 影响。",
+                "followUps": [
+                  {
+                    "question": "为什么 list 和 tuple 不算流式？",
+                    "answer": "它们被显式排除，通常作为表单键值对交给 `_encode_params`；若当流式会把容器本身当 body，语义不对。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "length 为 0 为什么走 chunked？",
+                    "answer": "流式分支用 `if length:` 判断，0 为假，于是设置 Transfer-Encoding chunked；这是代码当前行为，是否符合预期需测试确认。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "json 中出现 NaN 会怎样？",
+                    "answer": "`complexjson.dumps(json, allow_nan=False)` 抛 `ValueError`，代码转成 `InvalidJSONError`，不会发送非法 [[JSON]]。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "3fdc92ec-8c8f-4db1-8ec2-5b7d51e8dff4",
+                "title": "Session 配置合并流程",
+                "question": "[[Session]] 的 `prepare_request` 如何合并 cookie、认证、headers、params 和 hooks？`.netrc` 在什么条件下被读取？",
+                "answer": "`prepare_request` 先处理 cookie：请求 cookie 不是 [[CookieJar]] 时先 `cookiejar_from_dict`，再依次把 session cookie 和请求 cookie 合并进新的 `RequestsCookieJar`。认证上先取 `request.auth`；仅当 `trust_env` 为真、请求没有 auth 且 session 也没有 auth 时，才调用 `get_netrc_auth(url)`。之后用 `merge_setting` 合并 headers（以 [[CaseInsensitiveDict]] 为结果类型）和 params，用 `merge_hooks` 合并 [[hook]]，最后按方法大写、URL、files、data、json 等调用 [[PreparedRequest]] 的 `prepare`。\n\n因此显式 auth 优先于 .netrc，session 级 auth 也会阻止 .netrc。片段未展示 `merge_setting` 与 `merge_hooks` 的内部实现，无法确认空值与覆盖细节。",
+                "followUps": [
+                  {
+                    "question": "为什么请求 cookie 要在 session cookie 之后合并？",
+                    "answer": "这样请求级 cookie 可以覆盖或补充 session 级 cookie；具体覆盖效果还取决于 `merge_cookies` 对 [[CookieJar]] 的 update 语义。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "trust_env=False 还会读 .netrc 吗？",
+                    "answer": "不会。条件里明确要求 trust_env 为真；代理环境等其他 trust_env 行为也不应被默认启用。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "headers 合并为什么指定 CaseInsensitiveDict？",
+                    "answer": "HTTP 头部名大小写不敏感，用该结构合并能避免 `Content-Type` 与 `content-type` 被当成两个键；片段未展示 merge_setting 的具体冲突策略。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "9c4faa4f-2f31-4606-96e4-edf7aaf27878",
+                "title": "Session 发送与重定向",
+                "question": "[[Session]] 的 `send` 完整流程是什么？`allow_redirects` 和 `stream` 分别怎样影响 redirect 历史与响应内容读取？",
+                "answer": "`send` 先给 kwargs 补 `stream`、`verify`、`cert` 默认值，未显式给 proxies 时调用 `resolve_proxies`；拒绝直接传入 `Request`，并在当前代码里 `assert _is_prepared`。然后取出 hooks 和 allow_redirects，选择 adapter，记录开始时间，调用 `adapter.send`，计算 elapsed，执行 `dispatch_hook('response', ...)`。\n\n之后把历史和当前响应的 cookie 抽取到 session，若 allow_redirects 为真用 `resolve_redirects` 生成 history，插入原响应并取最后一个作为最终 r；若为假则 history 为空，并用 `yield_requests=True` 尝试把下一个请求存到 `r._next`。最后若 `stream` 为假，访问 `r.content` 立即读取完整内容；为真则保留流式读取。",
+                "followUps": [
+                  {
+                    "question": "hooks 在重定向前还是后执行？",
+                    "answer": "当前代码先对首次响应执行 `dispatch_hook`，再进入 `resolve_redirects`；重定向产生的后续响应是否再走同样 [[hook]] 取决于 resolve_redirects 实现，片段未完整展示。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "allow_redirects=False 时 _next 有什么用？",
+                    "answer": "它保存一个可继续的下一请求，供 `Response.next()` 等接口使用；代码在 StopIteration 时静默跳过。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "stream=False 为什么在 send 末尾读 content？",
+                    "answer": "这样调用方拿到响应时内容已下载完，连接可释放；stream=True 则把读取责任交给调用方。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "ef855c71-1945-4aa7-87cc-87e3d4dc7a4c",
+                "title": "响应内容消费状态机",
+                "question": "Response 的 `content` 与 `iter_content` 如何协作维护 `_content` 和 `_content_consumed`？重复读取或 `chunk_size` 非法时会发生什么？",
+                "answer": "`content` 只在 `_content is False` 时读取：若 `_content_consumed` 已为真则抛 `RuntimeError`；若 status_code 为 0 或 raw 为 None，把 `_content` 设为 None；否则用 `b''.join(iter_content(CONTENT_CHUNK_SIZE)) or b''`。随后把 `_content_consumed` 置 True 并返回。\n\n`iter_content` 先检查：已消费且 `_content` 仍是 bool 时抛 `StreamConsumedError`；`chunk_size` 非 None 且不是 int 时抛 `TypeError`。未消费时走 `generate()`，它优先用 `raw.stream`，否则循环 `raw.read`，并在结束时置 `_content_consumed=True`。已消费但 `_content` 是 bytes 时，用 `iter_slices` 重新切片，不重新读网络。",
+                "followUps": [
+                  {
+                    "question": "为什么用 False 而不是 None 作为未读哨兵？",
+                    "answer": "代码需要区分未读、已读为空和已读为 None 等状态；`False` 作为哨兵可与 bytes 或 None 区分，但类型注解仍需忽略。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "status_code 为 0 时 content 返回什么？",
+                    "answer": "代码把 `_content` 设为 None 后返回它，尽管注解是 bytes；这是当前实现的可观察行为。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "iter_content 的异常转换有哪些？",
+                    "answer": "`generate` 把 `ProtocolError` 转 `ChunkedEncodingError`、`DecodeError` 转 `ContentDecodingError`、`ReadTimeoutError` 转 `ConnectionError`、`SSLError` 转 `RequestsSSLError`。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "a40782d8-8985-4214-ad00-7761079f1f3c",
+            "title": "适配器、代理与认证",
+            "summary": "考察 HTTPAdapter 发送、TLS 与代理连接选择、Digest 认证状态和 hook 分发。",
+            "questions": [
+              {
+                "id": "88395966-d764-49ae-94ab-ef7da87c0ca9",
+                "title": "适配器发送与异常映射",
+                "question": "[[HTTPAdapter]] 的 `send` 如何构造 timeout 和 chunked 参数？它把哪些 [[urllib3]] 异常映射成 requests 的哪些异常？",
+                "answer": "`chunked = not (request.body is None or 'Content-Length' in request.headers)`。timeout 为 tuple 时拆成 connect 和 read 构造 `TimeoutSauce`，构造失败抛 `ValueError`；已经是 `TimeoutSauce` 则复用；其他标量则 connect 和 read 都取 timeout。随后调用 `conn.urlopen`，显式设置 `redirect=False`、`assert_same_host=False`、`preload_content=False`、`decode_content=False`、`retries=self.max_retries`。\n\n异常映射包括：`ProtocolError` 和 `OSError` 转 `ConnectionError`；`MaxRetryError` 内部分别可能转 `ConnectTimeout`、`RetryError`、`ProxyError`、`SSLError` 或 `ConnectionError`；`ClosedPoolError` 转 `ConnectionError`；`_ProxyError` 转 `ProxyError`；`_SSLError`、`ReadTimeoutError`、`_InvalidHeader` 分别转 `SSLError`、`ReadTimeout`、`InvalidHeader`。具体分支以代码中的类型判断为准。",
+                "followUps": [
+                  {
+                    "question": "为什么 preload_content 和 decode_content 都设 False？",
+                    "answer": "让 [[urllib3]] 不提前读完整响应、也不提前解码，requests 的 Response 层再按 stream 与 encoding 控制读取和解码。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "chunked 的判定是否等价于 body 非空？",
+                    "answer": "不等价。body 非空但已有 [[Content-Length]] 时 chunked 为 False；body 为 None 时也为 False。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "timeout 为 tuple 但长度不对会怎样？",
+                    "answer": "解包失败或构造 TimeoutSauce 抛 `ValueError`，代码转成带提示的 `ValueError`；具体消息在异常分支中。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "c9239c93-2e38-43d4-8f9d-06ac491d695e",
+                "title": "TLS 连接与代理选择",
+                "question": "`get_connection_with_tls_context` 如何选择直连或 [[proxy]] 连接？`proxy_manager_for` 对 [[SOCKS]] 代理和其他代理分别怎么处理？",
+                "answer": "`get_connection_with_tls_context` 先 `assert _is_prepared`，用 `select_proxy` 根据 URL 和 proxies 选代理；再调用 `build_connection_pool_key_attributes(request, verify, cert)` 生成 host 参数和 pool 参数，`ValueError` 转 `InvalidURL`。若有代理，先 `prepend_scheme_if_needed(proxy, 'http')`，解析后 host 为空则抛 `InvalidProxyURL`，然后 `proxy_manager_for(proxy)` 并 `connection_from_host`；否则直接用 `poolmanager.connection_from_host`。\n\n`proxy_manager_for` 先查缓存；代理字符串小写后以 `socks` 开头时，拆分用户名密码并创建 `SOCKSProxyManager`；其他代理生成 `proxy_headers` 后调用 `proxy_from_url`。两者都传入连接池大小和 block 参数。这里的 [[TLS]] 校验参数在 pool 属性构建阶段参与，具体校验实现未在片段中展开。",
+                "followUps": [
+                  {
+                    "question": "代理 URL 缺少 scheme 会怎样？",
+                    "answer": "`prepend_scheme_if_needed` 会补 `http`；随后解析并检查 host，host 为空才抛 `InvalidProxyURL`。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "SOCKS 依赖缺失会怎样？",
+                    "answer": "`pyproject.toml` 把 [[PySocks]] 放在 socks 可选依赖；若未安装，创建或导入 `SOCKSProxyManager` 可能失败。具体异常路径未在当前片段展示。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "close 如何释放连接？",
+                    "answer": "`HTTPAdapter.close` 对 `poolmanager` 和每个代理 manager 调 `clear()`；这会关闭池中连接，但具体连接生命周期由 [[urllib3]] 管理。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "ece7ceeb-28a0-4954-9c21-4913a1c799e9",
+                "title": "Digest 认证重试状态",
+                "question": "`HTTPDigestAuth` 为什么使用 `threading.local`？`handle_401` 的重试流程与 body 回绕具体怎样执行？",
+                "answer": "`HTTPDigestAuth.__init__` 保存用户名、密码和 `_thread_local`；`init_per_thread_state` 只在线程首次调用时初始化 `last_nonce`、`nonce_count`、`chal`、`pos`、`num_401_calls`，避免多线程共享 challenge 和计数。\n\n`__call__` 先初始化状态；若已有 last_nonce 就先构造 Authorization；若 body 有 `tell` 记录位置，否则把 pos 置 None；注册 `handle_401` 和 `handle_redirect` 两个响应 [[hook]]。`handle_401` 只处理 400 到 499；若 pos 非 None 且 body 有 `seek` 就回绕；检查 `www-authenticate` 含 [[Digest]] 且 `num_401_calls < 2`，然后递增、解析 challenge、消费并关闭原响应、复制请求、抽取和重设 cookie、构造 Digest 头并重新发送，把旧响应加入 history。[[nonce]] 计数和 cnonce 在 `build_digest_header` 中参与摘要计算。",
+                "followUps": [
+                  {
+                    "question": "为什么只重试一次 401？",
+                    "answer": "代码用 `num_401_calls < 2` 限制，避免认证失败时无限循环；重定向 hook 会把计数重置为 1，允许新位置重新挑战。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "body 不可 seek 会怎样？",
+                    "answer": "代码只在 `pos` 非 None 且存在 `seek` 时回绕；否则重发时可能从当前位置读取，具体后果取决于 body 类型。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "不支持的算法或 qop 如何处理？",
+                    "answer": "`build_digest_header` 对不支持的算法返回 None，对 auth-int 等非 auth qop 也返回 None；调用方只在返回值非空时设置 Authorization。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "1a5ea9ea-e4e1-4f5e-a7d1-7672e3e11d13",
+                "title": "响应钩子分发规则",
+                "question": "`dispatch_hook` 如何区分单个 callable 和列表？[[hook]] 返回 None 与非 None 对后续 hook 有什么影响？",
+                "answer": "`dispatch_hook` 从 hooks 字典取 `hook_list`；若为假值（None、空列表等）直接返回原数据。若 `hook_list` 是 `Callable`，先包成单元素列表；然后逐个调用 `hook(hook_data, **kwargs)`。每个返回值若非 None，就用它替换 `hook_data`；若为 None，则保留上一次的数据继续传给下一个 hook。\n\n因此它支持链式变换，也允许某个 hook 只观察不修改。`default_hooks()` 返回 `{'response': []}`；测试 `tests/test_hooks.py` 也验证了单个 hook 和列表混合 None 返回时的结果。",
+                "followUps": [
+                  {
+                    "question": "hook 抛异常会怎样？",
+                    "answer": "当前实现没有 try/except，异常会直接向上传播，后续 hook 不执行；调用方需自行处理。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "hooks 的值是生成器可以吗？",
+                    "answer": "代码只要求可迭代并逐个 for 循环；生成器可以被消费，但只能消费一次，重复 dispatch 需重新提供。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么允许返回 None？",
+                    "answer": "这样 hook 可以做日志或断言而不改变响应；若强制返回值，观察型 hook 也必须返回原对象。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "97234fbc-3ccf-4d74-a096-7310bd363c10",
+            "title": "工具函数、校验与类型",
+            "summary": "考察代理旁路、请求头校验、类型窄化与异常继承的实现细节。",
+            "questions": [
+              {
+                "id": "b7f9efd9-9e39-437b-8ed7-9a90f8a29601",
+                "title": "代理旁路与环境变量",
+                "question": "`should_bypass_proxies` 如何结合环境变量和 [[no_proxy]]？IPv4 的 [[CIDR]] 与域名后缀匹配分别怎么判断？",
+                "answer": "`get_proxy` 先读小写环境变量，再读大写；`no_proxy` 参数为 None 时才读环境。解析 URL 后 hostname 为 None 直接返回 True。若 no_proxy 存在，按逗号拆分并去掉空格；hostname 是 IPv4 时，逐项检查是否为合法 CIDR，是则 `address_in_network`，否则精确比较。非 IPv4 时构造带端口的 host，逐项去掉前导点后比较精确相等，或比较 `'.' + host` 后缀。\n\n最后在临时设置 no_proxy 的上下文中调用 `proxy_bypass(hostname)`，捕获 `TypeError` 和 `socket.gaierror` 为 False；若系统判断旁路则返回 True。`resolve_proxies` 再据此决定是否把环境代理写入副本的 scheme 键。",
+                "followUps": [
+                  {
+                    "question": "为什么小写环境变量优先？",
+                    "answer": "代码注释说与其他 HTTP 项目如 curl、wget 保持一致；小写存在时不再回退大写。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "hostname 带端口时域名匹配怎么做？",
+                    "answer": "代码同时比较 hostname 和 host_with_port 的精确值及后缀，因此 [[no_proxy]] 中可写带端口形式。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "resolve_proxies 会删除 no_proxy 键吗？",
+                    "answer": "它先复制 proxies，no_proxy 键会保留；只是用该值做旁路判断，并在需要时 `setdefault` scheme 代理。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "f62f4bf3-6855-470b-9b00-f0b1cd9f0ee7",
+                "title": "请求头合法性校验",
+                "question": "`check_header_validity` 对 header 名称和值分别采用什么校验规则？str、bytes 与非 str/bytes 输入的异常路径是什么？空值允许吗？",
+                "answer": "`src/requests/_internal_utils.py` 为 str 和 bytes 各准备两条正则：名称不能以冒号或空白开头，后续不能含冒号或 CRLF；值不能以空白开头，后续不能含 CRLF，但允许空串。`check_header_validity` 对 `(name, value)` 分别调用 `_validate_header_part`，索引 0 和 1 选择名称或值校验器。\n\n`_validate_header_part` 若部分是 str 用 str 校验器，是 bytes 用 bytes 校验器，否则直接抛 `InvalidHeader`。正则不匹配也抛 `InvalidHeader`，消息区分 name 与 value。因此空 header 值合法，空名称不合法；前导空白和 CRLF 都会被拒绝。",
+                "followUps": [
+                  {
+                    "question": "为什么名称不允许冒号？",
+                    "answer": "冒号分隔 header 名和值，名称中出现冒号会破坏解析边界；同时禁止 CRLF 防止头部注入。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "bytes 和 str 为什么要分开正则？",
+                    "answer": "bytes 正则用 bytes 模式匹配 bytes 输入，str 正则匹配 str，避免类型不匹配和隐式解码。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "空值是否意味着可以省略 header？",
+                    "answer": "空值被允许表示 header 存在但值为空；是否需要发送取决于调用方，校验层只判断格式。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "71e4c6e4-f907-4cd0-b0b0-8bbdc27314fe",
+                "title": "运行时断言与类型窄化",
+                "question": "`_types.py` 中 `is_prepared` 的 [[TypeIs]] 返回类型与运行时行为是什么？`_ValidatedRequest` 如何窄化 url 和 method？为什么运行时 `assert` 不能当作安全校验？",
+                "answer": "`is_prepared(request) -> TypeIs[_ValidatedRequest]` 在 `TYPE_CHECKING` 分支检查 `request.url is not None and request.method is not None`，从而让 [[pyright]] 等类型检查器把参数窄化为 `_ValidatedRequest`；但运行时函数体直接 `return True`，不做任何检查。\n\n`_ValidatedRequest` 继承 [[PreparedRequest]]，把 `url: str`、`method: str` 覆盖为更窄类型，并用 type ignore 抑制可变属性不变性冲突。它表达的是“已准备完成”的契约，不是运行时校验。因此 `assert _is_prepared(request)` 在普通运行中恒真，不能防止把未准备的请求传给 adapter；真正的安全边界仍需显式检查字段或捕获后续错误。",
+                "followUps": [
+                  {
+                    "question": "TypeIs 与 TypeGuard 有什么区别？",
+                    "answer": "[[TypeIs]] 在条件为真和假时都能参与窄化，且要求被窄化变量与输入一致；TypeGuard 主要保证真分支，假分支不一定收窄。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么覆盖可变属性需要 type ignore？",
+                    "answer": "类属性的可变类型在子类中收窄违反 Liskov 不变性，类型检查器会报错；代码用 ignore 表示这是有意契约。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "运行时如何真正校验 PreparedRequest？",
+                    "answer": "可显式检查 `request.url`、`request.method` 等字段，或让 prepare 阶段在缺失时抛异常；当前代码的 assert 不是这种校验。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "877ce812-4def-4a60-9435-fc1540c95d55",
+                "title": "异常继承与 JSON 解码",
+                "question": "`RequestException` 如何绑定 request 和 response？`JSONDecodeError` 为什么自定义 `__init__` 和 `__reduce__`？多继承的 [[MRO]] 会带来什么影响？",
+                "answer": "`RequestException.__init__` 从 kwargs 弹出 `response` 和 `request`，保存为属性；若 response 存在、request 为空且 response 有 `request` 属性，就从 response 取 request，然后调用 `super().__init__(*args, **kwargs)`。\n\n`JSONDecodeError` 同时继承 `InvalidJSONError` 和兼容层的 `CompatJSONDecodeError`。它的 `__init__` 先用全部参数初始化 [[JSON]] 解码异常，再用 `self.args` 初始化 `InvalidJSONError`，以保留 JSON 特定的参数和消息。`__reduce__` 显式委托给 `CompatJSONDecodeError.__reduce__`，否则按 MRO 可能走到 `IOError` 的序列化逻辑，导致 pickle 参数不匹配。\n\n因此这个多继承的关键是初始化顺序和 `__reduce__` 的显式选择，而不是简单复用父类。",
+                "followUps": [
+                  {
+                    "question": "为什么 RequestException 继承 IOError？",
+                    "answer": "代码把它作为 I/O 类异常体系的一部分，便于旧调用方按 IOError 捕获；具体历史兼容原因需查版本记录。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "ConnectTimeout 的多继承有什么效果？",
+                    "answer": "它同时是 `ConnectionError` 和 `Timeout`，调用方按任一父类捕获都能命中；[[MRO]] 决定方法查找顺序。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "pickle 这个异常时为什么要小心？",
+                    "answer": "JSON 解码异常需要保留原始 args，而 IOError 的 reduce 形状不同；不显式委托可能无法正确反序列化。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "glossary": {
+          "charset_normalizer": "一个 Python 字符集检测库，用于从字节序列猜测文本编码。它通过统计分析和模型判断候选编码，并返回检测结果。",
+          "chardet": "一个 Python 字符编码检测库，用于根据字节内容推测文本编码。它通过概率模型和语言特征给出编码及置信度。",
+          "sys.modules": "Python 解释器维护的已导入模块缓存字典，键是模块名、值是模块对象。导入语句会先查它，因此修改它可影响后续导入解析。",
+          "urllib3": "一个 Python HTTP 客户端库，提供连接池、重试、TLS 和代理等底层能力。requests 常把它作为传输层实现。",
+          "idna": "一个处理国际化域名的 Python 库，把 Unicode 域名转换为 ASCII 兼容形式。它实现 IDNA 编码规则，供 HTTP 客户端在连接前规范化主机名。",
+          "CaseInsensitiveDict": "一种大小写不敏感的映射结构，常用于 HTTP 头部。它用小写键做内部索引，同时保留最后一次写入的原始键大小写。",
+          "OrderedDict": "Python 标准库中的有序字典，按插入顺序保存键值对。它提供顺序迭代和移动、弹出等操作。",
+          "LookupDict": "requests 内部的一种字典子类，用属性保存名称到值的映射。它的下标访问和属性访问可返回默认 None，而不是普通字典的 KeyError。",
+          "status_codes": "requests 中把 HTTP 状态码名称映射为数值的模块和 codes 对象。它通过批量设置属性，让 codes.ok 或 codes['ok'] 等形式可读。",
+          "Morsel": "Python http.cookies 中表示单个 cookie 及其属性的对象。它保存 name、value、expires、domain 等字段，并可序列化为 Set-Cookie 片段。",
+          "CookieJar": "Python 标准库中管理 HTTP cookie 的容器。它按域、路径和策略保存、匹配并生成 Cookie 头。",
+          "PreparedRequest": "requests 中已经完成方法、URL、头部、cookie、body 和认证准备的请求对象。它可直接交给适配器发送。",
+          "Session": "requests 中可跨请求复用配置和连接的对象。它持有默认头部、cookie、认证、代理和适配器，并提供请求发送与重定向处理。",
+          "hook": "在特定事件发生时被调用的回调函数。requests 用 response hook 在收到响应后、处理重定向前修改或观察响应。",
+          "Content-Length": "HTTP 头部，表示消息体的字节长度。接收方据此知道要读取多少字节。",
+          "Transfer-Encoding": "HTTP 头部，表示消息体的传输编码方式。常见值 chunked 允许分块发送而不预先给出总长度。",
+          "chunked": "HTTP/1.1 的分块传输编码，把消息体拆成带长度前缀的块并以终止块结束。它适合长度未知的流式响应。",
+          "JSON": "一种轻量级文本数据交换格式，用对象、数组、字符串、数字、布尔和 null 表示数据。它常作为 HTTP API 的请求与响应体格式。",
+          "HTTPAdapter": "requests 中连接 Session 与 urllib3 的适配器。它负责连接池、代理、TLS 校验、超时和异常转换。",
+          "TLS": "传输层安全协议，为网络连接提供加密、完整性和身份认证。它通过握手协商密钥与证书，然后对应用数据加密传输。",
+          "SOCKS": "一种通过代理服务器转发 TCP 连接的协议。它支持客户端先与代理握手，再由代理连接目标主机。",
+          "proxy": "位于客户端与目标服务器之间的中间服务器，转发请求和响应。HTTP 客户端可通过代理访问外网或统一出口。",
+          "Digest": "HTTP Digest 认证是一种基于挑战-响应的认证机制。服务器发出 nonce 等挑战，客户端用用户名、密码和摘要算法计算响应而不明文发送密码。",
+          "nonce": "认证协议中由服务器生成的一次性随机值。它用于防止重放攻击，并参与客户端摘要计算。",
+          "no_proxy": "一个环境变量，列出不应经过代理的主机、域名或网段。客户端在决定代理前会按它做匹配和旁路。",
+          "CIDR": "无类别域间路由表示法，用地址和前缀长度描述 IP 网段。它可用于判断某个 IP 是否落在指定网络内。",
+          "TypeIs": "Python 类型规范中的类型窄化标记，用于让类型检查器根据布尔函数结果收窄变量类型。它比 TypeGuard 在否定分支上提供更精确的推断。",
+          "pyright": "一个 Python 静态类型检查器，可按照严格模式检查注解和类型流。它常用于在运行前发现类型错误。",
+          "MRO": "方法解析顺序，是 Python 在多继承中查找属性和方法时采用的线性化顺序。它决定同名方法最终调用哪一个基类实现。",
+          "HTTP": "一种应用层请求-响应协议，用于在客户端和服务器之间传输超文本等资源。它通过方法、状态码、头部和消息体组织一次请求与响应。",
+          "PySocks": "一个为 Python 提供 SOCKS 代理支持的第三方库。它让 HTTP 客户端能够通过 SOCKS4 或 SOCKS5 代理建立连接。"
+        },
+        "contextTruncation": {
+          "treeTruncated": false,
+          "contentTruncated": true,
+          "requestTruncated": true
+        },
+        "security": {
+          "excludedFiles": 7,
+          "redactedFiles": 4,
+          "redactionMatches": 10,
+          "categories": {
+            "private-key-file": 7,
+            "secret-assignment": 9,
+            "connection-string": 1
+          }
+        },
+        "generationDiagnostics": {
+          "version": 1,
+          "status": "succeeded",
+          "contextStrategy": "structure-v1",
+          "tokenEstimateMethod": "mixed-text-v1",
+          "estimatedInputTokens": 63934,
+          "inputTokenBudget": 64000,
+          "reservedOutputTokens": 65536,
+          "actualUsage": {
+            "inputTokens": 42209,
+            "outputTokens": 42768,
+            "totalTokens": 84977
+          },
+          "usageComplete": true,
+          "requestCount": 1,
+          "repairRequestCount": 0,
+          "compensationRequestCount": 0,
+          "contextBuildMs": 807,
+          "modelMs": 218096,
+          "totalMs": 219193,
+          "selectedFiles": 61,
+          "selectedRegions": 129,
+          "omittedFiles": 55
+        },
+        "evaluationDiagnostics": {
+          "version": 1,
+          "status": "succeeded",
+          "contextStrategy": "structure-v1",
+          "tokenEstimateMethod": "mixed-text-v1",
+          "estimatedInputTokens": 63934,
+          "inputTokenBudget": 64000,
+          "reservedOutputTokens": 65536,
+          "actualUsage": {
+            "inputTokens": 42209,
+            "outputTokens": 42768,
+            "totalTokens": 84977
+          },
+          "usageComplete": true,
+          "requestCount": 1,
+          "repairRequestCount": 0,
+          "compensationRequestCount": 0,
+          "contextBuildMs": 807,
+          "modelMs": 218096,
+          "totalMs": 219193,
+          "selectedFiles": 61,
+          "selectedRegions": 129,
+          "omittedFiles": 55
+        }
+      }
+    }
+  ],
+  "questions": [
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "pyproject.toml 把 [[charset_normalizer]] 列为运行依赖，又提供 [[chardet]] 可选依赖。请结合 `src/requests/compat.py` 说明运行时如何选择字符检测库、两者都安装时谁优先，以及 `src/requests/packages.py` 如何暴露该库。",
+      "answer": "要点如下：\n\n- `pyproject.toml` 的 dependencies 是 `charset_normalizer>=2,<4`；`use_chardet_on_py3` 才是可选 `chardet>=3.0.2,<8`。\n- `compat._resolve_char_detection` 按 `('chardet', 'charset_normalizer')` 顺序尝试 `importlib.import_module`，只有当前值仍为 None 才继续；因此两者都安装时先导入的 [[chardet]] 胜出，只有它缺失才用 [[charset_normalizer]]。\n- `packages.py` 从 compat 取得该模块；若非 None，就把 [[sys.modules]] 中目标包及其子模块别名到 `requests.packages.*`，并把目标名替换为 `chardet` 再建一组兼容别名。因此选到 `charset_normalizer` 时也会出现 `requests.packages.chardet.*` 指向同一模块对象。\n\n可见代码只证明加载顺序和别名行为；`check_compatibility` 的调用位置未在片段中展示，不能确认最终告警路径。",
+      "followUps": [
+        {
+          "question": "为什么代码先尝试 chardet 而不是声明为强依赖的 charset_normalizer？",
+          "answer": "从提供代码只能确认顺序，不能确认维护动机；可能是历史兼容策略，但这是推断。若要让主依赖优先，应调整循环顺序并加测试覆盖。",
+          "followUps": []
+        },
+        {
+          "question": "如果两个库都没有安装，compat 与 packages 分别会怎样？",
+          "answer": "`_resolve_char_detection` 返回 None；`packages.py` 因 `chardet is not None` 不执行字符库别名。其他 [[urllib3]]、idna 别名仍执行。",
+          "followUps": []
+        },
+        {
+          "question": "这种别名机制有什么风险？",
+          "answer": "它直接改写 [[sys.modules]]，让旧导入路径共享同一模块对象；副作用是导入顺序、重载和第三方 monkeypatch 可能互相影响，且别名不会自动清理。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`src/requests/compat.py` 如何判断 [[urllib3]] 主版本？异常处理覆盖哪些情况？如果版本字符串是 `dev` 会怎样？",
+      "answer": "`src/requests/compat.py` 读取 [[urllib3]] 的 `__version__`，然后尝试 `int(urllib3_version.split('.')[0]) == 1`。若 `split` 或属性访问失败（`TypeError`、`AttributeError`），就按注释“prefer old functionality”把 `is_urllib3_1` 置为 True。\n\n边界在于异常列表只覆盖这两类：`dev` 这类无法转成 int 的字符串会抛出未被捕获的 `ValueError`，而不是回退 True。若版本是 `2.x`，则结果为 False。当前片段没有展示 `is_urllib3_1` 在别处的使用，因此只能确认探测逻辑，不能确认它具体改变了哪些调用路径。",
+      "followUps": [
+        {
+          "question": "为什么异常时偏向旧版本而不是抛错？",
+          "answer": "代码注释给出意图：无法辨别版本时偏好旧功能。好处是避免未知版本直接崩溃，代价是可能把新版本误判为旧版本，导致走兼容分支。",
+          "followUps": []
+        },
+        {
+          "question": "版本字符串 dev 为什么可能出问题？",
+          "answer": "`int('dev')` 抛 `ValueError`，不在 except 列表中，会在导入 compat 时中断。是否先被 `__init__.check_compatibility` 拦截取决于导入顺序，当前上下文未完整展示。",
+          "followUps": []
+        },
+        {
+          "question": "如何改进版本探测？",
+          "answer": "可解析 `packaging.version.Version`，对非数字版本显式定义策略，并把版本判断集中到可测试函数；这是建议，不是现有实现。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`src/requests/packages.py` 为什么遍历 [[sys.modules]]？它怎样保证 `requests.packages.urllib3` 与真实 [[urllib3]] 是同一个模块对象？对字符检测库的别名有什么特别之处？",
+      "answer": "- 它用于兼容老的 `requests.packages.*` 导入路径。对 [[urllib3]]、[[idna]] 先 `__import__`，再遍历 [[sys.modules]] 中名称等于包名或以 `包名.` 开头的项，把 `requests.packages.<原模块名>` 指向同一个模块对象，因此身份不变。\n- 对字符检测库，先取 `chardet.__name__` 作为 target；遍历目标模块及其子模块，建立 `requests.packages.<target>.*` 别名，再把模块名中的 target 替换成 `chardet` 建第二组别名。选到 [[charset_normalizer]] 时，`requests.packages.chardet.*` 与 `requests.packages.charset_normalizer.*` 会指向同一对象。\n- 这里是直接写 [[sys.modules]]，不是重新导入，所以不会复制模块状态。",
+      "followUps": [
+        {
+          "question": "如果不先 import 目标包会怎样？",
+          "answer": "[[sys.modules]] 里还没有目标模块项，遍历就找不到可别名对象；代码先 `__import__` 正是为了填充缓存。",
+          "followUps": []
+        },
+        {
+          "question": "别名是否会让 requests.packages 成为真正的包？",
+          "answer": "它不是通过常规包文件建立子模块，而是把模块对象挂到 [[sys.modules]] 的合成名称下；是否还能属性访问取决于父包导入机制，当前片段未展示完整 packages 包结构。",
+          "followUps": []
+        },
+        {
+          "question": "这种兼容层何时可以删除？",
+          "answer": "需要确认不再有用户依赖旧路径，并按语义化版本主版本变更处理；当前代码注释说明保留到下一主版本，但具体计划未在片段中给出。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "[[CaseInsensitiveDict]] 如何同时保留原始大小写并实现大小写不敏感查询？`lower_items`、`copy`、`__eq__` 的语义是什么？重复小写键时如何处理？",
+      "answer": "[[CaseInsensitiveDict]] 的内部 `_store` 是 `[[OrderedDict]][str, tuple[str, value]]`，以小写键索引，值保存“最后一次写入的原始键”和值。\n\n- `__setitem__` 用 `key.lower()` 定位并覆盖；`__getitem__`、`__delitem__` 也先小写化，因此查询大小写不敏感。\n- `__iter__` 返回保存的原始大小写键；`lower_items()` 返回全小写键和值。\n- `__eq__` 只对 `Mapping` 生效，先构造另一个 `CaseInsensitiveDict`，再比较 `dict(lower_items())`；非 Mapping 返回 `NotImplemented`。\n- `copy()` 传入 `_store.values()` 的 `(原始键, 值)` 序列重建对象。\n- 文档明确说重复小写键行为未定义；实现上后写覆盖先写，保留后写的原始键。",
+      "followUps": [
+        {
+          "question": "为什么还要 OrderedDict？",
+          "answer": "代码在 Python 3.10+ 仍显式使用 [[OrderedDict]] 来保证插入顺序语义和清晰意图；普通 dict 现在也有序，但替换需评估迭代顺序和兼容性。",
+          "followUps": []
+        },
+        {
+          "question": "非字符串键会怎样？",
+          "answer": "实现直接调用 `key.lower()`，非字符串键会在设置或查询时抛 `AttributeError`；类型注解也限定为 str。",
+          "followUps": []
+        },
+        {
+          "question": "copy 为什么不用 copy.copy？",
+          "answer": "它要重建一个独立的 [[CaseInsensitiveDict]] 并保留大小写键；直接浅拷贝内部 `_store` 可能共享可变值，当前实现通过重新插入构造新容器。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`status_codes.py` 的 `codes` 为什么既能 `codes.ok`、`codes['ok']`，又能 `codes.get('ok')`？[[LookupDict]] 的 `__getitem__` 与 `__getattr__` 有哪些容易误解的行为？",
+      "answer": "[[status_codes]] 的 `_init()` 把每个状态码名称通过 `setattr(codes, title, code)` 写进实例 `__dict__`，并对不以反斜杠或斜杠开头的名称再写一份大写属性。[[LookupDict]] 继承 `dict`，但查询主要走 `__dict__`：\n\n- `codes['ok']` 调用重写的 `__getitem__`，返回 `self.__dict__.get(key, None)`，所以缺失键返回 None 而不是 `KeyError`。\n- `codes.ok` 正常属性查找命中 `__dict__`；未命中才进入 `__getattr__`，那里找不到会抛 `AttributeError`。\n- `get()` 也被重写为查 `__dict__`。\n\n容易误解的是：`codes` 继承的 `dict` 本身没有这些条目，因此 `codes.items()`、`keys()` 看到的是空字典，而不是状态码属性表。",
+      "followUps": [
+        {
+          "question": "为什么 codes['\\o/'] 能工作？",
+          "answer": "`setattr` 允许把任意字符串作为属性名写入实例字典，`__getitem__` 又直接按字符串查 `__dict__`；点号语法无法书写该名称，但下标可以。",
+          "followUps": []
+        },
+        {
+          "question": "缺失键返回 None 有什么风险？",
+          "answer": "调用方可能把未知状态码误当成合法值参与比较或格式化；需要区分“不存在”时应显式检查 `get` 结果或改用普通映射。",
+          "followUps": []
+        },
+        {
+          "question": "codes.items() 为空是否符合预期？",
+          "answer": "从实现看是必然结果，因为状态码写入的是属性而非 dict 条目；若需要可枚举映射，应额外维护字典或重写迭代方法。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`RequestsCookieJar.__getitem__` 为什么是 O(n)？同名 cookie 出现在不同域或路径时，`_find_no_duplicates` 会怎样？",
+      "answer": "`__getitem__` 的实现是 `self._find_no_duplicates(name)`，没有哈希索引，只能遍历 [[CookieJar]] 中所有 cookie，所以是 O(n)。\n\n`_find_no_duplicates` 逐项比较 `cookie.name`，再按可选的 `domain`、`path` 过滤；一旦已经记录到一个匹配值又遇到第二个匹配，就抛 `CookieConflictError`。若没有任何匹配，抛 `KeyError`。因此同名但域或路径不同的 cookie 在只按名称访问时会被视为冲突；它的 docstring 建议使用更明确的 `get`/`set` 并传 domain、path 来消除歧义。",
+      "followUps": [
+        {
+          "question": "怎样避免冲突？",
+          "answer": "按 docstring 使用带 domain、path 的 `get`/`set` 路径，或直接遍历 jar 比较属性；只按名称的下标访问无法区分同名 cookie。",
+          "followUps": []
+        },
+        {
+          "question": "冲突异常和 KeyError 的区别？",
+          "answer": "`CookieConflictError` 表示找到了多个候选，无法唯一选择；`KeyError` 表示没有匹配项。调用方应分别处理歧义与缺失。",
+          "followUps": []
+        },
+        {
+          "question": "O(n) 在大 jar 中怎样优化？",
+          "answer": "可维护按名称或 `(name,domain,path)` 的索引，但需在 set/delete/update 时同步；这是设计建议，现有实现没有该索引。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`create_cookie` 和 `morsel_to_cookie` 怎样把 dict 或 [[Morsel]] 转成 [[CookieJar]] 可用的 Cookie？`RequestsCookieJar.set` 对 `value=None` 和带引号值做了什么？",
+      "answer": "`create_cookie` 先填默认字段（domain 空、path `/`、discard True、rest 中 HttpOnly None 等），拒绝未知关键字参数，然后计算 `port_specified`、`domain_specified`、`domain_initial_dot`、`path_specified`，最后构造 `http.cookiejar.Cookie`。`morsel_to_cookie` 优先用 `max-age` 计算过期时间，非法整数转 `TypeError`；否则用固定格式解析 `expires`，并把 Morsel 的 domain、path、secure、httponly 等映射到 `create_cookie`。\n\n`RequestsCookieJar.set` 在 value 为 None 时调用 `remove_cookie_by_name` 并按传入的 domain、path 删除，返回 None；否则把 Morsel 转 cookie 或创建 cookie，再 `set_cookie`。`set_cookie` 只对首尾都是双引号的值做替换，去掉值中的转义双引号，并未剥掉外层引号。",
+      "followUps": [
+        {
+          "question": "max-age 与 expires 同时存在谁优先？",
+          "answer": "代码先判断 `morsel['max-age']`，为真就用它计算；只有 max-age 为空才看 expires。",
+          "followUps": []
+        },
+        {
+          "question": "未知参数为什么直接报错？",
+          "answer": "`create_cookie` 用 `set(kwargs)-set(result)` 检查，避免把拼写错误静默带入 Cookie 构造；这提高可诊断性。",
+          "followUps": []
+        },
+        {
+          "question": "comment_url 的处理有什么值得注意？",
+          "answer": "代码传的是 `bool(morsel['comment'])`，不是 comment 字符串本身；这看起来像历史实现细节，是否预期需结合测试确认，当前片段不能证明是 bug。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "[[PreparedRequest]] 的 `prepare` 调用顺序是什么？为什么 `prepare_auth` 要放在 `prepare_body` 之后、`prepare_hooks` 之前？",
+      "answer": "顺序是：`prepare_method` → `prepare_url` → `prepare_headers` → `prepare_cookies` → `prepare_body` → `prepare_auth` → `prepare_hooks`。`prepare_method` 会把非 None 方法转成大写。\n\n源码注释给出两个理由：`prepare_auth` 必须靠后，以便 OAuth 等认证方案看到已经完整准备好的请求；`prepare_hooks` 又必须放在 `prepare_auth` 之后，因为认证器可能在准备过程中注册 [[hook]]。若把 hooks 提前，认证器后来添加的 hook 就不会被合并进最终请求。\n\n片段没有展示各 `prepare_*` 的全部实现，因此只能确认顺序和注释声明的意图。",
+      "followUps": [
+        {
+          "question": "如果 method 为 None 会怎样？",
+          "answer": "`prepare_method` 保持 None；后续 `_is_prepared` 的运行时断言在片段中是无条件 True，因此不会在 prepare 阶段可靠拦截，具体失败点取决于后续使用。",
+          "followUps": []
+        },
+        {
+          "question": "认证器为什么需要看到 body？",
+          "answer": "有些认证方案要对请求体、URL 或头部做签名；先准备 body 和 headers 才能让认证逻辑基于最终请求内容计算。",
+          "followUps": []
+        },
+        {
+          "question": "把 hooks 放在最前会破坏什么？",
+          "answer": "认证器通过 `register_hook` 添加的响应 [[hook]] 可能不会被后续合并；但具体是否丢失取决于 Session 的 hooks 合并路径。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "[[PreparedRequest]] 的 `prepare_body` 如何判定流式 body？[[Content-Length]]、[[Transfer-Encoding]] 与 Content-Type 分别在哪些分支设置？`json` 和 `data` 同时给时谁生效？",
+      "answer": "判定流式的条件是：`data` 可迭代（`isinstance(data, Iterable)` 或有 `__iter__`），且不是 `str`、`bytes`、`list`、`tuple`、`Mapping`。命中后把 `data` 直接作为 body，记录 `tell()` 位置；若同时有 files 则抛 `NotImplementedError`。长度 `length` 为真时设 [[Content-Length]]，否则设 [[Transfer-Encoding]]: [[chunked]]。\n\n普通分支：有 files 走 `_encode_files`；否则有 raw data 走 `_encode_params`，并根据是否为字符串、字节或可 read 对象决定是否设 `application/x-www-form-urlencoded`。随后 `prepare_content_length` 对非 None body 的真值长度设 [[Content-Length]]；body 为 None 且方法不是 GET/HEAD 时设 `Content-Length: 0`。零长度 body 在该函数里不会补 Content-Length。\n\n`json` 只在 `not data and json is not None` 时序列化，所以 data 为真时 json 分支不执行。这两个 [[HTTP]] 头部和 Content-Type 的最终存在性还受已有 header 影响。",
+      "followUps": [
+        {
+          "question": "为什么 list 和 tuple 不算流式？",
+          "answer": "它们被显式排除，通常作为表单键值对交给 `_encode_params`；若当流式会把容器本身当 body，语义不对。",
+          "followUps": []
+        },
+        {
+          "question": "length 为 0 为什么走 chunked？",
+          "answer": "流式分支用 `if length:` 判断，0 为假，于是设置 Transfer-Encoding chunked；这是代码当前行为，是否符合预期需测试确认。",
+          "followUps": []
+        },
+        {
+          "question": "json 中出现 NaN 会怎样？",
+          "answer": "`complexjson.dumps(json, allow_nan=False)` 抛 `ValueError`，代码转成 `InvalidJSONError`，不会发送非法 [[JSON]]。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "[[Session]] 的 `prepare_request` 如何合并 cookie、认证、headers、params 和 hooks？`.netrc` 在什么条件下被读取？",
+      "answer": "`prepare_request` 先处理 cookie：请求 cookie 不是 [[CookieJar]] 时先 `cookiejar_from_dict`，再依次把 session cookie 和请求 cookie 合并进新的 `RequestsCookieJar`。认证上先取 `request.auth`；仅当 `trust_env` 为真、请求没有 auth 且 session 也没有 auth 时，才调用 `get_netrc_auth(url)`。之后用 `merge_setting` 合并 headers（以 [[CaseInsensitiveDict]] 为结果类型）和 params，用 `merge_hooks` 合并 [[hook]]，最后按方法大写、URL、files、data、json 等调用 [[PreparedRequest]] 的 `prepare`。\n\n因此显式 auth 优先于 .netrc，session 级 auth 也会阻止 .netrc。片段未展示 `merge_setting` 与 `merge_hooks` 的内部实现，无法确认空值与覆盖细节。",
+      "followUps": [
+        {
+          "question": "为什么请求 cookie 要在 session cookie 之后合并？",
+          "answer": "这样请求级 cookie 可以覆盖或补充 session 级 cookie；具体覆盖效果还取决于 `merge_cookies` 对 [[CookieJar]] 的 update 语义。",
+          "followUps": []
+        },
+        {
+          "question": "trust_env=False 还会读 .netrc 吗？",
+          "answer": "不会。条件里明确要求 trust_env 为真；代理环境等其他 trust_env 行为也不应被默认启用。",
+          "followUps": []
+        },
+        {
+          "question": "headers 合并为什么指定 CaseInsensitiveDict？",
+          "answer": "HTTP 头部名大小写不敏感，用该结构合并能避免 `Content-Type` 与 `content-type` 被当成两个键；片段未展示 merge_setting 的具体冲突策略。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "[[Session]] 的 `send` 完整流程是什么？`allow_redirects` 和 `stream` 分别怎样影响 redirect 历史与响应内容读取？",
+      "answer": "`send` 先给 kwargs 补 `stream`、`verify`、`cert` 默认值，未显式给 proxies 时调用 `resolve_proxies`；拒绝直接传入 `Request`，并在当前代码里 `assert _is_prepared`。然后取出 hooks 和 allow_redirects，选择 adapter，记录开始时间，调用 `adapter.send`，计算 elapsed，执行 `dispatch_hook('response', ...)`。\n\n之后把历史和当前响应的 cookie 抽取到 session，若 allow_redirects 为真用 `resolve_redirects` 生成 history，插入原响应并取最后一个作为最终 r；若为假则 history 为空，并用 `yield_requests=True` 尝试把下一个请求存到 `r._next`。最后若 `stream` 为假，访问 `r.content` 立即读取完整内容；为真则保留流式读取。",
+      "followUps": [
+        {
+          "question": "hooks 在重定向前还是后执行？",
+          "answer": "当前代码先对首次响应执行 `dispatch_hook`，再进入 `resolve_redirects`；重定向产生的后续响应是否再走同样 [[hook]] 取决于 resolve_redirects 实现，片段未完整展示。",
+          "followUps": []
+        },
+        {
+          "question": "allow_redirects=False 时 _next 有什么用？",
+          "answer": "它保存一个可继续的下一请求，供 `Response.next()` 等接口使用；代码在 StopIteration 时静默跳过。",
+          "followUps": []
+        },
+        {
+          "question": "stream=False 为什么在 send 末尾读 content？",
+          "answer": "这样调用方拿到响应时内容已下载完，连接可释放；stream=True 则把读取责任交给调用方。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "Response 的 `content` 与 `iter_content` 如何协作维护 `_content` 和 `_content_consumed`？重复读取或 `chunk_size` 非法时会发生什么？",
+      "answer": "`content` 只在 `_content is False` 时读取：若 `_content_consumed` 已为真则抛 `RuntimeError`；若 status_code 为 0 或 raw 为 None，把 `_content` 设为 None；否则用 `b''.join(iter_content(CONTENT_CHUNK_SIZE)) or b''`。随后把 `_content_consumed` 置 True 并返回。\n\n`iter_content` 先检查：已消费且 `_content` 仍是 bool 时抛 `StreamConsumedError`；`chunk_size` 非 None 且不是 int 时抛 `TypeError`。未消费时走 `generate()`，它优先用 `raw.stream`，否则循环 `raw.read`，并在结束时置 `_content_consumed=True`。已消费但 `_content` 是 bytes 时，用 `iter_slices` 重新切片，不重新读网络。",
+      "followUps": [
+        {
+          "question": "为什么用 False 而不是 None 作为未读哨兵？",
+          "answer": "代码需要区分未读、已读为空和已读为 None 等状态；`False` 作为哨兵可与 bytes 或 None 区分，但类型注解仍需忽略。",
+          "followUps": []
+        },
+        {
+          "question": "status_code 为 0 时 content 返回什么？",
+          "answer": "代码把 `_content` 设为 None 后返回它，尽管注解是 bytes；这是当前实现的可观察行为。",
+          "followUps": []
+        },
+        {
+          "question": "iter_content 的异常转换有哪些？",
+          "answer": "`generate` 把 `ProtocolError` 转 `ChunkedEncodingError`、`DecodeError` 转 `ContentDecodingError`、`ReadTimeoutError` 转 `ConnectionError`、`SSLError` 转 `RequestsSSLError`。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "[[HTTPAdapter]] 的 `send` 如何构造 timeout 和 chunked 参数？它把哪些 [[urllib3]] 异常映射成 requests 的哪些异常？",
+      "answer": "`chunked = not (request.body is None or 'Content-Length' in request.headers)`。timeout 为 tuple 时拆成 connect 和 read 构造 `TimeoutSauce`，构造失败抛 `ValueError`；已经是 `TimeoutSauce` 则复用；其他标量则 connect 和 read 都取 timeout。随后调用 `conn.urlopen`，显式设置 `redirect=False`、`assert_same_host=False`、`preload_content=False`、`decode_content=False`、`retries=self.max_retries`。\n\n异常映射包括：`ProtocolError` 和 `OSError` 转 `ConnectionError`；`MaxRetryError` 内部分别可能转 `ConnectTimeout`、`RetryError`、`ProxyError`、`SSLError` 或 `ConnectionError`；`ClosedPoolError` 转 `ConnectionError`；`_ProxyError` 转 `ProxyError`；`_SSLError`、`ReadTimeoutError`、`_InvalidHeader` 分别转 `SSLError`、`ReadTimeout`、`InvalidHeader`。具体分支以代码中的类型判断为准。",
+      "followUps": [
+        {
+          "question": "为什么 preload_content 和 decode_content 都设 False？",
+          "answer": "让 [[urllib3]] 不提前读完整响应、也不提前解码，requests 的 Response 层再按 stream 与 encoding 控制读取和解码。",
+          "followUps": []
+        },
+        {
+          "question": "chunked 的判定是否等价于 body 非空？",
+          "answer": "不等价。body 非空但已有 [[Content-Length]] 时 chunked 为 False；body 为 None 时也为 False。",
+          "followUps": []
+        },
+        {
+          "question": "timeout 为 tuple 但长度不对会怎样？",
+          "answer": "解包失败或构造 TimeoutSauce 抛 `ValueError`，代码转成带提示的 `ValueError`；具体消息在异常分支中。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`get_connection_with_tls_context` 如何选择直连或 [[proxy]] 连接？`proxy_manager_for` 对 [[SOCKS]] 代理和其他代理分别怎么处理？",
+      "answer": "`get_connection_with_tls_context` 先 `assert _is_prepared`，用 `select_proxy` 根据 URL 和 proxies 选代理；再调用 `build_connection_pool_key_attributes(request, verify, cert)` 生成 host 参数和 pool 参数，`ValueError` 转 `InvalidURL`。若有代理，先 `prepend_scheme_if_needed(proxy, 'http')`，解析后 host 为空则抛 `InvalidProxyURL`，然后 `proxy_manager_for(proxy)` 并 `connection_from_host`；否则直接用 `poolmanager.connection_from_host`。\n\n`proxy_manager_for` 先查缓存；代理字符串小写后以 `socks` 开头时，拆分用户名密码并创建 `SOCKSProxyManager`；其他代理生成 `proxy_headers` 后调用 `proxy_from_url`。两者都传入连接池大小和 block 参数。这里的 [[TLS]] 校验参数在 pool 属性构建阶段参与，具体校验实现未在片段中展开。",
+      "followUps": [
+        {
+          "question": "代理 URL 缺少 scheme 会怎样？",
+          "answer": "`prepend_scheme_if_needed` 会补 `http`；随后解析并检查 host，host 为空才抛 `InvalidProxyURL`。",
+          "followUps": []
+        },
+        {
+          "question": "SOCKS 依赖缺失会怎样？",
+          "answer": "`pyproject.toml` 把 [[PySocks]] 放在 socks 可选依赖；若未安装，创建或导入 `SOCKSProxyManager` 可能失败。具体异常路径未在当前片段展示。",
+          "followUps": []
+        },
+        {
+          "question": "close 如何释放连接？",
+          "answer": "`HTTPAdapter.close` 对 `poolmanager` 和每个代理 manager 调 `clear()`；这会关闭池中连接，但具体连接生命周期由 [[urllib3]] 管理。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`HTTPDigestAuth` 为什么使用 `threading.local`？`handle_401` 的重试流程与 body 回绕具体怎样执行？",
+      "answer": "`HTTPDigestAuth.__init__` 保存用户名、密码和 `_thread_local`；`init_per_thread_state` 只在线程首次调用时初始化 `last_nonce`、`nonce_count`、`chal`、`pos`、`num_401_calls`，避免多线程共享 challenge 和计数。\n\n`__call__` 先初始化状态；若已有 last_nonce 就先构造 Authorization；若 body 有 `tell` 记录位置，否则把 pos 置 None；注册 `handle_401` 和 `handle_redirect` 两个响应 [[hook]]。`handle_401` 只处理 400 到 499；若 pos 非 None 且 body 有 `seek` 就回绕；检查 `www-authenticate` 含 [[Digest]] 且 `num_401_calls < 2`，然后递增、解析 challenge、消费并关闭原响应、复制请求、抽取和重设 cookie、构造 Digest 头并重新发送，把旧响应加入 history。[[nonce]] 计数和 cnonce 在 `build_digest_header` 中参与摘要计算。",
+      "followUps": [
+        {
+          "question": "为什么只重试一次 401？",
+          "answer": "代码用 `num_401_calls < 2` 限制，避免认证失败时无限循环；重定向 hook 会把计数重置为 1，允许新位置重新挑战。",
+          "followUps": []
+        },
+        {
+          "question": "body 不可 seek 会怎样？",
+          "answer": "代码只在 `pos` 非 None 且存在 `seek` 时回绕；否则重发时可能从当前位置读取，具体后果取决于 body 类型。",
+          "followUps": []
+        },
+        {
+          "question": "不支持的算法或 qop 如何处理？",
+          "answer": "`build_digest_header` 对不支持的算法返回 None，对 auth-int 等非 auth qop 也返回 None；调用方只在返回值非空时设置 Authorization。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`dispatch_hook` 如何区分单个 callable 和列表？[[hook]] 返回 None 与非 None 对后续 hook 有什么影响？",
+      "answer": "`dispatch_hook` 从 hooks 字典取 `hook_list`；若为假值（None、空列表等）直接返回原数据。若 `hook_list` 是 `Callable`，先包成单元素列表；然后逐个调用 `hook(hook_data, **kwargs)`。每个返回值若非 None，就用它替换 `hook_data`；若为 None，则保留上一次的数据继续传给下一个 hook。\n\n因此它支持链式变换，也允许某个 hook 只观察不修改。`default_hooks()` 返回 `{'response': []}`；测试 `tests/test_hooks.py` 也验证了单个 hook 和列表混合 None 返回时的结果。",
+      "followUps": [
+        {
+          "question": "hook 抛异常会怎样？",
+          "answer": "当前实现没有 try/except，异常会直接向上传播，后续 hook 不执行；调用方需自行处理。",
+          "followUps": []
+        },
+        {
+          "question": "hooks 的值是生成器可以吗？",
+          "answer": "代码只要求可迭代并逐个 for 循环；生成器可以被消费，但只能消费一次，重复 dispatch 需重新提供。",
+          "followUps": []
+        },
+        {
+          "question": "为什么允许返回 None？",
+          "answer": "这样 hook 可以做日志或断言而不改变响应；若强制返回值，观察型 hook 也必须返回原对象。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`should_bypass_proxies` 如何结合环境变量和 [[no_proxy]]？IPv4 的 [[CIDR]] 与域名后缀匹配分别怎么判断？",
+      "answer": "`get_proxy` 先读小写环境变量，再读大写；`no_proxy` 参数为 None 时才读环境。解析 URL 后 hostname 为 None 直接返回 True。若 no_proxy 存在，按逗号拆分并去掉空格；hostname 是 IPv4 时，逐项检查是否为合法 CIDR，是则 `address_in_network`，否则精确比较。非 IPv4 时构造带端口的 host，逐项去掉前导点后比较精确相等，或比较 `'.' + host` 后缀。\n\n最后在临时设置 no_proxy 的上下文中调用 `proxy_bypass(hostname)`，捕获 `TypeError` 和 `socket.gaierror` 为 False；若系统判断旁路则返回 True。`resolve_proxies` 再据此决定是否把环境代理写入副本的 scheme 键。",
+      "followUps": [
+        {
+          "question": "为什么小写环境变量优先？",
+          "answer": "代码注释说与其他 HTTP 项目如 curl、wget 保持一致；小写存在时不再回退大写。",
+          "followUps": []
+        },
+        {
+          "question": "hostname 带端口时域名匹配怎么做？",
+          "answer": "代码同时比较 hostname 和 host_with_port 的精确值及后缀，因此 [[no_proxy]] 中可写带端口形式。",
+          "followUps": []
+        },
+        {
+          "question": "resolve_proxies 会删除 no_proxy 键吗？",
+          "answer": "它先复制 proxies，no_proxy 键会保留；只是用该值做旁路判断，并在需要时 `setdefault` scheme 代理。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`check_header_validity` 对 header 名称和值分别采用什么校验规则？str、bytes 与非 str/bytes 输入的异常路径是什么？空值允许吗？",
+      "answer": "`src/requests/_internal_utils.py` 为 str 和 bytes 各准备两条正则：名称不能以冒号或空白开头，后续不能含冒号或 CRLF；值不能以空白开头，后续不能含 CRLF，但允许空串。`check_header_validity` 对 `(name, value)` 分别调用 `_validate_header_part`，索引 0 和 1 选择名称或值校验器。\n\n`_validate_header_part` 若部分是 str 用 str 校验器，是 bytes 用 bytes 校验器，否则直接抛 `InvalidHeader`。正则不匹配也抛 `InvalidHeader`，消息区分 name 与 value。因此空 header 值合法，空名称不合法；前导空白和 CRLF 都会被拒绝。",
+      "followUps": [
+        {
+          "question": "为什么名称不允许冒号？",
+          "answer": "冒号分隔 header 名和值，名称中出现冒号会破坏解析边界；同时禁止 CRLF 防止头部注入。",
+          "followUps": []
+        },
+        {
+          "question": "bytes 和 str 为什么要分开正则？",
+          "answer": "bytes 正则用 bytes 模式匹配 bytes 输入，str 正则匹配 str，避免类型不匹配和隐式解码。",
+          "followUps": []
+        },
+        {
+          "question": "空值是否意味着可以省略 header？",
+          "answer": "空值被允许表示 header 存在但值为空；是否需要发送取决于调用方，校验层只判断格式。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`_types.py` 中 `is_prepared` 的 [[TypeIs]] 返回类型与运行时行为是什么？`_ValidatedRequest` 如何窄化 url 和 method？为什么运行时 `assert` 不能当作安全校验？",
+      "answer": "`is_prepared(request) -> TypeIs[_ValidatedRequest]` 在 `TYPE_CHECKING` 分支检查 `request.url is not None and request.method is not None`，从而让 [[pyright]] 等类型检查器把参数窄化为 `_ValidatedRequest`；但运行时函数体直接 `return True`，不做任何检查。\n\n`_ValidatedRequest` 继承 [[PreparedRequest]]，把 `url: str`、`method: str` 覆盖为更窄类型，并用 type ignore 抑制可变属性不变性冲突。它表达的是“已准备完成”的契约，不是运行时校验。因此 `assert _is_prepared(request)` 在普通运行中恒真，不能防止把未准备的请求传给 adapter；真正的安全边界仍需显式检查字段或捕获后续错误。",
+      "followUps": [
+        {
+          "question": "TypeIs 与 TypeGuard 有什么区别？",
+          "answer": "[[TypeIs]] 在条件为真和假时都能参与窄化，且要求被窄化变量与输入一致；TypeGuard 主要保证真分支，假分支不一定收窄。",
+          "followUps": []
+        },
+        {
+          "question": "为什么覆盖可变属性需要 type ignore？",
+          "answer": "类属性的可变类型在子类中收窄违反 Liskov 不变性，类型检查器会报错；代码用 ignore 表示这是有意契约。",
+          "followUps": []
+        },
+        {
+          "question": "运行时如何真正校验 PreparedRequest？",
+          "answer": "可显式检查 `request.url`、`request.method` 等字段，或让 prepare 阶段在缺失时抛异常；当前代码的 assert 不是这种校验。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "requests",
+      "variant": "generation",
+      "question": "`RequestException` 如何绑定 request 和 response？`JSONDecodeError` 为什么自定义 `__init__` 和 `__reduce__`？多继承的 [[MRO]] 会带来什么影响？",
+      "answer": "`RequestException.__init__` 从 kwargs 弹出 `response` 和 `request`，保存为属性；若 response 存在、request 为空且 response 有 `request` 属性，就从 response 取 request，然后调用 `super().__init__(*args, **kwargs)`。\n\n`JSONDecodeError` 同时继承 `InvalidJSONError` 和兼容层的 `CompatJSONDecodeError`。它的 `__init__` 先用全部参数初始化 [[JSON]] 解码异常，再用 `self.args` 初始化 `InvalidJSONError`，以保留 JSON 特定的参数和消息。`__reduce__` 显式委托给 `CompatJSONDecodeError.__reduce__`，否则按 MRO 可能走到 `IOError` 的序列化逻辑，导致 pickle 参数不匹配。\n\n因此这个多继承的关键是初始化顺序和 `__reduce__` 的显式选择，而不是简单复用父类。",
+      "followUps": [
+        {
+          "question": "为什么 RequestException 继承 IOError？",
+          "answer": "代码把它作为 I/O 类异常体系的一部分，便于旧调用方按 IOError 捕获；具体历史兼容原因需查版本记录。",
+          "followUps": []
+        },
+        {
+          "question": "ConnectTimeout 的多继承有什么效果？",
+          "answer": "它同时是 `ConnectionError` 和 `Timeout`，调用方按任一父类捕获都能命中；[[MRO]] 决定方法查找顺序。",
+          "followUps": []
+        },
+        {
+          "question": "pickle 这个异常时为什么要小心？",
+          "answer": "JSON 解码异常需要保留原始 args，而 IOError 的 reduce 形状不同；不显式委托可能无法正确反序列化。",
+          "followUps": []
+        }
+      ]
+    }
+  ],
+  "status": "complete",
+  "humanReview": {
+    "status": "pending",
+    "reviewedCount": 0,
+    "coverage": 0,
+    "templatePath": "review-template.json"
+  },
+  "limitations": [
+    "Keyword coverage is not factual correctness.",
+    "Real token usage is null when the provider omits bounded usage metadata.",
+    "Human review has not been completed; pending is not a passing result."
+  ],
+  "network": {
+    "blockedRequests": 0,
+    "requests": [
+      {
+        "attempt": "initial",
+        "inputChars": 136524,
+        "promptHash": "164ddca3e0a9203b479d1cd7ee7455bc8a0c0add4bd54740f0ba0db6d0d9b2de",
+        "elapsedMs": 218093,
+        "status": 200,
+        "errorType": null,
+        "usage": {
+          "inputTokens": 42209,
+          "outputTokens": 42768,
+          "totalTokens": 84977
+        }
+      }
+    ],
+    "usage": {
+      "inputTokens": 42209,
+      "outputTokens": 42768,
+      "totalTokens": 84977
+    }
+  }
+}

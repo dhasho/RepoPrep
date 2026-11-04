@@ -1,0 +1,284 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+  "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+  "caseId": "requests",
+  "repository": "psf/requests",
+  "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+  "reviewer": {
+    "executor": "Codex delegated source reviewer with primary review coordination",
+    "blind": false,
+    "independent": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsIncluded": true,
+    "followUpsRead": 60,
+    "criterion": "Frozen compound core facts and concrete source-backed errors; not exhaustive answer accuracy",
+    "networkCalls": 0,
+    "upstreamCodeExecuted": false,
+    "sourceHashesMatchedAfterNewlineNormalization": [
+      "src/requests/models.py",
+      "src/requests/sessions.py",
+      "src/requests/utils.py",
+      "src/requests/compat.py",
+      "src/requests/exceptions.py",
+      "src/requests/__init__.py",
+      "src/requests/auth.py",
+      "pyproject.toml",
+      "tests/test_requests.py"
+    ]
+  },
+  "variants": [
+    {
+      "variant": "generation",
+      "questionFingerprints": [
+        "bf9dd4f7e4eec2c4783cba66503df091d8f2832399c063e292c59a14db6623ba",
+        "447d3fe179c24662495a15f2f87e5f2572422b8fe72c04a563b9b2527973aeed",
+        "943dc8da6d69495443445c627fbee9c6dc33f6a4e303e6393b05b5b68a3ed7a2",
+        "7c2267e151e2ce6323395828ecba4bf0248057703dc7b994ac0d7d06dd2e98b0",
+        "c6854cb194158b3ee8774ed12ae03e4df34250c13a9788dbae14bf3704088402",
+        "483de21538d845f9bec7135a9f3b6cb23910ec91aaa8272318dcb2deeeb135e7",
+        "8ceade9dd8c74665a0ff3f87b54826b41ee80be4777c199e8dc979efeb1dc7d6",
+        "93ee7c34cfe3d59456d1a0647713c92b5ced85dfc6f78060f15044990693536a",
+        "b2deafbc86e4b8ae297dd0b93f5710d90a2533ddbc9705ca735d2598ba328d2f",
+        "333f56745597c254763cb141ea40006c22368d4064166444094cf3332e9a7cf5",
+        "00e258f42cb35effa39cd8a83612c9b029677e62915d731b3fee8e3e03bb154a",
+        "5b7ac38bfd006c6bc46276b66c310f043f93b50c41631c37d5d885775551c8d4",
+        "9e10669f819b1d371551fdc3222c94550d1a4d6e9ed50a69afaa0a830c61a474",
+        "645d065c3d6c3e32dd8b8a31f8d64e66882399e060ba933b7bc7b6e1cae09c43",
+        "5464fcc77e7b84451d3cb3451f300ba4d29cb3f9ace30b8364fe3eaa40989be9",
+        "03be90677b6a115570d4aff9a9961ded0844df3ac6c2ad56daca7197ac1e4b63",
+        "d17023f66c0ee6da357c49ea1277f4c2b57bd315acff4c8c65f0796288614f15",
+        "9798e49fc656435129b1a63c4787af78e3107239bf6b38c7bc272890952c7d74",
+        "62fee0231efea4b0cc5e4f022104325aa63e6409d37d946e93853a0a342b77a9",
+        "3628dbe82c8b8e537cdb7f6ced7cec89e2f6abe5b098e516a7510bf31d614ce3"
+      ],
+      "factReviews": [
+        {
+          "factId": "requests-prepared-order",
+          "coverage": "covered",
+          "questionNumbers": [
+            8
+          ],
+          "reason": "Q8 gives the exact method, URL, headers, cookies, body, auth, hooks order and the source-backed reason for preparing auth after request fields.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 451
+            }
+          ]
+        },
+        {
+          "factId": "requests-session-merge",
+          "coverage": "partial",
+          "questionNumbers": [
+            10
+          ],
+          "reason": "Q10 describes request/session cookie merging and header, params, and hooks merging, and explains when netrc is considered. It does not state that auth is also combined with `merge_setting(auth, self.auth)`, so the frozen compound fact is incomplete.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 511,
+              "endLine": 555
+            },
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 76,
+              "endLine": 105
+            }
+          ]
+        },
+        {
+          "factId": "requests-send-flow",
+          "coverage": "covered",
+          "questionNumbers": [
+            11
+          ],
+          "reason": "Q11 accurately describes adapter selection/send, elapsed time, response-hook dispatch, cookie extraction, optional redirect processing/history, and body consumption when stream is false.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 752,
+              "endLine": 829
+            }
+          ]
+        },
+        {
+          "factId": "requests-env",
+          "coverage": "partial",
+          "questionNumbers": [
+            10,
+            17
+          ],
+          "reason": "The answers cover trust_env-gated netrc/proxy behavior and no_proxy matching, but omit REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE and the merge of proxies, stream, verify, and cert with Session settings.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 831,
+              "endLine": 868
+            },
+            {
+              "path": "src/requests/utils.py",
+              "startLine": 810,
+              "endLine": 870
+            }
+          ]
+        },
+        {
+          "factId": "requests-redirect-limit",
+          "coverage": "missing",
+          "questionNumbers": [
+            11
+          ],
+          "reason": "Q11 describes redirect processing and history but does not state the max_redirects boundary or TooManyRedirects behavior.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 186,
+              "endLine": 219
+            }
+          ]
+        },
+        {
+          "factId": "requests-response-ok",
+          "coverage": "missing",
+          "questionNumbers": [],
+          "reason": "No answer explains Response.ok or __bool__ and their less-than-400 / raise_for_status semantics.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 837,
+              "endLine": 874
+            }
+          ]
+        },
+        {
+          "factId": "requests-stream-content",
+          "coverage": "covered",
+          "questionNumbers": [
+            12
+          ],
+          "reason": "Q12 distinguishes the uncached sentinel, consumed stream, cached bytes, replay through iter_slices, and StreamConsumedError for consumed-but-uncached content.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 935,
+              "endLine": 977
+            }
+          ]
+        },
+        {
+          "factId": "requests-dependencies",
+          "coverage": "partial",
+          "questionNumbers": [
+            1
+          ],
+          "reason": "Q1 correctly identifies charset_normalizer as a declared runtime dependency and chardet as optional, but does not enumerate idna, urllib3, and certifi, so it does not establish all four direct runtime dependencies.",
+          "sourceRefs": [
+            {
+              "path": "pyproject.toml",
+              "startLine": 16,
+              "endLine": 21
+            },
+            {
+              "path": "pyproject.toml",
+              "startLine": 64,
+              "endLine": 67
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "questionNumber": 8,
+          "questionPart": "answer and followUps[2].answer",
+          "kind": "incorrect",
+          "claim": "The main answer asserts that preparing hooks before authentication loses later authenticator-registered hooks; the follow-up repeats this as a possibility. register_hook appends/extends the same request lists, so this causal claim is false.",
+          "reason": "The answer attributes loss of an authenticator-registered hook to prepare_hooks running earlier. register_hook appends or extends the event list on the PreparedRequest itself, so that registered hook remains on that request; the cited preparation order alone does not support this stated loss. The source-authored requirement to run prepare_hooks after auth is real, but this specific explanation is not established by the hook registry behavior.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/models.py",
+              "startLine": 424,
+              "endLine": 451
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 257,
+              "endLine": 270
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 722,
+              "endLine": 729
+            }
+          ],
+          "questionFingerprint": "93ee7c34cfe3d59456d1a0647713c92b5ced85dfc6f78060f15044990693536a",
+          "questionParts": [
+            "answer",
+            "followUps[2].answer"
+          ],
+          "repeatedOccurrences": 2
+        },
+        {
+          "questionNumber": 11,
+          "questionPart": "followUps[1]",
+          "kind": "imprecise",
+          "claim": "The saved r._next is used by Response.next() and described as an interface to call.",
+          "reason": "Response.next is a property returning self._next, not a callable method; the answer uses method-call syntax and could lead a reader to call it.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/sessions.py",
+              "startLine": 817,
+              "endLine": 824
+            },
+            {
+              "path": "src/requests/models.py",
+              "startLine": 891,
+              "endLine": 894
+            }
+          ],
+          "questionFingerprint": "00e258f42cb35effa39cd8a83612c9b029677e62915d731b3fee8e3e03bb154a"
+        },
+        {
+          "questionNumber": 17,
+          "questionPart": "followUps[0]",
+          "kind": "imprecise",
+          "claim": "If lowercase no_proxy exists, the code does not fall back to uppercase NO_PROXY.",
+          "reason": "get_proxy returns os.environ.get(key) or os.environ.get(key.upper()). A non-empty lowercase value wins, but an empty lowercase value falls through to NO_PROXY; existence alone does not suppress the fallback.",
+          "sourceRefs": [
+            {
+              "path": "src/requests/utils.py",
+              "startLine": 817,
+              "endLine": 820
+            }
+          ],
+          "questionFingerprint": "d17023f66c0ee6da357c49ea1277f4c2b57bd315acff4c8c65f0796288614f15"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Assistant review is not independent human blind review.",
+    "Review covers all 20 main answers and all 60 nested follow-ups against the pinned source revision; it is not exhaustive of every factual nuance.",
+    "No model/network calls and no upstream project code execution."
+  ],
+  "reviewedSourceHashes": {
+    "src/requests/models.py": "a3351c3c12a86bf5ed211533875350bc4791e9327a685f8c19ba54343e471e26",
+    "src/requests/sessions.py": "3d2089736ced93b2b405624a943f866d22652b17df06a85eb010f86272fc3e7d",
+    "src/requests/utils.py": "b879cb3f671cf1c28e8ff9b2b02151bcdb8974b4820a514cfdd1f5a038443cd2",
+    "pyproject.toml": "345f26b9f691435e39d0eb6f7f4150a390f43175b22f8d61ac95e7f2827f0a77"
+  },
+  "primaryReview": "Primary source review checked all 20 main answers, the frozen compound fact classifications, and every retained finding; module reviewer read all nested follow-ups. Non-blind assistant review, not a human accuracy score.",
+  "primaryReviewAdjustments": [
+    {
+      "questionNumber": 2,
+      "disposition": "Do not count a qualified inability to confirm an unprovided import chain as a factual error. The main answer correctly identifies the ValueError; uncertainty from missing context remains a limitation."
+    },
+    {
+      "questionNumber": 8,
+      "disposition": "The main answer makes the same unsupported hook-loss assertion as the follow-up. Count one material incorrect claim, retain both occurrence locations, and use the same severity as the grounded review."
+    }
+  ]
+}
