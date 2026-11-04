@@ -687,6 +687,16 @@ test('decorated multiline Python signatures locate the actual triple-quoted docs
   assert.equal(compacted.text.slice(markerStart + marker.length), region.text.slice(range.end), 'everything after the docstring content remains byte-identical')
 })
 
+test('long docstrings with Python escapes remain unchanged instead of cutting an escape', () => {
+  const source = 'def escaped():\n  """' + 'A'.repeat(159) + '\\u0041\\U0001f600\\x41\\N{LATIN CAPITAL LETTER A}' + 'B'.repeat(500) + '"""\n  return \'KEEP_ESCAPE_NEIGHBOR\'\n'
+  const region = sourceRegionCandidates(source, null, { extension: 'py' }).find(item => item.label === 'escaped')
+  assert.ok(region?.documentationRanges)
+  const unchanged = compactRegionDocumentation(region)
+  assert.equal(unchanged, region)
+  assert.equal(unchanged.documentationOmitted, undefined)
+  assert.ok(unchanged.text.includes("return 'KEEP_ESCAPE_NEIGHBOR'"))
+})
+
 test('short Python docstrings and whole-file fits remain byte-for-byte unchanged', () => {
   const source = `def documented():\n  """short note"""\n  return 1\n`
   const region = sourceRegionCandidates(source, null, { extension: 'py' }).find(item => item.label === 'documented')

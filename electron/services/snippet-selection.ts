@@ -167,6 +167,9 @@ export function compactRegionDocumentation(region: SourceRegion): SourceRegion {
     const range = ranges[index]
     if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end < range.start || range.end > region.text.length) return region
     if (index > 0 && ranges[index - 1].end > range.start) return region
+    // Avoid cutting through Python escapes; raw strings are kept equally
+    // conservative because quote and escape semantics are not fully parsed.
+    if (region.text.slice(range.start, range.end).includes('\\')) return region
   }
   let text = region.text
   let omitted = false
