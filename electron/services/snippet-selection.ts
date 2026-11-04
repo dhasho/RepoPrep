@@ -143,16 +143,22 @@ function pythonDocstringRange(content: string, lines: string[], offsets: number[
   return undefined
 }
 
+const SOURCE_REGION_SEPARATOR = '\n…（其他位置省略）…\n'
+
 export function formatSourceRegions(regions: readonly SourceRegion[], extension = ''): string {
   const python = extension.replace(/^\./, '').toLowerCase() === 'py'
   const comment = python ? '# 代码单元：' : '// 代码单元：'
-  return regions.map((region, index) => {
+  return regions.map((region) => {
     const owner = region.qualifiedName && region.qualifiedName !== region.label
       ? `${comment}${region.qualifiedName}\n`
       : ''
     const docNote = region.documentationOmitted ? '（文档节选，原文有省略）\n' : ''
-    return `${index ? '…（其他位置省略）…\n' : ''}${owner}${docNote}${region.text}`
-  }).join('\n')
+    return `${owner}${docNote}${region.text}`
+  }).join(SOURCE_REGION_SEPARATOR)
+}
+
+export function sourceRegionCharCost(region: SourceRegion, extension = '', separated = false): number {
+  return formatSourceRegions([region], extension).length + (separated ? SOURCE_REGION_SEPARATOR.length : 0)
 }
 
 const DOCUMENTATION_LIMIT = 512
@@ -618,7 +624,7 @@ export function selectSourceRegions(
   let used = 0
   for (const region of candidates) {
     const excerpt = compactRegionDocumentation(region)
-    const cost = formatSourceRegions([...selected, excerpt], options.extension).length - formatSourceRegions(selected, options.extension).length
+    const cost = sourceRegionCharCost(excerpt, options.extension, selected.length > 0)
     if (used + cost > budget) continue
     // Avoid spending all the budget in one neighborhood when alternatives exist.
     if (selected.some((item) => item.start < region.end && item.end > region.start)) continue

@@ -27,7 +27,7 @@ import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles, type FileSelectionSignals } from './file-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { compactRegionDocumentation, formatSourceRegions, selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
+import { compactRegionDocumentation, formatSourceRegions, selectSourceRegions, sourceRegionCandidates, sourceRegionCharCost, type SourceRegion } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -824,6 +824,7 @@ export function renderBatchWithinBudget(
 
 function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number, extension = ''): SourceRegion[] {
   const selected: SourceRegion[] = []
+  let used = 0
   const ranked = [...regions].sort((a, b) => b.priority - a.priority || a.start - b.start)
   for (const region of ranked) {
     if (selected.some((item) => item.start < region.end && item.end > region.start)) continue
@@ -831,13 +832,17 @@ function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number,
     // Match the initial selector's excerpt mode by trying the same confirmed
     // documentation compaction before budgeting this code unit.
     const compacted = compactRegionDocumentation(region)
-    const compactCandidate = [...selected, compacted]
-    if (formatRegions(compactCandidate, extension).length <= maxChars) {
+    const compactCost = sourceRegionCharCost(compacted, extension, selected.length > 0)
+    if (used + compactCost <= maxChars) {
       selected.push(compacted)
+      used += compactCost
       continue
     }
-    const fullCandidate = [...selected, region]
-    if (formatRegions(fullCandidate, extension).length <= maxChars) selected.push(region)
+    const fullCost = sourceRegionCharCost(region, extension, selected.length > 0)
+    if (used + fullCost <= maxChars) {
+      selected.push(region)
+      used += fullCost
+    }
   }
   return selected.sort((a, b) => a.start - b.start)
 }
