@@ -7,6 +7,8 @@ import test from 'node:test'
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder.ts'
+// @ts-ignore TS5097 -- extension is required by the direct Node test runner.
+import { compactRegionDocumentation, formatSourceRegions } from './snippet-selection.ts'
 
 test('real scan selects a late complete JS/TS unit under a tightened budget and reports actual selection', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
@@ -217,6 +219,64 @@ test('real Python build prefers the complete implementation over overload stubs,
     assert.ok(!final.text.includes('ADAPTER_BODY'), 'under scarcity the orchestrating implementation outranks single-step helpers')
     assert.ok(final.selection?.filePaths.includes('service.py'))
     assert.equal(final.selection?.selectedRegions, 1)
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
+test('real scan second-fit compacts only confirmed Python docstrings to keep both method bodies', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    const docA = `    def first(self):\n        """${'first method documentation. '.repeat(32)}"""\n        return 'FIRST_METHOD_BODY'\n`
+    const secret = 'sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnop'
+    const docB = `    def second(self):\n        """${'second method documentation. '.repeat(32)}"""\n        secret = '${secret}'\n        return 'SECOND_METHOD_BODY' + secret\n`
+    const source = `class Service:\n${docA}${docB}`
+    await fs.writeFile(path.join(root, 'service.py'), source)
+    const built = await buildContext(await scanProject(root), 'medium')
+    const originalFile = built.batches.flatMap((batch) => batch.files).find((file) => file.relPath === 'service.py')
+    assert.ok(originalFile)
+    assert.equal(originalFile.truncated, false, 'the first context build keeps the complete redacted file')
+    assert.ok(!originalFile.content.includes('sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+    assert.equal(originalFile.content, source.replace(secret, '[REDACTED:token]'), 'a whole-file fit preserves every non-redacted source byte')
+    assert.ok(built.contentSecurity.redactionMatches > 0, 'the real scan pipeline reports that sensitive input was redacted')
+    const candidates = originalFile.selectionCandidates ?? []
+    const methods = candidates.filter((region) => region.label === 'first' || region.label === 'second')
+    assert.equal(methods.length, 2)
+    assert.ok(methods.every((region) => region.complete), 'the source candidates reflect complete original methods')
+    assert.ok(methods.every((region) => region.documentationRanges?.length === 1))
+    const compacted = methods.map(compactRegionDocumentation)
+    assert.ok(compacted.every((region) => region.documentationOmitted && !region.complete))
+    assert.ok(compacted.every((region) => region.text.includes('FIRST_METHOD_BODY') || region.text.includes('SECOND_METHOD_BODY')))
+    for (const [index, region] of methods.entries()) {
+      const range = region.documentationRanges?.[0]
+      assert.ok(range)
+      assert.ok(compacted[index].text.startsWith(region.text.slice(0, range.start)), 'the declaration and preceding source stays unchanged')
+      assert.ok(compacted[index].text.endsWith(region.text.slice(range.end)), 'quotes, body code and trailing source stay unchanged')
+    }
+    const batch = built.batches.find((item) => item.files.some((file) => file.relPath === 'service.py'))
+    assert.ok(batch)
+    const sourceBatch = { ...batch, files: [originalFile] }
+    const base = renderBatchWithinBudget(built.headerText, built.treeText, { ...sourceBatch, files: [] }, 100_000).text
+    const extension = 'py'
+    const bodyBudget = compacted.reduce((sum, region, index) => sum + formatSourceRegions([region], extension).length + (index ? 20 : 0), 0)
+    const title = `### 文件：service.py（内容过长已截断）`
+    const finalBudget = base.length + title.length + 10 + bodyBudget
+    assert.ok(renderBatch(built.headerText, built.treeText, sourceBatch).length > finalBudget, 'the final fitting path must actually run')
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, sourceBatch, finalBudget)
+    assert.equal(final.truncated, true)
+    assert.ok(final.text.includes('FIRST_METHOD_BODY'))
+    assert.ok(final.text.includes('SECOND_METHOD_BODY'))
+    assert.ok(final.text.includes('文档节选，原文有省略'))
+    assert.ok(final.text.includes('文档其余内容省略'))
+    assert.ok(!final.text.includes('sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+    assert.equal(final.selection?.filePaths.includes('service.py'), true)
+    assert.equal(final.selection?.selectedRegions, 2)
+    assert.equal(final.selection?.omittedDocumentationRegions, 2)
+    assert.equal(final.selection?.providedChars, formatSourceRegions(compacted, extension).length)
+    assert.ok(final.text.length <= finalBudget)
   } finally {
     const resolved = path.resolve(root)
     assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))

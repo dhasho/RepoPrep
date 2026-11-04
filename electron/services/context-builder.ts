@@ -27,7 +27,7 @@ import { renderBoundedTree } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { CODE_EXTS, collectFileSignals, isCoarseCandidate, orderFilesForContext, selectProbeFiles, type FileSelectionSignals } from './file-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { formatSourceRegions, selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
+import { compactRegionDocumentation, formatSourceRegions, selectSourceRegions, sourceRegionCandidates, type SourceRegion } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -60,6 +60,7 @@ export interface BuildContextOptions {
 export interface RenderedSelection {
   filePaths: string[]
   selectedRegions: number
+  omittedDocumentationRegions?: number
   providedChars: number
 }
 
@@ -92,7 +93,7 @@ export interface BuiltContext {
   contentReadSummary: ContentReadSummary
   /** 模块批的数量（0 表示没有按模块分批）。进度提示用它区分"全局+模块"与"仅全局"。 */
   moduleCount: number
-  selection?: { strategy: 'structure-v1'; eligibleFiles: number; selectedFiles: number; selectedRegions: number; omittedFiles: number; truncatedFiles: number; providedChars: number }
+  selection?: { strategy: 'structure-v1'; eligibleFiles: number; selectedFiles: number; selectedRegions: number; omittedFiles: number; truncatedFiles: number; omittedDocumentationRegions?: number; providedChars: number }
   /** Internal relative-path whitelist for aggregating files actually dispatched after final fitting. */
   eligibleFilePaths?: string[]
 }
@@ -691,6 +692,9 @@ function makeSelectionSummary(scan: ScanResult, files: readonly ContextFile[], g
     eligibleFiles: eligible.length,
     selectedFiles: values.length,
     selectedRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.length ?? (file.content.length ? 1 : 0)), 0),
+    ...(files.reduce((sum, file) => sum + (file.selectionRegions?.filter((region) => region.documentationOmitted).length ?? 0), 0) > 0
+      ? { omittedDocumentationRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.filter((region) => region.documentationOmitted).length ?? 0), 0) }
+      : {}),
     omittedFiles: Math.max(0, eligible.length - values.length),
     truncatedFiles: values.filter((file) => file.truncated).length,
     providedChars: files.reduce((sum, file) => sum + file.content.length, 0)
@@ -764,6 +768,7 @@ export function renderBatchWithinBudget(
   const parts = [base]
   const includedFiles: ContextFile[] = []
   let selectedRegions = 0
+  let omittedDocumentationRegions = 0
   let providedChars = 0
   let truncated = included.length < batch.files.length
   for (let index = 0; index < batch.files.length; index++) {
@@ -785,6 +790,7 @@ export function renderBatchWithinBudget(
         const regions = regionsWithinBudget(candidates, allocation, file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? '')
         content = formatRegions(regions, file.relPath.split(/[\\/]/).pop()?.split('.').pop() ?? '')
         regionCount = regions.length
+        omittedDocumentationRegions += regions.filter((region) => region.documentationOmitted).length
       }
     } else if (allocation >= file.content.length) {
       content = file.content
@@ -807,7 +813,12 @@ export function renderBatchWithinBudget(
   return {
     text: `${rendered}${requestTruncationMarker}`,
     truncated,
-    selection: { filePaths: includedFiles.map((file) => file.relPath), selectedRegions, providedChars }
+    selection: {
+      filePaths: includedFiles.map((file) => file.relPath),
+      selectedRegions,
+      ...(omittedDocumentationRegions > 0 ? { omittedDocumentationRegions } : {}),
+      providedChars
+    }
   }
 }
 
@@ -816,8 +827,17 @@ function regionsWithinBudget(regions: readonly SourceRegion[], maxChars: number,
   const ranked = [...regions].sort((a, b) => b.priority - a.priority || a.start - b.start)
   for (const region of ranked) {
     if (selected.some((item) => item.start < region.end && item.end > region.start)) continue
-    const candidate = [...selected, region]
-    if (formatRegions(candidate, extension).length <= maxChars) selected.push(region)
+    // This helper is used only after the whole source entry needs clipping.
+    // Match the initial selector's excerpt mode by trying the same confirmed
+    // documentation compaction before budgeting this code unit.
+    const compacted = compactRegionDocumentation(region)
+    const compactCandidate = [...selected, compacted]
+    if (formatRegions(compactCandidate, extension).length <= maxChars) {
+      selected.push(compacted)
+      continue
+    }
+    const fullCandidate = [...selected, region]
+    if (formatRegions(fullCandidate, extension).length <= maxChars) selected.push(region)
   }
   return selected.sort((a, b) => a.start - b.start)
 }
@@ -837,6 +857,9 @@ function summarizeRenderedFiles(files: readonly ContextFile[]): RenderedSelectio
   return {
     filePaths: files.map((file) => file.relPath),
     selectedRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.length ?? (file.content.length ? 1 : 0)), 0),
+    ...(files.reduce((sum, file) => sum + (file.selectionRegions?.filter((region) => region.documentationOmitted).length ?? 0), 0) > 0
+      ? { omittedDocumentationRegions: files.reduce((sum, file) => sum + (file.selectionRegions?.filter((region) => region.documentationOmitted).length ?? 0), 0) }
+      : {}),
     providedChars: files.reduce((sum, file) => sum + file.content.length, 0)
   }
 }
