@@ -18,7 +18,7 @@ import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncati
 import { contentReadWarning } from '@shared/content-read'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
 import { InterviewJsonStream, type InterviewJsonPreview, type StreamedInterviewQuestion } from './interview-json-stream'
-import { buildContext, renderBatch, renderBatchWithinBudget } from './context-builder'
+import { buildContext, renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
 import { buildCompensationInstruction, normalizeQuestionKey, selectUniqueQuestions } from './question-dedupe'
 import type { ScanResult } from './scanner'
@@ -35,7 +35,34 @@ export interface GenerateParams {
   signal: AbortSignal
   onProgress: (step: string, detail: string | undefined, percent: number, preview?: GenerationPreview) => void
   onDiagnostics?: (diagnostics: GenerationDiagnostics) => void
+  /** Optional metadata-only observation of the final source spans sent in each request. */
+  onContextDispatch?: (selection: RenderedSelection) => void
   checkpoint?: { state?: GenerationCheckpoint | null; save: (state: GenerationCheckpoint) => void | Promise<void> }
+}
+
+function cloneRenderedSelection(selection: RenderedSelection): RenderedSelection {
+  return {
+    filePaths: [...selection.filePaths],
+    selectedRegions: selection.selectedRegions,
+    ...(selection.omittedDocumentationRegions !== undefined
+      ? { omittedDocumentationRegions: selection.omittedDocumentationRegions }
+      : {}),
+    providedChars: selection.providedChars,
+    ...(selection.sourceSelections
+      ? {
+          sourceSelections: selection.sourceSelections.map((source) => ({
+            relPath: source.relPath,
+            wholeFile: source.wholeFile,
+            regions: source.regions.map((region) => ({
+              start: region.start,
+              end: region.end,
+              complete: region.complete,
+              ...(region.documentationOmitted ? { documentationOmitted: true } : {})
+            }))
+          }))
+        }
+      : {})
+  }
 }
 
 const CHECKPOINT_PROMPT_VERSION = 'generation-prompt-stream-v3'
@@ -393,11 +420,12 @@ async function callForJson(
   signal: AbortSignal,
   onRequestTruncation: () => void,
   inputTokenBudget: number,
+  onContextDispatch: GenerateParams['onContextDispatch'],
   counters: {
     estimated: number; requests: number; repairs: number; compensationRequests: number; compensationPending: number
     usage: LlmUsage | null; usageCount: number; modelMs: number
     dispatchedFiles: Set<string>; dispatchedRegions: number; eligibleFiles: Set<string>
-    pendingSelection: { filePaths: string[]; selectedRegions: number; providedChars: number } | null
+    pendingSelection: RenderedSelection | null
   },
   streaming: StreamingBatchState
 ): Promise<ParsedBatch> {
@@ -469,6 +497,7 @@ async function callForJson(
           if (selection) {
             for (const filePath of selection.filePaths) counters.dispatchedFiles.add(filePath)
             counters.dispatchedRegions += selection.selectedRegions
+            try { onContextDispatch?.(cloneRenderedSelection(selection)) } catch { /* Context observation cannot affect generation. */ }
           }
         },
         onUsage: (usage) => {
@@ -552,7 +581,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
     estimated: 0, requests: 0, repairs: 0, compensationRequests: 0, compensationPending: 0,
     usage: null as LlmUsage | null, usageCount: 0, modelMs: 0,
     dispatchedFiles: new Set<string>(), dispatchedRegions: 0, eligibleFiles: new Set<string>(),
-    pendingSelection: null as { filePaths: string[]; selectedRegions: number; providedChars: number } | null
+    pendingSelection: null as RenderedSelection | null
   }
   const tokenBudget = resolveGenerationBudget(profile, granularity)
   const makeDiagnostics = (
@@ -768,7 +797,8 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           built.treeText,
           built.batches[index],
           contextLimit,
-          REQUEST_TRUNCATION_MARKER
+          REQUEST_TRUNCATION_MARKER,
+          Boolean(params.onContextDispatch)
         )
         counters.pendingSelection = bounded.selection ?? {
           filePaths: built.batches[index].files.map((file) => file.relPath),
@@ -885,6 +915,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           signal,
           markRequestTruncation,
           tokenBudget.inputTokens,
+          params.onContextDispatch,
           counters,
           streaming
         )

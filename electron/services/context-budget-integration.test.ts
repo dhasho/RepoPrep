@@ -18,7 +18,7 @@ import type { FileNode, Granularity, LlmProfile } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { buildContext, renderBatch, renderBatchWithinBudget, type ContextBatch, type ContextFile } from './context-builder.ts'
+import { buildContext, renderBatch, renderBatchWithinBudget, type ContextBatch, type ContextFile, type RenderedSelection } from './context-builder.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { generateInterview } from './generator.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -149,6 +149,26 @@ async function makeWeightedGenerateFixture(): Promise<string> {
   return root
 }
 
+async function makeDocDispatchFixture(): Promise<{ root: string; source: string }> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'issue90-context-budget-'))
+  tempDirs.push(root)
+  await fs.mkdir(path.join(root, 'src'), { recursive: true })
+  const source = [
+    'class Service:',
+    '    def first(self):',
+    `        """${'First method documentation. '.repeat(1_400)}"""`,
+    "        return 'DISPATCH_FIRST_BODY'",
+    '',
+    '    def second(self):',
+    `        """${'Second method documentation. '.repeat(1_400)}"""`,
+    "        return 'DISPATCH_SECOND_BODY'",
+    ''
+  ].join('\n')
+  await fs.writeFile(path.join(root, 'src', 'service.py'), source)
+  await fs.writeFile(path.join(root, 'package.json'), '{"name":"dispatch-metadata-fixture"}')
+  return { root, source }
+}
+
 function installMock(capture: Array<{ messages: Array<{ role: string; content: string }> }>, mode: 'normal' | 'repair' | 'short' = 'normal') {
   const originalFetch = globalThis.fetch
   let call = 0
@@ -208,6 +228,71 @@ test('generation requests retain ordinary source text without source-reference o
   assert.doesNotMatch(serializedRequests, /sourceRefs|sourceId|\b\d+ \| /)
   assert.doesNotMatch(JSON.stringify(result!), /sourceEvidence|sourceEvidenceSummary|snapshotHash|sourceId/)
   assert.ok(result!.sections.flatMap((section) => section.questions).length > 0)
+})
+
+test('actual dispatch callback reports source spans matching the fitted body without exposing text', async () => {
+  const { root, source } = await makeDocDispatchFixture()
+  const scan = await scanProject(root)
+  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const dispatches: RenderedSelection[] = []
+  const restore = installMock(requests)
+  try {
+    await generateInterview({
+      scan,
+      granularity: 'medium',
+      roleFocus: 'backend',
+      profile: { ...profile, contextWindowTokens: 10_000, maxOutputTokens: 1_024 },
+      signal: new AbortController().signal,
+      onProgress: () => undefined,
+      onContextDispatch: (selection) => {
+        dispatches.push(structuredClone(selection))
+        if (dispatches.length === 1) {
+          selection.filePaths.push('CALLBACK_MUTATION_SENTINEL')
+          const region = selection.sourceSelections?.[0]?.regions[0]
+          if (region) region.start = -1
+          throw new Error('synthetic observer failure')
+        }
+      }
+    })
+  } finally { restore() }
+
+  const baselineRequests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const restoreBaseline = installMock(baselineRequests)
+  try {
+    await generateInterview({
+      scan,
+      granularity: 'medium',
+      roleFocus: 'backend',
+      profile: { ...profile, contextWindowTokens: 10_000, maxOutputTokens: 1_024 },
+      signal: new AbortController().signal,
+      onProgress: () => undefined
+    })
+  } finally { restoreBaseline() }
+
+  assert.equal(requests.length, 1, 'the generator should send one bounded request for this fixture')
+  assert.deepEqual(requests[0].messages, baselineRequests[0].messages,
+    'opt-in source observation preserves every serialized request byte and its hash')
+  assert.equal(dispatches.length, requests.length, 'fit probes do not call the observer; each actual dispatch calls it once')
+  const prompt = requests[0].messages.map((message) => message.content).join('\n')
+  assert.doesNotMatch(prompt, /CALLBACK_MUTATION_SENTINEL|synthetic observer failure/)
+  assert.ok(prompt.includes('DISPATCH_FIRST_BODY') && prompt.includes('DISPATCH_SECOND_BODY'))
+  const selection = dispatches[0]
+  assert.deepEqual(selection.filePaths, ['package.json', 'src/service.py'])
+  assert.doesNotMatch(JSON.stringify(selection), /DISPATCH_FIRST_BODY|First method documentation|Second method documentation|must-not-enter|mock\.example|apiKey/i)
+  assert.equal(selection.providedChars > 0, true)
+  const python = selection.sourceSelections?.find((entry) => entry.relPath === 'src/service.py')
+  assert.ok(python)
+  assert.equal(python.wholeFile, false)
+  assert.equal(python.regions.length, 2)
+  assert.ok(python.regions.every((region) => !region.complete && region.documentationOmitted))
+  assert.ok(prompt.includes('（文档节选，原文有省略）'))
+  assert.ok(prompt.includes('…（文档其余内容省略）…'))
+  for (const region of python.regions) {
+    assert.ok(region.start >= 0 && region.end <= source.length && region.start < region.end)
+    const rawRegion = source.slice(region.start, region.end)
+    const signature = rawRegion.slice(0, rawRegion.indexOf('\n') + 1)
+    assert.ok(prompt.includes(signature), 'the emitted body starts at the reported original source offset')
+  }
 })
 
 test('generation diagnostics report dispatched token budgets, repair usage, and no sensitive profile data', async () => {
@@ -583,6 +668,7 @@ test('fine-grained compensation requests remain within the same final-message bu
   const scan = await scanProject(root)
   addOversizedLegalTree(scan)
   const requests: Array<{ messages: Array<{ role: string; content: string }> }> = []
+  const dispatches: RenderedSelection[] = []
   const restore = installMock(requests, 'short')
   const progress: Array<{ step: string; detail?: string }> = []
   try {
@@ -592,12 +678,29 @@ test('fine-grained compensation requests remain within the same final-message bu
       roleFocus: 'backend',
       profile,
       signal: new AbortController().signal,
-      onProgress: (step, detail) => progress.push({ step, detail })
+      onProgress: (step, detail) => progress.push({ step, detail }),
+      onContextDispatch: (selection) => {
+        dispatches.push(structuredClone(selection))
+        if (dispatches.length === 1) {
+          selection.filePaths.push('CALLBACK_MUTATION_SENTINEL')
+          const region = selection.sourceSelections?.[0]?.regions[0]
+          if (region) region.start = -1
+          throw new Error('observer failure is isolated')
+        }
+      }
     })
   } finally {
     restore()
   }
   assert.ok(requests.length > 2, 'short model output should cause a bounded compensation round')
+  assert.equal(dispatches.length, requests.length, 'only actual requests trigger one source-selection observation each')
+  assert.ok(dispatches.every((selection) => selection.sourceSelections !== undefined))
+  assert.ok(!dispatches[0].filePaths.includes('CALLBACK_MUTATION_SENTINEL'))
+  assert.ok(dispatches.slice(1).every((selection) => !selection.filePaths.includes('CALLBACK_MUTATION_SENTINEL')),
+    'callback mutation cannot affect later dispatch metadata')
+  assert.ok(dispatches.every((selection) => (selection.sourceSelections ?? []).flatMap((source) => source.regions).every((region) => region.start >= 0)),
+    'callback mutation cannot corrupt the pending or subsequent source offsets')
+  assert.doesNotMatch(JSON.stringify(requests), /CALLBACK_MUTATION_SENTINEL/)
   assert.ok(requests.some((request) => request.messages.some((message) => /补充请求/.test(message.content))))
   assertRequestsStayBounded(requests, 'fine')
   assert.ok(JSON.stringify(progress).includes(CONTEXT_TRUNCATION_WARNING))
