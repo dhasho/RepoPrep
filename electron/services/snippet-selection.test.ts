@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { formatSourceRegions, selectSourceRegions, sourceRegionCandidates } from './snippet-selection.ts'
+import { compactRegionDocumentation, formatSourceRegions, selectSourceRegions, sourceRegionCandidates } from './snippet-selection.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { analyzeSource } from './source-analysis.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -639,3 +639,42 @@ function documentExcerptLength(rendered: string): number {
   const match = rendered.match(/### 文件：README\.md（内容过长已截断）\n```\n([\s\S]*?)\n```/)
   return match?.[1]?.length ?? -1
 }
+
+test('Python docstring ranges identify only standalone ordinary first body strings', () => {
+  const source = `@decorator\nclass Outer:\n  """${'😀'.repeat(300)}\ndef ghost(): pass\n  """\n  class Inner:\n    r'''${'n'.repeat(600)}'''\n    def method(self):\n      """${'m'.repeat(600)}"""\n      return 1\n\ndef joined():\n  '''${'j'.repeat(600)}''' + run()\n  return 2\n\ndef assigned():\n  text = """${'a'.repeat(600)}"""\n  return text\n\ndef formatted():\n  f"""${'f'.repeat(600)}{run()}"""\n\ndef bytes_doc():\n  b"""${'b'.repeat(600)}"""\n`
+  const candidates = sourceRegionCandidates(source, null, { extension: '.py' })
+  const outer = candidates.find(region => region.label === 'Outer')
+  const inner = candidates.find(region => region.label === 'Inner')
+  const method = candidates.find(region => region.label === 'method')
+  assert.ok(outer?.documentationRanges)
+  assert.ok(inner?.documentationRanges)
+  assert.ok(method?.documentationRanges)
+  assert.equal(outer.text.slice(outer.documentationRanges[0].start, outer.documentationRanges[0].end), '😀'.repeat(300) + '\ndef ghost(): pass\n  ')
+  for (const name of ['joined', 'assigned', 'formatted', 'bytes_doc']) {
+    assert.equal(candidates.find(region => region.label === name)?.documentationRanges, undefined, `${name} is not a standalone plain docstring`)
+  }
+})
+
+test('Python docstring compaction is bounded, visible, preserves code, and marks the region incomplete', () => {
+  const source = `def documented():\n  """${'A'.repeat(159)}😀${'B'.repeat(500)}"""\n  return 'KEEP_CODE'\n`
+  const region = sourceRegionCandidates(source, null, { extension: 'py' }).find(item => item.label === 'documented')
+  assert.ok(region?.documentationRanges)
+  const compacted = compactRegionDocumentation(region)
+  assert.equal(compacted.complete, false)
+  assert.equal(compacted.documentationOmitted, true)
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(compacted.text), 'the 160-unit cutoff must not split a surrogate pair')
+  assert.ok(compacted.text.includes('文档其余内容省略'))
+  assert.ok(compacted.text.includes("return 'KEEP_CODE'"))
+  assert.ok(formatSourceRegions([compacted], 'py').includes('文档节选'))
+  assert.equal(compactRegionDocumentation({ ...region, text: region.text + 'changed' }).documentationOmitted, true)
+})
+
+test('short Python docstrings and whole-file fits remain byte-for-byte unchanged', () => {
+  const source = `def documented():\n  """short note"""\n  return 1\n`
+  const region = sourceRegionCandidates(source, null, { extension: 'py' }).find(item => item.label === 'documented')
+  assert.ok(region)
+  assert.equal(compactRegionDocumentation(region).text, region.text)
+  const whole = selectSourceRegions(source, null, source.length, { extension: 'py' })
+  assert.equal(whole.regions[0].text, source)
+  assert.equal(whole.regions[0].documentationOmitted, undefined)
+})

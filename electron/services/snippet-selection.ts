@@ -10,6 +10,10 @@ export interface SourceRegion {
   qualifiedName?: string
   /** Source-position IDs of unambiguously resolved direct local callees. */
   calledDeclarationStarts?: number[]
+  /** Confirmed standalone Python docstring content offsets within text. */
+  documentationRanges?: Array<{ start: number; end: number }>
+  /** True when a long confirmed docstring was compacted. */
+  documentationOmitted?: boolean
   complete: boolean
   priority: number
 }
@@ -101,6 +105,44 @@ function prioritizeDirectCallees(regions: SourceRegion[]): SourceRegion[] {
   return regions.map((region) => ({ ...region, priority: boosted.get(region) ?? region.priority }))
 }
 
+function pythonDocstringRange(content: string, lines: string[], offsets: number[], declaration: PythonDeclaration, endIndex: number): { start: number; end: number } | undefined {
+  let lineIndex = declaration.index + 1
+  while (lineIndex < endIndex) {
+    const line = lines[lineIndex]
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) { lineIndex++; continue }
+    if (line.length - line.trimStart().length <= declaration.indent) return undefined
+    const first = line.match(/^\s*((?:[rR]|[uU]|[rR][uU]|[uU][rR])?)("""|'''|"|')/)
+    if (!first) return undefined
+    const prefix = first[1]
+    const quote = first[2]
+    const opening = line.indexOf(quote, first[0].length - quote.length)
+    if (opening < 0) return undefined
+    const contentStart = offsets[lineIndex] + opening + quote.length
+    let closeStart = -1
+    let closeEnd = -1
+    for (let row = lineIndex; row < endIndex; row++) {
+      const current = lines[row]
+      for (let column = row === lineIndex ? opening + quote.length : 0; column <= current.length - quote.length; column++) {
+        if (current.slice(column, column + quote.length) !== quote) continue
+        let slashes = 0
+        for (let k = column - 1; k >= 0 && current[k] === '\\'; k--) slashes++
+        if (slashes % 2 === 0) {
+          closeStart = offsets[row] + column
+          closeEnd = closeStart + quote.length
+          const suffix = current.slice(column + quote.length).trim()
+          if (suffix && !suffix.startsWith('#')) return undefined
+          break
+        }
+      }
+      if (closeStart >= 0) break
+    }
+    if (closeStart < 0) return undefined
+    return { start: contentStart - offsets[declaration.startLine], end: closeStart - offsets[declaration.startLine] }
+  }
+  return undefined
+}
+
 export function formatSourceRegions(regions: readonly SourceRegion[], extension = ''): string {
   const python = extension.replace(/^\./, '').toLowerCase() === 'py'
   const comment = python ? '# 代码单元：' : '// 代码单元：'
@@ -108,8 +150,29 @@ export function formatSourceRegions(regions: readonly SourceRegion[], extension 
     const owner = region.qualifiedName && region.qualifiedName !== region.label
       ? `${comment}${region.qualifiedName}\n`
       : ''
-    return `${index ? '…（其他位置省略）…\n' : ''}${owner}${region.text}`
+    const docNote = region.documentationOmitted ? '（文档节选，原文有省略）\n' : ''
+    return `${index ? '…（其他位置省略）…\n' : ''}${owner}${docNote}${region.text}`
   }).join('\n')
+}
+
+const DOCUMENTATION_LIMIT = 512
+const DOCUMENTATION_PREFIX = 160
+const DOCUMENTATION_MARKER = '\n…（文档其余内容省略）…\n'
+
+/** Compact only offsets supplied by the conservative Python lexer. */
+export function compactRegionDocumentation(region: SourceRegion): SourceRegion {
+  if (region.documentationOmitted || !region.documentationRanges?.length) return region
+  let text = region.text
+  let omitted = false
+  for (const range of [...region.documentationRanges].sort((a, b) => b.start - a.start)) {
+    if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end < range.start || range.end > text.length) return region
+    const body = text.slice(range.start, range.end)
+    if (body.length <= DOCUMENTATION_LIMIT) continue
+    const head = headAtCodePointBoundary(body, DOCUMENTATION_PREFIX)
+    text = text.slice(0, range.start) + head + DOCUMENTATION_MARKER + text.slice(range.end)
+    omitted = true
+  }
+  return omitted ? { ...region, text, complete: false, documentationOmitted: true } : region
 }
 
 const PYTHON_IDENT_CHAR = /[A-Za-z0-9_]/
@@ -428,6 +491,7 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
     // Without a confirmed depth-0 colon (or with the file ending mid-logical-line)
     // the header cannot be trusted as a complete body.
     const complete = decl.colonSeen && !(endIndex === lines.length && fileEndsOpen)
+    const documentation = pythonDocstringRange(content, lines, offsets, decl, endIndex)
     return {
       start,
       end,
@@ -435,6 +499,7 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
       label: decl.name,
       qualifiedName: decl.qualifiedName,
       calledDeclarationStarts: calleesBySlot.get(decl.slot)?.map((line) => offsets[line]) ?? [],
+      documentationRanges: documentation ? [documentation] : undefined,
       complete,
       priority
     }
@@ -538,14 +603,12 @@ export function selectSourceRegions(
   const selected: SourceRegion[] = []
   let used = 0
   for (const region of candidates) {
-    const annotation = region.qualifiedName && region.qualifiedName !== region.label
-      ? (options.extension?.replace(/^\./, '').toLowerCase() === 'py' ? '# 代码单元：' : '// 代码单元：').length + region.qualifiedName.length + 1
-      : 0
-    const cost = region.text.length + annotation + (selected.length ? 20 : 0)
+    const excerpt = compactRegionDocumentation(region)
+    const cost = formatSourceRegions([...selected, excerpt], options.extension).length - formatSourceRegions(selected, options.extension).length
     if (used + cost > budget) continue
     // Avoid spending all the budget in one neighborhood when alternatives exist.
     if (selected.some((item) => item.start < region.end && item.end > region.start)) continue
-    selected.push(region)
+    selected.push(excerpt)
     used += cost
   }
   selected.sort((a, b) => a.start - b.start)
