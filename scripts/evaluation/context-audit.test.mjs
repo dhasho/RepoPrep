@@ -175,6 +175,28 @@ test('reference protocol rejection writes a static incomplete report and existin
   assert.doesNotMatch(JSON.stringify(failure), /anthropic|model/iu)
 })
 
+test('reference token limits honor profile bounds and output must remain below a known context window', async t => {
+  const values = await fixture(t)
+  const invalid = [
+    { contextWindowTokens: 4095 },
+    { contextWindowTokens: 4096, maxOutputTokens: 4096 },
+    { contextWindowTokens: 1_000_000, maxOutputTokens: 255 },
+    { contextWindowTokens: 1_000_000, profileMaxOutputTokens: 393_217 }
+  ]
+  for (let index = 0; index < invalid.length; index++) {
+    const output = path.join(values.base, `invalid-limits-${index}`)
+    await assert.rejects(runContextAudit({
+      reposRoot: values.reposRoot,
+      outputDir: output,
+      testManifestPath: values.manifestPath,
+      referenceReport: { model: 'synthetic', protocol: 'openai', config: { ...invalid[index] } }
+    }), /incomplete/)
+    const report = JSON.parse(await readFile(path.join(output, 'report.json'), 'utf8'))
+    assert.deepEqual(report.failure, { stage: 'configuration', code: 'context_audit_incomplete' })
+    assert.equal(report.syntheticCaptures, 0)
+  }
+})
+
 test('CLI reports damaged reference input without echoing its contents', async t => {
   const values = await fixture(t)
   const referencePath = path.join(values.base, 'broken-reference.json')
@@ -221,6 +243,33 @@ test('production final request is captured; gold metadata and source text stay o
   assert.ok(report.sourceHashes['scripts/evaluation/context-audit.mjs'])
   assert.ok(report.cases[0].fixtureHashes['src/app.ts'])
   assert.ok(!Object.keys(report.cases[0]).some(key => ['requestBody', 'messages', 'prompt', 'responseBody', 'apiKey'].includes(key)))
+})
+
+test('real-report null output cap is provider-default and hashes like an explicit undefined cap', { timeout: 180_000 }, async t => {
+  const values = await fixture(t)
+  const captures = []
+  const baseReference = {
+    model: 'deepseek-v4-flash', protocol: 'openai',
+    config: { reasoningEffort: 'low', temperature: 0.4, contextWindowTokens: 1_000_000, maxOutputTokens: null, profileMaxOutputTokens: null }
+  }
+  const first = await runContextAudit({
+    reposRoot: values.reposRoot, outputDir: path.join(values.base, 'provider-default'),
+    testManifestPath: values.manifestPath, referenceReport: baseReference,
+    onCapture: capture => captures.push(capture.requestBody)
+  })
+  const second = await runContextAudit({
+    reposRoot: values.reposRoot, outputDir: path.join(values.base, 'provider-default-undefined'),
+    testManifestPath: values.manifestPath,
+    referenceReport: { ...baseReference, config: { ...baseReference.config, maxOutputTokens: undefined, profileMaxOutputTokens: undefined } }
+  })
+  assert.equal(first.status, 'complete')
+  assert.equal(first.configuration.maxOutputTokens, null)
+  assert.equal(first.configuration.profileMaxOutputTokens, null)
+  assert.equal(first.configuration.contextWindowTokens, 1_000_000)
+  assert.ok(captures.length > 0)
+  assert.ok(captures.every(body => body.model === 'deepseek-v4-flash' && body.reasoning_effort === 'low' && !Object.hasOwn(body, 'max_tokens')))
+  assert.deepEqual(first.cases[0].requestBodyHashes, second.cases[0].requestBodyHashes)
+  assert.equal(first.networkRequests, 0)
 })
 
 test('sensitive content is redacted before candidate matching', () => {

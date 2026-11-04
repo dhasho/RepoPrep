@@ -33,7 +33,7 @@ export function parseContextAuditArgs(args) {
 }
 
 function readInferenceConfig(reference) {
-  if (!reference) return { model: 'context-audit-synthetic', protocol: 'openai', temperature: 0.4, reasoningEffort: 'provider-default', contextWindowTokens: undefined, maxOutputTokens: undefined }
+  if (!reference) return { model: 'context-audit-synthetic', protocol: 'openai', temperature: 0.4, reasoningEffort: 'provider-default', contextWindowTokens: null, maxOutputTokens: null, profileMaxOutputTokens: null }
   const config = reference.config ?? reference
   const model = reference.model ?? config.model
   if (typeof model !== 'string' || model.length === 0 || model.length > 256 || (config.protocol ?? reference.protocol) !== 'openai') throw new Error('reference report must contain an OpenAI inference configuration')
@@ -43,16 +43,24 @@ function readInferenceConfig(reference) {
   if (!['low', 'high', 'provider-default'].includes(reasoningEffort)) throw new Error('reference report has an unsupported reasoning effort')
   const temperature = config.temperature ?? 0.4
   if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) throw new Error('reference report has an invalid temperature')
-  for (const value of [config.contextWindowTokens, config.maxOutputTokens]) {
-    if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0 || value > 2_097_152)) throw new Error('reference report has an invalid token limit')
+  const bounded = (value, min, max) => {
+    if (value === undefined || value === null) return null
+    if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error('reference report has an invalid token limit')
+    return value
   }
+  const contextWindowTokens = bounded(config.contextWindowTokens, 4096, 2_097_152)
+  const maxOutputTokens = bounded(config.maxOutputTokens, 256, 393_216)
+  const profileMaxOutputTokens = bounded(config.profileMaxOutputTokens, 256, 393_216)
+  if (contextWindowTokens !== null && maxOutputTokens !== null && maxOutputTokens >= contextWindowTokens) throw new Error('reference report has an invalid token limit')
+  if (contextWindowTokens !== null && profileMaxOutputTokens !== null && profileMaxOutputTokens >= contextWindowTokens) throw new Error('reference report has an invalid token limit')
   return {
     model,
     protocol,
     temperature,
     reasoningEffort,
-    contextWindowTokens: config.contextWindowTokens,
-    maxOutputTokens: config.maxOutputTokens
+    contextWindowTokens,
+    maxOutputTokens,
+    profileMaxOutputTokens
   }
 }
 
@@ -60,7 +68,7 @@ function syntheticCompletion() {
   const questions = Array.from({ length: 20 }, (_, index) => ({
     question: `Synthetic question ${index + 1}?`, answer: 'Synthetic answer.', followUps: []
   }))
-  return JSON.stringify({ title: 'Synthetic interview', summary: 'Synthetic only.', sections: [{ title: 'Synthetic', summary: 'Synthetic', questions }], glossary: {} })
+  return JSON.stringify({ projectSummary: 'Synthetic project summary.', sections: [{ title: 'Synthetic', summary: 'Synthetic only.', questions }], glossary: {} })
 }
 
 export function installSyntheticFetch(captures, onCapture) {
@@ -285,8 +293,8 @@ export async function runContextAudit({ reposRoot, outputDir, referenceReport, c
           id: 'context-audit', name: 'Synthetic context audit', baseUrl: syntheticOrigin, apiKey: 'SYNTHETIC_ONLY',
           model: config.model, protocol: 'openai', temperature: config.temperature,
           ...(config.reasoningEffort !== 'provider-default' ? { reasoningEffort: config.reasoningEffort } : {}),
-          ...(config.contextWindowTokens ? { contextWindowTokens: config.contextWindowTokens } : {}),
-          ...(config.maxOutputTokens ? { maxOutputTokens: config.maxOutputTokens } : {})
+          ...(config.contextWindowTokens !== null ? { contextWindowTokens: config.contextWindowTokens } : {}),
+          ...(config.maxOutputTokens !== null ? { maxOutputTokens: config.maxOutputTokens } : {})
         }, signal: AbortSignal.timeout(120_000), onProgress: () => {}, onContextDispatch: selection => { dispatches.push(selection) } })
       } finally {
         restore()
