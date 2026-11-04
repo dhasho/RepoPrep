@@ -53,6 +53,83 @@ test('Python regions retain nested class and function scopes', () => {
   assert.equal(regions.find((region) => region.label === 'helper')?.qualifiedName, 'factory.helper')
 })
 
+test('direct local calls use source identities and keep same-named class methods separate', () => {
+  const tsSource = `class Alpha {\n  invoke() { return this.parse() }\n  parse() { return 'ALPHA' }\n}\nclass Beta {\n  invoke() { return this.other() }\n  parse() { return 'BETA' }\n  other() { return 'OTHER' }\n}\n`
+  const tsAnalysis = analyzeSource('src/flow.ts', tsSource)
+  assert.ok(tsAnalysis?.parseable)
+  const tsRegions = sourceRegionCandidates(tsSource, tsAnalysis, { extension: 'ts' })
+  const alphaStart = tsSource.indexOf('invoke()')
+  const betaStart = tsSource.indexOf('invoke()', alphaStart + 1)
+  const alphaInvoke = tsRegions.find((region) => region.start === alphaStart)
+  const betaInvoke = tsRegions.find((region) => region.start === betaStart)
+  const alphaParse = tsRegions.find((region) => region.label === 'parse' && region.qualifiedName === 'Alpha.parse')
+  const betaParse = tsRegions.find((region) => region.label === 'parse' && region.qualifiedName === 'Beta.parse')
+  const betaOther = tsRegions.find((region) => region.label === 'other' && region.qualifiedName === 'Beta.other')
+  assert.ok(alphaInvoke && betaInvoke && alphaParse && betaParse && betaOther)
+  assert.ok(alphaInvoke.calledDeclarationStarts?.includes(alphaParse.start))
+  assert.ok(betaInvoke.calledDeclarationStarts?.includes(betaOther.start))
+  assert.ok(!betaInvoke.calledDeclarationStarts?.includes(betaParse.start))
+
+  const pySource = `class Alpha:\n    def invoke(self):\n        return self.parse()\n    def parse(self):\n        return 'ALPHA'\nclass Beta:\n    def invoke(self):\n        return self.other()\n    def parse(self):\n        return 'BETA'\n    def other(self):\n        return 'OTHER'\n`
+  const pyRegions = sourceRegionCandidates(pySource, null, { extension: 'py' })
+  const pyAlphaInvoke = pyRegions.find((region) => region.label === 'invoke' && region.qualifiedName === 'Alpha.invoke')
+  const pyBetaInvoke = pyRegions.find((region) => region.label === 'invoke' && region.qualifiedName === 'Beta.invoke')
+  const pyAlphaParse = pyRegions.find((region) => region.label === 'parse' && region.qualifiedName === 'Alpha.parse')
+  const pyBetaParse = pyRegions.find((region) => region.label === 'parse' && region.qualifiedName === 'Beta.parse')
+  const pyBetaOther = pyRegions.find((region) => region.label === 'other' && region.qualifiedName === 'Beta.other')
+  assert.ok(pyAlphaInvoke && pyBetaInvoke && pyAlphaParse && pyBetaParse && pyBetaOther)
+  assert.ok(pyAlphaInvoke.calledDeclarationStarts?.includes(pyAlphaParse.start))
+  assert.ok(pyBetaInvoke.calledDeclarationStarts?.includes(pyBetaOther.start))
+  assert.ok(!pyBetaInvoke.calledDeclarationStarts?.includes(pyBetaParse.start))
+})
+
+test('bare calls resolve only to a unique same-file declaration', () => {
+  const tsSource = `function caller() { return helper() }\nfunction shadowedCaller(helper: () => number) { return helper() }\nfunction helper() { return 1 }\nfunction ambiguousCaller() { return duplicate() }\nfunction duplicate() { return 1 }\nfunction duplicate() { return 2 }\n`
+  const tsAnalysis = analyzeSource('src/flow.ts', tsSource)
+  assert.ok(tsAnalysis?.parseable)
+  const tsRegions = sourceRegionCandidates(tsSource, tsAnalysis, { extension: 'ts' })
+  const tsCaller = tsRegions.find((region) => region.label === 'caller')
+  const tsShadowedCaller = tsRegions.find((region) => region.label === 'shadowedCaller')
+  const tsHelper = tsRegions.find((region) => region.label === 'helper')
+  const tsAmbiguousCaller = tsRegions.find((region) => region.label === 'ambiguousCaller')
+  const tsDuplicates = tsRegions.filter((region) => region.label === 'duplicate')
+  assert.ok(tsCaller && tsShadowedCaller && tsHelper && tsAmbiguousCaller)
+  assert.deepEqual(tsCaller.calledDeclarationStarts, [tsHelper.start])
+  assert.equal(tsShadowedCaller.calledDeclarationStarts?.length ?? 0, 0)
+  assert.equal(tsDuplicates.length, 2)
+  assert.equal(tsAmbiguousCaller.calledDeclarationStarts?.length ?? 0, 0)
+
+  const pySource = `def caller():\n    return helper()\ndef helper():\n    return 1\ndef ambiguous_caller():\n    return duplicate()\ndef duplicate():\n    return 1\ndef duplicate():\n    return 2\n`
+  const pyRegions = sourceRegionCandidates(pySource, null, { extension: 'py' })
+  const pyCaller = pyRegions.find((region) => region.label === 'caller')
+  const pyHelper = pyRegions.find((region) => region.label === 'helper')
+  const pyAmbiguousCaller = pyRegions.find((region) => region.label === 'ambiguous_caller')
+  assert.ok(pyCaller && pyHelper && pyAmbiguousCaller)
+  assert.deepEqual(pyCaller.calledDeclarationStarts, [pyHelper.start])
+  assert.equal(pyAmbiguousCaller.calledDeclarationStarts?.length ?? 0, 0)
+
+  const pyMembers = `def foo():\n    return 'module'\nclass Thing:\n    def call_member(self):\n        return self.foo()\n    def foo(self):\n        return 'member'\n    def call_bare(self):\n        return foo()\n`
+  const pyMemberRegions = sourceRegionCandidates(pyMembers, null, { extension: 'py' })
+  const pyCallMember = pyMemberRegions.find((region) => region.qualifiedName === 'Thing.call_member')
+  const pyMemberFoo = pyMemberRegions.find((region) => region.qualifiedName === 'Thing.foo')
+  const pyCallBare = pyMemberRegions.find((region) => region.qualifiedName === 'Thing.call_bare')
+  const pyModuleFoo = pyMemberRegions.find((region) => region.qualifiedName === 'foo')
+  assert.ok(pyCallMember && pyMemberFoo && pyCallBare && pyModuleFoo)
+  assert.deepEqual(pyCallMember.calledDeclarationStarts, [pyMemberFoo.start])
+  assert.deepEqual(pyCallBare.calledDeclarationStarts, [pyModuleFoo.start])
+})
+
+test('this calls inside nested ordinary functions are not attributed to the outer method', () => {
+  const content = `class Runner {\n  run() {\n    function nested() { return this.finish() }\n    return nested()\n  }\n  finish() { return 1 }\n}\n`
+  const analysis = analyzeSource('src/runner.ts', content)
+  assert.ok(analysis?.parseable)
+  const regions = sourceRegionCandidates(content, analysis, { extension: 'ts' })
+  const run = regions.find((region) => region.qualifiedName === 'Runner.run')
+  const finish = regions.find((region) => region.qualifiedName === 'Runner.finish')
+  assert.ok(run && finish)
+  assert.equal(Boolean(run.calledDeclarationStarts?.includes(finish.start)), false)
+})
+
 test('final fitting keeps TS and Python method owners within budget while whole files stay byte-identical', () => {
   const tsFiller = '  cached: string = "filler-value"\n'.repeat(100)
   const tsSource = `class Request {\n${tsFiller}  prepare() { return 'REQUEST_PREPARE' }\n}\nclass PreparedRequest {\n${tsFiller}  prepare() { return 'PREPARED_PREPARE' }\n}\n`

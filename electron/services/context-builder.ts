@@ -137,7 +137,7 @@ const CONTEXT_WEIGHT_MAX = 8
 /** Every hungry file keeps at least this slice before weights differentiate. */
 const WEIGHTED_MIN_SHARE = 1024
 
-const TEST_PATH_PATTERN = /(^|\/)(__tests__|tests?|spec|fixtures?)(\/|$)|\.(test|spec)\.[^.]+$/i
+const TEST_PATH_PATTERN = /(^|\/)(__tests__|tests?|spec|fixtures?)(\/|$)|\.(test|spec)\.[^.]+$|(^|\/)test(?:[_-][^/]+)?\.[^.]+$/i
 const GENERATED_PATH_PATTERN = /(^|\/)(generated|dist|build|coverage|vendor)(\/|$)|\.(min|generated)\.[^.]+$/i
 
 function normalizeContextWeight(value: unknown): number {
@@ -395,12 +395,33 @@ async function pickFiles(
     for (const imported of analysis?.imports ?? []) {
       for (const name of imported.importedNames) if (name !== '*' && name !== 'default') referencedSymbols.add(name)
     }
+    const useCallRelations = !TEST_PATH_PATTERN.test(file.relPath) && !GENERATED_PATH_PATTERN.test(file.relPath)
     const regions = truncated
-      ? selectSourceRegions(redaction.content, analysis, allocations[index], { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext }).regions
+      ? selectSourceRegions(redaction.content, analysis, allocations[index], { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext, useCallRelations }).regions
       : [{ start: 0, end: redaction.content.length, text: redaction.content, label: 'whole-file', complete: true, priority: 100 }]
     const selectionCandidates = isDocumentOrConfigPath(file.relPath)
       ? undefined
-      : sourceRegionCandidates(redaction.content, analysis, { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext })
+      : sourceRegionCandidates(redaction.content, analysis, { roleFocus: options.roleFocus, referencedSymbols, extension: file.ext, useCallRelations })
+    const callChainRegionStarts = new Set<number>()
+    for (const candidate of selectionCandidates ?? []) {
+      if (!candidate.calledDeclarationStarts?.length) continue
+      callChainRegionStarts.add(candidate.start)
+      for (const targetStart of candidate.calledDeclarationStarts) callChainRegionStarts.add(targetStart)
+    }
+    const canAdjustCallWeight = CODE_EXTS.has(file.ext) &&
+      !TEST_PATH_PATTERN.test(file.relPath) &&
+      !GENERATED_PATH_PATTERN.test(file.relPath) &&
+      !signals.entryPaths.has(file.relPath)
+    // Shift one bounded final-fit weight point toward source files with a local
+    // call chain. Preserve manifest entries and keep tests/generated files out
+    // of this adjustment; the hard request budget remains unchanged.
+    const hasLocalCallChain = callChainRegionStarts.size >= 3
+    const hasAnyLocalCall = callChainRegionStarts.size > 1
+    const finalWeight = canAdjustCallWeight && hasLocalCallChain
+      ? Math.min(CONTEXT_WEIGHT_MAX, weights[index] + 1)
+      : canAdjustCallWeight && !hasAnyLocalCall
+        ? Math.max(CONTEXT_WEIGHT_MIN, weights[index] - 1)
+        : weights[index]
     const renderedContent = truncated ? formatRegions(regions, file.ext) : redaction.content
     out.push({
       relPath: file.relPath,
@@ -410,7 +431,7 @@ async function pickFiles(
       truncated,
       redacted: redaction.totalMatches > 0,
       redactionMatches: redaction.totalMatches,
-      weight: weights[index]
+      weight: finalWeight
     })
     contentTruncated ||= truncated
     if (redaction.totalMatches > 0) {

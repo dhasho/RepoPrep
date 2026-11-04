@@ -11,15 +11,49 @@ export interface CodeSymbol {
   end: number
   signatureEnd?: number
   parentName?: string
+  parentStart?: number
   exported: boolean
+}
+export interface SourceCallReference {
+  name: string
+  callerStart: number
+  receiver: 'identifier' | 'this' | 'constructor'
 }
 export interface SourceAnalysis {
   parseable: boolean
   imports: ImportReference[]
   symbols: CodeSymbol[]
+  calls?: SourceCallReference[]
 }
 
 const SCRIPT_EXTENSIONS = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'mts', 'cts'])
+
+function addBindingNames(name: ts.BindingName, names: Set<string>): void {
+  if (ts.isIdentifier(name)) {
+    names.add(name.text)
+  } else {
+    for (const element of name.elements) {
+      if (!ts.isOmittedExpression(element)) addBindingNames(element.name, names)
+    }
+  }
+}
+
+function functionBindings(node: ts.FunctionLikeDeclaration): Set<string> {
+  const names = new Set<string>()
+  for (const parameter of node.parameters) addBindingNames(parameter.name, names)
+  const visit = (child: ts.Node): void => {
+    if (child !== node && (ts.isFunctionDeclaration(child) || ts.isFunctionExpression(child) || ts.isArrowFunction(child))) {
+      if (ts.isFunctionDeclaration(child) && child.name) names.add(child.name.text)
+      return
+    }
+    if (ts.isVariableDeclaration(child)) addBindingNames(child.name, names)
+    else if ((ts.isClassDeclaration(child) || ts.isFunctionDeclaration(child)) && child.name) names.add(child.name.text)
+    else if (ts.isCatchClause(child) && child.variableDeclaration) addBindingNames(child.variableDeclaration.name, names)
+    ts.forEachChild(child, visit)
+  }
+  if (node.body) visit(node.body)
+  return names
+}
 const extension = (relPath: string): string => relPath.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase() ?? ''
 const named = (node: ts.Node): string | undefined => {
   const n = (node as ts.NamedDeclaration).name
@@ -54,10 +88,18 @@ export function analyzeSource(relPath: string, content: string): SourceAnalysis 
   }
   const imports: ImportReference[] = []
   const symbols: CodeSymbol[] = []
+  const calls: SourceCallReference[] = []
+  const ownerBindings = new Map<number, Set<string>>()
   const addImport = (spec: ts.Expression | undefined, names: string[]): void => {
     if (spec && ts.isStringLiteralLike(spec)) imports.push({ specifier: spec.text, importedNames: [...new Set(names)] })
   }
-  const visit = (node: ts.Node, isTopLevel = false): void => {
+  const visit = (node: ts.Node, isTopLevel = false, owner?: CodeSymbol): void => {
+    // `this` in a nested ordinary function has its own runtime receiver; do not
+    // attribute its calls to the enclosing class method without type analysis.
+    if (!isTopLevel && (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node))) {
+      ts.forEachChild(node, (child) => visit(child, false))
+      return
+    }
     if (ts.isImportDeclaration(node)) {
       const names: string[] = []
       const clause = node.importClause
@@ -74,12 +116,24 @@ export function analyzeSource(relPath: string, content: string): SourceAnalysis 
       const arg = node.arguments[0]
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword && arg && ts.isStringLiteralLike(arg)) addImport(arg, ['*'])
       if (ts.isIdentifier(node.expression) && node.expression.text === 'require' && arg && ts.isStringLiteralLike(arg)) addImport(arg, ['*'])
+      if (calls.length < 1024) {
+        if (ts.isIdentifier(node.expression) && node.expression.text !== 'require') {
+          if (owner && !ownerBindings.get(owner.start)?.has(node.expression.text)) calls.push({ name: node.expression.text, callerStart: owner.start, receiver: 'identifier' })
+        } else if (ts.isPropertyAccessExpression(node.expression)) {
+          const receiver = node.expression.expression.kind === ts.SyntaxKind.ThisKeyword ? 'this' : undefined
+          if (owner && receiver) calls.push({ name: node.expression.name.text, callerStart: owner.start, receiver })
+        }
+      }
+    } else if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && calls.length < 1024) {
+      if (owner) calls.push({ name: node.expression.text, callerStart: owner.start, receiver: 'constructor' })
     }
 
     if (isTopLevel && (ts.isClassDeclaration(node) || ts.isClassExpression(node))) {
       const name = named(node) ?? '(anonymous class)'
-      symbols.push({ name, kind: 'class', start: node.getStart(source), end: node.end, signatureEnd: node.members[0]?.getStart(source) ?? node.end, exported: isExported(node) })
+      const classSymbol: CodeSymbol = { name, kind: 'class', start: node.getStart(source), end: node.end, signatureEnd: node.members[0]?.getStart(source) ?? node.end, exported: isExported(node) }
+      symbols.push(classSymbol)
       for (const member of node.members) {
+        let memberSymbol: CodeSymbol | undefined
         if (
           ts.isMethodDeclaration(member) || ts.isConstructorDeclaration(member) ||
           ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member) ||
@@ -87,18 +141,28 @@ export function analyzeSource(relPath: string, content: string): SourceAnalysis 
         ) {
           const memberName = ts.isConstructorDeclaration(member) ? 'constructor' : named(member) ?? '(computed method)'
           const signatureEnd = sigEnd(member)
-          symbols.push({ name: memberName, kind: 'method', start: member.getStart(source), end: member.end, signatureEnd, parentName: name, exported: false })
+          memberSymbol = { name: memberName, kind: 'method', start: member.getStart(source), end: member.end, signatureEnd, parentName: name, parentStart: classSymbol.start, exported: false }
+          if (ts.isMethodDeclaration(member) || ts.isConstructorDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) {
+            ownerBindings.set(memberSymbol.start, functionBindings(member))
+          }
+          symbols.push(memberSymbol)
         }
+        visit(member, false, memberSymbol ?? classSymbol)
       }
+      return
     } else if (isTopLevel && ts.isFunctionDeclaration(node)) {
-      symbols.push({
+      const functionSymbol: CodeSymbol = {
         name: named(node) ?? '(anonymous function)',
         kind: 'function',
         start: node.getStart(source),
         end: node.end,
         signatureEnd: sigEnd(node),
         exported: isExported(node)
-      })
+      }
+      symbols.push(functionSymbol)
+      ownerBindings.set(functionSymbol.start, functionBindings(node))
+      ts.forEachChild(node, (child) => visit(child, false, functionSymbol))
+      return
     } else if (isTopLevel && ts.isInterfaceDeclaration(node)) {
       symbols.push({
         name: named(node) ?? '(interface)',
@@ -144,8 +208,8 @@ export function analyzeSource(relPath: string, content: string): SourceAnalysis 
       node.statements.forEach((statement) => visit(statement, true))
       return
     }
-    ts.forEachChild(node, (child) => visit(child))
+    ts.forEachChild(node, (child) => visit(child, false, owner))
   }
   try { visit(source) } catch { return { parseable: false, imports: [], symbols: [] } }
-  return { parseable: (source as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length === 0, imports, symbols }
+  return { parseable: (source as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length === 0, imports, symbols, calls }
 }

@@ -42,6 +42,68 @@ test('real scan selects a late complete JS/TS unit under a tightened budget and 
   }
 })
 
+test('bounded call-chain fitting keeps scoped callees without leaking redacted literals or exceeding budget', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
+  try {
+    await fs.mkdir(path.join(root, 'src'), { recursive: true })
+    await fs.mkdir(path.join(root, 'tests'), { recursive: true })
+    await fs.mkdir(path.join(root, 'generated'), { recursive: true })
+    const padding = '  metadata: string = "background"\n'.repeat(900)
+    const decoys = Array.from({ length: 24 }, (_, index) => `  decoy${index}() { return '${`BACKGROUND_${index}_`.repeat(8)}' }\n`).join('')
+    const source = `class Other {\n  prepare(input: string) { return input + 'OTHER_PREPARE_MARKER' }\n}\nexport class Pipeline {\n${padding}${decoys}  normalize(input: string) { return input.trim() }\n  prepare(input: string) {\n    const OPENAI_API_KEY = 'sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnop'\n    return this.normalize(input) + OPENAI_API_KEY.length\n  }\n  execute(input: string) { return this.prepare(input) }\n}\n`
+    const entry = `import { Pipeline } from './pipeline'\nexport function start() { return new Pipeline().execute('ENTRYPOINT_CALLSITE') }\n`
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'call-chain-fixture', main: 'src/index.ts' }))
+    await fs.writeFile(path.join(root, 'src', 'pipeline.ts'), source)
+    await fs.writeFile(path.join(root, 'src', 'index.ts'), entry)
+    await fs.writeFile(path.join(root, 'tests', 'test_calls.ts'), 'export function testRunner() { return testHelper() }\nfunction testHelper() { return 1 }\n')
+    await fs.writeFile(path.join(root, 'generated', 'calls.generated.ts'), 'export function generatedRunner() { return generatedHelper() }\nfunction generatedHelper() { return 1 }\n')
+    const scan = await scanProject(root)
+    const built = await buildContext(scan, 'medium', { maxChars: 18_000 })
+    const batch = built.batches[0]
+    const file = batch.files.find((item) => item.relPath === 'src/pipeline.ts')
+    const entryFile = batch.files.find((item) => item.relPath === 'src/index.ts')
+    const testFile = batch.files.find((item) => item.relPath === 'tests/test_calls.ts')
+    const generatedFile = batch.files.find((item) => item.relPath === 'generated/calls.generated.ts')
+    assert.ok(entryFile)
+    assert.ok(testFile?.selectionCandidates)
+    assert.ok(generatedFile?.selectionCandidates)
+    assert.equal(entryFile.weight, 8, 'manifest-declared entry keeps the top priority weight')
+    assert.equal(testFile.weight, 1, 'test code keeps the minimum context weight')
+    assert.equal(generatedFile.weight, 1, 'generated code keeps the minimum context weight')
+    assert.ok(entryFile.content.includes('ENTRYPOINT_CALLSITE'), 'the manifest-declared entry remains visible without a local call edge')
+    assert.ok(entryFile.selectionCandidates?.every((region) => !region.calledDeclarationStarts?.length))
+    assert.ok(testFile.selectionCandidates.every((region) => !region.calledDeclarationStarts?.length))
+    assert.ok(generatedFile.selectionCandidates.every((region) => !region.calledDeclarationStarts?.length))
+    assert.ok(file?.truncated)
+    const selected = file.selectionRegions ?? []
+    assert.ok(selected.some((region) => region.label === 'execute' && region.text.includes('this.prepare(input)')))
+    assert.ok(selected.some((region) => region.label === 'prepare' && region.qualifiedName === 'Pipeline.prepare' && region.text.includes('this.normalize(input)')))
+    assert.ok(selected.some((region) => region.label === 'normalize' && region.qualifiedName === 'Pipeline.normalize'))
+    assert.ok(!file.content.includes('sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+    assert.ok(batch.totalChars <= 18_000)
+
+    const base = renderBatchWithinBudget(built.headerText, built.treeText, { ...batch, files: [] }, 100_000).text
+    const finalBudget = base.length + 4_000
+    assert.ok(renderBatch(built.headerText, built.treeText, batch).length > finalBudget)
+    const final = renderBatchWithinBudget(built.headerText, built.treeText, batch, finalBudget)
+    assert.equal(final.truncated, true)
+    assert.ok(final.text.length <= finalBudget)
+    assert.ok(final.text.includes('// 代码单元：Pipeline.prepare'))
+    assert.ok(final.text.includes('// 代码单元：Pipeline.normalize'))
+    assert.ok(final.text.includes('this.prepare(input)'))
+    assert.ok(final.text.includes('this.normalize(input)'))
+    assert.ok(final.text.includes('src/index.ts'))
+    assert.ok(final.text.includes('ENTRYPOINT_CALLSITE'))
+    assert.ok(!final.text.includes('OTHER_PREPARE_MARKER'))
+    assert.ok(!final.text.includes('sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+  } finally {
+    const resolved = path.resolve(root)
+    assert.equal(path.dirname(resolved), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(resolved).startsWith('repoprep-structure-selection-'))
+    await fs.rm(resolved, { recursive: true, force: true })
+  }
+})
+
 test('real Python scan uses indentation regions and ignores fake methods inside a docstring', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-structure-selection-'))
   try {

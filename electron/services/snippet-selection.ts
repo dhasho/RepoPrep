@@ -8,6 +8,8 @@ export interface SourceRegion {
   label: string
   /** Lexical owner for standalone methods or nested declarations. */
   qualifiedName?: string
+  /** Source-position IDs of unambiguously resolved direct local callees. */
+  calledDeclarationStarts?: number[]
   complete: boolean
   priority: number
 }
@@ -65,6 +67,40 @@ function regionForSymbol(content: string, symbol: CodeSymbol, priority: number):
   }
 }
 
+function prioritizeDirectCallees(regions: SourceRegion[]): SourceRegion[] {
+  const basePriority = new Map(regions.map((region) => [region, region.priority]))
+  const byStart = new Map<number, SourceRegion[]>()
+  for (const region of regions) {
+    const values = byStart.get(region.start) ?? []
+    values.push(region)
+    byStart.set(region.start, values)
+  }
+  const boosted = new Map<SourceRegion, number>()
+  for (const caller of regions) {
+    const callerPriority = basePriority.get(caller) ?? caller.priority
+    const callees = [...new Set(caller.calledDeclarationStarts ?? [])]
+      .map((start, index) => ({ start, index, targets: byStart.get(start) }))
+      .filter((candidate): candidate is { start: number; index: number; targets: SourceRegion[] } => candidate.targets?.length === 1)
+      .slice(0, 8)
+    const firstCall = callees[0]
+    const strongestExisting = [...callees].sort((a, b) =>
+      (basePriority.get(b.targets[0]) ?? b.targets[0].priority) - (basePriority.get(a.targets[0]) ?? a.targets[0].priority) || a.index - b.index
+    )[0]
+    const selectedCallees = new Map<number, (typeof callees)[number]>()
+    if (firstCall) selectedCallees.set(firstCall.start, firstCall)
+    if (strongestExisting) selectedCallees.set(strongestExisting.start, strongestExisting)
+    for (const [index, candidate] of [...selectedCallees.values()].entries()) {
+      const targets = candidate.targets
+      const target = targets[0]
+      if (target === caller) continue
+      const targetPriority = basePriority.get(target) ?? target.priority
+      const edgePriority = Math.min(targetPriority + 12, callerPriority - 1 - index)
+      if (edgePriority > targetPriority) boosted.set(target, Math.max(boosted.get(target) ?? targetPriority, edgePriority))
+    }
+  }
+  return regions.map((region) => ({ ...region, priority: boosted.get(region) ?? region.priority }))
+}
+
 export function formatSourceRegions(regions: readonly SourceRegion[], extension = ''): string {
   const python = extension.replace(/^\./, '').toLowerCase() === 'py'
   const comment = python ? '# 代码单元：' : '// 代码单元：'
@@ -85,6 +121,7 @@ const PYTHON_STRING_ONLY_STATEMENT = /^[rRbBuU]{0,3}"$/
 const PYTHON_OVERLOAD_DECORATOR = /^@\s*(?:[A-Za-z_]\w*\.)?overload\b/
 
 interface PythonDeclaration {
+  slot: number
   index: number
   startLine: number
   indent: number
@@ -97,12 +134,16 @@ interface PythonDeclaration {
   overload: boolean
   defDepth: number
   ownerClasses: string // File-local class declaration identities, not display names.
+  scopePath: string
+  classScopePath: string
   parentSlot: number
   callees: Set<string> | undefined
+  bareCallees: Set<string> | undefined
+  memberCallees: Set<string> | undefined
   inlineStubBody: boolean
 }
 
-function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySet<string> = new Set()): SourceRegion[] {
+function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySet<string> = new Set(), useCallRelations = true): SourceRegion[] {
   // Deliberately conservative indentation parser. Track string delimiters so a
   // docstring's apparent `def`/`class` cannot become a fake declaration, plus
   // bracket depth and explicit backslash joins so a wrapped signature or a
@@ -177,7 +218,26 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
               } else classChain.push(String(scope.slot))
             }
             const slot = declarations.length
-            pendingHeader = { index: i, startLine, indent, name: match[2], qualifiedName: [...scopes.map((scope) => scope.name), match[2]].join('.'), kind: match[1], colonSeen: false, overload, defDepth, ownerClasses: classChain.join('.'), parentSlot, callees: undefined, inlineStubBody: false }
+            pendingHeader = {
+              slot,
+              index: i,
+              startLine,
+              indent,
+              name: match[2],
+              qualifiedName: [...scopes.map((scope) => scope.name), match[2]].join('.'),
+              kind: match[1],
+              colonSeen: false,
+              overload,
+              defDepth,
+              ownerClasses: classChain.join('.'),
+              scopePath: scopes.map((scope) => String(scope.slot)).join('.'),
+              classScopePath: scopes.filter((scope) => scope.kind === 'class').map((scope) => String(scope.slot)).join('.'),
+              parentSlot,
+              callees: undefined,
+              bareCallees: undefined,
+              memberCallees: undefined,
+              inlineStubBody: false
+            }
             declarations.push(pendingHeader)
             scopes.push({ indent, name: match[2], kind: match[1], decl: pendingHeader, slot })
           }
@@ -227,11 +287,19 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
             if ((receiver === 'self' || receiver === 'cls') && lineOwnerClasses) {
               const key = `${lineOwnerClasses}.${ident}`
               memberUses.set(key, (memberUses.get(key) ?? 0) + 1)
-              if (countsUsage && ch === '(' && lineDecl) (lineDecl.callees ??= new Set<string>()).add(ident)
+              if (countsUsage && ch === '(' && lineDecl) {
+                const memberCallees = (lineDecl.memberCallees ??= new Set<string>())
+                if (memberCallees.size < 16) memberCallees.add(ident)
+                const callees = (lineDecl.callees ??= new Set<string>())
+                if (callees.size < 16) callees.add(ident)
+              }
             }
             pendingDot = false
           } else if (countsUsage && ch === '(' && lineDecl) {
-            (lineDecl.callees ??= new Set<string>()).add(ident)
+            const callees = (lineDecl.callees ??= new Set<string>())
+            if (callees.size < 16) callees.add(ident)
+            const bareCallees = (lineDecl.bareCallees ??= new Set<string>())
+            if (bareCallees.size < 16) bareCallees.add(ident)
           }
           receiver = ident
           ident = ''
@@ -274,6 +342,41 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
   }
   const fileEndsOpen = Boolean(quote) || depth > 0 || continuation
   const declaredNames = new Set(declarations.map((decl) => decl.name))
+  const declarationsByScope = new Map<string, Map<string, PythonDeclaration[]>>()
+  for (const declaration of declarations) {
+    const byName = declarationsByScope.get(declaration.scopePath) ?? new Map<string, PythonDeclaration[]>()
+    const matches = byName.get(declaration.name) ?? []
+    matches.push(declaration)
+    byName.set(declaration.name, matches)
+    declarationsByScope.set(declaration.scopePath, byName)
+  }
+  const resolveUnique = (scopePath: string, name: string): PythonDeclaration | undefined => {
+    const matches = declarationsByScope.get(scopePath)?.get(name) ?? []
+    return matches.length === 1 ? matches[0] : undefined
+  }
+  const calleesBySlot = new Map<number, number[]>()
+  let resolvedEdges = 0
+  for (const caller of useCallRelations ? declarations : []) {
+    const targets = new Set<number>()
+    for (const name of caller.memberCallees ?? []) {
+      const candidate = resolveUnique(caller.classScopePath, name)
+      const target = candidate?.kind === 'def' ? candidate : undefined
+      if (target) targets.add(target.slot)
+    }
+    for (const name of caller.bareCallees ?? []) {
+      const classNamespace = Boolean(caller.ownerClasses) && caller.scopePath === caller.classScopePath
+      const local = classNamespace
+        ? undefined
+        : resolveUnique(caller.scopePath, name)
+      const nested = local ?? resolveUnique([caller.scopePath, String(caller.slot)].filter(Boolean).join('.'), name)
+      const module = nested ?? resolveUnique('', name)
+      if (module && module.slot !== caller.slot) targets.add(module.slot)
+    }
+    const boundedTargets = [...targets].slice(0, 8)
+    resolvedEdges += boundedTargets.length
+    calleesBySlot.set(caller.slot, boundedTargets.map((slot) => declarations[slot].startLine))
+    if (resolvedEdges >= 1024) break
+  }
   // Score first, then structurally demote closures below their ancestor
   // function: a candidate nested inside another def can never outrank it, so a
   // fitting parent wins the overlap contest (ties resolve to the earlier
@@ -325,24 +428,79 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
     // Without a confirmed depth-0 colon (or with the file ending mid-logical-line)
     // the header cannot be trusted as a complete body.
     const complete = decl.colonSeen && !(endIndex === lines.length && fileEndsOpen)
-    return { start, end, text: content.slice(start, end), label: decl.name, qualifiedName: decl.qualifiedName, complete, priority }
+    return {
+      start,
+      end,
+      text: content.slice(start, end),
+      label: decl.name,
+      qualifiedName: decl.qualifiedName,
+      calledDeclarationStarts: calleesBySlot.get(decl.slot)?.map((line) => offsets[line]) ?? [],
+      complete,
+      priority
+    }
   })
 }
 
 export function sourceRegionCandidates(
   content: string,
   analysis: SourceAnalysis | null,
-  options: { roleFocus?: RoleFocus; referencedSymbols?: ReadonlySet<string>; extension?: string } = {}
+  options: { roleFocus?: RoleFocus; referencedSymbols?: ReadonlySet<string>; extension?: string; useCallRelations?: boolean } = {}
 ): SourceRegion[] {
   const referenced = options.referencedSymbols ?? new Set<string>()
   let candidates: SourceRegion[]
   if (options.extension?.replace(/^\./, '').toLowerCase() === 'py') {
-    candidates = pythonRegions(content, options.roleFocus, referenced)
+    candidates = pythonRegions(content, options.roleFocus, referenced, options.useCallRelations !== false)
   } else if (analysis?.parseable) {
-    candidates = analysis.symbols
+    const symbolRegions = analysis.symbols
       .filter((symbol) => symbol.kind !== 'import' || /^import\b/.test(content.slice(symbol.start, symbol.end).trim()))
-      .map((symbol) => regionForSymbol(content, symbol, symbolPriority(symbol, analysis, referenced, options.roleFocus)))
-      .filter((region): region is SourceRegion => Boolean(region))
+      .map((symbol) => ({ symbol, region: regionForSymbol(content, symbol, symbolPriority(symbol, analysis, referenced, options.roleFocus)) }))
+      .filter((entry): entry is { symbol: CodeSymbol; region: SourceRegion } => Boolean(entry.region))
+    const bySymbol = new Map(symbolRegions.map((entry) => [entry.symbol, entry.region]))
+    const callersByStart = new Map<number, CodeSymbol>()
+    const functionsByName = new Map<string, CodeSymbol[]>()
+    const classesByName = new Map<string, CodeSymbol[]>()
+    const methodsByOwnerAndName = new Map<string, CodeSymbol[]>()
+    for (const { symbol } of symbolRegions) {
+      if (symbol.kind === 'function' && !symbol.parentName) {
+        const matches = functionsByName.get(symbol.name) ?? []
+        matches.push(symbol)
+        functionsByName.set(symbol.name, matches)
+      } else if (symbol.kind === 'class') {
+        const matches = classesByName.get(symbol.name) ?? []
+        matches.push(symbol)
+        classesByName.set(symbol.name, matches)
+      } else if (symbol.kind === 'method' && symbol.parentStart !== undefined) {
+        const key = `${symbol.parentStart}:${symbol.name}`
+        const matches = methodsByOwnerAndName.get(key) ?? []
+        matches.push(symbol)
+        methodsByOwnerAndName.set(key, matches)
+      }
+      if (symbol.kind === 'function' || symbol.kind === 'method') callersByStart.set(symbol.start, symbol)
+    }
+    const callsByCaller = new Map<number, number[]>()
+    for (const call of options.useCallRelations === false ? [] : analysis.calls ?? []) {
+      const caller = callersByStart.get(call.callerStart)
+      if (!caller) continue
+      let targets: CodeSymbol[]
+      if (call.receiver === 'this' && caller.parentStart !== undefined) {
+        targets = methodsByOwnerAndName.get(`${caller.parentStart}:${call.name}`) ?? []
+      } else if (call.receiver === 'constructor') {
+        targets = classesByName.get(call.name) ?? []
+      } else {
+        targets = functionsByName.get(call.name) ?? []
+      }
+      if (targets.length !== 1) continue
+      const target = bySymbol.get(targets[0])
+      const callerRegion = bySymbol.get(caller)
+      if (!target || !callerRegion) continue
+      const starts = callsByCaller.get(caller.start) ?? []
+      if (starts.length < 8 && !starts.includes(target.start)) starts.push(target.start)
+      callsByCaller.set(caller.start, starts)
+    }
+    candidates = symbolRegions.map(({ symbol, region }) => ({
+      ...region,
+      calledDeclarationStarts: callsByCaller.get(symbol.start)
+    }))
   } else {
     // Deterministic declaration blocks. The fallback makes no AST claim and
     // uses the next declaration boundary rather than slicing arbitrary lines.
@@ -361,14 +519,15 @@ export function sourceRegionCandidates(
       return { start, end, text: content.slice(start, end), label: `heuristic-declaration-${lineIndex + 1}`, complete: false, priority: 10 + position / Math.max(1, starts.length - 1) * 15 }
     })
   }
-  return candidates.sort((a, b) => b.priority - a.priority || a.start - b.start)
+  const ordered = candidates.sort((a, b) => b.priority - a.priority || a.start - b.start)
+  return options.useCallRelations === false ? ordered : prioritizeDirectCallees(ordered)
 }
 
 export function selectSourceRegions(
   content: string,
   analysis: SourceAnalysis | null,
   maxChars: number,
-  options: { roleFocus?: RoleFocus; referencedSymbols?: ReadonlySet<string>; extension?: string } = {}
+  options: { roleFocus?: RoleFocus; referencedSymbols?: ReadonlySet<string>; extension?: string; useCallRelations?: boolean } = {}
 ): SnippetSelection {
   const budget = Math.max(0, Math.floor(maxChars))
   if (content.length <= budget) return { regions: [{ start: 0, end: content.length, text: content, label: 'whole-file', complete: true, priority: 100 }], truncated: false }
