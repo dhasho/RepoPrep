@@ -685,6 +685,9 @@ test('decorated multiline Python signatures locate the actual triple-quoted docs
   const markerStart = compacted.text.indexOf(marker, range.start)
   assert.ok(markerStart >= range.start)
   assert.equal(compacted.text.slice(markerStart + marker.length), region.text.slice(range.end), 'everything after the docstring content remains byte-identical')
+  const simple = `def sample(\n    value\n):\n    """${'😀'.repeat(300)}${'tail'.repeat(100)}"""\n    return 1\n`
+  const simpleRegion = sourceRegionCandidates(simple, null, { extension: 'py' }).find(item => item.label === 'sample')
+  assert.ok(simpleRegion?.documentationRanges, 'a signature whose close paren and colon begin at column zero still finds its body docstring')
 })
 
 test('long docstrings with Python escapes remain unchanged instead of cutting an escape', () => {
