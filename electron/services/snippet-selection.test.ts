@@ -757,7 +757,10 @@ test('parent regions collect nested confirmed docs with a bounded cap and preser
   assert.equal(parent.documentationRanges.length, 64)
   const compacted = compactRegionDocumentation(parent)
   assert.equal(compacted.documentationOmitted, true)
-  assert.ok(compacted.text.includes('@') === false)
+  const scrubDocs = (text: string): string => text.replace(/"""[\s\S]*?"""/g, '"""DOCUMENTATION"""')
+  assert.equal(scrubDocs(compacted.text), scrubDocs(parent.text), 'all fixture source outside confirmed doc contents remains byte-identical')
+  const last = parent.documentationRanges.at(-1)!
+  assert.ok(compacted.text.endsWith(parent.text.slice(last.end)), 'the unprocessed tail after the64-range cap remains byte-identical, including its long docs')
   assert.ok(compacted.text.includes("return 'BODY_65'"), 'tail source after the cap remains intact')
   assert.ok(compacted.text.includes('def ghost(): pass'), 'doc text resembling a declaration remains ordinary string contents')
   for (let index = 0; index < 66; index++) assert.ok(compacted.text.includes(`return 'BODY_${index}'`))
