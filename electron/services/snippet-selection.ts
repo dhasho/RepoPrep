@@ -219,6 +219,8 @@ interface PythonDeclaration {
   callees: Set<string> | undefined
   bareCallees: Set<string> | undefined
   memberCallees: Set<string> | undefined
+  // First lexical appearances only; this is static source order, not runtime order.
+  callEvents: Array<{ kind: 'member' | 'bare'; name: string }> | undefined
   inlineStubBody: boolean
 }
 
@@ -317,6 +319,7 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
               callees: undefined,
               bareCallees: undefined,
               memberCallees: undefined,
+              callEvents: undefined,
               inlineStubBody: false
             }
             declarations.push(pendingHeader)
@@ -370,7 +373,11 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
               memberUses.set(key, (memberUses.get(key) ?? 0) + 1)
               if (countsUsage && ch === '(' && lineDecl) {
                 const memberCallees = (lineDecl.memberCallees ??= new Set<string>())
-                if (memberCallees.size < 16) memberCallees.add(ident)
+                if (memberCallees.size < 16 && !memberCallees.has(ident)) {
+                  memberCallees.add(ident)
+                  const events = lineDecl.callEvents ??= []
+                  events.push({ kind: 'member', name: ident })
+                }
                 const callees = (lineDecl.callees ??= new Set<string>())
                 if (callees.size < 16) callees.add(ident)
               }
@@ -378,9 +385,13 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
             pendingDot = false
           } else if (countsUsage && ch === '(' && lineDecl) {
             const callees = (lineDecl.callees ??= new Set<string>())
-            if (callees.size < 16) callees.add(ident)
             const bareCallees = (lineDecl.bareCallees ??= new Set<string>())
-            if (bareCallees.size < 16) bareCallees.add(ident)
+            if (bareCallees.size < 16 && !bareCallees.has(ident)) {
+              bareCallees.add(ident)
+              const events = lineDecl.callEvents ??= []
+              events.push({ kind: 'bare', name: ident })
+            }
+            if (callees.size < 16) callees.add(ident)
           }
           receiver = ident
           ident = ''
@@ -441,21 +452,23 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
   let resolvedEdges = 0
   for (const caller of useCallRelations ? declarations : []) {
     const targets = new Set<number>()
-    for (const name of caller.memberCallees ?? []) {
-      const candidate = resolveUnique(caller.classScopePath, name)
-      const target = candidate?.kind === 'def' ? candidate : undefined
-      if (target) targets.add(target.slot)
+    for (const event of caller.callEvents ?? []) {
+      if (targets.size >= 8 || resolvedEdges + targets.size >= 1024) break
+      if (event.kind === 'member') {
+        const candidate = resolveUnique(caller.classScopePath, event.name)
+        const target = candidate?.kind === 'def' ? candidate : undefined
+        if (target) targets.add(target.slot)
+      } else {
+        const classNamespace = Boolean(caller.ownerClasses) && caller.scopePath === caller.classScopePath
+        const local = classNamespace
+          ? undefined
+          : resolveUnique(caller.scopePath, event.name)
+        const nested = local ?? resolveUnique([caller.scopePath, String(caller.slot)].filter(Boolean).join('.'), event.name)
+        const module = nested ?? resolveUnique('', event.name)
+        if (module && module.slot !== caller.slot) targets.add(module.slot)
+      }
     }
-    for (const name of caller.bareCallees ?? []) {
-      const classNamespace = Boolean(caller.ownerClasses) && caller.scopePath === caller.classScopePath
-      const local = classNamespace
-        ? undefined
-        : resolveUnique(caller.scopePath, name)
-      const nested = local ?? resolveUnique([caller.scopePath, String(caller.slot)].filter(Boolean).join('.'), name)
-      const module = nested ?? resolveUnique('', name)
-      if (module && module.slot !== caller.slot) targets.add(module.slot)
-    }
-    const boundedTargets = [...targets].slice(0, 8)
+    const boundedTargets = [...targets]
     resolvedEdges += boundedTargets.length
     calleesBySlot.set(caller.slot, boundedTargets.map((slot) => declarations[slot].startLine))
     if (resolvedEdges >= 1024) break

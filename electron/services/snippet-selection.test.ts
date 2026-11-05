@@ -119,6 +119,54 @@ test('bare calls resolve only to a unique same-file declaration', () => {
   assert.deepEqual(pyCallBare.calledDeclarationStarts, [pyModuleFoo.start])
 })
 
+test('Python direct call targets follow first lexical bare/member call order in either direction', () => {
+  const sources = [
+    `def begin():\n    return 1\nclass Workflow:\n    def finish(self):\n        return 2\n    def run(self):\n        begin()\n        self.finish()\n`,
+    `def begin():\n    return 1\nclass Workflow:\n    def finish(self):\n        return 2\n    def run(self):\n        self.finish()\n        begin()\n`
+  ]
+  for (const [index, content] of sources.entries()) {
+    const regions = sourceRegionCandidates(content, null, { extension: 'py' })
+    const caller = regions.find((region) => region.qualifiedName === 'Workflow.run')
+    const begin = regions.find((region) => region.qualifiedName === 'begin')
+    const finish = regions.find((region) => region.qualifiedName === 'Workflow.finish')
+    assert.ok(caller && begin && finish)
+    assert.deepEqual(caller.calledDeclarationStarts, index === 0 ? [begin.start, finish.start] : [finish.start, begin.start])
+  }
+})
+
+test('Python same-named bare and member calls stay distinct and deduplicate targets by first appearance', () => {
+  const content = `def shared():\n    return 'MODULE'\nclass Worker:\n    def shared(self):\n        return 'MEMBER'\n    def run(self):\n        shared()\n        self.shared()\n        shared()\n`
+  const regions = sourceRegionCandidates(content, null, { extension: 'py' })
+  const caller = regions.find((region) => region.qualifiedName === 'Worker.run')
+  const module = regions.find((region) => region.qualifiedName === 'shared')
+  const member = regions.find((region) => region.qualifiedName === 'Worker.shared')
+  assert.ok(caller && module && member)
+  assert.deepEqual(caller.calledDeclarationStarts, [module.start, member.start])
+})
+
+test('Python direct call graph keeps the first eight unique targets per caller', () => {
+  const calls = Array.from({ length: 10 }, (_, index) => `        self.target_${index}()`).join('\n')
+  const content = `class Worker:\n    def run(self):\n${calls}\n${Array.from({ length: 10 }, (_, index) => `    def target_${index}(self):\n        return ${index}\n`).join('')}`
+  const regions = sourceRegionCandidates(content, null, { extension: 'py' })
+  const caller = regions.find((region) => region.qualifiedName === 'Worker.run')
+  const targets = Array.from({ length: 10 }, (_, index) => regions.find((region) => region.qualifiedName === `Worker.target_${index}`))
+  assert.ok(caller && targets.every(Boolean))
+  assert.deepEqual(caller.calledDeclarationStarts, targets.slice(0, 8).map((target) => target!.start))
+})
+
+test('Python direct call graph enforces the global 1024 edge budget exactly', () => {
+  const callers = [
+    `def caller_0():\n    target_0()\n`,
+    ...Array.from({ length: 128 }, (_, index) => `def caller_${index + 1}():\n${Array.from({ length: 8 }, (_, target) => `    target_${target}()\n`).join('')}`)
+  ].join('')
+  const targets = Array.from({ length: 8 }, (_, index) => `def target_${index}():\n    return ${index}\n`).join('')
+  const regions = sourceRegionCandidates(`${callers}${targets}`, null, { extension: 'py' })
+  const callerRegions = Array.from({ length: 129 }, (_, index) => regions.find((region) => region.label === `caller_${index}`))
+  assert.ok(callerRegions.every(Boolean))
+  assert.equal(callerRegions.reduce((total, caller) => total + (caller?.calledDeclarationStarts?.length ?? 0), 0), 1024)
+  assert.equal(callerRegions[128]?.calledDeclarationStarts?.length, 7)
+})
+
 test('this calls inside nested ordinary functions are not attributed to the outer method', () => {
   const content = `class Runner {\n  run() {\n    function nested() { return this.finish() }\n    return nested()\n  }\n  finish() { return 1 }\n}\n`
   const analysis = analyzeSource('src/runner.ts', content)
