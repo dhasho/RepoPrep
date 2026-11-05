@@ -748,6 +748,50 @@ test('long docstrings with Python escapes remain unchanged instead of cutting an
   assert.ok(unchanged.text.includes("return 'KEEP_ESCAPE_NEIGHBOR'"))
 })
 
+test('parent regions collect nested confirmed docs with a bounded cap and preserve declaration source', () => {
+  const methods = Array.from({ length: 66 }, (_, index) => `  def method_${index}():\n    """${'D'.repeat(600)}\ndef ghost(): pass\n    """\n    return 'BODY_${index}'\n`).join('')
+  const source = `class Parent:\n  """${'P'.repeat(600)}"""\n${methods}`
+  const candidates = sourceRegionCandidates(source, null, { extension: 'py' })
+  const parent = candidates.find(region => region.label === 'Parent')
+  assert.ok(parent?.documentationRanges)
+  assert.equal(parent.documentationRanges.length, 64)
+  const compacted = compactRegionDocumentation(parent)
+  assert.equal(compacted.documentationOmitted, true)
+  assert.ok(compacted.text.includes('@') === false)
+  assert.ok(compacted.text.includes("return 'BODY_65'"), 'tail source after the cap remains intact')
+  assert.ok(compacted.text.includes('def ghost(): pass'), 'doc text resembling a declaration remains ordinary string contents')
+  for (let index = 0; index < 66; index++) assert.ok(compacted.text.includes(`return 'BODY_${index}'`))
+  const first = parent.documentationRanges[0]
+  assert.ok(first.start > 0, 'the parent range list includes nested docs in source order')
+  const nestedSource = `def factory():\n  def inner():\n    """${'N'.repeat(700)}"""\n    return 'NESTED_BODY'\n  return inner()\n`
+  const nested = sourceRegionCandidates(nestedSource, null, { extension: 'py' }).find(region => region.label === 'factory')
+  assert.ok(nested?.documentationRanges?.length === 1)
+  const nestedCompact = compactRegionDocumentation(nested)
+  assert.ok(nestedCompact.documentationOmitted)
+  assert.ok(nestedCompact.text.includes("return 'NESTED_BODY'"))
+})
+
+test('mixed escaped and plain long doc ranges compact independently', () => {
+  const first = 'A'.repeat(600)
+  const escaped = 'E'.repeat(200) + '\\u0041' + 'F'.repeat(400)
+  const last = 'B'.repeat(600)
+  const text = `pre${first}mid${escaped}post${last}tail`
+  const rangeA = { start: 3, end: 3 + first.length }
+  const rangeB = { start: rangeA.end + 3, end: rangeA.end + 3 + escaped.length }
+  const rangeC = { start: rangeB.end + 4, end: rangeB.end + 4 + last.length }
+  const region = { start: 0, end: text.length, text, label: 'mixed', complete: true, priority: 1, documentationRanges: [rangeA, rangeB, rangeC] }
+  const compacted = compactRegionDocumentation(region)
+  assert.equal(compacted.documentationOmitted, true)
+  assert.ok(compacted.text.includes(`mid${escaped}post`), 'the escaped range remains byte-identical')
+  assert.ok(compacted.text.includes('A'.repeat(160) + '\n…（文档其余内容省略）…\n'))
+  assert.ok(compacted.text.includes('B'.repeat(160) + '\n…（文档其余内容省略）…\n'))
+  assert.ok(compacted.text.endsWith('tail'))
+  const overlap = { ...region, documentationRanges: [rangeA, { start: rangeA.start + 1, end: rangeA.end }] }
+  assert.equal(compactRegionDocumentation(overlap), overlap)
+  const invalid = { ...region, documentationRanges: [{ start: -1, end: 2 }] }
+  assert.equal(compactRegionDocumentation(invalid), invalid)
+})
+
 test('short Python docstrings and whole-file fits remain byte-for-byte unchanged', () => {
   const source = `def documented():\n  """short note"""\n  return 1\n`
   const region = sourceRegionCandidates(source, null, { extension: 'py' }).find(item => item.label === 'documented')

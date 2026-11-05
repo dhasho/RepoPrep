@@ -283,7 +283,7 @@ test('actual dispatch callback reports source spans matching the fitted body wit
   const python = selection.sourceSelections?.find((entry) => entry.relPath === 'src/service.py')
   assert.ok(python)
   assert.equal(python.wholeFile, false)
-  assert.equal(python.regions.length, 2)
+  assert.equal(python.regions.length, 1, 'the containing class can carry both independently compacted method docs')
   assert.ok(python.regions.every((region) => !region.complete && region.documentationOmitted))
   assert.ok(prompt.includes('（文档节选，原文有省略）'))
   assert.ok(prompt.includes('…（文档其余内容省略）…'))

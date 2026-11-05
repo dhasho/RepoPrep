@@ -173,20 +173,22 @@ export function compactRegionDocumentation(region: SourceRegion): SourceRegion {
     const range = ranges[index]
     if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.end < range.start || range.end > region.text.length) return region
     if (index > 0 && ranges[index - 1].end > range.start) return region
-    // Avoid cutting through Python escapes; raw strings are kept equally
-    // conservative because quote and escape semantics are not fully parsed.
-    if (region.text.slice(range.start, range.end).includes('\\')) return region
   }
-  let text = region.text
+  const pieces: string[] = []
+  let cursor = 0
   let omitted = false
-  for (const range of [...ranges].reverse()) {
-    const body = text.slice(range.start, range.end)
-    if (body.length <= DOCUMENTATION_LIMIT) continue
-    const head = headAtCodePointBoundary(body, DOCUMENTATION_PREFIX)
-    text = text.slice(0, range.start) + head + DOCUMENTATION_MARKER + text.slice(range.end)
+  for (const range of ranges) {
+    const body = region.text.slice(range.start, range.end)
+    if (body.length <= DOCUMENTATION_LIMIT || body.includes('\\')) continue
+    pieces.push(region.text.slice(cursor, range.start))
+    pieces.push(headAtCodePointBoundary(body, DOCUMENTATION_PREFIX), DOCUMENTATION_MARKER)
+    cursor = range.end
     omitted = true
   }
-  return omitted ? { ...region, text, complete: false, documentationOmitted: true } : region
+  if (!omitted) return region
+  pieces.push(region.text.slice(cursor))
+  const text = pieces.join('')
+  return { ...region, text, complete: false, documentationOmitted: true }
 }
 
 const PYTHON_IDENT_CHAR = /[A-Za-z0-9_]/
@@ -517,6 +519,13 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
     const parentSlot = declarations[position].parentSlot
     if (parentSlot >= 0) priorities[position].priority = Math.min(priorities[position].priority, priorities[parentSlot].priority)
   }
+  const ownDocumentation = declarations.map((decl, position) => {
+    const endIndex = priorities[position].endIndex
+    const range = pythonDocstringRange(content, lines, offsets, decl, endIndex)
+    if (!range) return undefined
+    const regionStart = offsets[decl.startLine]
+    return { start: regionStart + range.start, end: regionStart + range.end }
+  }).filter((range): range is { start: number; end: number } => Boolean(range)).sort((a, b) => a.start - b.start || a.end - b.end)
   return declarations.map((decl, position) => {
     const { endIndex, priority } = priorities[position]
     const start = offsets[decl.startLine]
@@ -524,7 +533,18 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
     // Without a confirmed depth-0 colon (or with the file ending mid-logical-line)
     // the header cannot be trusted as a complete body.
     const complete = decl.colonSeen && !(endIndex === lines.length && fileEndsOpen)
-    const documentation = pythonDocstringRange(content, lines, offsets, decl, endIndex)
+    let low = 0
+    let high = ownDocumentation.length
+    while (low < high) {
+      const mid = (low + high) >>> 1
+      if (ownDocumentation[mid].start < start) low = mid + 1
+      else high = mid
+    }
+    const documentationRanges: Array<{ start: number; end: number }> = []
+    for (let index = low; index < ownDocumentation.length && ownDocumentation[index].start < end && documentationRanges.length < 64; index++) {
+      const range = ownDocumentation[index]
+      if (range.end <= end) documentationRanges.push({ start: range.start - start, end: range.end - start })
+    }
     return {
       start,
       end,
@@ -532,7 +552,7 @@ function pythonRegions(content: string, role?: RoleFocus, referenced: ReadonlySe
       label: decl.name,
       qualifiedName: decl.qualifiedName,
       calledDeclarationStarts: calleesBySlot.get(decl.slot)?.map((line) => offsets[line]) ?? [],
-      documentationRanges: documentation ? [documentation] : undefined,
+      documentationRanges: documentationRanges.length ? documentationRanges : undefined,
       complete,
       priority
     }
