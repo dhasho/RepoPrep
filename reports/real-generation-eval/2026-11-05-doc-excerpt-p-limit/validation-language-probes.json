@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "repoprep-js-language-probe-v1",
+  "nodeVersion": "v24.16.0",
+  "method": "Isolated synthetic ECMAScript Promise primitives only; no p-limit source import or execution, no network or model call.",
+  "promiseAllPendingAndRejection": [
+    {
+      "pendingFirst": true,
+      "state": "rejected",
+      "reasonPreserved": true
+    },
+    {
+      "pendingFirst": false,
+      "state": "rejected",
+      "reasonPreserved": true
+    }
+  ],
+  "negativeControl": {
+    "noRejectionStateAtCheckpoint": "pending"
+  },
+  "resolutionOrderObservations": [
+    {
+      "reverseCreation": false,
+      "order": [
+        "resolve(await result)",
+        "resolve(result)"
+      ]
+    },
+    {
+      "reverseCreation": true,
+      "order": [
+        "resolve(await result)",
+        "resolve(result)"
+      ]
+    }
+  ],
+  "limitations": [
+    "The pending negative control was observed at a checkpoint, not by waiting indefinitely.",
+    "Resolution ordering observations describe these constructed cases on the recorded Node version; they are not a universal performance ordering."
+  ]
+}

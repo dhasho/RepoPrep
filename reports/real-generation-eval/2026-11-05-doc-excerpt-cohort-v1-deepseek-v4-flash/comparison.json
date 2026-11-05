@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "repoprep-multirun-observation-v1",
+  "cohortFileSha256": "7b41ff8299b953f8092ccf0fa15748eab38c4dcc46d925bda48705b6a618af9a",
+  "candidate": {
+    "usage": {
+      "inputTokens": 110151,
+      "outputTokens": 102859,
+      "totalTokens": 213010
+    },
+    "counts": {
+      "covered": 25,
+      "partial": 1,
+      "missing": 2,
+      "contradicted": 0,
+      "incorrect": 8,
+      "imprecise": 2
+    }
+  },
+  "scopedReference": {
+    "reference": "reports/real-generation-eval/2026-11-01-scoped-v1-deepseek-v4-flash/report.json",
+    "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+    "counts": {
+      "covered": 23,
+      "partial": 3,
+      "missing": 2,
+      "contradicted": 0,
+      "incorrect": 4,
+      "imprecise": 4
+    },
+    "usage": {
+      "inputTokens": 109986,
+      "outputTokens": 144853,
+      "totalTokens": 254839
+    },
+    "tokenChangePercent": {
+      "inputTokens": 0.15,
+      "outputTokens": -28.99,
+      "totalTokens": -16.41
+    },
+    "conditionChange": {
+      "baseline": "provider-default",
+      "candidate": "low"
+    }
+  },
+  "lowerUseReference": {
+    "reference": "reports/real-generation-eval/2026-10-24-grounded-v1-deepseek-v4-flash/report.json",
+    "runId": "ee69a921-05fe-4d8d-bf44-2ba4bc72ee21",
+    "counts": {
+      "covered": 23,
+      "partial": 2,
+      "missing": 3,
+      "contradicted": 0,
+      "incorrect": 3,
+      "imprecise": 5
+    },
+    "usage": {
+      "inputTokens": 109577,
+      "outputTokens": 103959,
+      "totalTokens": 213536
+    },
+    "tokenChangePercent": {
+      "inputTokens": 0.52,
+      "outputTokens": -1.06,
+      "totalTokens": -0.25
+    },
+    "conditionChanges": [
+      "Provider-default reasoning versus explicit low",
+      "Unrecorded/null context-window setting versus1000000"
+    ]
+  },
+  "selectedRequests": 4,
+  "campaignRequests": 5,
+  "campaignUsage": {
+    "inputTokens": 152360,
+    "outputTokens": 145627,
+    "totalTokens": 297987
+  },
+  "currencyCost": null,
+  "limitations": [
+    "One observation per condition; not an isolated causal estimate or blinded generalization test.",
+    "All four cases have been used during development.",
+    "The cohort combines three separately completed runs; it is not one new four-case run.",
+    "Token receipts are not a monetary bill."
+  ]
+}

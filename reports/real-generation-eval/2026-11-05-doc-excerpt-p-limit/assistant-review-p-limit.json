@@ -1,0 +1,315 @@
+{
+  "schemaVersion": "repoprep-assistant-fact-review-v1",
+  "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+  "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+  "caseId": "p-limit",
+  "repository": "sindresorhus/p-limit",
+  "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+  "reviewer": {
+    "independent": false,
+    "executor": "Codex delegated source reviewer",
+    "blind": false
+  },
+  "reviewScope": {
+    "questionsRead": 20,
+    "followUpsRead": 60,
+    "questionFingerprintsMatchFinalReport": true,
+    "networkCalls": 0,
+    "upstreamCodeExecuted": false
+  },
+  "reviewedSourceHashes": {
+    "index.js": "edde12a4a4dbdbe8d27161cdd0853db0bab435d5dc6c15f9f4dedc27ee9bca60",
+    "test.js": "a803c332d9af3a9e14d657d63280c2e059e3fe5c343ab7ab869da8a85276204c",
+    "package.json": "daa6b0d168d7197eccbfef1c678e8f00b79d063129bf48f4ee2db38dc605ca7f"
+  },
+  "limitations": [
+    "本复核为非盲、非独立的 Codex 源码复核，不代表人工盲审或准确率估计。",
+    "只读固定提交中的相关源码、类型声明、测试、包配置和文档；未执行上游代码、测试、脚本或依赖安装。"
+  ],
+  "variants": [
+    {
+      "nonBlockingNotes": [
+        {
+          "note": "“新上限在微任务中生效”略显含混：setter 同步校验并赋值 concurrency，随后在 queueMicrotask 中恢复队列任务。按此表述不计为错误。",
+          "questionNumber": 9,
+          "questionFingerprint": "a5cf10a8e294d8b95ea006646cd6a13c48d0acb56c265b1e575f2149fd87691a",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 91,
+              "endLine": 103
+            }
+          ]
+        }
+      ],
+      "variant": "generation",
+      "findings": [
+        {
+          "occurrences": [
+            {
+              "questionNumber": 10,
+              "questionFingerprint": "c8a43c7efcc9ea7ae49ea8cc765eed0519cde4303090f90a948d3cbeae049780",
+              "questionPart": "followUps[0].answer"
+            },
+            {
+              "questionNumber": 12,
+              "questionFingerprint": "52a56eb8600babf39c7e77c1b6f851d91f3072b216f106c6b9b8842b025d5657",
+              "questionPart": "answer"
+            },
+            {
+              "questionNumber": 13,
+              "questionFingerprint": "f5069b2c41ba0b3b9175b9c1448edd7c0a2c3b55d52f8a9116755401fbb1ad9d",
+              "questionPart": "answer"
+            }
+          ],
+          "claim": "在 Q10 的追问以及 Q12、Q13 的回答中，无条件断言只要 map 含一个被 clearQueue 清理的 pending promise，Promise.all 就永不 settle。",
+          "kind": "incorrect",
+          "questionNumber": 10,
+          "questionFingerprint": "c8a43c7efcc9ea7ae49ea8cc765eed0519cde4303090f90a948d3cbeae049780",
+          "sourceRefs": [
+            {
+              "path": "index.js",
+              "startLine": 32,
+              "endLine": 47
+            },
+            {
+              "path": "index.js",
+              "startLine": 77,
+              "endLine": 89
+            },
+            {
+              "path": "index.js",
+              "startLine": 106,
+              "endLine": 126
+            }
+          ],
+          "questionPart": "followUps[0].answer",
+          "externalSourceRefs": [
+            {
+              "note": "ECMAScript 2026 Promise.all specification; first rejection rejects the aggregate promise without waiting for pending inputs.",
+              "url": "https://tc39.es/ecma262/2026/multipage/control-abstraction-objects.html#sec-promise.all"
+            }
+          ],
+          "reason": "默认 clearQueue 会使被清除任务对应的外层 promise 保持 pending，但 map 的 Promise.all 仍会观察其他 promise。如果另一个已运行任务拒绝，Promise.all 会以该拒绝原因 reject，而非永远 pending。该错误在三处重复，合并计为一个 finding。",
+          "validationArtifactRefs": [
+            {
+              "path": "validation-language-probes.json",
+              "sha256": "837763f420e4af3d51f7b598b43f440634d6171c6b453bc2e01212abeff78d82",
+              "scope": "Synthetic native Promise semantics only; no upstream execution."
+            }
+          ]
+        },
+        {
+          "kind": "incorrect",
+          "questionFingerprint": "024d8c99408d7ba2201d15b1acbfacbe7ad8d29fa0a2b6e6ac16b8a332bff60f",
+          "sourceRefs": [
+            {
+              "path": "package.json",
+              "startLine": 26,
+              "endLine": 29
+            }
+          ],
+          "claim": "将 package.json 的 files 白名单描述为发布包只包含 index.js 与 index.d.ts。",
+          "questionPart": "answer",
+          "reason": "files 列表用于选择发布文件，但 npm 还会始终包含 package.json、README、LICENSE 等文件，因此“只含”不成立。",
+          "externalSourceRefs": [
+            {
+              "note": "npm CLI v10 package.json files documentation states that package.json, README, and LICENSE files are always included.",
+              "url": "https://docs.npmjs.com/cli/v10/configuring-npm/package-json/#files"
+            }
+          ],
+          "questionNumber": 4
+        }
+      ],
+      "factReviews": [
+        {
+          "reason": "入口校验顺序、正整数或正无穷及 rejectOnClear 布尔校验均准确。",
+          "sourceRefs": [
+            {
+              "endLine": 15,
+              "path": "index.js",
+              "startLine": 3
+            },
+            {
+              "endLine": 148,
+              "path": "index.js",
+              "startLine": 144
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            1
+          ],
+          "factId": "plimit-validation"
+        },
+        {
+          "reason": "闭包计数、队列调度和并发槽语义准确。",
+          "sourceRefs": [
+            {
+              "endLine": 30,
+              "path": "index.js",
+              "startLine": 16
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            5,
+            6
+          ],
+          "factId": "plimit-active-queue"
+        },
+        {
+          "reason": "调用方 promise 采用任务结果，内部 await 吸收拒绝后继续释放槽位，回答准确。",
+          "sourceRefs": [
+            {
+              "endLine": 48,
+              "path": "index.js",
+              "startLine": 32
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            6,
+            7,
+            8
+          ],
+          "factId": "plimit-promise-rejection"
+        },
+        {
+          "reason": "默认丢弃队列；rejectOnClear 逐项以 AbortSignal.abort().reason 拒绝，运行中任务不取消。",
+          "sourceRefs": [
+            {
+              "endLine": 89,
+              "path": "index.js",
+              "startLine": 77
+            },
+            {
+              "endLine": 215,
+              "path": "test.js",
+              "startLine": 184
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            10,
+            11,
+            12,
+            13
+          ],
+          "factId": "plimit-clear"
+        },
+        {
+          "reason": "setter 校验、更新并在微任务中补足队列；降低上限不杀活动任务。",
+          "sourceRefs": [
+            {
+              "endLine": 105,
+              "path": "index.js",
+              "startLine": 91
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            9
+          ],
+          "factId": "plimit-concurrency-setter"
+        },
+        {
+          "reason": "Array.from 提交任务且 Promise.all 按输入提交顺序收集；迭代异常观察已建 promise 拒绝。",
+          "sourceRefs": [
+            {
+              "endLine": 126,
+              "path": "index.js",
+              "startLine": 106
+            },
+            {
+              "endLine": 269,
+              "path": "test.js",
+              "startLine": 256
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            14,
+            15,
+            16
+          ],
+          "factId": "plimit-map-order"
+        },
+        {
+          "reason": "每次 limitFunction 创建独立 limiter，包装函数转发 clearQueue。",
+          "sourceRefs": [
+            {
+              "endLine": 142,
+              "path": "index.js",
+              "startLine": 133
+            }
+          ],
+          "coverage": "covered",
+          "questionNumbers": [
+            17
+          ],
+          "factId": "plimit-wrapper"
+        }
+      ],
+      "questionFingerprints": [
+        "a0dc92e5c27caf581451b1f5ca360cdf556cef9f279880fcd1f601d0b222ea36",
+        "ed7e4062108688089191f826a5837c7eac82d94ee2890cc7c056f4132edbb229",
+        "f449d58ed78d1f3a00f5d4564f7ed8c4747dd176f6711429d7afeda26900db3e",
+        "024d8c99408d7ba2201d15b1acbfacbe7ad8d29fa0a2b6e6ac16b8a332bff60f",
+        "094c57d48c0ece9f316a77fc1cf8cee866499484115713e6e4fd61d66c663668",
+        "4b0e37cdaf0cd84ab27fe7300e5713e0e21b636aec9f76e15c1d53bed1eeb5db",
+        "a02febd2556901d587215e610882adb7faafbf96defead80d3bbb66a1726ea56",
+        "fdefc042ed700482bcf3de031bc1bec54743c5b325920c34ada701bd3f1e418f",
+        "a5cf10a8e294d8b95ea006646cd6a13c48d0acb56c265b1e575f2149fd87691a",
+        "c8a43c7efcc9ea7ae49ea8cc765eed0519cde4303090f90a948d3cbeae049780",
+        "36acc6a4106fadf1b40dfcb20b53289357c503344115773228cb8ee4a32a4ae0",
+        "52a56eb8600babf39c7e77c1b6f851d91f3072b216f106c6b9b8842b025d5657",
+        "f5069b2c41ba0b3b9175b9c1448edd7c0a2c3b55d52f8a9116755401fbb1ad9d",
+        "894cd8574d2bc4112e67077cf0ad2aae4bf391d4ac99d0e2aab5245b3bfa7b58",
+        "3154303e02c1ec55bc5cb73017aa4a9a8b4b7f5f35daad71476a715bc0ee096b",
+        "bdf5ce0673127f1b332b2d85f71fb227b126a60498538e9a232f002240370d13",
+        "0718a01d77c62d5830ba1d043220259d88d9225d59f558470c6a8bc14fcfa197",
+        "db174ced22d02d226ec15677917bd2aca3275f5d34dba05fdd3e5de4bc0c4174",
+        "5675b432a43814b5da8dd6fa2af3277e71094ccf0cd24990b72013c380ce90ab",
+        "e908a8301779a4a8dfa61a8a3a8afce209694ac18d59e50cf952ead2061ad387"
+      ]
+    }
+  ],
+  "nonBlockingNotes": [
+    {
+      "questionNumber": 9,
+      "questionFingerprint": "a5cf10a8e294d8b95ea006646cd6a13c48d0acb56c265b1e575f2149fd87691a",
+      "note": "The opening paragraph correctly describes the synchronous concurrency assignment. The later wording should distinguish this immediate update from the microtask that drains queued work.",
+      "sourceRefs": [
+        {
+          "path": "index.js",
+          "startLine": 91,
+          "endLine": 104
+        }
+      ]
+    },
+    {
+      "questionNumber": 7,
+      "questionFingerprint": "a02febd2556901d587215e610882adb7faafbf96defead80d3bbb66a1726ea56",
+      "note": "The adoption-versus-await distinction is useful; do not read the phrase about earlier propagation as a universal settlement-order guarantee. The synthetic fulfilled-Promise examples settle the await form first on the recorded Node version.",
+      "validationArtifactRefs": [
+        {
+          "path": "validation-language-probes.json",
+          "sha256": "837763f420e4af3d51f7b598b43f440634d6171c6b453bc2e01212abeff78d82"
+        }
+      ]
+    }
+  ],
+  "primaryReview": "Primary read all20 main answers and60 follow-ups, checked all7 frozen facts and retained findings against fixed source, verified the external npm/ECMAScript references, and ran isolated language probes. Non-blind assistant review, not human acceptance.",
+  "primaryReviewAdjustments": [
+    {
+      "disposition": "Accept all7 core-fact coverage dispositions; narrow the question references to answers that actually support each fact."
+    },
+    {
+      "disposition": "Reject the initial zero-finding conclusion: retain the unsupported exhaustive publication-file claim and the repeated unconditional pending-input Promise.all claim as two distinct incorrect mechanisms."
+    },
+    {
+      "disposition": "Count the repeated Promise.all claim once across Q10/Q12/Q13, preserving every occurrence fingerprint. Keep Q9/Q7 wording limitations outside counted findings."
+    }
+  ]
+}

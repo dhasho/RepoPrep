@@ -81,7 +81,7 @@
       },
       {
         "filename": "finding-context-audit.md",
-        "sha256": "4282e538595598c7647c086f3589d1c32c097b1fa09dfa0ea4ee2fbb16fa3f91"
+        "sha256": "4722d8b90a0f8f55689c57fce8b873a1adc0aebae9b88caee43f4795ad007d77"
       }
     ],
     "review": "Primary recapture verified the original 107 source hashes, report/review bindings and both exact request hashes. Actual same-file dispatch spans were verified in final messages; partial overlap is kept distinct from wholly unobserved references."

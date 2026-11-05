@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "repoprep-doc-excerpt-cohort-provenance-v1",
+  "cohortFileSha256": "7b41ff8299b953f8092ccf0fa15748eab38c4dcc46d925bda48705b6a618af9a",
+  "selectedSourceFiles": 107,
+  "identicalSourceHashMapsAcrossSelectedRuns": true,
+  "sourceProducerCommit": "6208425e18414bf304e9a3821e02ad0e87648dab",
+  "selectedMeasurementRequests": 4,
+  "campaignRequests": 5,
+  "providerUsageCompleteForAllCases": true,
+  "sourceReports": [
+    {
+      "reference": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/report.json",
+      "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+      "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+      "rawReportSha256": "dc54d42681dcca5a303cb9f258c667e2f92920e6f8c772b89d1c854da8df94fa",
+      "canonicalReportSha256": "fad3d0e27a47caaedaaa5623558492a26b723c5fcb9680456dbb47867b206efe",
+      "status": "complete",
+      "generatedAt": "2026-11-04T13:55:56.021Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 1
+    },
+    {
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.json",
+      "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "rawReportSha256": "a360dc183aaf5012b42ce57ba0cad2a3869ff02ae36da69d6d90264b8492b903",
+      "canonicalReportSha256": "9ba332c38a35fe76e59010be1dc27658065a4e94e323251298bfd65b426d7cbf",
+      "status": "complete",
+      "generatedAt": "2026-11-04T21:29:09.544Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 2
+    },
+    {
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-p-limit/report.json",
+      "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+      "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+      "rawReportSha256": "7d7a828dfa2391297e7055ade432fa347841c13dedada3022682ec062375c98c",
+      "canonicalReportSha256": "560726c1f9c84fa309a990d8e13a28b6a147b01604273af2c6a00e346419812c",
+      "status": "complete",
+      "generatedAt": "2026-11-05T08:06:21.270Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 1
+    }
+  ],
+  "campaignOnlyReports": [
+    {
+      "reference": "reports/real-generation-eval/2026-11-04-callchain-low-requests/report.json",
+      "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+      "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+      "rawReportSha256": "064960f6ed63f40fcfd9ff8320e41dd350a4a7392bbcced732988e5ee36061b8",
+      "canonicalReportSha256": "5050a2cc9509ee36beee91a9be71166dd97660cee839f139202ebe29c487c415",
+      "status": "complete",
+      "generatedAt": "2026-11-04T08:06:13.407Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 1
+    }
+  ],
+  "comparisonReference": {
+    "reference": "reports/real-generation-eval/2026-11-01-scoped-v1-deepseek-v4-flash/report.json",
+    "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+    "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+    "rawReportSha256": "1d2980271c855851ade5f58d0a96b0fdd55a4008fa595edac81f9d0e9fdda640",
+    "canonicalReportSha256": "b02f6db5b04d7ab346372373b657d4900e2092196027d71f1fbc66efb4c6865a",
+    "status": "complete",
+    "generatedAt": "2026-11-01T03:08:14.868Z",
+    "reasoningEffort": "provider-default",
+    "rawNetworkRequests": 4
+  },
+  "humanReviewStatus": "pending"
+}

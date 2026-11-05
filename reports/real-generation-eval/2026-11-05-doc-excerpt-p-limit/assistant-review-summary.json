@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "repoprep-assistant-review-summary-v1",
+  "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+  "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+  "status": "reviewed-by-assistant",
+  "humanReviewStatus": "pending",
+  "questions": 20,
+  "followUpsRead": 60,
+  "requests": 1,
+  "reviewedFacts": 7,
+  "completedCases": [
+    "p-limit"
+  ],
+  "aggregate": {
+    "generation": {
+      "covered": 7,
+      "partial": 0,
+      "missing": 0,
+      "contradicted": 0,
+      "incorrect": 2,
+      "imprecise": 0
+    }
+  },
+  "usage": {
+    "inputTokens": 14851,
+    "outputTokens": 34662,
+    "totalTokens": 49513
+  },
+  "reviewFiles": [
+    {
+      "filename": "assistant-review-p-limit.json",
+      "sha256": "0f389c5e0795937e976dad329e6e33206c6c862bd8feaf015c2fc86cdc49a0ab"
+    }
+  ],
+  "limitations": [
+    "Core fact coverage does not certify all answers.",
+    "Assistant source review is non-blind and is not a human accuracy percentage."
+  ]
+}

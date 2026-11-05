@@ -1,0 +1,310 @@
+{
+  "schemaVersion": "repoprep-real-eval-multirun-cohort-v1",
+  "status": "complete",
+  "createdAt": "2026-11-05T08:13:42.479Z",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "model": "deepseek-v4-flash",
+  "protocol": "openai",
+  "selectedConfiguration": {
+    "model": "deepseek-v4-flash",
+    "protocol": "openai",
+    "temperature": 0.4,
+    "reasoningEffort": "low",
+    "contextWindowTokens": 1000000,
+    "profileMaxOutputTokens": null,
+    "maxOutputTokens": null,
+    "maxOutputTokensPolicy": "provider-default",
+    "applicationInputTokenTarget": 64000,
+    "applicationInputTokenBudget": 64000,
+    "reservedOutputTokens": 65536,
+    "reservedOutputPolicy": "deepseek-reasoning-reserve-65536",
+    "inputTokenBudgetPolicy": "min(application target, max(0, configured context window - output reserve)); unknown window uses application target",
+    "contextStrategy": "structure-v1",
+    "tokenEstimateMethod": "mixed-text-v1",
+    "corpusVersion": "repoprep-real-corpus-v1",
+    "granularity": "medium",
+    "questionBudget": {
+      "min": 15,
+      "target": 20,
+      "max": 25
+    },
+    "endpointOriginSha256": "a34e2a4708ed1c61008a151688838dcf1c44d4e7f08054633e72ba7c0b16cfc1"
+  },
+  "reasoningEffortChange": {
+    "baseline": "provider-default",
+    "candidate": "low"
+  },
+  "baseline": {
+    "reference": "reports/real-generation-eval/2026-11-01-scoped-v1-deepseek-v4-flash/report.json",
+    "runId": "c87cf61f-cacd-4e5f-821f-be1471372856",
+    "reportDigest": "sha256:f60eeb37e16ac5473fb14bdfdcf9464a5db8d4591378ce8f3a71e8b005c03f0f",
+    "rawReportSha256": "1d2980271c855851ade5f58d0a96b0fdd55a4008fa595edac81f9d0e9fdda640",
+    "canonicalReportSha256": "b02f6db5b04d7ab346372373b657d4900e2092196027d71f1fbc66efb4c6865a",
+    "status": "complete",
+    "generatedAt": "2026-11-01T03:08:14.868Z",
+    "reasoningEffort": "provider-default",
+    "rawNetworkRequests": 4
+  },
+  "candidateReports": [
+    {
+      "reference": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/report.json",
+      "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+      "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+      "rawReportSha256": "dc54d42681dcca5a303cb9f258c667e2f92920e6f8c772b89d1c854da8df94fa",
+      "canonicalReportSha256": "fad3d0e27a47caaedaaa5623558492a26b723c5fcb9680456dbb47867b206efe",
+      "status": "complete",
+      "generatedAt": "2026-11-04T13:55:56.021Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 1
+    },
+    {
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.json",
+      "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "rawReportSha256": "a360dc183aaf5012b42ce57ba0cad2a3869ff02ae36da69d6d90264b8492b903",
+      "canonicalReportSha256": "9ba332c38a35fe76e59010be1dc27658065a4e94e323251298bfd65b426d7cbf",
+      "status": "complete",
+      "generatedAt": "2026-11-04T21:29:09.544Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 2
+    },
+    {
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-p-limit/report.json",
+      "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+      "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+      "rawReportSha256": "7d7a828dfa2391297e7055ade432fa347841c13dedada3022682ec062375c98c",
+      "canonicalReportSha256": "560726c1f9c84fa309a990d8e13a28b6a147b01604273af2c6a00e346419812c",
+      "status": "complete",
+      "generatedAt": "2026-11-05T08:06:21.270Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 1
+    }
+  ],
+  "campaignOnlyReports": [
+    {
+      "reference": "reports/real-generation-eval/2026-11-04-callchain-low-requests/report.json",
+      "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+      "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+      "rawReportSha256": "064960f6ed63f40fcfd9ff8320e41dd350a4a7392bbcced732988e5ee36061b8",
+      "canonicalReportSha256": "5050a2cc9509ee36beee91a9be71166dd97660cee839f139202ebe29c487c415",
+      "status": "complete",
+      "generatedAt": "2026-11-04T08:06:13.407Z",
+      "reasoningEffort": "low",
+      "rawNetworkRequests": 1
+    }
+  ],
+  "candidateSourceHashMap": {
+    "entryCount": 107,
+    "sha256": "7fd0cdeb0587d84ca7d5f6cbb20a878948aef32c556b9dc5fcbe6ab3b4947a3f"
+  },
+  "caseUnion": [
+    "mitt",
+    "p-limit",
+    "requests",
+    "schedule"
+  ],
+  "cases": [
+    {
+      "id": "mitt",
+      "repository": "developit/mitt",
+      "commit": "6b41670516ed8e8b738612f60491995470aa63b3",
+      "originRunId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "sourceReportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "sourceReportRawSha256": "a360dc183aaf5012b42ce57ba0cad2a3869ff02ae36da69d6d90264b8492b903",
+      "sourceReportCanonicalSha256": "9ba332c38a35fe76e59010be1dc27658065a4e94e323251298bfd65b426d7cbf",
+      "sourceReportReference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.json",
+      "questionCount": 20,
+      "questionFingerprints": [
+        "0267a345b812f7ff86eaf1bd440e7ada110b5d89fe6275555fde22acf0a5b0cb",
+        "1a5db0a14bc5fc8f0b0be7cbd60783fb9b2338988c708caaf9a0d03f134a3327",
+        "21a8570b9a9cd9719aeb5d402fc752fc064d0e1cd77091df5e7f8a64daaedd2c",
+        "3a279a5ca6e746b5f1ac5df3327f8be9c21e408435a841ff85465100fb2fcb5a",
+        "468ad6caf5607963ec0b2f30d551c076b6ba8c2c6f2f5e6d49e085e93c3cc6e5",
+        "48395cb5623ec35f8abb71fad5c1009dcfc4da06c77ba1c980921af9748e714b",
+        "4876174cfb28d38b71f61620ac860f12ae98d5a79cbce2b04d6fbc923bbbb25f",
+        "48aebe70d9367bf4bc5c022aa49eed544099248bb95b84c47ff5bb75cbade8a4",
+        "55e592864f258611e33610850509862d8bc448a0d850c0ad3a1e955b5887689c",
+        "565e1d240e5fac7947eddd09572d54c39517cd96cd30edeb7595fb85b141d7fe",
+        "6af98d2022b7f247cd0059f49da2a90ab5933cab0849891a55ae8e68e53d0813",
+        "9cb75d11165aa3f21643920708864758fec6e86789648cf67fdada19250a14df",
+        "a26d1f2020999ad8224a3b4f6c7c71c9f5de6c36fd810747dc8fce39ff09bdb6",
+        "a31b8eb35d36e1a94b3d440e12a2cf9953469d66690317ee636c36e19a15f94a",
+        "a53645c6e3061967af2feff8ef41f3b289d64e9c10d08bc5affaf0b8fbed296d",
+        "a8a9d20fed0d6b2e6143468c570924f9bdac46872987e6d91f4acb640eb26ac0",
+        "afd9c3b93b951816b611120512028122f1ae1bee817e8de56dc9a8b268bf9321",
+        "b7efbfff9acee95f1607771790d5bb51bf1184ef84b49808f00c55440783c620",
+        "c3760fa392d5f9f9ebcaa301cea5141f33288f8bec12b9a3a30616ac44f63b06",
+        "c5a1c1ab9f703928daf2b4d168ccb0e627f1adff540e202820c8c3d24b321838"
+      ],
+      "providerUsage": {
+        "inputTokens": 10162,
+        "outputTokens": 21302,
+        "totalTokens": 31464
+      },
+      "requests": 1,
+      "inputEstimate": 14570
+    },
+    {
+      "id": "p-limit",
+      "repository": "sindresorhus/p-limit",
+      "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+      "originRunId": "00032e42-668d-40c6-ae6f-1937906571f2",
+      "sourceReportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+      "sourceReportRawSha256": "7d7a828dfa2391297e7055ade432fa347841c13dedada3022682ec062375c98c",
+      "sourceReportCanonicalSha256": "560726c1f9c84fa309a990d8e13a28b6a147b01604273af2c6a00e346419812c",
+      "sourceReportReference": "reports/real-generation-eval/2026-11-05-doc-excerpt-p-limit/report.json",
+      "questionCount": 20,
+      "questionFingerprints": [
+        "024d8c99408d7ba2201d15b1acbfacbe7ad8d29fa0a2b6e6ac16b8a332bff60f",
+        "0718a01d77c62d5830ba1d043220259d88d9225d59f558470c6a8bc14fcfa197",
+        "094c57d48c0ece9f316a77fc1cf8cee866499484115713e6e4fd61d66c663668",
+        "3154303e02c1ec55bc5cb73017aa4a9a8b4b7f5f35daad71476a715bc0ee096b",
+        "36acc6a4106fadf1b40dfcb20b53289357c503344115773228cb8ee4a32a4ae0",
+        "4b0e37cdaf0cd84ab27fe7300e5713e0e21b636aec9f76e15c1d53bed1eeb5db",
+        "52a56eb8600babf39c7e77c1b6f851d91f3072b216f106c6b9b8842b025d5657",
+        "5675b432a43814b5da8dd6fa2af3277e71094ccf0cd24990b72013c380ce90ab",
+        "894cd8574d2bc4112e67077cf0ad2aae4bf391d4ac99d0e2aab5245b3bfa7b58",
+        "a02febd2556901d587215e610882adb7faafbf96defead80d3bbb66a1726ea56",
+        "a0dc92e5c27caf581451b1f5ca360cdf556cef9f279880fcd1f601d0b222ea36",
+        "a5cf10a8e294d8b95ea006646cd6a13c48d0acb56c265b1e575f2149fd87691a",
+        "bdf5ce0673127f1b332b2d85f71fb227b126a60498538e9a232f002240370d13",
+        "c8a43c7efcc9ea7ae49ea8cc765eed0519cde4303090f90a948d3cbeae049780",
+        "db174ced22d02d226ec15677917bd2aca3275f5d34dba05fdd3e5de4bc0c4174",
+        "e908a8301779a4a8dfa61a8a3a8afce209694ac18d59e50cf952ead2061ad387",
+        "ed7e4062108688089191f826a5837c7eac82d94ee2890cc7c056f4132edbb229",
+        "f449d58ed78d1f3a00f5d4564f7ed8c4747dd176f6711429d7afeda26900db3e",
+        "f5069b2c41ba0b3b9175b9c1448edd7c0a2c3b55d52f8a9116755401fbb1ad9d",
+        "fdefc042ed700482bcf3de031bc1bec54743c5b325920c34ada701bd3f1e418f"
+      ],
+      "providerUsage": {
+        "inputTokens": 14851,
+        "outputTokens": 34662,
+        "totalTokens": 49513
+      },
+      "requests": 1,
+      "inputEstimate": 27013
+    },
+    {
+      "id": "requests",
+      "repository": "psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "originRunId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+      "sourceReportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+      "sourceReportRawSha256": "dc54d42681dcca5a303cb9f258c667e2f92920e6f8c772b89d1c854da8df94fa",
+      "sourceReportCanonicalSha256": "fad3d0e27a47caaedaaa5623558492a26b723c5fcb9680456dbb47867b206efe",
+      "sourceReportReference": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/report.json",
+      "questionCount": 20,
+      "questionFingerprints": [
+        "12859afc27d2c62dc62b164dfa19f4a183dc4ff937d808dfcfe3d0ca1610cc22",
+        "3785314e2308ce6e49ab7ed8ea6949f614405d59809826e2fa02262fb0697ba9",
+        "4aa5fabfefa9acb3304a6b271ec9a09a498d34e08d7a5fb35823a00368bc1dea",
+        "6290f25e3aae851c4fe2794198250ca04c431175d5b29e82fa2ad4200e8db6ca",
+        "7ff9f61a9960ad926b08a638bc7972fe1802feb6ec3e946f950cbb3024f826c7",
+        "88864f0b28e9de29f727b2366726b3a67de85323b61ae7b86d229c8716566461",
+        "90cd39703606294eb7a419f9de975a80ddc24dc45458f49d91ccd1976f23372d",
+        "919a38e7747450c8c48b77e423d622ae8e685b18194db4ff04164121d75bfde3",
+        "a0431642aa5f381372a13c4f3a2d804cc19b09a8eb0907f10d86b1adeb5ad8ac",
+        "a83bf1ac4e9d2a46d98585d6800371e9eb9cfa32108d43cfb11ae041828b6910",
+        "a8d83fedf2ca5a653e81520cfe9e3ec4cd5bd88c4968b3fb75e3d82590225b32",
+        "b2b765c907a648cdbcb69848c8ac15827b9f098204084c1350de24c13c673771",
+        "ca417a7353afbda7eddde02d698ace1811db5c3fcd6ec9d0fe2c21e9c45a7462",
+        "cd4221f5318256048a18af67213e48b303fe13b929ce4d936323cdc319ca4a9e",
+        "ce82be96680186405df5af1a6c5da401e25e4b212e5ec78efb072a6bd10d8a4c",
+        "dfd339efbdb87d6a0b78d6cf760fcab64016db300ab043f4db59a70e9490daac",
+        "e178194120f7a2875331c9e6dd02a8d350b0b387d851d7a1abf9ade00d087a61",
+        "f5516e9031459f60cf366e9f9e27cf7066bdde3757d059aaa5d047372b38563b",
+        "f6ade84b3b2fb3992a056b2c3e428527499cb5b9d68192f0222a625786046680",
+        "f985c74ce18b3f6d893e7b26e5c8051df19b872416e7ff49cb7f34910bb81e50"
+      ],
+      "providerUsage": {
+        "inputTokens": 42465,
+        "outputTokens": 20812,
+        "totalTokens": 63277
+      },
+      "requests": 1,
+      "inputEstimate": 63878
+    },
+    {
+      "id": "schedule",
+      "repository": "dbader/schedule",
+      "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651",
+      "originRunId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "sourceReportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "sourceReportRawSha256": "a360dc183aaf5012b42ce57ba0cad2a3869ff02ae36da69d6d90264b8492b903",
+      "sourceReportCanonicalSha256": "9ba332c38a35fe76e59010be1dc27658065a4e94e323251298bfd65b426d7cbf",
+      "sourceReportReference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.json",
+      "questionCount": 20,
+      "questionFingerprints": [
+        "06abe2bef27395777567b4478e39433f418d93ddff16c52732be628b8cd8e9c1",
+        "1bc2cc209af7dd5b43976f3574682f4fbcf196bdbf53431473f824173abfb4db",
+        "3332ca0e84d1bc804cee9d693829cc6e3d4868ed5ab991e71493d1a13e47aa77",
+        "390acbd32b04603a4f9237097cab57dfbbcae5c9fc6075f5e2f47dafcf899ee6",
+        "5148fe2e724592fe04f48f8e6d52090fb22294ab3a486d226f89cd863dd15b48",
+        "5a1af4767a97d2d779890e881de256d4c2ca0330a943fd2d78ab5a584261c6ec",
+        "665c8dc8a130833342d386e4d89a410d9aa748eda3881ae1897d99dc547e438a",
+        "8591defe81542dc335846e42b71a20d7c38b627b86abe7cf037a288c2b5bb90a",
+        "865db2e045dcdd984f5e4ee9c5fdfe85e42c315aea7e147b9ae4ec645cf2180f",
+        "921ae102515891c4549371183ba63f2225e6be11ab1379499b6009310acd695c",
+        "93bbd00c533cdea8c3bb32a7ed26c9209bae3a0b4a7a4198434d24c547ea4893",
+        "98499a23920c8ed7c4aaddfdf7a71b9fd92bff932ffbdc3d90fe56d60df94245",
+        "b7acc8b8930941d898d8ae1f981fb8127459ceb558a6cf81fec51289ed120c2f",
+        "bb02b2f4b691e21339d692c178f1a032e25b20b53e49157a160d773f8a011fe6",
+        "bee05bb6a64b7155a3a8b07458ebb4e8cfdfac1b35c514bba44aee3fd09c809a",
+        "c31fecaf9e0214ca3051f3f94abc7bb1bb7eb5e9193eaf7c033c00ca72d4b248",
+        "d3fc4a3adde3b70a138b258732e205544a047da606058815e1a81f05beab1267",
+        "d4e368df783fe33e168c8f19bdb09297afd3ef9aef1ee6e6509d0f1f07fc5825",
+        "d82139ee509b0663f7f890f98749e213f55495add69e7bb4115b5b735e51a244",
+        "dadfe84ab82dc1b5925e090db1e05e45a34ff1cd0c1cbd62fe5b6bd43383f692"
+      ],
+      "providerUsage": {
+        "inputTokens": 42673,
+        "outputTokens": 26083,
+        "totalTokens": 68756
+      },
+      "requests": 1,
+      "inputEstimate": 63997
+    }
+  ],
+  "measurement": {
+    "selectedMeasurementRequests": 4,
+    "campaignRequests": 5,
+    "campaignRequestSources": [
+      {
+        "reference": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/report.json",
+        "runId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+        "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+        "rawRequests": 1
+      },
+      {
+        "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.json",
+        "runId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+        "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+        "rawRequests": 2
+      },
+      {
+        "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-p-limit/report.json",
+        "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+        "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+        "rawRequests": 1
+      },
+      {
+        "reference": "reports/real-generation-eval/2026-11-04-callchain-low-requests/report.json",
+        "runId": "314d1677-7aee-4e7a-a56e-2000fadcc21c",
+        "reportDigest": "sha256:e3f766e7b92398b0d5aa14ce059cfb4bff7d4be75ff6e5f3b0c81d6c5fdb8f7a",
+        "rawRequests": 1
+      }
+    ],
+    "selectedCases": 4,
+    "campaignOnlyReports": 1
+  },
+  "caveats": [
+    "This is a multi-run aggregation with per-case run provenance, not one fresh four-case run.",
+    "Each case retains its original source run, report digest, raw and canonical report hashes, relative report reference, and 20 sorted question fingerprints.",
+    "Campaign requests include all candidate source-run network receipts plus explicitly supplied campaign-only reports; the baseline is a comparison reference and is not counted unless separately supplied as campaign-only.",
+    "Selected measurement requests sum only the four selected generation case request counts; campaign-only attempts are excluded.",
+    "Provider usage remains null unless the source case contains a complete provider usage receipt; estimated input tokens remain separate.",
+    "The legacy source report digest may not bind generation metadata; each input is additionally checked with the production comparator and its full canonical report hash is recorded.",
+    "Proxy review is not human review. This artifact does not score factual accuracy or infer monetary cost.",
+    "Baseline and candidate reasoning efforts differ under explicit authorization; treat them as different inference conditions."
+  ]
+}

@@ -6,15 +6,19 @@
 
 普通运行以 `report.json` 保存逐题结果、请求与用量、配置、源码/fixture 哈希和 report digest；`report.md` 提供概览，逐事实复核见已有的 `assistant-review-*.json`。对比产物为 `comparison.md`/`comparison.json`。cohort 目录以 `cohort.json` 汇总已有测量，并保存复用证明和来源引用；它不代表重新执行了一次完整运行。
 
-### 最新验证（文档节选候选，三例已复核）
+### 最新验证（文档节选候选，四例已复核）
+
+- [`2026-11-05-doc-excerpt-cohort-v1-deepseek-v4-flash/`](real-generation-eval/2026-11-05-doc-excerpt-cohort-v1-deepseek-v4-flash/report.md) — 三个完整子集运行组成四例 cohort：80 题、完整事实 25/28（前次 23/28），另记 8 类实质错误、2 条不精确表述。所选四例用量 213,010 tokens，比最近 scoped 四例少 16.41%，比更早较低用量 grounded 参考少 0.25%；推理强度及部分窗口条件不同，不能证明整体答案质量或稳定成本收益提升。比较与来源分别见该目录 `comparison.md`、`cohort.json`。
 
 - [`2026-11-04-doc-excerpt-requests/`](real-generation-eval/2026-11-04-doc-excerpt-requests/report.md) — runId `0a84cfe5-0b30-41e0-8ff7-4e30328f9d02`。在预算受限时节选已确认的 Python 长文档字符串，保留其余代码；20 题、1 次真实请求。与上一轮 Requests low 使用相同模型、提示词模板和推理参数，实际上下文随节选改变。完整事实由 3/8 增至 5/8，部分 1、缺失 2；输入 42,465、输出 20,812、合计 63,277 tokens（总量少 25.54%）。实质错误由 1 类增至 2 类，另有 2 条不精确表述；该次覆盖与用量筛查通过不代表整体回答更准确。
 
 - [`2026-11-05-doc-excerpt-mitt-schedule/`](real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.md) — runId `835a902a-59ce-4880-a279-f8ff7abec2b2`。与上述 Requests 使用相同的 107 项生成源码哈希和推理参数；40 题、2 次真实请求，完整事实 mitt 6/6、schedule 7/7。mitt 仍有 4 类实质错误；schedule 未发现计入清单的错误，边界说明保留在复核文件。输入 52,835、输出 47,385、合计 100,220 tokens。
 
-当前候选只测量了上述三例：60 题、完整事实 18/21、部分 1、缺失 2，另记 6 类实质错误、2 条不精确表述；所选测量共 163,497 tokens。p-limit 尚未在本候选的 low 条件下测量，不能组成四例 cohort。原授权 4 次调用已全部使用（含下面保留的失败筛查），研究调用合计 248,474 tokens；这与三例候选的用量口径不同，也不是货币费用。复核均为代理辅助、非盲审，人工评价仍为 pending。
+- [`2026-11-05-doc-excerpt-p-limit/`](real-generation-eval/2026-11-05-doc-excerpt-p-limit/report.md) — runId `00032e42-668d-40c6-ae6f-1937906571f2`。额外明确授权的 1 次调用，20 题、完整事实 7/7，另记 2 类实质错误；输入 14,851、输出 34,662、合计 49,513 tokens。请求体与合成捕获匹配，107 项源码哈希和推理配置与其他三例一致。
 
-[零网络误述归因](real-generation-eval/2026-11-04-doc-excerpt-requests/finding-context-audit.md)已覆盖上述 8 类表述问题的 21 个源码引用：16 个完整提供、1 个部分提供、4 个与派发区域不相交。Requests 存在辅助实现缺口；cookie 合并误述与 mitt 四类错误所列的项目源码引用均完整提供，部分判断另需未提供的语言或工具语义。该审计不重评分，也不证明增加上下文即可修复答案。
+当前候选四例使用同一份生成源码与 low 配置，所选生成测量共 4 次调用、213,010 tokens。含前置 Requests 失败筛查的研究累计 5 次调用、297,987 tokens，原 4 次与额外 1 次授权均已使用。两种用量口径分别记录，不推算货币费用。cohort 保留各例原 run 出处，不标作一次新的四例运行；复核均为代理辅助、非盲审，人工评价仍为 pending。
+
+[零网络误述归因](real-generation-eval/2026-11-04-doc-excerpt-requests/finding-context-audit.md)覆盖前三例中 8 类表述问题的 21 个源码引用（不含新增 p-limit 两类错误）：16 个完整提供、1 个部分提供、4 个与派发区域不相交。Requests 存在辅助实现缺口；cookie 合并误述与 mitt 四类错误所列的项目源码引用均完整提供，部分判断另需未提供的语言或工具语义。该审计不重评分，也不证明增加上下文即可修复答案。
 
 ### 最近的四例运行（收益未证实）
 

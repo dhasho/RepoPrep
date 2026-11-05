@@ -1,0 +1,2450 @@
+{
+  "schemaVersion": "repoprep-eval-report-v2",
+  "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+  "corpusVersion": "repoprep-real-corpus-v1",
+  "mode": "real-model-public-repositories",
+  "model": "deepseek-v4-flash",
+  "protocol": "openai",
+  "runtime": {
+    "node": "v24.19.0"
+  },
+  "config": {
+    "mode": "real-model-public-repositories",
+    "variants": [
+      "generation"
+    ],
+    "granularity": "medium",
+    "budget": {
+      "min": 15,
+      "target": 20,
+      "max": 25
+    },
+    "temperature": 0.4,
+    "reasoningEffort": "low",
+    "contextWindowTokens": 1000000,
+    "profileMaxOutputTokens": null,
+    "maxOutputTokens": null,
+    "maxOutputTokensPolicy": "provider-default",
+    "applicationInputTokenTarget": 64000,
+    "applicationInputTokenBudget": 64000,
+    "reservedOutputTokens": 65536,
+    "reservedOutputPolicy": "deepseek-reasoning-reserve-65536",
+    "tokenEstimateMethod": "mixed-text-v1",
+    "contextStrategy": "structure-v1",
+    "inputTokenBudgetPolicy": "min(application target, max(0, configured context window - output reserve)); unknown window uses application target",
+    "maxRequests": 1,
+    "maxDurationMs": 1200000,
+    "baseline": "production scan and generation with README candidate only; repository tree and scan metadata remain available"
+  },
+  "configHash": "1c5704b398eaf20054ed3ceb7c1b5ae9816921cb5827ad53125a2db0b2f92507",
+  "configHashInputs": {
+    "baseUrlOriginSha256": "a34e2a4708ed1c61008a151688838dcf1c44d4e7f08054633e72ba7c0b16cfc1",
+    "model": "deepseek-v4-flash",
+    "protocol": "openai",
+    "reasoningEffort": "low"
+  },
+  "sourceHashes": {
+    "electron/services/atomic-json.ts": "772a80f4ec497a588dfcdccc6929a0ef67e06f01ee037e9efe90df0f9bbba2af",
+    "electron/services/config-score.test.ts": "eafb1dcc69d681569866800e9e399363d560176ca106bbeeddfdeb9b080d4d85",
+    "electron/services/content-read-integration.test.ts": "72d88421937b858e802a2544b02e08d894303814fe29c48d6902c8dba7f1f1d5",
+    "electron/services/context-budget-integration.test.ts": "cd04e36f35ca777367601d3a20eaddf4daf01c296e14c34ea870d39607f6af1d",
+    "electron/services/context-builder.ts": "533a362738a3e64bbf9c08c2ceef615f43d1d48ee03ffb94fffd1415d65e96ca",
+    "electron/services/context-selection.test.ts": "6ca385578a14d8c67e2bdbe7ba8053e39897d13f417a2e29f8269ef9ad54add4",
+    "electron/services/credential-vault.test.ts": "910f659aefb8df8eaf494116aa95b43bc04aec5e753260c55f1196c77f550adc",
+    "electron/services/credential-vault.ts": "81c002c1aafd908801b2779960a481147c1fa02b2b168a82a1bfcee181e927b4",
+    "electron/services/exporter.ts": "9159ba016c7d766d69a2f5c0e7a118085b256545de6bd75c3590fad68be4dd3c",
+    "electron/services/file-selection.ts": "c23785a5e42dafaa4ac80e3b8a949f576f90a305f05121c989b085b0f6a5fa99",
+    "electron/services/generation-checkpoint.test.ts": "c83ca898ee93a8c4b896e76a2ba29d2ea38a9f075bb76073dfbf44a103e139c6",
+    "electron/services/generation-draft-store.test.ts": "b5c56fc88bfc177377e39da44f287452190b8e425b6ff6dd83e17861106ad7af",
+    "electron/services/generation-draft-store.ts": "484d98fdcc57ca1e1798a51a0511d8f480cfcf3fb588fbb0d6f7fa8b8485ef18",
+    "electron/services/generation-drafts.ts": "8eb17e99c184e4b29151f4a4fcb2574989ee26fc09c6c63ae1fccec10d9943ee",
+    "electron/services/generation-preview.test.ts": "b0510459b76e02a76abe6290dc625bb3d038c7eb1bb95a583fb9268222275f85",
+    "electron/services/generation-streaming.test.ts": "f7cd30f9cdc7b1087aafd6fd5172a4d286976460918a156303ff47f3ef494045",
+    "electron/services/generation-tasks.test.ts": "ab861e3aeda94aeac38dee03350dcb242488f4cff118d52a61041d7b19512d46",
+    "electron/services/generation-tasks.ts": "1b080f6452143261d24f76494f8d7bf7fc2862ff76c035225929570aecabb35a",
+    "electron/services/generator-grounding.test.ts": "89c68d4bf0669f730cfe62a6b85c8339290f59934b43d7dad7f88a0a394901cc",
+    "electron/services/generator-merge.test.ts": "19f8ca2cdb479ca600c4273e5648f1eb98fb24139570693bc252696102762ec9",
+    "electron/services/generator.ts": "a1bff062d1e86f178c9f061349627a44245d088ce6bb14e54b1f1f6894361204",
+    "electron/services/interview-json-stream.test.ts": "1e2cf85cc2d8a57ec542fb26efbff55439caa54494734364831127886b915481",
+    "electron/services/interview-json-stream.ts": "333e8f6799ac8b03d289d6e5439e021204b8622a12371bae0a9269656a2fa294",
+    "electron/services/ipc-authority.test.ts": "0ffb43f285398e3e870eb1709c7ba111d0f229005c73b6e9d2b2359e4c9d5fed",
+    "electron/services/ipc-authority.ts": "b3f97d553f6f1472d7e5e765d056836053dbc7ccec7bf8730156f8e03d36ebf1",
+    "electron/services/ipc-handler-guards.test.ts": "24eb034cfa296cbc30432b12d8567abbf14a35a64c81b690c0185f216883a503",
+    "electron/services/ipc-handler-guards.ts": "69c8db7322441b8883f2c38b46076d785c71b83375f5216ecad1faa5889d4ce2",
+    "electron/services/ipc-validation.test.ts": "c2bd7218e6afee0b96be4d25079603466bba2ab6498b6022fa100d07233b1c29",
+    "electron/services/ipc-validation.ts": "6e52587fa0883d4176e408aa4b681dd01244bf5745e25a1433e9d3d90b89d4c4",
+    "electron/services/issue70-result-integration.test.ts": "7065324f27e89c22e54f9b2aa5fee8f4ef045bda9ffe6ea6e52a44a64478f4f6",
+    "electron/services/llm-anthropic.test.ts": "370d8bbd26ca570a00548137cc9e627a93005492ede2abe94fe849767e7d8375",
+    "electron/services/llm-request-lifecycle.test.ts": "c79a7ec168616a046af1860f4b01e4f6a95725c4052c53fb41840800a9dcd75f",
+    "electron/services/llm-response-budget.test.ts": "4c93ebda8b0d8e3f227fe24b52a4f52f4f83b2f66caae68ca79a501bdf1fc391",
+    "electron/services/llm-safe-results.test.ts": "6c1abe292e56bbbcd5a4d5dc2e5818f33fa5f5d575c5b15d7d859c9a21c11938",
+    "electron/services/llm-streaming.test.ts": "52ec80c3739d267afb5727c1be534ef9eeb49430e42258bc52b5f88277125502",
+    "electron/services/llm.ts": "632d636414d55a8cfa69012632a9e47f42c79e80124ede67d8664f49cb91659e",
+    "electron/services/markdown-export.test.ts": "4f36810ce6ea0643c363a4d3aa64584f2d109e67a632639abcea030c670abb64",
+    "electron/services/markdown-export.ts": "e50f2e223177d9f3e761c070bf2049aed946d857beb78080c9a2f7e5d1b367a7",
+    "electron/services/native-credential-crypto.ts": "6edb663418a7966bb6542669304d384ea403ac2c926e652fa8b3b3fd4b62d8c4",
+    "electron/services/project-content-reader.test.ts": "8fbf8347f15e7fa513437f5f337b4e6a08acdcf6126b679ff81bcbf919e1ab54",
+    "electron/services/project-content-reader.ts": "9ddecb2b0ac4984eeabdbac3e072c28587f190bdf6ead49d00cb2270a9c6e3b8",
+    "electron/services/project-display-name.test.ts": "b138d57ff7bfaa5bbe49686470932d8b9e6a11f374cb7d1d9c7f1eae0c623862",
+    "electron/services/project-display-name.ts": "356c77feebe9f7cf60c46780645676227985e4b812d96478dcdc78b347300121",
+    "electron/services/project-file-policy.test.ts": "8596f9a54fb86990ea2ba30187ae526df27c14da3e6fe724397ecf90e1ed6c40",
+    "electron/services/project-file-policy.ts": "d0d6ad031fe1a7ed69d12b81c3eb361ebe00754f7fd08b5bd1ec3a16e5445213",
+    "electron/services/project-snapshot.test.ts": "7705815c9e20525c0598c3b51d1012f755dc7d36cf9fd939e8da65c7bd268ca8",
+    "electron/services/project-snapshot.ts": "af4b41e4ac5da878a16e052e599e0a08a781e55d3d7eebf7f024348854767b35",
+    "electron/services/question-budget-integration.test.ts": "51c38c33fdd218bc9c4a3e2faf1f87ede6f90d19ce745614cf6ff20a44f35d3f",
+    "electron/services/question-budget.test.ts": "20c789cfcf7810ae202c5fc97e202460067b7434e75e4b73dd3a39d8a2d4850a",
+    "electron/services/question-budget.ts": "b249fc0a8df0e7f2fe7f961c178ce80375aa159427188fabc08c01155127c0ed",
+    "electron/services/question-dedupe.test.ts": "511a8d4c697abff6953889caf291f8233221fd53cbbe86944cadbd6e358effdc",
+    "electron/services/question-dedupe.ts": "936b106bf9d9a4e853df828dd80f6c7f3f6172e7d894869a1247623716539267",
+    "electron/services/recent-relocation.test.ts": "32c03bfe36efd28c88c49ccd03d2d30cf8957e292c464b50af7206796d5824a4",
+    "electron/services/result-store-contract.test.ts": "57d2bce984cfe6be3c2e57d80a8bce9fd6bacecbb8456fc27aa48232b9151228",
+    "electron/services/scan-cache.test.ts": "f0939d1ae76dda6cf71dbd6ae048abb06addd323e2c3ca053d4c8e1906f23741",
+    "electron/services/scan-cache.ts": "c47da10ed52e15121ac0455c381fdce862da93f3914fae0ad67293abb014b57f",
+    "electron/services/scan-limits.test.ts": "0b7d016a70fdea8a5797cf310b2e4d39bce2070853db47616799fdb305839215",
+    "electron/services/scanner-gitignore.test.ts": "0c5dd2c8ae0e4c36ce8f0a2cad85d8cf8d1b5d3f1664189835e12214a9bd5e3b",
+    "electron/services/scanner.ts": "220fb827d6981daca30036a7f09c4e34729554858afe4752aaf287b9a14c9afc",
+    "electron/services/security-integration.test.ts": "ad24cbe0525909de1224ba9bb6f9ae54b5f2f01744712cfe0faa1e347062267e",
+    "electron/services/sensitive.test.ts": "a3b1289e5bc03e7afed74ed8d20ed723831b22d3c4e3ae29937c2d68cc1a2708",
+    "electron/services/sensitive.ts": "0b6605b2066d8f627356e29839b8281e1d78af05444194947f4d72e08cfc92cc",
+    "electron/services/snippet-selection-integration.test.ts": "be78e50df27b8d01a354c61810859bb53ba8eac530b47f465a622dc0cb3e5910",
+    "electron/services/snippet-selection.test.ts": "dd241807157334194e4cfea0e5ae263b437f96954eda6ca144a82e7853607739",
+    "electron/services/snippet-selection.ts": "c2c8c7586c47fe180c55e9c5ed3c35867902ce94af375273d837da80eb77f7d9",
+    "electron/services/source-analysis.test.ts": "a1af0f084389b1ca630699d423e28460ebfd9e1c02f4d41f0b586a56714c5591",
+    "electron/services/source-analysis.ts": "b842f0fb940231feed35aca35bd23893bf93171795764dbecbef14d32cf04a52",
+    "electron/services/sse-parser.test.ts": "fcfdbb44cf7051bd9f7824fd38086a16022c4b7840240cb7adf24f1b8ce6fe7a",
+    "electron/services/sse-parser.ts": "27f3d04d279a6c46b788d57b3fc00674f8e8aa9b0973fb6e3c2e152a470dcd8a",
+    "electron/services/storage-recovery.test.ts": "fbcbf7fa13f6d5834e328a11ed4f57529adcfce9a290f6766aa649318b8dc5ed",
+    "electron/services/store.ts": "5c670a371f026a85ff4bccdb7d0a9abbfffc735dcd82d6a164bfb8f9998f88fa",
+    "package-lock.json": "353190be39ebe27401d8c7d7f6796963641f2b5fc455ce5f31fbf9422b93dee4",
+    "package.json": "8c591f1c427d4e51a68ae86bd83573f65bf4900f8fc10987fc3ab373286eca87",
+    "realCorpusManifest": "d736316d34549783a0e278efca9e5d2ba19a3a1e5cd4b2f8820ff9dd362d1fa5",
+    "scripts/evaluation/compare-real-runs.mjs": "272e7fbe367bc48ebddb74fb4126faa97d09016749342e313103d3fc2cc683a6",
+    "scripts/evaluation/compare-real-runs.test.mjs": "acd74d1bb68795937b39643362a7cd63282a831419b8bee440461f2aeba9f28f",
+    "scripts/evaluation/compose-real-cohort.mjs": "495bb2961e046a1f99c3e330999e5659e4dce0f021872e7ec4277dc9c5567486",
+    "scripts/evaluation/compose-real-cohort.test.mjs": "b0442455d94779c1b042127dfef74290881c9600071befaaae969f2823e7f717",
+    "scripts/evaluation/context-audit.mjs": "3364162c2d948e9d7a4350c763fe4230ce9afafda4e1c021e892d13cd91720cb",
+    "scripts/evaluation/context-audit.test.mjs": "ba27ce7cb5d1070989c4917c392308e35d11ada89ee512e053324f9ce860a07a",
+    "scripts/evaluation/corpus/node-routes/server.mjs": "1a8681d3cdff1d676a87df1f2e02555dafc56253d60c569488ef74285d4cc1a3",
+    "scripts/evaluation/offline-runner.mjs": "7882102d3d0420b2fc9ea75c9860f23b3a1fa16aa13df055f0202b46c79bd438",
+    "scripts/evaluation/real-runner.mjs": "57cbb560eaf6e82b4c2c7bf1408f8d05469696ce8023e3a9aba3097290205a15",
+    "scripts/evaluation/real-runner.test.mjs": "9f1ac347a2cf0f70a175bedc16da4feed11949824e45d2570261f98c50e36185",
+    "scripts/evaluation/review-cli.test.mjs": "54779f97bb5bdeefd0f52aea2e0b491f4c306da6a6fbe9e7dd6804c99412b04b",
+    "scripts/evaluation/review.mjs": "d8a66e8c43bf23ec18c8b2669e4ea85ee89286f6fc84419f2f7c5393a2bb02ee",
+    "scripts/evaluation/run-saved-profile-entry.cjs": "065699889549fc64de381e20af6e6e3794f530adbde512893007591d8deeb750",
+    "scripts/evaluation/run-saved-profile.cjs": "d79d6fb46d5830c95fb7201191387eb6c8fea64551bded4760252c739382f0e3",
+    "scripts/evaluation/run-saved-profile.test.cjs": "6262c450333717826ae6d4e8e84089532cb2870d009e0e0f1fc9aa78b1da4914",
+    "scripts/evaluation/scorer.mjs": "a68bba4123a92012393cc3df3cc469b641c7ec6effc3703044cb59e6c8d29934",
+    "scripts/evaluation/scorer.test.mjs": "16c2c9581ce6566196b956d1ce9eca2f682fb88c4e4e89b8459e8316879b4c8d",
+    "scripts/evaluation/variant-arguments.cjs": "11119a8af013b0f7f12292352f180d7057f4657955419c0e024bb49dd6ce14e2",
+    "shared/answer-markdown.test.ts": "afc872d9c4fc8c2f7bd4609e1b356c0d15bbcb53066afcaf565676d7b5ec4a2d",
+    "shared/answer-markdown.ts": "225af577a256741941d3272c3e7d4b3e042d7c5a6c73586250a969246b01177c",
+    "shared/content-read.ts": "19c8d3864901a84b7619f147603b28f8d43b29b38d02acd9497df90b5776968b",
+    "shared/context-budget.test.ts": "c00f4f7fc94c2ccc38372533d6d128f92383f4d352a62146397a66915bad8558",
+    "shared/context-budget.ts": "63da7ba892cf309e6e484f4052ce1b9a704d7f94ed9828d7a8f9a883980c21d8",
+    "shared/generation-checkpoint.ts": "9e1437013a35a2548cf4285f89f9d8cd0c09df415fc0b6c97649477fbc52d07d",
+    "shared/generation-preview.test.ts": "748533caa2e91eb4ac16b9d4c9e7ae4e2edb2756afae1b24b373160732c92e83",
+    "shared/generation-preview.ts": "2e4c4bb860b95176c3222ed9bc55b740d90f15f3a4a6116a3ee43d8f65a6ecc7",
+    "shared/ipc.ts": "67c600fe55ccb59e51abfd0247c9a3672d3446e4f17aeb8412f105b757d5c742",
+    "shared/result-contract.test.ts": "3bc86746c37da9eaada778f6a6a048fbfe61fda8e573593c0b301b1e2eb5534a",
+    "shared/result-contract.ts": "4939cef594e3f4b4919ae59a1ad981b63219cb915e79147a1f9fdbf523191619",
+    "shared/storage-contract.ts": "13222b409e69877165e521eb912d6d9d3e8b51fc6ac9f78964a965a5051d90d2",
+    "shared/token-budget.test.ts": "f3b2b1e207208ccadda123d971be297eee5cff66c21edd98978e128e1189b184",
+    "shared/token-budget.ts": "9b8e64db0405745d47452a66790a99fa5c264d9463a9a2357c1651dd786886d4",
+    "shared/types.ts": "17ff61acb21296e56354a3f9f15c4877b3d32ab752efe0caa009e56c90a91ca5"
+  },
+  "fixtureHashes": {
+    "p-limit/index.js": "edde12a4a4dbdbe8d27161cdd0853db0bab435d5dc6c15f9f4dedc27ee9bca60",
+    "p-limit/test.js": "a803c332d9af3a9e14d657d63280c2e059e3fe5c343ab7ab869da8a85276204c",
+    "p-limit/package.json": "daa6b0d168d7197eccbfef1c678e8f00b79d063129bf48f4ee2db38dc605ca7f"
+  },
+  "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+  "generatedAt": "2026-11-05T08:06:21.270Z",
+  "cases": [
+    {
+      "id": "p-limit",
+      "repository": "sindresorhus/p-limit",
+      "commit": "a8a6fbec4e0e866d6d779b10889bb4f5567e70eb",
+      "projectPath": "/public-corpus/p-limit",
+      "granularity": "medium",
+      "budget": {
+        "min": 15,
+        "target": 20,
+        "max": 25
+      },
+      "generation": {
+        "status": "complete",
+        "elapsedMs": 181918,
+        "requestCount": 1,
+        "requests": [
+          {
+            "attempt": "initial",
+            "inputChars": 52166,
+            "promptHash": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+            "elapsedMs": 181645,
+            "status": 200,
+            "errorType": null,
+            "usage": {
+              "inputTokens": 14851,
+              "outputTokens": 34662,
+              "totalTokens": 49513
+            }
+          }
+        ],
+        "inputChars": 52166,
+        "tokens": {
+          "inputTokens": 14851,
+          "outputTokens": 34662,
+          "totalTokens": 49513
+        },
+        "diagnostics": {
+          "version": 1,
+          "status": "succeeded",
+          "contextStrategy": "structure-v1",
+          "tokenEstimateMethod": "mixed-text-v1",
+          "estimatedInputTokens": 27013,
+          "inputTokenBudget": 64000,
+          "reservedOutputTokens": 65536,
+          "actualUsage": {
+            "inputTokens": 14851,
+            "outputTokens": 34662,
+            "totalTokens": 49513
+          },
+          "usageComplete": true,
+          "requestCount": 1,
+          "repairRequestCount": 0,
+          "compensationRequestCount": 0,
+          "contextBuildMs": 195,
+          "modelMs": 181660,
+          "totalMs": 181892,
+          "selectedFiles": 15,
+          "selectedRegions": 15,
+          "omittedFiles": 0
+        },
+        "output": {
+          "version": 1,
+          "createdAt": "2026-11-05T08:09:23.180Z",
+          "projectName": "p-limit",
+          "projectPath": "/public-corpus/p-limit",
+          "granularity": "medium",
+          "roleFocus": "general",
+          "profileId": "real-eval",
+          "modelUsed": "deepseek-v4-flash",
+          "projectSummary": "p-limit 是一个用 JavaScript/TypeScript 实现的 Promise 并发限制库，核心导出 pLimit 与 limitFunction，通过 yocto-queue 维护 FIFO 等待队列，并以闭包保存并发上限、运行计数和清理策略。项目包含 AVA 运行时测试、tsd 类型测试、Benchmarker 基准脚本与 recipes 使用示例，整体结构小而集中，主要复杂度在调度、动态并发、clearQueue 和 map 的边界行为。",
+          "sections": [
+            {
+              "id": "c86dbf97-3a79-41e7-be07-bdb81a067259",
+              "title": "整体架构与入口",
+              "summary": "考察 pLimit 的入参归一化、返回函数结构、运行依赖与包级运行环境边界。",
+              "questions": [
+                {
+                  "id": "62e518d4-c22a-4103-a547-8e08346920be",
+                  "title": "入参归一化与校验顺序",
+                  "question": "pLimit 如何处理数字与 options 两种入参？传入 null、非整数并发或非法 rejectOnClear 时，异常顺序是什么？",
+                  "answer": "要点是先用 typeof 区分对象入参，再做并发校验，最后校验 rejectOnClear。\n\n- 数字直接进入 validateConcurrency；对象分支解构 `{concurrency, rejectOnClear = false}`，其余字段忽略。\n- 由于 `typeof null === 'object'`，`pLimit(null)` 会先在解构 null 时抛出原生 TypeError，而不是走到自定义的并发错误；数组也会被当作对象解构。\n- validateConcurrency 只接受 `Number.isInteger` 或 `Number.POSITIVE_INFINITY` 且大于 0；0、-1、1.2、undefined、true、`{}`、`{concurrency:0}` 都抛 TypeError。\n- rejectOnClear 在并发校验之后检查，非 boolean 抛 TypeError；因此两者都非法时先报 concurrency。",
+                  "followUps": [
+                    {
+                      "question": "为什么允许 Infinity 作为并发上限？",
+                      "answer": "允许 `Number.POSITIVE_INFINITY` 表示不限制并发；resumeNext 中 `activeCount < concurrency` 恒真，队列中有任务就立即启动。注意仍受队列长度和内存限制，不是“无成本”。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "对象检测为什么不用更严格的方式？",
+                      "answer": "当前用 typeof 能覆盖普通 options 和数组，但 null 会产生非预期错误；更稳妥可先判 `concurrency !== null && typeof concurrency === 'object'` 或 isPlainObject，再给自定义 TypeError。这是设计建议，不是现有行为。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果 options 的 concurrency 是 getter 会怎样？",
+                      "answer": "解构会同步触发 getter，抛错会直接传播；当前没有 try/catch 包裹。读取后仍要过 validateConcurrency，因此 getter 返回非法值会抛自定义 TypeError。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "55b52c29-7741-4f50-ab69-b9cd1a94c7a5",
+                  "title": "返回函数的属性结构",
+                  "question": "默认导出的 limit 函数为什么用 Object.defineProperties 挂载 activeCount、pendingCount、clearQueue、concurrency 和 map？这些属性的职责是什么？",
+                  "answer": "默认导出不是普通函数对象，而是带只读计数、可写并发和方法的可调用对象。\n\n- activeCount/pendingCount 是 [[getter]]，分别返回闭包中的 activeCount 和 queue.size。\n- clearQueue 是 value 方法，读取闭包中的 queue 与 rejectOnClear 决定丢弃还是拒绝。\n- concurrency 通过 [[getter]] 和 [[setter]] 暴露：setter 会校验并排队启动。\n- map 是 async value 方法，复用同一个 generator 调度输入。\n- 这些属性没有用 class 暴露，而是闭包加 defineProperties，外部不能直接拿到 queue。",
+                  "followUps": [
+                    {
+                      "question": "getter 返回 activeCount 是否实时？",
+                      "answer": "是，读取时访问闭包变量；但 activeCount 在任务真正调用前就可能自增，因此它表示已占用的并发槽，不是严格等于正在执行的函数体数量。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么不让外部直接操作 queue？",
+                      "answer": "直接暴露会破坏不变量，例如外部 dequeue 后 activeCount 不会同步，clearQueue 的拒绝策略也会绕过。封装成方法能保持计数与队列一致，但当前实现仍要小心外部并发调用。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "用 class 改写有什么差异？",
+                      "answer": "class 更容易类型化，但默认导出必须同时可调用又有属性；可以返回带方法的函数。当前闭包方案避免 this 绑定问题，map/clearQueue 被解构后仍能工作。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "0af2c8e1-9d46-4d4e-81bc-eb6b9ff81bab",
+                  "title": "yocto-queue 依赖路径",
+                  "question": "项目如何依赖 yocto-queue？从 index.js 的调用看，它对队列抽象提出了哪些最小接口要求？",
+                  "answer": "`package.json` 把 `yocto-queue` 放在 dependencies，`index.js` 默认导入 `Queue` 并 `new Queue()`。\n\n代码只使用四个操作：`enqueue(item)` 入队、`dequeue()` 取出并返回队首、`size` 读取长度、`clear()` 清空。队列项是 `{reject, run}`，其中 run 由内部 [[Promise]] 的 resolve 赋值。\n\n从这些调用可以确认它是 [[FIFO]] 队列抽象，但上下文中没有 yocto-queue 源码，不能据此断言其内部复杂度或所有边界行为；只能确认 p-limit 依赖上述 API。",
+                  "followUps": [
+                    {
+                      "question": "为什么不用数组 push/shift？",
+                      "answer": "数组也能实现同样语义，但 shift 在常见实现中可能移动元素；使用专用 [[队列]] 可把入队/出队职责交给依赖。不过没有基准数据不能断言本项目里一定更快，需实测。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果 yocto-queue 的 dequeue 返回 undefined 怎么处理？",
+                      "answer": "当前 resumeNext 只在 `queue.size > 0` 时调用 dequeue，并假设返回值是队列项；没有判空。若依赖违反契约会在此处抛错，属于未防护的信任边界。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么 queueItem 要存 reject？",
+                      "answer": "reject 用于 rejectOnClear 分支直接拒绝等待中的外层 [[Promise]]；run 则用于稍后启动任务。两者分离让清空队列时不必执行任务也能结算调用方。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "51a98a5e-9087-41ab-a355-ad7d12ce40d1",
+                  "title": "包导出与运行环境边界",
+                  "question": "从 package.json 与 CI 配置看，这个包的导出、模块格式和运行环境承诺是什么？benchmark 是否在 CI 覆盖范围内？",
+                  "answer": "包是 [[ESM]]（`type: module`），exports 同时映射 `types` 与 `default`，发布文件只含 `index.js` 和 `index.d.ts`，并声明 [[sideEffects]] 为 false。`engines` 要求 Node >=20，[[CI]] 在 Node 20/22/24 上执行 `npm test`。\n\n运行依赖只有 yocto-queue；README 声称浏览器可用，但当前上下文没有浏览器测试或 browser 字段，不能仅凭声明确认所有浏览器行为。`benchmark.js` 使用 `using`、`fs.mkdtempDisposableSync`、`styleText` 等较新 API，且 `npm test` 不包含 [[benchmark]]，因此 benchmark 不在 CI 验证范围内，无法确认 Node 20 下可运行。",
+                  "followUps": [
+                    {
+                      "question": "`sideEffects: false` 对打包意味着什么？",
+                      "answer": "它告诉支持 [[tree-shaking]] 的打包器：未被使用的模块导入可被删除。前提是包内模块确实无导入副作用；当前 index.js 只在调用 pLimit 时创建闭包和队列，但打包器是否完全删除仍取决于使用方式。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么 exports 同时写 types 和 default？",
+                      "answer": "让 [[TypeScript]] 解析声明文件，运行时解析 ESM 入口；顺序上 types 在前可避免被 default 覆盖。若只写 default，类型消费者可能找不到声明。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "README 的浏览器承诺如何验证？",
+                      "answer": "需要浏览器测试矩阵或至少无 Node 内置模块的构建验证。当前 index.js 只用 yocto-queue 和全局 AbortSignal，理论上可打包，但 rejectOnClear 依赖 [[AbortSignal]].abort，不能从现有 CI 推断旧浏览器兼容。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "2b29228c-620f-4ca6-91d9-caffc52a18e3",
+              "title": "队列调度与并发状态",
+              "summary": "考察任务从入队到执行的微任务链路、运行计数语义、错误传播、同步异常和动态并发调整。",
+              "questions": [
+                {
+                  "id": "73c29c3c-de95-41dd-9771-d78a3e8ba930",
+                  "title": "enqueue 到 run 的微任务链路",
+                  "question": "一次 limit(fn) 从 enqueue 到真正调用 fn 经过哪些步骤？为什么这里要借助一个内部 Promise 和 then？",
+                  "answer": "核心是排队项先入队，再由内部 [[Promise]] 的 resolve 触发 [[微任务]] 中的 run。\n\n1. generator 创建外层 [[Promise]]，executor 调 enqueue。\n2. enqueue 建 `queueItem={reject}`，再建内部 [[Promise]]；executor 同步把 `queueItem.run=internalResolve` 并 `queue.enqueue`。\n3. 给内部 [[Promise]] 挂 `.then(run.bind(...))`。\n4. 若 `activeCount < concurrency`，resumeNext 出队、activeCount++、调用 queueItem.run()。\n5. 内部 [[Promise]] 进入已决议，run 在随后的 [[微任务]] 执行，fn 此时才被调用。\n\n因此即使有空槽，fn 也不会在 limit 调用栈内同步执行；这也让 [[AsyncLocalStorage]] 上下文能在 then 注册时被捕获。",
+                  "followUps": [
+                    {
+                      "question": "如果直接 queue.dequeue().run 而不经过内部 Promise 会怎样？",
+                      "answer": "任务可能更早同步启动，破坏“所有任务异步执行”的测试预期；更重要的是 run 会在 resumeNext 的调用上下文执行，可能丢失调用方通过 [[AsyncLocalStorage]] 建立的上下文。当前 then 是在调用方上下文注册的。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "activeCount 在 fn 调用前就增加，会带来什么语义？",
+                      "answer": "它把已占槽但尚未执行的调度也计入 activeCount，所以刚调用 limit 后读数可能已大于实际执行中的函数数。这是槽位计数，不是严格运行中计数。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "内部 Promise 一直不 resolve 会怎样？",
+                      "answer": "对应队列项不会启动，外层 [[Promise]] 保持 pending；clearQueue 默认分支正是丢弃这些项。若 rejectOnClear，则外层被拒绝，但内部 [[Promise]] 仍可能保持 pending，当前没有额外清理。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "7bbc6458-3864-4815-bebf-ef1e4d9aab01",
+                  "title": "运行计数与等待计数",
+                  "question": "activeCount 与 pendingCount 在实现中如何更新？它们与 README 的“currently running”表述是否完全一致？",
+                  "answer": "pendingCount 直接返回 `queue.size`；activeCount 是闭包变量，在 resumeNext 中自增、在 next 中自减。\n\n- resumeNext 在出队前判断 `activeCount < concurrency`，满足则先 `activeCount++` 再调用队列项的 run。\n- run 等任务结果 settle 后调用 next；next 先 `activeCount--`，再 resumeNext 启动下一个。\n- 因此 activeCount 统计的是“已占用并发槽”的任务，包括已出队但尚未在 [[微任务]] 中调用 fn 的任务。测试 `runs all tasks asynchronously` 中两次 limit 后立即断言 activeCount 为 2，正说明这一点。\n\n它不等同于“函数体正在执行”的精确数量；pendingCount 则是仍在队列中、尚未出队的数量。",
+                  "followUps": [
+                    {
+                      "question": "任务 reject 时 activeCount 会减吗？",
+                      "answer": "会。run 中 `try { await result } catch {}` 捕获内部 await 的拒绝，随后仍执行 next()；调用方拿到的外层 [[Promise]] 仍按原结果 reject。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "pendingCount 包含正在执行的任务吗？",
+                      "answer": "不包含。出队时 run 被调用，队列长度已减少；正在执行或已占槽的任务只体现在 activeCount。clearQueue 后 pendingCount 归零，但 activeCount 不变。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果并发上限调低到小于 activeCount？",
+                      "answer": "不会取消已占槽任务；resumeNext 因 `activeCount < concurrency` 为假而暂停启动新任务，直到 next 把 activeCount 降到新上限以下。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "97ed4aa1-0bf9-4b70-bc73-50c309f44be8",
+                  "title": "结果 Promise 与错误传播",
+                  "question": "run 中为什么先 `resolve(result)`，再 `await result` 并吞掉异常？这样错误还能传到调用方吗？",
+                  "answer": "能。`result` 是 `(async () => function_(...arguments_))()` 返回的 [[Promise]]；`resolve(result)` 让外层 [[Promise]] 采用它的状态，所以调用方看到原始成功值或拒绝原因。\n\n随后的 `try { await result } catch {}` 只是为了在内部等待任务结束，避免内部 await 产生未处理的拒绝；它吞掉的是内部这一路的异常，不会改变已交给调用方的 [[Promise]] 的状态。任务 settle 后执行 next()，释放槽位。\n\n注意 `resolve` 发生在 await 之前，但 [[Promise]] 的状态传播仍是异步的；调用方不会同步拿到值。",
+                  "followUps": [
+                    {
+                      "question": "如果去掉 catch 会怎样？",
+                      "answer": "内部 `await result` 的拒绝会变成 run 返回 [[Promise]] 的拒绝；该 [[Promise]] 没有被消费者，可能触发 [[unhandledRejection]]。调用方仍能收到拒绝，但进程可能报未处理拒绝。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果 fn 返回 thenable 而非原生 Promise？",
+                      "answer": "async 立即执行函数会采用 [[thenable]] 的状态，`await result` 也会等待其 settle；因此 [[thenable]] 的拒绝同样会走到 catch。若 [[thenable]] 永不 settle，槽位也永不释放。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "resolve(result) 与 resolve(await result) 有何区别？",
+                      "answer": "前者让外层 [[Promise]] 采用 result 的状态，调用方更早拿到同一个拒绝/成功传播；后者会先等 result settle，外层再结算。当前实现让调用方与任务结果直接关联，同时内部再等待以释放槽位。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "5d898ea1-5fde-467f-9511-f1c569d52cda",
+                  "title": "同步抛错与非 Promise 返回",
+                  "question": "limit 如何支持同步抛错函数和返回非 Promise 的函数？为什么同步 throw 不会让后续任务卡住？",
+                  "answer": "`run` 用异步立即执行函数包住调用：`const result = (async () => function_(...arguments_))();`。同步 throw 会变成 result 的拒绝，而不是在 run 调用栈中直接炸出；返回 null 等普通值则变成 fulfilled 的 [[Promise]]。\n\n外层 `resolve(result)` 把拒绝传给调用方；内部 `await result` 的 catch 吞掉内部异常后仍执行 `next()`，所以下一个排队任务会被 resumeNext 启动。测试 `continues after sync throw` 验证了第二个任务仍会执行。\n\n这依赖 async 函数对同步异常和返回值的统一包装，不需要额外 Promise.resolve。",
+                  "followUps": [
+                    {
+                      "question": "如果 fn 直接返回一个已拒绝 Promise 呢？",
+                      "answer": "结果同样是外层拒绝，内部 catch 后 next；与同步 throw 的差别只在拒绝产生位置。调用方必须处理外层 [[Promise]]，否则会有未处理拒绝。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "非 Promise 返回值在类型上允许吗？",
+                      "answer": "LimitFunction 调用签名允许 `PromiseLike<ReturnType> | ReturnType`，所以类型允许同步值；但 limitFunction 的类型只允许 [[PromiseLike]]，运行时却仍可接受同步值，存在类型与运行时差异。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么不在 enqueue 时直接 try/catch fn？",
+                      "answer": "enqueue 只负责排队，真正调用在 run 的异步阶段；提前调用会破坏并发限制和异步上下文。把 try/catch 放在 async 包装里能统一处理同步与异步错误。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "a2f47f45-8e91-4a06-ae2d-de9fb7cb1e78",
+                  "title": "动态调整并发上限",
+                  "question": "limit.concurrency 的 setter 如何生效？调大、调小以及设为 Infinity 时分别会发生什么？",
+                  "answer": "动态调整[[并发]]上限的入口是 concurrency setter。setter 先 validateConcurrency(newConcurrency)，通过后直接更新闭包变量，再用 queueMicrotask 排一个循环：只要 `activeCount < concurrency && queue.size > 0`，就 resumeNext。\n\n- 调大：新上限在[[微任务]]中生效，循环可一次启动多个等待任务。\n- 调小：不会取消已运行任务；resumeNext 因 activeCount 大于上限而暂停，等 next 把 activeCount 降下来才继续。\n- 设为 Infinity：条件恒真，[[微任务]]会把当前队列全部启动；仍受实际资源限制。\n\n如果新值非法，会同步抛 TypeError，原 concurrency 不变。",
+                  "followUps": [
+                    {
+                      "question": "为什么 setter 不立即 resumeNext 而要 queueMicrotask？",
+                      "answer": "延迟到[[微任务]]可避免在属性赋值栈内同步启动任务，保持调用后的状态一致，也给同一轮同步修改留出空间。代价是启动不是立即发生。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "连续多次设置会怎样？",
+                      "answer": "每次都会排一个[[微任务]]；循环条件使用最新 concurrency，所以多个[[微任务]]可能重复检查。由于 resumeNext 每次都重新判断上限，不会超过最终上限，但会有额外[[微任务]]开销。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "调小到 1 时已运行 5 个任务会立即停吗？",
+                      "answer": "不会。已经出队的任务继续运行，activeCount 仍为 5；只有它们 settle 触发 next，且 activeCount 降到 1 以下后才会启动新任务。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "068050a4-4be8-4f56-8082-33771c84773c",
+              "title": "clearQueue 与取消生命周期",
+              "summary": "考察等待任务的清理、AbortError 构造、运行中任务的生命周期以及 map 与 clearQueue 的组合行为。",
+              "questions": [
+                {
+                  "id": "45da9a34-6d40-4415-998a-66fdfd8da292",
+                  "title": "clearQueue 两种清理模式",
+                  "question": "clearQueue 在默认模式和 rejectOnClear 模式下分别如何处理等待中的 Promise？会改变 activeCount 吗？",
+                  "answer": "默认模式只执行 `queue.clear()`，把队列项丢掉；这些等待中的外层 [[Promise]] 既不 resolve 也不 reject，会永久 pending。rejectOnClear 为 true 时，先取 `[[AbortSignal]].abort().reason`，再逐个 dequeue 并调用队列项的 reject，因此等待中的调用会以 [[AbortError]] 拒绝。\n\n两种模式都不碰 activeCount，因为被清理的任务从未出队、从未占槽；已经运行的任务不受影响。pendingCount 在清理后归零。",
+                  "followUps": [
+                    {
+                      "question": "默认模式下 Promise.all 会怎样？",
+                      "answer": "只要有一个被清理的等待 [[Promise]] 未 settle，[[Promise.all]] 就永远不会 settle。README 因此建议在 await 返回 [[Promise]] 时启用 rejectOnClear；否则应只等待已运行任务。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么 rejectOnClear 不直接 new Error？",
+                      "answer": "使用 `[[AbortSignal]].abort().reason` 得到标准的 [[DOMException]] 类型 [[AbortError]]，便于调用方用 name 判断。当前要求运行环境支持该静态方法，未提供降级。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "clearQueue 后再调用 limit 会怎样？",
+                      "answer": "队列已空，新调用会正常入队；若 activeCount 仍低于 concurrency 会启动。旧任务若已清理则不会再执行，新旧任务之间没有代际隔离。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "f9e9a8af-e4de-4bd0-8453-f5755f4cf535",
+                  "title": "AbortError 构造与兼容性",
+                  "question": "rejectOnClear 分支为什么用 `AbortSignal.abort().reason` 生成错误？Node 20 的测试跳过说明了什么？",
+                  "answer": "`[[AbortSignal]].abort()` 返回一个已中止的 [[AbortSignal]]，其 `reason` 是标准 [[DOMException]]，name 为 [[AbortError]]。这样调用方可用 `error.name === 'AbortError'` 识别清理导致的拒绝，而不依赖自定义错误类。\n\n`test.js` 仅在 Node 20 跳过 `clearQueue rejects...`，注释说 Node 20 有 [[DOMException]] 与 [[AVA]] `throwsAsync` 的兼容问题；这不能证明业务代码在 Node 20 一定失败，只能说明该断言路径未被 [[CI]] 的 Node 20 验证。浏览器端还依赖 [[AbortSignal]].abort 静态方法，当前没有 polyfill。",
+                  "followUps": [
+                    {
+                      "question": "不用 AbortSignal，自己创建 Error 并设置 name 可行吗？",
+                      "answer": "可行，且兼容性更广；但会失去标准 [[DOMException]] 类型。若库承诺标准 [[AbortError]]，应统一构造方式并写清兼容要求，或提供降级。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "Node 20 测试跳过会带来什么风险？",
+                      "answer": "该分支在 Node 20 上没有回归覆盖，未来改动可能未被发现；[[CI]] 的 Node 20 仍跑其他测试。建议用不依赖 [[AVA]] 特殊处理的断言方式补回覆盖。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "调用方如何区分 AbortError 和任务自身错误？",
+                      "answer": "检查 `error.name === 'AbortError'` 或 `error instanceof [[DOMException]]`；但任务自身也可能抛同名错误。更严谨可附加自定义标记，当前实现没有。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "befb2e7b-843c-4ed9-a749-d440edbfd484",
+                  "title": "清理后的生命周期与优雅关闭",
+                  "question": "clearQueue 不取消运行中任务，这对优雅关闭和等待逻辑有什么影响？recipes.md 的 graceful shutdown 为什么只等待 runningPromises？",
+                  "answer": "clearQueue 只丢弃尚未出队的项，已经调用 fn 的任务继续执行；activeCount 不会因清理而减少，直到这些任务 settle 后 next 才释放。\n\n默认模式下被清理的调用永久 pending，因此若直接 `await [[Promise.all]](promises)` 会挂住；recipes.md 用 runningPromises 集合只收集已启动的 fetch，并在 shutdown 时 `[[Promise.allSettled]]([...runningPromises])`，避免等待被丢弃的 pending 调用。\n\n若启用 rejectOnClear，等待中的 [[Promise]] 会以 [[AbortError]] 拒绝，调用方可以继续用 [[Promise.allSettled]] 收尾，但仍不会中止运行中的 fetch。",
+                  "followUps": [
+                    {
+                      "question": "运行中的任务能取消吗？",
+                      "answer": "不能，p-limit 没有传入 [[AbortSignal]] 给 fn，也没有中止机制。需要取消时应在任务内部使用 [[AbortController]]，并由业务层在 shutdown 时触发。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "rejectOnClear 下 runningPromises 还有必要吗？",
+                      "answer": "仍有必要。它只解决等待中 [[Promise]] 不结算的问题，不取消已运行任务；关闭时仍应等待已启动任务完成或自行中止。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "clearQueue 后 pendingCount 与 activeCount 的关系？",
+                      "answer": "pendingCount 归零，activeCount 保持清理前的运行数量；两者不再表示总未完成任务数，因为被清理的调用已从队列移除但仍可能被调用方持有。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "2674cbfa-8921-4815-a0bc-ccc82b87f696",
+                  "title": "clearQueue 与 map 的组合",
+                  "question": "如果对 limit.map 返回的 Promise 调用 clearQueue，会发生什么？默认模式与 rejectOnClear 模式有何不同？",
+                  "answer": "map 会把每个输入转成 generator 返回的 [[Promise]]，最后交给 [[Promise.all]]。因此 clearQueue 的影响通过各个任务 [[Promise]] 汇聚到 map 的返回 [[Promise]]。\n\n- 默认模式：被清理的等待 [[Promise]] 永久 pending，只要 map 中有任何一个这样的任务，[[Promise.all]] 就永远不 settle，map 的 [[Promise]] 也一直 pending。\n- rejectOnClear：等待中的任务以 [[AbortError]] 拒绝，[[Promise.all]] 以其中一个拒绝而拒绝，map 的返回 [[Promise]] 也随之拒绝；已启动的 mapper 仍继续运行，结果被丢弃。\n\n如果所有任务都已出队运行，clearQueue 不影响 map，它仍等待这些任务。",
+                  "followUps": [
+                    {
+                      "question": "map 的 Promise.all 会等待所有 mapper 吗？",
+                      "answer": "成功路径会等待全部结果；失败路径只要有一个拒绝就立即拒绝，不等其他 mapper，但其他已调度任务仍会继续占槽并最终执行 next。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "rejectOnClear 下 map 一定以 AbortError 拒绝吗？",
+                      "answer": "不一定。若某个已运行 mapper 先以自身错误拒绝，[[Promise.all]] 可能先以该错误拒绝；取决于 settle 时序。被清理任务产生的 [[AbortError]] 只是候选原因之一。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如何让 map 在 clearQueue 后安全收尾？",
+                      "answer": "启用 rejectOnClear 并用 [[Promise.allSettled]] 或 catch 处理拒绝，同时单独跟踪已启动任务；不要假设 clearQueue 能取消 mapper。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "4b902f10-26ad-451c-8f42-8ff0de61cfb3",
+              "title": "map 与 limitFunction",
+              "summary": "考察 map 的批量调度、迭代器异常路径、边界行为，以及 limitFunction 的封装和暴露面。",
+              "questions": [
+                {
+                  "id": "370b6e83-a775-404e-89c4-48a7ea27817c",
+                  "title": "map 的正常调度路径",
+                  "question": "limit.map 如何把可迭代对象转成受限并发任务？为什么 map 被解构后仍能工作？",
+                  "answer": "map 是定义在 generator 上的 async 方法，闭包引用同一个 generator。它用 `[[Array.from]](iterable, (value,index) => { const promise=generator(function_, value,index); promises.push(promise); return promise; })` 同步消费输入，然后返回 `[[Promise.all]](promises)`。\n\n每个 mapper 调用都走同一[[队列]]，因此共享并发上限；[[Promise.all]] 保持输入顺序的结果数组。map 不依赖 this，解构后仍能通过闭包访问 generator，所以 detached 调用可用。\n\n注意它会先完整消费[[可迭代对象]]再等待结果，不是流式处理，也不会对无限[[可迭代对象]]做[[背压]]。",
+                  "followUps": [
+                    {
+                      "question": "mapper 收到的 index 如何保证顺序？",
+                      "answer": "[[Array.from]] 的映射回调按迭代顺序同步执行，index 由 [[Array.from]] 提供；任务完成顺序可能乱，但结果数组由 [[Promise.all]] 按 promise 数组顺序排列。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果 iterable 是无限生成器？",
+                      "answer": "map 会卡在 [[Array.from]] 的同步消费上，永远到不了 [[Promise.all]]，也不会启动已排任务之外的新调度；这是设计边界，不是[[背压]]。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "为什么不用 p-map？",
+                      "answer": "[[p-map]] 功能更全，适合复杂映射；这里 map 是轻量便利方法，复用现有 limit。README 也建议复杂场景用 [[p-map]]。当前实现不是 [[p-map]] 的替代。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "8b946d45-882c-4f65-a8bd-b286d7b8cb09",
+                  "title": "map 迭代器抛错的清理",
+                  "question": "当 iterable 在迭代过程中抛错时，map 如何避免未处理拒绝？已经调度的 mapper 还会运行吗？",
+                  "answer": "[[Array.from]] 在同步迭代中抛错后，map 进入 catch：对 `promises` 中已经创建的每个 [[Promise]] 执行 `promise.catch(() => {})`，然后重新抛出原始错误。这样这些 [[Promise]] 的拒绝被观察，不会变成 [[unhandledRejection]]。\n\n已经通过 generator 入队的 mapper 仍会继续运行，结果被丢弃；map 返回的 [[Promise]] 以迭代器错误立即拒绝，不等这些任务完成。测试用 `await limit(() => {})` 等已排任务结束，再断言队列清空。\n\n这是“不取消已调度任务、只观察拒绝”的策略。",
+                  "followUps": [
+                    {
+                      "question": "为什么 catch 里只 catch 不记录？",
+                      "answer": "目标是避免 [[unhandledRejection]]，而不是改变 map 的拒绝原因；map 已决定以迭代器错误拒绝，其他 mapper 错误属于被丢弃结果的一部分。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如果 mapper 在迭代器抛错前已拒绝？",
+                      "answer": "同步迭代期间 mapper 还未真正执行，因为 run 在[[微任务]]中；通常迭代器错误先成为 map 的拒绝原因。若之后 mapper 拒绝，catch 已挂上，仍被观察。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "这种策略有什么资源风险？",
+                      "answer": "已调度任务不会被取消，可能继续占用并发槽和外部资源；调用方若想尽快停止，需要在 mapper 内自行检查取消信号或使用可中止的任务实现。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "a046ea67-7d2c-415d-ad8b-45e7faa8f89e",
+                  "title": "map 的边界与错误传播",
+                  "question": "limit.map 对空 iterable、array-like 和 mapper 拒绝分别是什么行为？它是否提供任务取消？",
+                  "answer": "空 iterable 时 `promises` 为空，`[[Promise.all]]([])` 立即 resolve 为 `[]`，mapper 不会被调用。[[array-like]] 对象如 `{0:'a',1:'b',length:2}` 也能被 [[Array.from]] 处理，回调收到值和索引。\n\nmapper 拒绝时，对应任务 [[Promise]] 拒绝，[[Promise.all]] 以第一个拒绝原因拒绝；其他已调度任务仍继续运行，不会自动取消。map 本身没有 [[AbortSignal]] 参数，也没有取消队列的入口。\n\n因此它适合批量输入，不适合需要中途取消或流式[[背压]]的场景。",
+                  "followUps": [
+                    {
+                      "question": "array-like 和可迭代对象有什么区别？",
+                      "answer": "[[Array.from]] 优先使用迭代器；没有迭代器时按 length 和索引读取 [[array-like]]。因此 map 既能接受 Set、[[生成器]]，也能接受带 length 的对象。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "Promise.all 第一个拒绝后，其他拒绝会怎样？",
+                      "answer": "[[Promise.all]] 只报告第一个原因，但它已为每个任务 [[Promise]] 注册处理器，其他拒绝会被观察而非未处理；只是结果被忽略。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如何给 map 增加取消能力？",
+                      "answer": "需要设计层支持：给 mapper 传入 [[AbortSignal]]，或在 map 外层维护取消标志并拒绝后续任务；当前 API 没有该能力，clearQueue 只丢弃等待项，不中止运行项。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "94dadfaa-aa9a-4fb8-aca5-b08a8d9f49c6",
+                  "title": "limitFunction 的封装与暴露面",
+                  "question": "limitFunction 如何复用 pLimit？它向调用方暴露了哪些能力，又有哪些没有暴露？",
+                  "answer": "limitFunction 先 `const limit = pLimit(options)`，再返回 `(...args) => limit(() => function_(...args))`；每次调用都通过同一个 limit 排队，因此共享并发上限。\n\n它用 `Object.defineProperty` 只挂了 `clearQueue`，值是 `limit.clearQueue`。由于 clearQueue 使用闭包而非 this，解构后仍可调用。activeCount、pendingCount、concurrency、map 都没有转发，调用方拿不到这些状态。\n\n每次调用多一层闭包，换来的是把参数捕获到内部任务函数中；类型上返回函数与 `Pick<LimitFunction,'clearQueue'>` 相交。",
+                  "followUps": [
+                    {
+                      "question": "为什么只暴露 clearQueue？",
+                      "answer": "这是有意的最小 API：limitFunction 关注单个函数的并发执行，不承诺队列内省。若需要动态并发或计数，应直接使用 pLimit 返回的 limit。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "limitFunction 的 clearQueue 与 limit.clearQueue 是同一个函数吗？",
+                      "answer": "运行时是同一个函数引用，不是绑定副本；它不依赖 this，所以可以直接赋给 limitedFunction。若未来改成使用 this 的方法，这种转发会失效。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "怎样让 limitFunction 支持动态并发？",
+                      "answer": "当前没有暴露 concurrency setter；可以改为返回带 concurrency 访问器的对象，或让调用方保留底层 limit。直接改实现需注意类型声明也要同步。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "06be72da-5de9-4eba-8ac3-15581abd1da3",
+              "title": "类型契约与工程验证",
+              "summary": "考察 TypeScript 声明中的泛型约束、类型测试与运行时差异，以及基准场景和每任务调度开销。",
+              "questions": [
+                {
+                  "id": "e8c41287-c832-49be-a4fc-78a63ce21ac2",
+                  "title": "类型声明中的泛型约束",
+                  "question": "index.d.ts 中 LimitFunction 的调用签名和 map 泛型分别约束了什么？limitFunction 的返回类型与 LimitFunction 有何差异？",
+                  "answer": "LimitFunction 的调用签名是 `<Arguments extends unknown[], ReturnType>(function_: (...args: Arguments) => [[PromiseLike]]<ReturnType> | ReturnType, ...args: Arguments): Promise<ReturnType>`，用[[元组]]形式的[[泛型]]把传入参数与函数参数绑定，支持额外参数透传，并允许同步返回值。\n\nmap 是 `<Input, ReturnType>(iterable: [[Iterable]]<Input>, mapper: (input, index) => [[PromiseLike]]<ReturnType> | ReturnType) => Promise<ReturnType[]>`，约束输入可迭代、mapper 接收值和索引。\n\nlimitFunction 的函数参数只接受 `[[PromiseLike]]<ReturnType>`，不接受同步 ReturnType；返回类型是函数与 `Pick<LimitFunction,'clearQueue'>` 的交叉，不包含 activeCount、concurrency、map。",
+                  "followUps": [
+                    {
+                      "question": "为什么 LimitFunction 用 `Arguments extends unknown[]` 而不是简单 `...args: any[]`？",
+                      "answer": "[[元组]]形式的[[泛型]]能保留每个参数的类型和顺序，使 `limit(fn, 'x', 1)` 能检查 fn 的签名；any[] 会丢失参数约束，容易放过错误调用。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "limitFunction 类型拒绝同步返回值，但运行时接受，这是 bug 吗？",
+                      "answer": "是类型与运行时契约不一致。设计上可能有意要求异步函数；若运行时继续用 async 包装，类型应明确同步值是否支持，或在实现中拒绝同步返回。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "Options 中 concurrency 是 readonly，LimitFunction 中可写，矛盾吗？",
+                      "answer": "不矛盾。Options 是构造时输入，声明只读表达不应在对象上改；LimitFunction 的 concurrency 是运行期可调属性，因此可写。两者描述不同对象。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "878a1fd7-314c-4327-9ed0-acb028f0a5b7",
+                  "title": "类型测试与运行时差异",
+                  "question": "index.test-d.ts 覆盖了哪些类型契约？tsd 能验证 clearQueue 的运行时行为或 rejectOnClear 的实际抛错吗？",
+                  "answer": "index.test-d.ts 用 [[tsd]] 的 expectType/expectError 检查：limit 的返回 [[Promise]] 类型、参数透传、activeCount/pendingCount 为 number、clearQueue 返回 void、limitFunction 要求异步函数、非法 rejectOnClear 被拒绝，以及 map 接受 Set 和数组迭代器。\n\n[[tsd]] 只做类型检查，不执行代码，因此不能验证 clearQueue 是否真的拒绝、[[AbortError]] 的 name、或 activeCount 的运行时数值；这些由 [[AVA]] 测试覆盖。反过来，[[AVA]] 也不验证类型。二者需要同时存在。\n\n类型测试中的 expectError 只证明当前声明会拒绝该写法，不证明运行时也会拒绝。",
+                  "followUps": [
+                    {
+                      "question": "为什么类型测试要单独用 tsd？",
+                      "answer": "普通单元测试运行 JavaScript，不会检查声明文件的类型推导；[[tsd]] 在编译期断言类型，能防止声明回归。它不替代运行时测试，二者互补。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "`expectError(limitFunction((_a: string) => 'x', ...))` 说明了什么？",
+                      "answer": "说明声明要求 limitFunction 的 fn 返回 [[PromiseLike]]；同步返回在类型层被拒绝。运行时包装并没有强制检查，因此这是类型契约而非运行时保证。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如何发现类型与运行时不一致？",
+                      "answer": "需要同时写类型测试和运行时测试，并对边界值做对照；例如 limitFunction 同步返回、null options、非法 rejectOnClear。仅靠 [[tsd]] 或 [[AVA]] 单边都会漏掉。",
+                      "followUps": []
+                    }
+                  ]
+                },
+                {
+                  "id": "5c1c0c1c-6cbf-4ad8-acbc-c974949403be",
+                  "title": "基准场景与每任务开销",
+                  "question": "benchmark.js 覆盖了哪些场景？从 index.js 看，每个受限任务至少产生哪些调度开销？这些基准结果应如何解读？",
+                  "answer": "benchmark.js 用 Benchmarker 覆盖 API 限流、文件处理、数据库连接池、混合 CPU/IO、高任务量队列、limitFunction 对比和动态并发调整；默认 iterations 为 1，warmup 默认 false，计时为墙钟时间，并可用返回的操作数计算[[吞吐量]]。\n\n从 index.js 看，每次 limit 调用至少创建外层 [[Promise]]、队列项、内部 [[Promise]] 和 then 回调，并经历入队/出队与[[微任务]]切换；任务结束还要 await 和 next。高并发下这些分配和[[微任务]]可能成为可观开销，但当前上下文没有[[benchmark]]运行数据，不能断言具体量级。\n\n[[benchmark]]受随机 sleep、机器负载和单次采样影响，不能直接当作生产性能保证。",
+                  "followUps": [
+                    {
+                      "question": "为什么默认 iterations 为 1 会削弱结论？",
+                      "answer": "单次采样无法区分噪声和真实差异，尤其场景里有随机延迟。应增加重复次数、报告中位数/分位数，并在稳定环境运行；当前默认值只适合快速 smoke。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "如何降低每任务内部 Promise 的开销？",
+                      "answer": "可以评估直接调度队列项、减少一层 [[Promise]]，但会牺牲异步上下文和统一错误处理；需要[[benchmark]]与语义测试共同验证。当前实现优先保持异步边界，不能只凭性能直觉改。",
+                      "followUps": []
+                    },
+                    {
+                      "question": "高任务量场景最应观察什么指标？",
+                      "answer": "除总耗时外，应看内存分配、[[事件循环]]延迟、activeCount 是否稳定、队列长度峰值和尾延迟。只看 ops/s 可能掩盖长尾和内存压力。",
+                      "followUps": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "glossary": {
+            "getter": "getter 是对象上按属性读取触发的访问器函数。读取该属性时执行函数体并返回计算结果，而不是直接返回存储字段。",
+            "setter": "setter 是对象上按属性赋值触发的访问器函数。赋值时执行函数体，可在写入前做校验或触发副作用。",
+            "Promise": "Promise 是表示异步操作最终完成或失败的对象。它通过 then/catch 注册回调，并以不可变状态传播成功值或拒绝原因。",
+            "FIFO": "FIFO 是先进先出的排队规则。最早进入队列的元素最先被取出处理，适合按提交顺序调度任务。",
+            "队列": "队列是一种按入队顺序保存待处理元素的线性结构。通常从一端加入、另一端取出，用于解耦生产与消费。",
+            "ESM": "ESM 是 JavaScript 的官方模块系统，使用 import/export 静态声明依赖。它支持顶层 await 和静态分析，通常由运行时或打包器解析模块图。",
+            "sideEffects": "sideEffects 是打包器使用的包元数据，用来标记模块导入是否产生副作用。声明为 false 时，未被使用的导入更可能被删除以减小产物。",
+            "CI": "CI 是持续集成，在代码提交后自动执行构建、测试等检查。它通过统一环境尽早发现回归，但只覆盖配置中实际运行的命令。",
+            "benchmark": "benchmark 是可重复运行以测量性能的基准测试。它通常记录耗时或吞吐量，并需要在稳定环境和足够采样下解读。",
+            "tree-shaking": "tree-shaking 是打包阶段删除未被使用代码的优化。它依赖模块的静态结构和副作用标记，判断哪些导出可以安全移除。",
+            "TypeScript": "TypeScript 是带静态类型系统的 JavaScript 超集。它在编译期检查类型并输出 JavaScript，类型信息不会在运行时强制执行。",
+            "AbortSignal": "AbortSignal 是用于传递取消/中止状态的标准接口。它可与 AbortController 配合，通过 aborted 状态和 reason 通知消费者。",
+            "微任务": "微任务是事件循环中在当前调用栈清空后、下一轮宏任务前执行的任务。Promise 回调等通常进入微任务队列，因此会在同步代码之后尽快运行。",
+            "AsyncLocalStorage": "AsyncLocalStorage 是 Node.js 提供的异步上下文存储机制。它让同一异步调用链中的代码读取到调用方设置的上下文，而不必显式传参。",
+            "thenable": "thenable 是带有 then 方法的对象，可被 Promise 采用其状态。它不必是原生 Promise，但异步函数和 await 会按 then 协议等待它。",
+            "DOMException": "DOMException 是 Web 平台定义的标准异常类型，常用于 DOM 和 Abort 相关错误。它带有 name 等字段，调用方可据此区分错误类别。",
+            "AbortError": "AbortError 是表示操作被中止的错误名称，通常由 AbortSignal 触发。调用方常通过 error.name 判断是否属于取消而非业务失败。",
+            "Promise.all": "Promise.all 接收一组 Promise 并返回聚合 Promise。它在全部成功时按输入顺序给出结果，任一拒绝时立即以该原因拒绝。",
+            "AVA": "AVA 是 JavaScript 测试运行器，支持并发执行测试和异步断言。它提供 throwsAsync 等断言，但不同 Node 版本对标准异常的处理可能有差异。",
+            "Promise.allSettled": "Promise.allSettled 等待一组 Promise 全部结算。它总是成功返回每个任务的状态和值/原因，适合需要部分结果的收尾。",
+            "AbortController": "AbortController 是创建并控制 AbortSignal 的对象。调用 abort 会切换信号状态并携带原因，供下游任务检查或中止。",
+            "可迭代对象": "可迭代对象是实现 Symbol.iterator 的对象，可被 for...of 或 Array.from 消费。它按迭代器协议逐个产出值，适合表达集合或生成序列。",
+            "背压": "背压是生产速度超过消费速度时的流量控制机制。它让上游暂停或减速，避免队列和内存无限增长。",
+            "生成器": "生成器是 JavaScript 中可暂停和恢复执行的函数，调用后返回迭代器。它通过 yield 逐个产出值，适合惰性序列。",
+            "p-map": "p-map 是用于并发映射集合的 npm 包。它提供并发上限、停止条件等更丰富的映射控制，适合复杂批处理。",
+            "unhandledRejection": "unhandledRejection 是 Promise 拒绝后没有处理器时触发的事件/状态。运行时可据此报告未处理错误，严重时可能终止进程。",
+            "array-like": "array-like 是具有 length 和数字索引、但不一定实现迭代器的对象。Array.from 可按下标读取并转换为数组。",
+            "泛型": "泛型是参数化类型机制，让函数或类型在保持类型安全的同时适配多种输入。它通过类型参数在调用处推导具体类型。",
+            "PromiseLike": "PromiseLike 是 TypeScript 中描述具有 then 方法的类型。它不要求完整 Promise API，async/await 和 Promise 采用逻辑可与之互操作。",
+            "Iterable": "Iterable 是 TypeScript/JavaScript 中描述可迭代协议的类型。实现 Symbol.iterator 后，可被 for...of、Array.from 等消费。",
+            "元组": "元组是长度和元素类型固定的数组类型。TypeScript 用它精确表达参数列表的顺序与类型。",
+            "tsd": "tsd 是 TypeScript 声明文件的类型测试工具。它用 expectType/expectError 在编译期断言类型，不执行运行时逻辑。",
+            "吞吐量": "吞吐量是单位时间内完成的工作量。基准中常用操作数除以耗时计算，但不能单独反映尾延迟和资源压力。",
+            "事件循环": "事件循环是 JavaScript 运行时调度同步代码、微任务和宏任务的机制。它决定回调执行顺序，也影响异步任务的延迟表现。",
+            "Array.from": "Array.from 是从可迭代对象或 array-like 创建数组的静态方法。它可接收映射回调，在构建数组时逐个转换元素。",
+            "并发": "并发是多个任务在重叠时间段内推进的执行方式。它不一定并行，具体交错由调度器和事件循环决定。"
+          },
+          "security": {
+            "excludedFiles": 1,
+            "redactedFiles": 0,
+            "redactionMatches": 0,
+            "categories": {
+              "credential-file": 1
+            }
+          },
+          "generationDiagnostics": {
+            "version": 1,
+            "status": "succeeded",
+            "contextStrategy": "structure-v1",
+            "tokenEstimateMethod": "mixed-text-v1",
+            "estimatedInputTokens": 27013,
+            "inputTokenBudget": 64000,
+            "reservedOutputTokens": 65536,
+            "actualUsage": {
+              "inputTokens": 14851,
+              "outputTokens": 34662,
+              "totalTokens": 49513
+            },
+            "usageComplete": true,
+            "requestCount": 1,
+            "repairRequestCount": 0,
+            "compensationRequestCount": 0,
+            "contextBuildMs": 195,
+            "modelMs": 181660,
+            "totalMs": 181892,
+            "selectedFiles": 15,
+            "selectedRegions": 15,
+            "omittedFiles": 0
+          },
+          "evaluationDiagnostics": {
+            "version": 1,
+            "status": "succeeded",
+            "contextStrategy": "structure-v1",
+            "tokenEstimateMethod": "mixed-text-v1",
+            "estimatedInputTokens": 27013,
+            "inputTokenBudget": 64000,
+            "reservedOutputTokens": 65536,
+            "actualUsage": {
+              "inputTokens": 14851,
+              "outputTokens": 34662,
+              "totalTokens": 49513
+            },
+            "usageComplete": true,
+            "requestCount": 1,
+            "repairRequestCount": 0,
+            "compensationRequestCount": 0,
+            "contextBuildMs": 195,
+            "modelMs": 181660,
+            "totalMs": 181892,
+            "selectedFiles": 15,
+            "selectedRegions": 15,
+            "omittedFiles": 0
+          }
+        },
+        "questions": [
+          {
+            "question": "pLimit 如何处理数字与 options 两种入参？传入 null、非整数并发或非法 rejectOnClear 时，异常顺序是什么？",
+            "answer": "要点是先用 typeof 区分对象入参，再做并发校验，最后校验 rejectOnClear。\n\n- 数字直接进入 validateConcurrency；对象分支解构 `{concurrency, rejectOnClear = false}`，其余字段忽略。\n- 由于 `typeof null === 'object'`，`pLimit(null)` 会先在解构 null 时抛出原生 TypeError，而不是走到自定义的并发错误；数组也会被当作对象解构。\n- validateConcurrency 只接受 `Number.isInteger` 或 `Number.POSITIVE_INFINITY` 且大于 0；0、-1、1.2、undefined、true、`{}`、`{concurrency:0}` 都抛 TypeError。\n- rejectOnClear 在并发校验之后检查，非 boolean 抛 TypeError；因此两者都非法时先报 concurrency。",
+            "section": "整体架构与入口",
+            "followUps": [
+              {
+                "question": "为什么允许 Infinity 作为并发上限？",
+                "answer": "允许 `Number.POSITIVE_INFINITY` 表示不限制并发；resumeNext 中 `activeCount < concurrency` 恒真，队列中有任务就立即启动。注意仍受队列长度和内存限制，不是“无成本”。",
+                "followUps": []
+              },
+              {
+                "question": "对象检测为什么不用更严格的方式？",
+                "answer": "当前用 typeof 能覆盖普通 options 和数组，但 null 会产生非预期错误；更稳妥可先判 `concurrency !== null && typeof concurrency === 'object'` 或 isPlainObject，再给自定义 TypeError。这是设计建议，不是现有行为。",
+                "followUps": []
+              },
+              {
+                "question": "如果 options 的 concurrency 是 getter 会怎样？",
+                "answer": "解构会同步触发 getter，抛错会直接传播；当前没有 try/catch 包裹。读取后仍要过 validateConcurrency，因此 getter 返回非法值会抛自定义 TypeError。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "默认导出的 limit 函数为什么用 Object.defineProperties 挂载 activeCount、pendingCount、clearQueue、concurrency 和 map？这些属性的职责是什么？",
+            "answer": "默认导出不是普通函数对象，而是带只读计数、可写并发和方法的可调用对象。\n\n- activeCount/pendingCount 是 [[getter]]，分别返回闭包中的 activeCount 和 queue.size。\n- clearQueue 是 value 方法，读取闭包中的 queue 与 rejectOnClear 决定丢弃还是拒绝。\n- concurrency 通过 [[getter]] 和 [[setter]] 暴露：setter 会校验并排队启动。\n- map 是 async value 方法，复用同一个 generator 调度输入。\n- 这些属性没有用 class 暴露，而是闭包加 defineProperties，外部不能直接拿到 queue。",
+            "section": "整体架构与入口",
+            "followUps": [
+              {
+                "question": "getter 返回 activeCount 是否实时？",
+                "answer": "是，读取时访问闭包变量；但 activeCount 在任务真正调用前就可能自增，因此它表示已占用的并发槽，不是严格等于正在执行的函数体数量。",
+                "followUps": []
+              },
+              {
+                "question": "为什么不让外部直接操作 queue？",
+                "answer": "直接暴露会破坏不变量，例如外部 dequeue 后 activeCount 不会同步，clearQueue 的拒绝策略也会绕过。封装成方法能保持计数与队列一致，但当前实现仍要小心外部并发调用。",
+                "followUps": []
+              },
+              {
+                "question": "用 class 改写有什么差异？",
+                "answer": "class 更容易类型化，但默认导出必须同时可调用又有属性；可以返回带方法的函数。当前闭包方案避免 this 绑定问题，map/clearQueue 被解构后仍能工作。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "项目如何依赖 yocto-queue？从 index.js 的调用看，它对队列抽象提出了哪些最小接口要求？",
+            "answer": "`package.json` 把 `yocto-queue` 放在 dependencies，`index.js` 默认导入 `Queue` 并 `new Queue()`。\n\n代码只使用四个操作：`enqueue(item)` 入队、`dequeue()` 取出并返回队首、`size` 读取长度、`clear()` 清空。队列项是 `{reject, run}`，其中 run 由内部 [[Promise]] 的 resolve 赋值。\n\n从这些调用可以确认它是 [[FIFO]] 队列抽象，但上下文中没有 yocto-queue 源码，不能据此断言其内部复杂度或所有边界行为；只能确认 p-limit 依赖上述 API。",
+            "section": "整体架构与入口",
+            "followUps": [
+              {
+                "question": "为什么不用数组 push/shift？",
+                "answer": "数组也能实现同样语义，但 shift 在常见实现中可能移动元素；使用专用 [[队列]] 可把入队/出队职责交给依赖。不过没有基准数据不能断言本项目里一定更快，需实测。",
+                "followUps": []
+              },
+              {
+                "question": "如果 yocto-queue 的 dequeue 返回 undefined 怎么处理？",
+                "answer": "当前 resumeNext 只在 `queue.size > 0` 时调用 dequeue，并假设返回值是队列项；没有判空。若依赖违反契约会在此处抛错，属于未防护的信任边界。",
+                "followUps": []
+              },
+              {
+                "question": "为什么 queueItem 要存 reject？",
+                "answer": "reject 用于 rejectOnClear 分支直接拒绝等待中的外层 [[Promise]]；run 则用于稍后启动任务。两者分离让清空队列时不必执行任务也能结算调用方。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "从 package.json 与 CI 配置看，这个包的导出、模块格式和运行环境承诺是什么？benchmark 是否在 CI 覆盖范围内？",
+            "answer": "包是 [[ESM]]（`type: module`），exports 同时映射 `types` 与 `default`，发布文件只含 `index.js` 和 `index.d.ts`，并声明 [[sideEffects]] 为 false。`engines` 要求 Node >=20，[[CI]] 在 Node 20/22/24 上执行 `npm test`。\n\n运行依赖只有 yocto-queue；README 声称浏览器可用，但当前上下文没有浏览器测试或 browser 字段，不能仅凭声明确认所有浏览器行为。`benchmark.js` 使用 `using`、`fs.mkdtempDisposableSync`、`styleText` 等较新 API，且 `npm test` 不包含 [[benchmark]]，因此 benchmark 不在 CI 验证范围内，无法确认 Node 20 下可运行。",
+            "section": "整体架构与入口",
+            "followUps": [
+              {
+                "question": "`sideEffects: false` 对打包意味着什么？",
+                "answer": "它告诉支持 [[tree-shaking]] 的打包器：未被使用的模块导入可被删除。前提是包内模块确实无导入副作用；当前 index.js 只在调用 pLimit 时创建闭包和队列，但打包器是否完全删除仍取决于使用方式。",
+                "followUps": []
+              },
+              {
+                "question": "为什么 exports 同时写 types 和 default？",
+                "answer": "让 [[TypeScript]] 解析声明文件，运行时解析 ESM 入口；顺序上 types 在前可避免被 default 覆盖。若只写 default，类型消费者可能找不到声明。",
+                "followUps": []
+              },
+              {
+                "question": "README 的浏览器承诺如何验证？",
+                "answer": "需要浏览器测试矩阵或至少无 Node 内置模块的构建验证。当前 index.js 只用 yocto-queue 和全局 AbortSignal，理论上可打包，但 rejectOnClear 依赖 [[AbortSignal]].abort，不能从现有 CI 推断旧浏览器兼容。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "一次 limit(fn) 从 enqueue 到真正调用 fn 经过哪些步骤？为什么这里要借助一个内部 Promise 和 then？",
+            "answer": "核心是排队项先入队，再由内部 [[Promise]] 的 resolve 触发 [[微任务]] 中的 run。\n\n1. generator 创建外层 [[Promise]]，executor 调 enqueue。\n2. enqueue 建 `queueItem={reject}`，再建内部 [[Promise]]；executor 同步把 `queueItem.run=internalResolve` 并 `queue.enqueue`。\n3. 给内部 [[Promise]] 挂 `.then(run.bind(...))`。\n4. 若 `activeCount < concurrency`，resumeNext 出队、activeCount++、调用 queueItem.run()。\n5. 内部 [[Promise]] 进入已决议，run 在随后的 [[微任务]] 执行，fn 此时才被调用。\n\n因此即使有空槽，fn 也不会在 limit 调用栈内同步执行；这也让 [[AsyncLocalStorage]] 上下文能在 then 注册时被捕获。",
+            "section": "队列调度与并发状态",
+            "followUps": [
+              {
+                "question": "如果直接 queue.dequeue().run 而不经过内部 Promise 会怎样？",
+                "answer": "任务可能更早同步启动，破坏“所有任务异步执行”的测试预期；更重要的是 run 会在 resumeNext 的调用上下文执行，可能丢失调用方通过 [[AsyncLocalStorage]] 建立的上下文。当前 then 是在调用方上下文注册的。",
+                "followUps": []
+              },
+              {
+                "question": "activeCount 在 fn 调用前就增加，会带来什么语义？",
+                "answer": "它把已占槽但尚未执行的调度也计入 activeCount，所以刚调用 limit 后读数可能已大于实际执行中的函数数。这是槽位计数，不是严格运行中计数。",
+                "followUps": []
+              },
+              {
+                "question": "内部 Promise 一直不 resolve 会怎样？",
+                "answer": "对应队列项不会启动，外层 [[Promise]] 保持 pending；clearQueue 默认分支正是丢弃这些项。若 rejectOnClear，则外层被拒绝，但内部 [[Promise]] 仍可能保持 pending，当前没有额外清理。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "activeCount 与 pendingCount 在实现中如何更新？它们与 README 的“currently running”表述是否完全一致？",
+            "answer": "pendingCount 直接返回 `queue.size`；activeCount 是闭包变量，在 resumeNext 中自增、在 next 中自减。\n\n- resumeNext 在出队前判断 `activeCount < concurrency`，满足则先 `activeCount++` 再调用队列项的 run。\n- run 等任务结果 settle 后调用 next；next 先 `activeCount--`，再 resumeNext 启动下一个。\n- 因此 activeCount 统计的是“已占用并发槽”的任务，包括已出队但尚未在 [[微任务]] 中调用 fn 的任务。测试 `runs all tasks asynchronously` 中两次 limit 后立即断言 activeCount 为 2，正说明这一点。\n\n它不等同于“函数体正在执行”的精确数量；pendingCount 则是仍在队列中、尚未出队的数量。",
+            "section": "队列调度与并发状态",
+            "followUps": [
+              {
+                "question": "任务 reject 时 activeCount 会减吗？",
+                "answer": "会。run 中 `try { await result } catch {}` 捕获内部 await 的拒绝，随后仍执行 next()；调用方拿到的外层 [[Promise]] 仍按原结果 reject。",
+                "followUps": []
+              },
+              {
+                "question": "pendingCount 包含正在执行的任务吗？",
+                "answer": "不包含。出队时 run 被调用，队列长度已减少；正在执行或已占槽的任务只体现在 activeCount。clearQueue 后 pendingCount 归零，但 activeCount 不变。",
+                "followUps": []
+              },
+              {
+                "question": "如果并发上限调低到小于 activeCount？",
+                "answer": "不会取消已占槽任务；resumeNext 因 `activeCount < concurrency` 为假而暂停启动新任务，直到 next 把 activeCount 降到新上限以下。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "run 中为什么先 `resolve(result)`，再 `await result` 并吞掉异常？这样错误还能传到调用方吗？",
+            "answer": "能。`result` 是 `(async () => function_(...arguments_))()` 返回的 [[Promise]]；`resolve(result)` 让外层 [[Promise]] 采用它的状态，所以调用方看到原始成功值或拒绝原因。\n\n随后的 `try { await result } catch {}` 只是为了在内部等待任务结束，避免内部 await 产生未处理的拒绝；它吞掉的是内部这一路的异常，不会改变已交给调用方的 [[Promise]] 的状态。任务 settle 后执行 next()，释放槽位。\n\n注意 `resolve` 发生在 await 之前，但 [[Promise]] 的状态传播仍是异步的；调用方不会同步拿到值。",
+            "section": "队列调度与并发状态",
+            "followUps": [
+              {
+                "question": "如果去掉 catch 会怎样？",
+                "answer": "内部 `await result` 的拒绝会变成 run 返回 [[Promise]] 的拒绝；该 [[Promise]] 没有被消费者，可能触发 [[unhandledRejection]]。调用方仍能收到拒绝，但进程可能报未处理拒绝。",
+                "followUps": []
+              },
+              {
+                "question": "如果 fn 返回 thenable 而非原生 Promise？",
+                "answer": "async 立即执行函数会采用 [[thenable]] 的状态，`await result` 也会等待其 settle；因此 [[thenable]] 的拒绝同样会走到 catch。若 [[thenable]] 永不 settle，槽位也永不释放。",
+                "followUps": []
+              },
+              {
+                "question": "resolve(result) 与 resolve(await result) 有何区别？",
+                "answer": "前者让外层 [[Promise]] 采用 result 的状态，调用方更早拿到同一个拒绝/成功传播；后者会先等 result settle，外层再结算。当前实现让调用方与任务结果直接关联，同时内部再等待以释放槽位。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "limit 如何支持同步抛错函数和返回非 Promise 的函数？为什么同步 throw 不会让后续任务卡住？",
+            "answer": "`run` 用异步立即执行函数包住调用：`const result = (async () => function_(...arguments_))();`。同步 throw 会变成 result 的拒绝，而不是在 run 调用栈中直接炸出；返回 null 等普通值则变成 fulfilled 的 [[Promise]]。\n\n外层 `resolve(result)` 把拒绝传给调用方；内部 `await result` 的 catch 吞掉内部异常后仍执行 `next()`，所以下一个排队任务会被 resumeNext 启动。测试 `continues after sync throw` 验证了第二个任务仍会执行。\n\n这依赖 async 函数对同步异常和返回值的统一包装，不需要额外 Promise.resolve。",
+            "section": "队列调度与并发状态",
+            "followUps": [
+              {
+                "question": "如果 fn 直接返回一个已拒绝 Promise 呢？",
+                "answer": "结果同样是外层拒绝，内部 catch 后 next；与同步 throw 的差别只在拒绝产生位置。调用方必须处理外层 [[Promise]]，否则会有未处理拒绝。",
+                "followUps": []
+              },
+              {
+                "question": "非 Promise 返回值在类型上允许吗？",
+                "answer": "LimitFunction 调用签名允许 `PromiseLike<ReturnType> | ReturnType`，所以类型允许同步值；但 limitFunction 的类型只允许 [[PromiseLike]]，运行时却仍可接受同步值，存在类型与运行时差异。",
+                "followUps": []
+              },
+              {
+                "question": "为什么不在 enqueue 时直接 try/catch fn？",
+                "answer": "enqueue 只负责排队，真正调用在 run 的异步阶段；提前调用会破坏并发限制和异步上下文。把 try/catch 放在 async 包装里能统一处理同步与异步错误。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "limit.concurrency 的 setter 如何生效？调大、调小以及设为 Infinity 时分别会发生什么？",
+            "answer": "动态调整[[并发]]上限的入口是 concurrency setter。setter 先 validateConcurrency(newConcurrency)，通过后直接更新闭包变量，再用 queueMicrotask 排一个循环：只要 `activeCount < concurrency && queue.size > 0`，就 resumeNext。\n\n- 调大：新上限在[[微任务]]中生效，循环可一次启动多个等待任务。\n- 调小：不会取消已运行任务；resumeNext 因 activeCount 大于上限而暂停，等 next 把 activeCount 降下来才继续。\n- 设为 Infinity：条件恒真，[[微任务]]会把当前队列全部启动；仍受实际资源限制。\n\n如果新值非法，会同步抛 TypeError，原 concurrency 不变。",
+            "section": "队列调度与并发状态",
+            "followUps": [
+              {
+                "question": "为什么 setter 不立即 resumeNext 而要 queueMicrotask？",
+                "answer": "延迟到[[微任务]]可避免在属性赋值栈内同步启动任务，保持调用后的状态一致，也给同一轮同步修改留出空间。代价是启动不是立即发生。",
+                "followUps": []
+              },
+              {
+                "question": "连续多次设置会怎样？",
+                "answer": "每次都会排一个[[微任务]]；循环条件使用最新 concurrency，所以多个[[微任务]]可能重复检查。由于 resumeNext 每次都重新判断上限，不会超过最终上限，但会有额外[[微任务]]开销。",
+                "followUps": []
+              },
+              {
+                "question": "调小到 1 时已运行 5 个任务会立即停吗？",
+                "answer": "不会。已经出队的任务继续运行，activeCount 仍为 5；只有它们 settle 触发 next，且 activeCount 降到 1 以下后才会启动新任务。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "clearQueue 在默认模式和 rejectOnClear 模式下分别如何处理等待中的 Promise？会改变 activeCount 吗？",
+            "answer": "默认模式只执行 `queue.clear()`，把队列项丢掉；这些等待中的外层 [[Promise]] 既不 resolve 也不 reject，会永久 pending。rejectOnClear 为 true 时，先取 `[[AbortSignal]].abort().reason`，再逐个 dequeue 并调用队列项的 reject，因此等待中的调用会以 [[AbortError]] 拒绝。\n\n两种模式都不碰 activeCount，因为被清理的任务从未出队、从未占槽；已经运行的任务不受影响。pendingCount 在清理后归零。",
+            "section": "clearQueue 与取消生命周期",
+            "followUps": [
+              {
+                "question": "默认模式下 Promise.all 会怎样？",
+                "answer": "只要有一个被清理的等待 [[Promise]] 未 settle，[[Promise.all]] 就永远不会 settle。README 因此建议在 await 返回 [[Promise]] 时启用 rejectOnClear；否则应只等待已运行任务。",
+                "followUps": []
+              },
+              {
+                "question": "为什么 rejectOnClear 不直接 new Error？",
+                "answer": "使用 `[[AbortSignal]].abort().reason` 得到标准的 [[DOMException]] 类型 [[AbortError]]，便于调用方用 name 判断。当前要求运行环境支持该静态方法，未提供降级。",
+                "followUps": []
+              },
+              {
+                "question": "clearQueue 后再调用 limit 会怎样？",
+                "answer": "队列已空，新调用会正常入队；若 activeCount 仍低于 concurrency 会启动。旧任务若已清理则不会再执行，新旧任务之间没有代际隔离。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "rejectOnClear 分支为什么用 `AbortSignal.abort().reason` 生成错误？Node 20 的测试跳过说明了什么？",
+            "answer": "`[[AbortSignal]].abort()` 返回一个已中止的 [[AbortSignal]]，其 `reason` 是标准 [[DOMException]]，name 为 [[AbortError]]。这样调用方可用 `error.name === 'AbortError'` 识别清理导致的拒绝，而不依赖自定义错误类。\n\n`test.js` 仅在 Node 20 跳过 `clearQueue rejects...`，注释说 Node 20 有 [[DOMException]] 与 [[AVA]] `throwsAsync` 的兼容问题；这不能证明业务代码在 Node 20 一定失败，只能说明该断言路径未被 [[CI]] 的 Node 20 验证。浏览器端还依赖 [[AbortSignal]].abort 静态方法，当前没有 polyfill。",
+            "section": "clearQueue 与取消生命周期",
+            "followUps": [
+              {
+                "question": "不用 AbortSignal，自己创建 Error 并设置 name 可行吗？",
+                "answer": "可行，且兼容性更广；但会失去标准 [[DOMException]] 类型。若库承诺标准 [[AbortError]]，应统一构造方式并写清兼容要求，或提供降级。",
+                "followUps": []
+              },
+              {
+                "question": "Node 20 测试跳过会带来什么风险？",
+                "answer": "该分支在 Node 20 上没有回归覆盖，未来改动可能未被发现；[[CI]] 的 Node 20 仍跑其他测试。建议用不依赖 [[AVA]] 特殊处理的断言方式补回覆盖。",
+                "followUps": []
+              },
+              {
+                "question": "调用方如何区分 AbortError 和任务自身错误？",
+                "answer": "检查 `error.name === 'AbortError'` 或 `error instanceof [[DOMException]]`；但任务自身也可能抛同名错误。更严谨可附加自定义标记，当前实现没有。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "clearQueue 不取消运行中任务，这对优雅关闭和等待逻辑有什么影响？recipes.md 的 graceful shutdown 为什么只等待 runningPromises？",
+            "answer": "clearQueue 只丢弃尚未出队的项，已经调用 fn 的任务继续执行；activeCount 不会因清理而减少，直到这些任务 settle 后 next 才释放。\n\n默认模式下被清理的调用永久 pending，因此若直接 `await [[Promise.all]](promises)` 会挂住；recipes.md 用 runningPromises 集合只收集已启动的 fetch，并在 shutdown 时 `[[Promise.allSettled]]([...runningPromises])`，避免等待被丢弃的 pending 调用。\n\n若启用 rejectOnClear，等待中的 [[Promise]] 会以 [[AbortError]] 拒绝，调用方可以继续用 [[Promise.allSettled]] 收尾，但仍不会中止运行中的 fetch。",
+            "section": "clearQueue 与取消生命周期",
+            "followUps": [
+              {
+                "question": "运行中的任务能取消吗？",
+                "answer": "不能，p-limit 没有传入 [[AbortSignal]] 给 fn，也没有中止机制。需要取消时应在任务内部使用 [[AbortController]]，并由业务层在 shutdown 时触发。",
+                "followUps": []
+              },
+              {
+                "question": "rejectOnClear 下 runningPromises 还有必要吗？",
+                "answer": "仍有必要。它只解决等待中 [[Promise]] 不结算的问题，不取消已运行任务；关闭时仍应等待已启动任务完成或自行中止。",
+                "followUps": []
+              },
+              {
+                "question": "clearQueue 后 pendingCount 与 activeCount 的关系？",
+                "answer": "pendingCount 归零，activeCount 保持清理前的运行数量；两者不再表示总未完成任务数，因为被清理的调用已从队列移除但仍可能被调用方持有。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "如果对 limit.map 返回的 Promise 调用 clearQueue，会发生什么？默认模式与 rejectOnClear 模式有何不同？",
+            "answer": "map 会把每个输入转成 generator 返回的 [[Promise]]，最后交给 [[Promise.all]]。因此 clearQueue 的影响通过各个任务 [[Promise]] 汇聚到 map 的返回 [[Promise]]。\n\n- 默认模式：被清理的等待 [[Promise]] 永久 pending，只要 map 中有任何一个这样的任务，[[Promise.all]] 就永远不 settle，map 的 [[Promise]] 也一直 pending。\n- rejectOnClear：等待中的任务以 [[AbortError]] 拒绝，[[Promise.all]] 以其中一个拒绝而拒绝，map 的返回 [[Promise]] 也随之拒绝；已启动的 mapper 仍继续运行，结果被丢弃。\n\n如果所有任务都已出队运行，clearQueue 不影响 map，它仍等待这些任务。",
+            "section": "clearQueue 与取消生命周期",
+            "followUps": [
+              {
+                "question": "map 的 Promise.all 会等待所有 mapper 吗？",
+                "answer": "成功路径会等待全部结果；失败路径只要有一个拒绝就立即拒绝，不等其他 mapper，但其他已调度任务仍会继续占槽并最终执行 next。",
+                "followUps": []
+              },
+              {
+                "question": "rejectOnClear 下 map 一定以 AbortError 拒绝吗？",
+                "answer": "不一定。若某个已运行 mapper 先以自身错误拒绝，[[Promise.all]] 可能先以该错误拒绝；取决于 settle 时序。被清理任务产生的 [[AbortError]] 只是候选原因之一。",
+                "followUps": []
+              },
+              {
+                "question": "如何让 map 在 clearQueue 后安全收尾？",
+                "answer": "启用 rejectOnClear 并用 [[Promise.allSettled]] 或 catch 处理拒绝，同时单独跟踪已启动任务；不要假设 clearQueue 能取消 mapper。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "limit.map 如何把可迭代对象转成受限并发任务？为什么 map 被解构后仍能工作？",
+            "answer": "map 是定义在 generator 上的 async 方法，闭包引用同一个 generator。它用 `[[Array.from]](iterable, (value,index) => { const promise=generator(function_, value,index); promises.push(promise); return promise; })` 同步消费输入，然后返回 `[[Promise.all]](promises)`。\n\n每个 mapper 调用都走同一[[队列]]，因此共享并发上限；[[Promise.all]] 保持输入顺序的结果数组。map 不依赖 this，解构后仍能通过闭包访问 generator，所以 detached 调用可用。\n\n注意它会先完整消费[[可迭代对象]]再等待结果，不是流式处理，也不会对无限[[可迭代对象]]做[[背压]]。",
+            "section": "map 与 limitFunction",
+            "followUps": [
+              {
+                "question": "mapper 收到的 index 如何保证顺序？",
+                "answer": "[[Array.from]] 的映射回调按迭代顺序同步执行，index 由 [[Array.from]] 提供；任务完成顺序可能乱，但结果数组由 [[Promise.all]] 按 promise 数组顺序排列。",
+                "followUps": []
+              },
+              {
+                "question": "如果 iterable 是无限生成器？",
+                "answer": "map 会卡在 [[Array.from]] 的同步消费上，永远到不了 [[Promise.all]]，也不会启动已排任务之外的新调度；这是设计边界，不是[[背压]]。",
+                "followUps": []
+              },
+              {
+                "question": "为什么不用 p-map？",
+                "answer": "[[p-map]] 功能更全，适合复杂映射；这里 map 是轻量便利方法，复用现有 limit。README 也建议复杂场景用 [[p-map]]。当前实现不是 [[p-map]] 的替代。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "当 iterable 在迭代过程中抛错时，map 如何避免未处理拒绝？已经调度的 mapper 还会运行吗？",
+            "answer": "[[Array.from]] 在同步迭代中抛错后，map 进入 catch：对 `promises` 中已经创建的每个 [[Promise]] 执行 `promise.catch(() => {})`，然后重新抛出原始错误。这样这些 [[Promise]] 的拒绝被观察，不会变成 [[unhandledRejection]]。\n\n已经通过 generator 入队的 mapper 仍会继续运行，结果被丢弃；map 返回的 [[Promise]] 以迭代器错误立即拒绝，不等这些任务完成。测试用 `await limit(() => {})` 等已排任务结束，再断言队列清空。\n\n这是“不取消已调度任务、只观察拒绝”的策略。",
+            "section": "map 与 limitFunction",
+            "followUps": [
+              {
+                "question": "为什么 catch 里只 catch 不记录？",
+                "answer": "目标是避免 [[unhandledRejection]]，而不是改变 map 的拒绝原因；map 已决定以迭代器错误拒绝，其他 mapper 错误属于被丢弃结果的一部分。",
+                "followUps": []
+              },
+              {
+                "question": "如果 mapper 在迭代器抛错前已拒绝？",
+                "answer": "同步迭代期间 mapper 还未真正执行，因为 run 在[[微任务]]中；通常迭代器错误先成为 map 的拒绝原因。若之后 mapper 拒绝，catch 已挂上，仍被观察。",
+                "followUps": []
+              },
+              {
+                "question": "这种策略有什么资源风险？",
+                "answer": "已调度任务不会被取消，可能继续占用并发槽和外部资源；调用方若想尽快停止，需要在 mapper 内自行检查取消信号或使用可中止的任务实现。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "limit.map 对空 iterable、array-like 和 mapper 拒绝分别是什么行为？它是否提供任务取消？",
+            "answer": "空 iterable 时 `promises` 为空，`[[Promise.all]]([])` 立即 resolve 为 `[]`，mapper 不会被调用。[[array-like]] 对象如 `{0:'a',1:'b',length:2}` 也能被 [[Array.from]] 处理，回调收到值和索引。\n\nmapper 拒绝时，对应任务 [[Promise]] 拒绝，[[Promise.all]] 以第一个拒绝原因拒绝；其他已调度任务仍继续运行，不会自动取消。map 本身没有 [[AbortSignal]] 参数，也没有取消队列的入口。\n\n因此它适合批量输入，不适合需要中途取消或流式[[背压]]的场景。",
+            "section": "map 与 limitFunction",
+            "followUps": [
+              {
+                "question": "array-like 和可迭代对象有什么区别？",
+                "answer": "[[Array.from]] 优先使用迭代器；没有迭代器时按 length 和索引读取 [[array-like]]。因此 map 既能接受 Set、[[生成器]]，也能接受带 length 的对象。",
+                "followUps": []
+              },
+              {
+                "question": "Promise.all 第一个拒绝后，其他拒绝会怎样？",
+                "answer": "[[Promise.all]] 只报告第一个原因，但它已为每个任务 [[Promise]] 注册处理器，其他拒绝会被观察而非未处理；只是结果被忽略。",
+                "followUps": []
+              },
+              {
+                "question": "如何给 map 增加取消能力？",
+                "answer": "需要设计层支持：给 mapper 传入 [[AbortSignal]]，或在 map 外层维护取消标志并拒绝后续任务；当前 API 没有该能力，clearQueue 只丢弃等待项，不中止运行项。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "limitFunction 如何复用 pLimit？它向调用方暴露了哪些能力，又有哪些没有暴露？",
+            "answer": "limitFunction 先 `const limit = pLimit(options)`，再返回 `(...args) => limit(() => function_(...args))`；每次调用都通过同一个 limit 排队，因此共享并发上限。\n\n它用 `Object.defineProperty` 只挂了 `clearQueue`，值是 `limit.clearQueue`。由于 clearQueue 使用闭包而非 this，解构后仍可调用。activeCount、pendingCount、concurrency、map 都没有转发，调用方拿不到这些状态。\n\n每次调用多一层闭包，换来的是把参数捕获到内部任务函数中；类型上返回函数与 `Pick<LimitFunction,'clearQueue'>` 相交。",
+            "section": "map 与 limitFunction",
+            "followUps": [
+              {
+                "question": "为什么只暴露 clearQueue？",
+                "answer": "这是有意的最小 API：limitFunction 关注单个函数的并发执行，不承诺队列内省。若需要动态并发或计数，应直接使用 pLimit 返回的 limit。",
+                "followUps": []
+              },
+              {
+                "question": "limitFunction 的 clearQueue 与 limit.clearQueue 是同一个函数吗？",
+                "answer": "运行时是同一个函数引用，不是绑定副本；它不依赖 this，所以可以直接赋给 limitedFunction。若未来改成使用 this 的方法，这种转发会失效。",
+                "followUps": []
+              },
+              {
+                "question": "怎样让 limitFunction 支持动态并发？",
+                "answer": "当前没有暴露 concurrency setter；可以改为返回带 concurrency 访问器的对象，或让调用方保留底层 limit。直接改实现需注意类型声明也要同步。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "index.d.ts 中 LimitFunction 的调用签名和 map 泛型分别约束了什么？limitFunction 的返回类型与 LimitFunction 有何差异？",
+            "answer": "LimitFunction 的调用签名是 `<Arguments extends unknown[], ReturnType>(function_: (...args: Arguments) => [[PromiseLike]]<ReturnType> | ReturnType, ...args: Arguments): Promise<ReturnType>`，用[[元组]]形式的[[泛型]]把传入参数与函数参数绑定，支持额外参数透传，并允许同步返回值。\n\nmap 是 `<Input, ReturnType>(iterable: [[Iterable]]<Input>, mapper: (input, index) => [[PromiseLike]]<ReturnType> | ReturnType) => Promise<ReturnType[]>`，约束输入可迭代、mapper 接收值和索引。\n\nlimitFunction 的函数参数只接受 `[[PromiseLike]]<ReturnType>`，不接受同步 ReturnType；返回类型是函数与 `Pick<LimitFunction,'clearQueue'>` 的交叉，不包含 activeCount、concurrency、map。",
+            "section": "类型契约与工程验证",
+            "followUps": [
+              {
+                "question": "为什么 LimitFunction 用 `Arguments extends unknown[]` 而不是简单 `...args: any[]`？",
+                "answer": "[[元组]]形式的[[泛型]]能保留每个参数的类型和顺序，使 `limit(fn, 'x', 1)` 能检查 fn 的签名；any[] 会丢失参数约束，容易放过错误调用。",
+                "followUps": []
+              },
+              {
+                "question": "limitFunction 类型拒绝同步返回值，但运行时接受，这是 bug 吗？",
+                "answer": "是类型与运行时契约不一致。设计上可能有意要求异步函数；若运行时继续用 async 包装，类型应明确同步值是否支持，或在实现中拒绝同步返回。",
+                "followUps": []
+              },
+              {
+                "question": "Options 中 concurrency 是 readonly，LimitFunction 中可写，矛盾吗？",
+                "answer": "不矛盾。Options 是构造时输入，声明只读表达不应在对象上改；LimitFunction 的 concurrency 是运行期可调属性，因此可写。两者描述不同对象。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "index.test-d.ts 覆盖了哪些类型契约？tsd 能验证 clearQueue 的运行时行为或 rejectOnClear 的实际抛错吗？",
+            "answer": "index.test-d.ts 用 [[tsd]] 的 expectType/expectError 检查：limit 的返回 [[Promise]] 类型、参数透传、activeCount/pendingCount 为 number、clearQueue 返回 void、limitFunction 要求异步函数、非法 rejectOnClear 被拒绝，以及 map 接受 Set 和数组迭代器。\n\n[[tsd]] 只做类型检查，不执行代码，因此不能验证 clearQueue 是否真的拒绝、[[AbortError]] 的 name、或 activeCount 的运行时数值；这些由 [[AVA]] 测试覆盖。反过来，[[AVA]] 也不验证类型。二者需要同时存在。\n\n类型测试中的 expectError 只证明当前声明会拒绝该写法，不证明运行时也会拒绝。",
+            "section": "类型契约与工程验证",
+            "followUps": [
+              {
+                "question": "为什么类型测试要单独用 tsd？",
+                "answer": "普通单元测试运行 JavaScript，不会检查声明文件的类型推导；[[tsd]] 在编译期断言类型，能防止声明回归。它不替代运行时测试，二者互补。",
+                "followUps": []
+              },
+              {
+                "question": "`expectError(limitFunction((_a: string) => 'x', ...))` 说明了什么？",
+                "answer": "说明声明要求 limitFunction 的 fn 返回 [[PromiseLike]]；同步返回在类型层被拒绝。运行时包装并没有强制检查，因此这是类型契约而非运行时保证。",
+                "followUps": []
+              },
+              {
+                "question": "如何发现类型与运行时不一致？",
+                "answer": "需要同时写类型测试和运行时测试，并对边界值做对照；例如 limitFunction 同步返回、null options、非法 rejectOnClear。仅靠 [[tsd]] 或 [[AVA]] 单边都会漏掉。",
+                "followUps": []
+              }
+            ]
+          },
+          {
+            "question": "benchmark.js 覆盖了哪些场景？从 index.js 看，每个受限任务至少产生哪些调度开销？这些基准结果应如何解读？",
+            "answer": "benchmark.js 用 Benchmarker 覆盖 API 限流、文件处理、数据库连接池、混合 CPU/IO、高任务量队列、limitFunction 对比和动态并发调整；默认 iterations 为 1，warmup 默认 false，计时为墙钟时间，并可用返回的操作数计算[[吞吐量]]。\n\n从 index.js 看，每次 limit 调用至少创建外层 [[Promise]]、队列项、内部 [[Promise]] 和 then 回调，并经历入队/出队与[[微任务]]切换；任务结束还要 await 和 next。高并发下这些分配和[[微任务]]可能成为可观开销，但当前上下文没有[[benchmark]]运行数据，不能断言具体量级。\n\n[[benchmark]]受随机 sleep、机器负载和单次采样影响，不能直接当作生产性能保证。",
+            "section": "类型契约与工程验证",
+            "followUps": [
+              {
+                "question": "为什么默认 iterations 为 1 会削弱结论？",
+                "answer": "单次采样无法区分噪声和真实差异，尤其场景里有随机延迟。应增加重复次数、报告中位数/分位数，并在稳定环境运行；当前默认值只适合快速 smoke。",
+                "followUps": []
+              },
+              {
+                "question": "如何降低每任务内部 Promise 的开销？",
+                "answer": "可以评估直接调度队列项、减少一层 [[Promise]]，但会牺牲异步上下文和统一错误处理；需要[[benchmark]]与语义测试共同验证。当前实现优先保持异步边界，不能只凭性能直觉改。",
+                "followUps": []
+              },
+              {
+                "question": "高任务量场景最应观察什么指标？",
+                "answer": "除总耗时外，应看内存分配、[[事件循环]]延迟、activeCount 是否稳定、队列长度峰值和尾延迟。只看 ops/s 可能掩盖长尾和内存压力。",
+                "followUps": []
+              }
+            ]
+          }
+        ],
+        "scored": {
+          "contract": {
+            "pass": true
+          },
+          "quota": {
+            "pass": true,
+            "actual": 20,
+            "min": 15,
+            "target": 20,
+            "max": 25
+          },
+          "duplicateRate": {
+            "count": 0,
+            "denominator": 20,
+            "rate": 0
+          },
+          "knownFactCoverage": {
+            "covered": 7,
+            "total": 7,
+            "facts": {
+              "plimit-validation": {
+                "covered": true,
+                "keywords": [
+                  "validateConcurrency",
+                  "POSITIVE_INFINITY",
+                  "rejectOnClear"
+                ]
+              },
+              "plimit-active-queue": {
+                "covered": true,
+                "keywords": [
+                  "activeCount",
+                  "resumeNext",
+                  "queue.dequeue"
+                ]
+              },
+              "plimit-promise-rejection": {
+                "covered": true,
+                "keywords": [
+                  "resolve(result)",
+                  "await result",
+                  "next()"
+                ]
+              },
+              "plimit-clear": {
+                "covered": true,
+                "keywords": [
+                  "clearQueue",
+                  "rejectOnClear",
+                  "AbortSignal.abort"
+                ]
+              },
+              "plimit-concurrency-setter": {
+                "covered": true,
+                "keywords": [
+                  "concurrency",
+                  "queueMicrotask",
+                  "validateConcurrency"
+                ]
+              },
+              "plimit-map-order": {
+                "covered": true,
+                "keywords": [
+                  "map",
+                  "Array.from",
+                  "Promise.all"
+                ]
+              },
+              "plimit-wrapper": {
+                "covered": true,
+                "keywords": [
+                  "limitFunction",
+                  "limitedFunction",
+                  "clearQueue"
+                ]
+              }
+            }
+          },
+          "forbiddenAssertionHits": [],
+          "alerts": []
+        }
+      },
+      "output": {
+        "version": 1,
+        "createdAt": "2026-11-05T08:09:23.180Z",
+        "projectName": "p-limit",
+        "projectPath": "/public-corpus/p-limit",
+        "granularity": "medium",
+        "roleFocus": "general",
+        "profileId": "real-eval",
+        "modelUsed": "deepseek-v4-flash",
+        "projectSummary": "p-limit 是一个用 JavaScript/TypeScript 实现的 Promise 并发限制库，核心导出 pLimit 与 limitFunction，通过 yocto-queue 维护 FIFO 等待队列，并以闭包保存并发上限、运行计数和清理策略。项目包含 AVA 运行时测试、tsd 类型测试、Benchmarker 基准脚本与 recipes 使用示例，整体结构小而集中，主要复杂度在调度、动态并发、clearQueue 和 map 的边界行为。",
+        "sections": [
+          {
+            "id": "c86dbf97-3a79-41e7-be07-bdb81a067259",
+            "title": "整体架构与入口",
+            "summary": "考察 pLimit 的入参归一化、返回函数结构、运行依赖与包级运行环境边界。",
+            "questions": [
+              {
+                "id": "62e518d4-c22a-4103-a547-8e08346920be",
+                "title": "入参归一化与校验顺序",
+                "question": "pLimit 如何处理数字与 options 两种入参？传入 null、非整数并发或非法 rejectOnClear 时，异常顺序是什么？",
+                "answer": "要点是先用 typeof 区分对象入参，再做并发校验，最后校验 rejectOnClear。\n\n- 数字直接进入 validateConcurrency；对象分支解构 `{concurrency, rejectOnClear = false}`，其余字段忽略。\n- 由于 `typeof null === 'object'`，`pLimit(null)` 会先在解构 null 时抛出原生 TypeError，而不是走到自定义的并发错误；数组也会被当作对象解构。\n- validateConcurrency 只接受 `Number.isInteger` 或 `Number.POSITIVE_INFINITY` 且大于 0；0、-1、1.2、undefined、true、`{}`、`{concurrency:0}` 都抛 TypeError。\n- rejectOnClear 在并发校验之后检查，非 boolean 抛 TypeError；因此两者都非法时先报 concurrency。",
+                "followUps": [
+                  {
+                    "question": "为什么允许 Infinity 作为并发上限？",
+                    "answer": "允许 `Number.POSITIVE_INFINITY` 表示不限制并发；resumeNext 中 `activeCount < concurrency` 恒真，队列中有任务就立即启动。注意仍受队列长度和内存限制，不是“无成本”。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "对象检测为什么不用更严格的方式？",
+                    "answer": "当前用 typeof 能覆盖普通 options 和数组，但 null 会产生非预期错误；更稳妥可先判 `concurrency !== null && typeof concurrency === 'object'` 或 isPlainObject，再给自定义 TypeError。这是设计建议，不是现有行为。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果 options 的 concurrency 是 getter 会怎样？",
+                    "answer": "解构会同步触发 getter，抛错会直接传播；当前没有 try/catch 包裹。读取后仍要过 validateConcurrency，因此 getter 返回非法值会抛自定义 TypeError。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "55b52c29-7741-4f50-ab69-b9cd1a94c7a5",
+                "title": "返回函数的属性结构",
+                "question": "默认导出的 limit 函数为什么用 Object.defineProperties 挂载 activeCount、pendingCount、clearQueue、concurrency 和 map？这些属性的职责是什么？",
+                "answer": "默认导出不是普通函数对象，而是带只读计数、可写并发和方法的可调用对象。\n\n- activeCount/pendingCount 是 [[getter]]，分别返回闭包中的 activeCount 和 queue.size。\n- clearQueue 是 value 方法，读取闭包中的 queue 与 rejectOnClear 决定丢弃还是拒绝。\n- concurrency 通过 [[getter]] 和 [[setter]] 暴露：setter 会校验并排队启动。\n- map 是 async value 方法，复用同一个 generator 调度输入。\n- 这些属性没有用 class 暴露，而是闭包加 defineProperties，外部不能直接拿到 queue。",
+                "followUps": [
+                  {
+                    "question": "getter 返回 activeCount 是否实时？",
+                    "answer": "是，读取时访问闭包变量；但 activeCount 在任务真正调用前就可能自增，因此它表示已占用的并发槽，不是严格等于正在执行的函数体数量。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么不让外部直接操作 queue？",
+                    "answer": "直接暴露会破坏不变量，例如外部 dequeue 后 activeCount 不会同步，clearQueue 的拒绝策略也会绕过。封装成方法能保持计数与队列一致，但当前实现仍要小心外部并发调用。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "用 class 改写有什么差异？",
+                    "answer": "class 更容易类型化，但默认导出必须同时可调用又有属性；可以返回带方法的函数。当前闭包方案避免 this 绑定问题，map/clearQueue 被解构后仍能工作。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "0af2c8e1-9d46-4d4e-81bc-eb6b9ff81bab",
+                "title": "yocto-queue 依赖路径",
+                "question": "项目如何依赖 yocto-queue？从 index.js 的调用看，它对队列抽象提出了哪些最小接口要求？",
+                "answer": "`package.json` 把 `yocto-queue` 放在 dependencies，`index.js` 默认导入 `Queue` 并 `new Queue()`。\n\n代码只使用四个操作：`enqueue(item)` 入队、`dequeue()` 取出并返回队首、`size` 读取长度、`clear()` 清空。队列项是 `{reject, run}`，其中 run 由内部 [[Promise]] 的 resolve 赋值。\n\n从这些调用可以确认它是 [[FIFO]] 队列抽象，但上下文中没有 yocto-queue 源码，不能据此断言其内部复杂度或所有边界行为；只能确认 p-limit 依赖上述 API。",
+                "followUps": [
+                  {
+                    "question": "为什么不用数组 push/shift？",
+                    "answer": "数组也能实现同样语义，但 shift 在常见实现中可能移动元素；使用专用 [[队列]] 可把入队/出队职责交给依赖。不过没有基准数据不能断言本项目里一定更快，需实测。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果 yocto-queue 的 dequeue 返回 undefined 怎么处理？",
+                    "answer": "当前 resumeNext 只在 `queue.size > 0` 时调用 dequeue，并假设返回值是队列项；没有判空。若依赖违反契约会在此处抛错，属于未防护的信任边界。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么 queueItem 要存 reject？",
+                    "answer": "reject 用于 rejectOnClear 分支直接拒绝等待中的外层 [[Promise]]；run 则用于稍后启动任务。两者分离让清空队列时不必执行任务也能结算调用方。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "51a98a5e-9087-41ab-a355-ad7d12ce40d1",
+                "title": "包导出与运行环境边界",
+                "question": "从 package.json 与 CI 配置看，这个包的导出、模块格式和运行环境承诺是什么？benchmark 是否在 CI 覆盖范围内？",
+                "answer": "包是 [[ESM]]（`type: module`），exports 同时映射 `types` 与 `default`，发布文件只含 `index.js` 和 `index.d.ts`，并声明 [[sideEffects]] 为 false。`engines` 要求 Node >=20，[[CI]] 在 Node 20/22/24 上执行 `npm test`。\n\n运行依赖只有 yocto-queue；README 声称浏览器可用，但当前上下文没有浏览器测试或 browser 字段，不能仅凭声明确认所有浏览器行为。`benchmark.js` 使用 `using`、`fs.mkdtempDisposableSync`、`styleText` 等较新 API，且 `npm test` 不包含 [[benchmark]]，因此 benchmark 不在 CI 验证范围内，无法确认 Node 20 下可运行。",
+                "followUps": [
+                  {
+                    "question": "`sideEffects: false` 对打包意味着什么？",
+                    "answer": "它告诉支持 [[tree-shaking]] 的打包器：未被使用的模块导入可被删除。前提是包内模块确实无导入副作用；当前 index.js 只在调用 pLimit 时创建闭包和队列，但打包器是否完全删除仍取决于使用方式。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么 exports 同时写 types 和 default？",
+                    "answer": "让 [[TypeScript]] 解析声明文件，运行时解析 ESM 入口；顺序上 types 在前可避免被 default 覆盖。若只写 default，类型消费者可能找不到声明。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "README 的浏览器承诺如何验证？",
+                    "answer": "需要浏览器测试矩阵或至少无 Node 内置模块的构建验证。当前 index.js 只用 yocto-queue 和全局 AbortSignal，理论上可打包，但 rejectOnClear 依赖 [[AbortSignal]].abort，不能从现有 CI 推断旧浏览器兼容。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "2b29228c-620f-4ca6-91d9-caffc52a18e3",
+            "title": "队列调度与并发状态",
+            "summary": "考察任务从入队到执行的微任务链路、运行计数语义、错误传播、同步异常和动态并发调整。",
+            "questions": [
+              {
+                "id": "73c29c3c-de95-41dd-9771-d78a3e8ba930",
+                "title": "enqueue 到 run 的微任务链路",
+                "question": "一次 limit(fn) 从 enqueue 到真正调用 fn 经过哪些步骤？为什么这里要借助一个内部 Promise 和 then？",
+                "answer": "核心是排队项先入队，再由内部 [[Promise]] 的 resolve 触发 [[微任务]] 中的 run。\n\n1. generator 创建外层 [[Promise]]，executor 调 enqueue。\n2. enqueue 建 `queueItem={reject}`，再建内部 [[Promise]]；executor 同步把 `queueItem.run=internalResolve` 并 `queue.enqueue`。\n3. 给内部 [[Promise]] 挂 `.then(run.bind(...))`。\n4. 若 `activeCount < concurrency`，resumeNext 出队、activeCount++、调用 queueItem.run()。\n5. 内部 [[Promise]] 进入已决议，run 在随后的 [[微任务]] 执行，fn 此时才被调用。\n\n因此即使有空槽，fn 也不会在 limit 调用栈内同步执行；这也让 [[AsyncLocalStorage]] 上下文能在 then 注册时被捕获。",
+                "followUps": [
+                  {
+                    "question": "如果直接 queue.dequeue().run 而不经过内部 Promise 会怎样？",
+                    "answer": "任务可能更早同步启动，破坏“所有任务异步执行”的测试预期；更重要的是 run 会在 resumeNext 的调用上下文执行，可能丢失调用方通过 [[AsyncLocalStorage]] 建立的上下文。当前 then 是在调用方上下文注册的。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "activeCount 在 fn 调用前就增加，会带来什么语义？",
+                    "answer": "它把已占槽但尚未执行的调度也计入 activeCount，所以刚调用 limit 后读数可能已大于实际执行中的函数数。这是槽位计数，不是严格运行中计数。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "内部 Promise 一直不 resolve 会怎样？",
+                    "answer": "对应队列项不会启动，外层 [[Promise]] 保持 pending；clearQueue 默认分支正是丢弃这些项。若 rejectOnClear，则外层被拒绝，但内部 [[Promise]] 仍可能保持 pending，当前没有额外清理。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "7bbc6458-3864-4815-bebf-ef1e4d9aab01",
+                "title": "运行计数与等待计数",
+                "question": "activeCount 与 pendingCount 在实现中如何更新？它们与 README 的“currently running”表述是否完全一致？",
+                "answer": "pendingCount 直接返回 `queue.size`；activeCount 是闭包变量，在 resumeNext 中自增、在 next 中自减。\n\n- resumeNext 在出队前判断 `activeCount < concurrency`，满足则先 `activeCount++` 再调用队列项的 run。\n- run 等任务结果 settle 后调用 next；next 先 `activeCount--`，再 resumeNext 启动下一个。\n- 因此 activeCount 统计的是“已占用并发槽”的任务，包括已出队但尚未在 [[微任务]] 中调用 fn 的任务。测试 `runs all tasks asynchronously` 中两次 limit 后立即断言 activeCount 为 2，正说明这一点。\n\n它不等同于“函数体正在执行”的精确数量；pendingCount 则是仍在队列中、尚未出队的数量。",
+                "followUps": [
+                  {
+                    "question": "任务 reject 时 activeCount 会减吗？",
+                    "answer": "会。run 中 `try { await result } catch {}` 捕获内部 await 的拒绝，随后仍执行 next()；调用方拿到的外层 [[Promise]] 仍按原结果 reject。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "pendingCount 包含正在执行的任务吗？",
+                    "answer": "不包含。出队时 run 被调用，队列长度已减少；正在执行或已占槽的任务只体现在 activeCount。clearQueue 后 pendingCount 归零，但 activeCount 不变。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果并发上限调低到小于 activeCount？",
+                    "answer": "不会取消已占槽任务；resumeNext 因 `activeCount < concurrency` 为假而暂停启动新任务，直到 next 把 activeCount 降到新上限以下。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "97ed4aa1-0bf9-4b70-bc73-50c309f44be8",
+                "title": "结果 Promise 与错误传播",
+                "question": "run 中为什么先 `resolve(result)`，再 `await result` 并吞掉异常？这样错误还能传到调用方吗？",
+                "answer": "能。`result` 是 `(async () => function_(...arguments_))()` 返回的 [[Promise]]；`resolve(result)` 让外层 [[Promise]] 采用它的状态，所以调用方看到原始成功值或拒绝原因。\n\n随后的 `try { await result } catch {}` 只是为了在内部等待任务结束，避免内部 await 产生未处理的拒绝；它吞掉的是内部这一路的异常，不会改变已交给调用方的 [[Promise]] 的状态。任务 settle 后执行 next()，释放槽位。\n\n注意 `resolve` 发生在 await 之前，但 [[Promise]] 的状态传播仍是异步的；调用方不会同步拿到值。",
+                "followUps": [
+                  {
+                    "question": "如果去掉 catch 会怎样？",
+                    "answer": "内部 `await result` 的拒绝会变成 run 返回 [[Promise]] 的拒绝；该 [[Promise]] 没有被消费者，可能触发 [[unhandledRejection]]。调用方仍能收到拒绝，但进程可能报未处理拒绝。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果 fn 返回 thenable 而非原生 Promise？",
+                    "answer": "async 立即执行函数会采用 [[thenable]] 的状态，`await result` 也会等待其 settle；因此 [[thenable]] 的拒绝同样会走到 catch。若 [[thenable]] 永不 settle，槽位也永不释放。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "resolve(result) 与 resolve(await result) 有何区别？",
+                    "answer": "前者让外层 [[Promise]] 采用 result 的状态，调用方更早拿到同一个拒绝/成功传播；后者会先等 result settle，外层再结算。当前实现让调用方与任务结果直接关联，同时内部再等待以释放槽位。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "5d898ea1-5fde-467f-9511-f1c569d52cda",
+                "title": "同步抛错与非 Promise 返回",
+                "question": "limit 如何支持同步抛错函数和返回非 Promise 的函数？为什么同步 throw 不会让后续任务卡住？",
+                "answer": "`run` 用异步立即执行函数包住调用：`const result = (async () => function_(...arguments_))();`。同步 throw 会变成 result 的拒绝，而不是在 run 调用栈中直接炸出；返回 null 等普通值则变成 fulfilled 的 [[Promise]]。\n\n外层 `resolve(result)` 把拒绝传给调用方；内部 `await result` 的 catch 吞掉内部异常后仍执行 `next()`，所以下一个排队任务会被 resumeNext 启动。测试 `continues after sync throw` 验证了第二个任务仍会执行。\n\n这依赖 async 函数对同步异常和返回值的统一包装，不需要额外 Promise.resolve。",
+                "followUps": [
+                  {
+                    "question": "如果 fn 直接返回一个已拒绝 Promise 呢？",
+                    "answer": "结果同样是外层拒绝，内部 catch 后 next；与同步 throw 的差别只在拒绝产生位置。调用方必须处理外层 [[Promise]]，否则会有未处理拒绝。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "非 Promise 返回值在类型上允许吗？",
+                    "answer": "LimitFunction 调用签名允许 `PromiseLike<ReturnType> | ReturnType`，所以类型允许同步值；但 limitFunction 的类型只允许 [[PromiseLike]]，运行时却仍可接受同步值，存在类型与运行时差异。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么不在 enqueue 时直接 try/catch fn？",
+                    "answer": "enqueue 只负责排队，真正调用在 run 的异步阶段；提前调用会破坏并发限制和异步上下文。把 try/catch 放在 async 包装里能统一处理同步与异步错误。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "a2f47f45-8e91-4a06-ae2d-de9fb7cb1e78",
+                "title": "动态调整并发上限",
+                "question": "limit.concurrency 的 setter 如何生效？调大、调小以及设为 Infinity 时分别会发生什么？",
+                "answer": "动态调整[[并发]]上限的入口是 concurrency setter。setter 先 validateConcurrency(newConcurrency)，通过后直接更新闭包变量，再用 queueMicrotask 排一个循环：只要 `activeCount < concurrency && queue.size > 0`，就 resumeNext。\n\n- 调大：新上限在[[微任务]]中生效，循环可一次启动多个等待任务。\n- 调小：不会取消已运行任务；resumeNext 因 activeCount 大于上限而暂停，等 next 把 activeCount 降下来才继续。\n- 设为 Infinity：条件恒真，[[微任务]]会把当前队列全部启动；仍受实际资源限制。\n\n如果新值非法，会同步抛 TypeError，原 concurrency 不变。",
+                "followUps": [
+                  {
+                    "question": "为什么 setter 不立即 resumeNext 而要 queueMicrotask？",
+                    "answer": "延迟到[[微任务]]可避免在属性赋值栈内同步启动任务，保持调用后的状态一致，也给同一轮同步修改留出空间。代价是启动不是立即发生。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "连续多次设置会怎样？",
+                    "answer": "每次都会排一个[[微任务]]；循环条件使用最新 concurrency，所以多个[[微任务]]可能重复检查。由于 resumeNext 每次都重新判断上限，不会超过最终上限，但会有额外[[微任务]]开销。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "调小到 1 时已运行 5 个任务会立即停吗？",
+                    "answer": "不会。已经出队的任务继续运行，activeCount 仍为 5；只有它们 settle 触发 next，且 activeCount 降到 1 以下后才会启动新任务。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "068050a4-4be8-4f56-8082-33771c84773c",
+            "title": "clearQueue 与取消生命周期",
+            "summary": "考察等待任务的清理、AbortError 构造、运行中任务的生命周期以及 map 与 clearQueue 的组合行为。",
+            "questions": [
+              {
+                "id": "45da9a34-6d40-4415-998a-66fdfd8da292",
+                "title": "clearQueue 两种清理模式",
+                "question": "clearQueue 在默认模式和 rejectOnClear 模式下分别如何处理等待中的 Promise？会改变 activeCount 吗？",
+                "answer": "默认模式只执行 `queue.clear()`，把队列项丢掉；这些等待中的外层 [[Promise]] 既不 resolve 也不 reject，会永久 pending。rejectOnClear 为 true 时，先取 `[[AbortSignal]].abort().reason`，再逐个 dequeue 并调用队列项的 reject，因此等待中的调用会以 [[AbortError]] 拒绝。\n\n两种模式都不碰 activeCount，因为被清理的任务从未出队、从未占槽；已经运行的任务不受影响。pendingCount 在清理后归零。",
+                "followUps": [
+                  {
+                    "question": "默认模式下 Promise.all 会怎样？",
+                    "answer": "只要有一个被清理的等待 [[Promise]] 未 settle，[[Promise.all]] 就永远不会 settle。README 因此建议在 await 返回 [[Promise]] 时启用 rejectOnClear；否则应只等待已运行任务。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么 rejectOnClear 不直接 new Error？",
+                    "answer": "使用 `[[AbortSignal]].abort().reason` 得到标准的 [[DOMException]] 类型 [[AbortError]]，便于调用方用 name 判断。当前要求运行环境支持该静态方法，未提供降级。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "clearQueue 后再调用 limit 会怎样？",
+                    "answer": "队列已空，新调用会正常入队；若 activeCount 仍低于 concurrency 会启动。旧任务若已清理则不会再执行，新旧任务之间没有代际隔离。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "f9e9a8af-e4de-4bd0-8453-f5755f4cf535",
+                "title": "AbortError 构造与兼容性",
+                "question": "rejectOnClear 分支为什么用 `AbortSignal.abort().reason` 生成错误？Node 20 的测试跳过说明了什么？",
+                "answer": "`[[AbortSignal]].abort()` 返回一个已中止的 [[AbortSignal]]，其 `reason` 是标准 [[DOMException]]，name 为 [[AbortError]]。这样调用方可用 `error.name === 'AbortError'` 识别清理导致的拒绝，而不依赖自定义错误类。\n\n`test.js` 仅在 Node 20 跳过 `clearQueue rejects...`，注释说 Node 20 有 [[DOMException]] 与 [[AVA]] `throwsAsync` 的兼容问题；这不能证明业务代码在 Node 20 一定失败，只能说明该断言路径未被 [[CI]] 的 Node 20 验证。浏览器端还依赖 [[AbortSignal]].abort 静态方法，当前没有 polyfill。",
+                "followUps": [
+                  {
+                    "question": "不用 AbortSignal，自己创建 Error 并设置 name 可行吗？",
+                    "answer": "可行，且兼容性更广；但会失去标准 [[DOMException]] 类型。若库承诺标准 [[AbortError]]，应统一构造方式并写清兼容要求，或提供降级。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "Node 20 测试跳过会带来什么风险？",
+                    "answer": "该分支在 Node 20 上没有回归覆盖，未来改动可能未被发现；[[CI]] 的 Node 20 仍跑其他测试。建议用不依赖 [[AVA]] 特殊处理的断言方式补回覆盖。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "调用方如何区分 AbortError 和任务自身错误？",
+                    "answer": "检查 `error.name === 'AbortError'` 或 `error instanceof [[DOMException]]`；但任务自身也可能抛同名错误。更严谨可附加自定义标记，当前实现没有。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "befb2e7b-843c-4ed9-a749-d440edbfd484",
+                "title": "清理后的生命周期与优雅关闭",
+                "question": "clearQueue 不取消运行中任务，这对优雅关闭和等待逻辑有什么影响？recipes.md 的 graceful shutdown 为什么只等待 runningPromises？",
+                "answer": "clearQueue 只丢弃尚未出队的项，已经调用 fn 的任务继续执行；activeCount 不会因清理而减少，直到这些任务 settle 后 next 才释放。\n\n默认模式下被清理的调用永久 pending，因此若直接 `await [[Promise.all]](promises)` 会挂住；recipes.md 用 runningPromises 集合只收集已启动的 fetch，并在 shutdown 时 `[[Promise.allSettled]]([...runningPromises])`，避免等待被丢弃的 pending 调用。\n\n若启用 rejectOnClear，等待中的 [[Promise]] 会以 [[AbortError]] 拒绝，调用方可以继续用 [[Promise.allSettled]] 收尾，但仍不会中止运行中的 fetch。",
+                "followUps": [
+                  {
+                    "question": "运行中的任务能取消吗？",
+                    "answer": "不能，p-limit 没有传入 [[AbortSignal]] 给 fn，也没有中止机制。需要取消时应在任务内部使用 [[AbortController]]，并由业务层在 shutdown 时触发。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "rejectOnClear 下 runningPromises 还有必要吗？",
+                    "answer": "仍有必要。它只解决等待中 [[Promise]] 不结算的问题，不取消已运行任务；关闭时仍应等待已启动任务完成或自行中止。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "clearQueue 后 pendingCount 与 activeCount 的关系？",
+                    "answer": "pendingCount 归零，activeCount 保持清理前的运行数量；两者不再表示总未完成任务数，因为被清理的调用已从队列移除但仍可能被调用方持有。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "2674cbfa-8921-4815-a0bc-ccc82b87f696",
+                "title": "clearQueue 与 map 的组合",
+                "question": "如果对 limit.map 返回的 Promise 调用 clearQueue，会发生什么？默认模式与 rejectOnClear 模式有何不同？",
+                "answer": "map 会把每个输入转成 generator 返回的 [[Promise]]，最后交给 [[Promise.all]]。因此 clearQueue 的影响通过各个任务 [[Promise]] 汇聚到 map 的返回 [[Promise]]。\n\n- 默认模式：被清理的等待 [[Promise]] 永久 pending，只要 map 中有任何一个这样的任务，[[Promise.all]] 就永远不 settle，map 的 [[Promise]] 也一直 pending。\n- rejectOnClear：等待中的任务以 [[AbortError]] 拒绝，[[Promise.all]] 以其中一个拒绝而拒绝，map 的返回 [[Promise]] 也随之拒绝；已启动的 mapper 仍继续运行，结果被丢弃。\n\n如果所有任务都已出队运行，clearQueue 不影响 map，它仍等待这些任务。",
+                "followUps": [
+                  {
+                    "question": "map 的 Promise.all 会等待所有 mapper 吗？",
+                    "answer": "成功路径会等待全部结果；失败路径只要有一个拒绝就立即拒绝，不等其他 mapper，但其他已调度任务仍会继续占槽并最终执行 next。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "rejectOnClear 下 map 一定以 AbortError 拒绝吗？",
+                    "answer": "不一定。若某个已运行 mapper 先以自身错误拒绝，[[Promise.all]] 可能先以该错误拒绝；取决于 settle 时序。被清理任务产生的 [[AbortError]] 只是候选原因之一。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如何让 map 在 clearQueue 后安全收尾？",
+                    "answer": "启用 rejectOnClear 并用 [[Promise.allSettled]] 或 catch 处理拒绝，同时单独跟踪已启动任务；不要假设 clearQueue 能取消 mapper。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "4b902f10-26ad-451c-8f42-8ff0de61cfb3",
+            "title": "map 与 limitFunction",
+            "summary": "考察 map 的批量调度、迭代器异常路径、边界行为，以及 limitFunction 的封装和暴露面。",
+            "questions": [
+              {
+                "id": "370b6e83-a775-404e-89c4-48a7ea27817c",
+                "title": "map 的正常调度路径",
+                "question": "limit.map 如何把可迭代对象转成受限并发任务？为什么 map 被解构后仍能工作？",
+                "answer": "map 是定义在 generator 上的 async 方法，闭包引用同一个 generator。它用 `[[Array.from]](iterable, (value,index) => { const promise=generator(function_, value,index); promises.push(promise); return promise; })` 同步消费输入，然后返回 `[[Promise.all]](promises)`。\n\n每个 mapper 调用都走同一[[队列]]，因此共享并发上限；[[Promise.all]] 保持输入顺序的结果数组。map 不依赖 this，解构后仍能通过闭包访问 generator，所以 detached 调用可用。\n\n注意它会先完整消费[[可迭代对象]]再等待结果，不是流式处理，也不会对无限[[可迭代对象]]做[[背压]]。",
+                "followUps": [
+                  {
+                    "question": "mapper 收到的 index 如何保证顺序？",
+                    "answer": "[[Array.from]] 的映射回调按迭代顺序同步执行，index 由 [[Array.from]] 提供；任务完成顺序可能乱，但结果数组由 [[Promise.all]] 按 promise 数组顺序排列。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果 iterable 是无限生成器？",
+                    "answer": "map 会卡在 [[Array.from]] 的同步消费上，永远到不了 [[Promise.all]]，也不会启动已排任务之外的新调度；这是设计边界，不是[[背压]]。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "为什么不用 p-map？",
+                    "answer": "[[p-map]] 功能更全，适合复杂映射；这里 map 是轻量便利方法，复用现有 limit。README 也建议复杂场景用 [[p-map]]。当前实现不是 [[p-map]] 的替代。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "8b946d45-882c-4f65-a8bd-b286d7b8cb09",
+                "title": "map 迭代器抛错的清理",
+                "question": "当 iterable 在迭代过程中抛错时，map 如何避免未处理拒绝？已经调度的 mapper 还会运行吗？",
+                "answer": "[[Array.from]] 在同步迭代中抛错后，map 进入 catch：对 `promises` 中已经创建的每个 [[Promise]] 执行 `promise.catch(() => {})`，然后重新抛出原始错误。这样这些 [[Promise]] 的拒绝被观察，不会变成 [[unhandledRejection]]。\n\n已经通过 generator 入队的 mapper 仍会继续运行，结果被丢弃；map 返回的 [[Promise]] 以迭代器错误立即拒绝，不等这些任务完成。测试用 `await limit(() => {})` 等已排任务结束，再断言队列清空。\n\n这是“不取消已调度任务、只观察拒绝”的策略。",
+                "followUps": [
+                  {
+                    "question": "为什么 catch 里只 catch 不记录？",
+                    "answer": "目标是避免 [[unhandledRejection]]，而不是改变 map 的拒绝原因；map 已决定以迭代器错误拒绝，其他 mapper 错误属于被丢弃结果的一部分。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如果 mapper 在迭代器抛错前已拒绝？",
+                    "answer": "同步迭代期间 mapper 还未真正执行，因为 run 在[[微任务]]中；通常迭代器错误先成为 map 的拒绝原因。若之后 mapper 拒绝，catch 已挂上，仍被观察。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "这种策略有什么资源风险？",
+                    "answer": "已调度任务不会被取消，可能继续占用并发槽和外部资源；调用方若想尽快停止，需要在 mapper 内自行检查取消信号或使用可中止的任务实现。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "a046ea67-7d2c-415d-ad8b-45e7faa8f89e",
+                "title": "map 的边界与错误传播",
+                "question": "limit.map 对空 iterable、array-like 和 mapper 拒绝分别是什么行为？它是否提供任务取消？",
+                "answer": "空 iterable 时 `promises` 为空，`[[Promise.all]]([])` 立即 resolve 为 `[]`，mapper 不会被调用。[[array-like]] 对象如 `{0:'a',1:'b',length:2}` 也能被 [[Array.from]] 处理，回调收到值和索引。\n\nmapper 拒绝时，对应任务 [[Promise]] 拒绝，[[Promise.all]] 以第一个拒绝原因拒绝；其他已调度任务仍继续运行，不会自动取消。map 本身没有 [[AbortSignal]] 参数，也没有取消队列的入口。\n\n因此它适合批量输入，不适合需要中途取消或流式[[背压]]的场景。",
+                "followUps": [
+                  {
+                    "question": "array-like 和可迭代对象有什么区别？",
+                    "answer": "[[Array.from]] 优先使用迭代器；没有迭代器时按 length 和索引读取 [[array-like]]。因此 map 既能接受 Set、[[生成器]]，也能接受带 length 的对象。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "Promise.all 第一个拒绝后，其他拒绝会怎样？",
+                    "answer": "[[Promise.all]] 只报告第一个原因，但它已为每个任务 [[Promise]] 注册处理器，其他拒绝会被观察而非未处理；只是结果被忽略。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如何给 map 增加取消能力？",
+                    "answer": "需要设计层支持：给 mapper 传入 [[AbortSignal]]，或在 map 外层维护取消标志并拒绝后续任务；当前 API 没有该能力，clearQueue 只丢弃等待项，不中止运行项。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "94dadfaa-aa9a-4fb8-aca5-b08a8d9f49c6",
+                "title": "limitFunction 的封装与暴露面",
+                "question": "limitFunction 如何复用 pLimit？它向调用方暴露了哪些能力，又有哪些没有暴露？",
+                "answer": "limitFunction 先 `const limit = pLimit(options)`，再返回 `(...args) => limit(() => function_(...args))`；每次调用都通过同一个 limit 排队，因此共享并发上限。\n\n它用 `Object.defineProperty` 只挂了 `clearQueue`，值是 `limit.clearQueue`。由于 clearQueue 使用闭包而非 this，解构后仍可调用。activeCount、pendingCount、concurrency、map 都没有转发，调用方拿不到这些状态。\n\n每次调用多一层闭包，换来的是把参数捕获到内部任务函数中；类型上返回函数与 `Pick<LimitFunction,'clearQueue'>` 相交。",
+                "followUps": [
+                  {
+                    "question": "为什么只暴露 clearQueue？",
+                    "answer": "这是有意的最小 API：limitFunction 关注单个函数的并发执行，不承诺队列内省。若需要动态并发或计数，应直接使用 pLimit 返回的 limit。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "limitFunction 的 clearQueue 与 limit.clearQueue 是同一个函数吗？",
+                    "answer": "运行时是同一个函数引用，不是绑定副本；它不依赖 this，所以可以直接赋给 limitedFunction。若未来改成使用 this 的方法，这种转发会失效。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "怎样让 limitFunction 支持动态并发？",
+                    "answer": "当前没有暴露 concurrency setter；可以改为返回带 concurrency 访问器的对象，或让调用方保留底层 limit。直接改实现需注意类型声明也要同步。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "06be72da-5de9-4eba-8ac3-15581abd1da3",
+            "title": "类型契约与工程验证",
+            "summary": "考察 TypeScript 声明中的泛型约束、类型测试与运行时差异，以及基准场景和每任务调度开销。",
+            "questions": [
+              {
+                "id": "e8c41287-c832-49be-a4fc-78a63ce21ac2",
+                "title": "类型声明中的泛型约束",
+                "question": "index.d.ts 中 LimitFunction 的调用签名和 map 泛型分别约束了什么？limitFunction 的返回类型与 LimitFunction 有何差异？",
+                "answer": "LimitFunction 的调用签名是 `<Arguments extends unknown[], ReturnType>(function_: (...args: Arguments) => [[PromiseLike]]<ReturnType> | ReturnType, ...args: Arguments): Promise<ReturnType>`，用[[元组]]形式的[[泛型]]把传入参数与函数参数绑定，支持额外参数透传，并允许同步返回值。\n\nmap 是 `<Input, ReturnType>(iterable: [[Iterable]]<Input>, mapper: (input, index) => [[PromiseLike]]<ReturnType> | ReturnType) => Promise<ReturnType[]>`，约束输入可迭代、mapper 接收值和索引。\n\nlimitFunction 的函数参数只接受 `[[PromiseLike]]<ReturnType>`，不接受同步 ReturnType；返回类型是函数与 `Pick<LimitFunction,'clearQueue'>` 的交叉，不包含 activeCount、concurrency、map。",
+                "followUps": [
+                  {
+                    "question": "为什么 LimitFunction 用 `Arguments extends unknown[]` 而不是简单 `...args: any[]`？",
+                    "answer": "[[元组]]形式的[[泛型]]能保留每个参数的类型和顺序，使 `limit(fn, 'x', 1)` 能检查 fn 的签名；any[] 会丢失参数约束，容易放过错误调用。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "limitFunction 类型拒绝同步返回值，但运行时接受，这是 bug 吗？",
+                    "answer": "是类型与运行时契约不一致。设计上可能有意要求异步函数；若运行时继续用 async 包装，类型应明确同步值是否支持，或在实现中拒绝同步返回。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "Options 中 concurrency 是 readonly，LimitFunction 中可写，矛盾吗？",
+                    "answer": "不矛盾。Options 是构造时输入，声明只读表达不应在对象上改；LimitFunction 的 concurrency 是运行期可调属性，因此可写。两者描述不同对象。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "878a1fd7-314c-4327-9ed0-acb028f0a5b7",
+                "title": "类型测试与运行时差异",
+                "question": "index.test-d.ts 覆盖了哪些类型契约？tsd 能验证 clearQueue 的运行时行为或 rejectOnClear 的实际抛错吗？",
+                "answer": "index.test-d.ts 用 [[tsd]] 的 expectType/expectError 检查：limit 的返回 [[Promise]] 类型、参数透传、activeCount/pendingCount 为 number、clearQueue 返回 void、limitFunction 要求异步函数、非法 rejectOnClear 被拒绝，以及 map 接受 Set 和数组迭代器。\n\n[[tsd]] 只做类型检查，不执行代码，因此不能验证 clearQueue 是否真的拒绝、[[AbortError]] 的 name、或 activeCount 的运行时数值；这些由 [[AVA]] 测试覆盖。反过来，[[AVA]] 也不验证类型。二者需要同时存在。\n\n类型测试中的 expectError 只证明当前声明会拒绝该写法，不证明运行时也会拒绝。",
+                "followUps": [
+                  {
+                    "question": "为什么类型测试要单独用 tsd？",
+                    "answer": "普通单元测试运行 JavaScript，不会检查声明文件的类型推导；[[tsd]] 在编译期断言类型，能防止声明回归。它不替代运行时测试，二者互补。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "`expectError(limitFunction((_a: string) => 'x', ...))` 说明了什么？",
+                    "answer": "说明声明要求 limitFunction 的 fn 返回 [[PromiseLike]]；同步返回在类型层被拒绝。运行时包装并没有强制检查，因此这是类型契约而非运行时保证。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如何发现类型与运行时不一致？",
+                    "answer": "需要同时写类型测试和运行时测试，并对边界值做对照；例如 limitFunction 同步返回、null options、非法 rejectOnClear。仅靠 [[tsd]] 或 [[AVA]] 单边都会漏掉。",
+                    "followUps": []
+                  }
+                ]
+              },
+              {
+                "id": "5c1c0c1c-6cbf-4ad8-acbc-c974949403be",
+                "title": "基准场景与每任务开销",
+                "question": "benchmark.js 覆盖了哪些场景？从 index.js 看，每个受限任务至少产生哪些调度开销？这些基准结果应如何解读？",
+                "answer": "benchmark.js 用 Benchmarker 覆盖 API 限流、文件处理、数据库连接池、混合 CPU/IO、高任务量队列、limitFunction 对比和动态并发调整；默认 iterations 为 1，warmup 默认 false，计时为墙钟时间，并可用返回的操作数计算[[吞吐量]]。\n\n从 index.js 看，每次 limit 调用至少创建外层 [[Promise]]、队列项、内部 [[Promise]] 和 then 回调，并经历入队/出队与[[微任务]]切换；任务结束还要 await 和 next。高并发下这些分配和[[微任务]]可能成为可观开销，但当前上下文没有[[benchmark]]运行数据，不能断言具体量级。\n\n[[benchmark]]受随机 sleep、机器负载和单次采样影响，不能直接当作生产性能保证。",
+                "followUps": [
+                  {
+                    "question": "为什么默认 iterations 为 1 会削弱结论？",
+                    "answer": "单次采样无法区分噪声和真实差异，尤其场景里有随机延迟。应增加重复次数、报告中位数/分位数，并在稳定环境运行；当前默认值只适合快速 smoke。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "如何降低每任务内部 Promise 的开销？",
+                    "answer": "可以评估直接调度队列项、减少一层 [[Promise]]，但会牺牲异步上下文和统一错误处理；需要[[benchmark]]与语义测试共同验证。当前实现优先保持异步边界，不能只凭性能直觉改。",
+                    "followUps": []
+                  },
+                  {
+                    "question": "高任务量场景最应观察什么指标？",
+                    "answer": "除总耗时外，应看内存分配、[[事件循环]]延迟、activeCount 是否稳定、队列长度峰值和尾延迟。只看 ops/s 可能掩盖长尾和内存压力。",
+                    "followUps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "glossary": {
+          "getter": "getter 是对象上按属性读取触发的访问器函数。读取该属性时执行函数体并返回计算结果，而不是直接返回存储字段。",
+          "setter": "setter 是对象上按属性赋值触发的访问器函数。赋值时执行函数体，可在写入前做校验或触发副作用。",
+          "Promise": "Promise 是表示异步操作最终完成或失败的对象。它通过 then/catch 注册回调，并以不可变状态传播成功值或拒绝原因。",
+          "FIFO": "FIFO 是先进先出的排队规则。最早进入队列的元素最先被取出处理，适合按提交顺序调度任务。",
+          "队列": "队列是一种按入队顺序保存待处理元素的线性结构。通常从一端加入、另一端取出，用于解耦生产与消费。",
+          "ESM": "ESM 是 JavaScript 的官方模块系统，使用 import/export 静态声明依赖。它支持顶层 await 和静态分析，通常由运行时或打包器解析模块图。",
+          "sideEffects": "sideEffects 是打包器使用的包元数据，用来标记模块导入是否产生副作用。声明为 false 时，未被使用的导入更可能被删除以减小产物。",
+          "CI": "CI 是持续集成，在代码提交后自动执行构建、测试等检查。它通过统一环境尽早发现回归，但只覆盖配置中实际运行的命令。",
+          "benchmark": "benchmark 是可重复运行以测量性能的基准测试。它通常记录耗时或吞吐量，并需要在稳定环境和足够采样下解读。",
+          "tree-shaking": "tree-shaking 是打包阶段删除未被使用代码的优化。它依赖模块的静态结构和副作用标记，判断哪些导出可以安全移除。",
+          "TypeScript": "TypeScript 是带静态类型系统的 JavaScript 超集。它在编译期检查类型并输出 JavaScript，类型信息不会在运行时强制执行。",
+          "AbortSignal": "AbortSignal 是用于传递取消/中止状态的标准接口。它可与 AbortController 配合，通过 aborted 状态和 reason 通知消费者。",
+          "微任务": "微任务是事件循环中在当前调用栈清空后、下一轮宏任务前执行的任务。Promise 回调等通常进入微任务队列，因此会在同步代码之后尽快运行。",
+          "AsyncLocalStorage": "AsyncLocalStorage 是 Node.js 提供的异步上下文存储机制。它让同一异步调用链中的代码读取到调用方设置的上下文，而不必显式传参。",
+          "thenable": "thenable 是带有 then 方法的对象，可被 Promise 采用其状态。它不必是原生 Promise，但异步函数和 await 会按 then 协议等待它。",
+          "DOMException": "DOMException 是 Web 平台定义的标准异常类型，常用于 DOM 和 Abort 相关错误。它带有 name 等字段，调用方可据此区分错误类别。",
+          "AbortError": "AbortError 是表示操作被中止的错误名称，通常由 AbortSignal 触发。调用方常通过 error.name 判断是否属于取消而非业务失败。",
+          "Promise.all": "Promise.all 接收一组 Promise 并返回聚合 Promise。它在全部成功时按输入顺序给出结果，任一拒绝时立即以该原因拒绝。",
+          "AVA": "AVA 是 JavaScript 测试运行器，支持并发执行测试和异步断言。它提供 throwsAsync 等断言，但不同 Node 版本对标准异常的处理可能有差异。",
+          "Promise.allSettled": "Promise.allSettled 等待一组 Promise 全部结算。它总是成功返回每个任务的状态和值/原因，适合需要部分结果的收尾。",
+          "AbortController": "AbortController 是创建并控制 AbortSignal 的对象。调用 abort 会切换信号状态并携带原因，供下游任务检查或中止。",
+          "可迭代对象": "可迭代对象是实现 Symbol.iterator 的对象，可被 for...of 或 Array.from 消费。它按迭代器协议逐个产出值，适合表达集合或生成序列。",
+          "背压": "背压是生产速度超过消费速度时的流量控制机制。它让上游暂停或减速，避免队列和内存无限增长。",
+          "生成器": "生成器是 JavaScript 中可暂停和恢复执行的函数，调用后返回迭代器。它通过 yield 逐个产出值，适合惰性序列。",
+          "p-map": "p-map 是用于并发映射集合的 npm 包。它提供并发上限、停止条件等更丰富的映射控制，适合复杂批处理。",
+          "unhandledRejection": "unhandledRejection 是 Promise 拒绝后没有处理器时触发的事件/状态。运行时可据此报告未处理错误，严重时可能终止进程。",
+          "array-like": "array-like 是具有 length 和数字索引、但不一定实现迭代器的对象。Array.from 可按下标读取并转换为数组。",
+          "泛型": "泛型是参数化类型机制，让函数或类型在保持类型安全的同时适配多种输入。它通过类型参数在调用处推导具体类型。",
+          "PromiseLike": "PromiseLike 是 TypeScript 中描述具有 then 方法的类型。它不要求完整 Promise API，async/await 和 Promise 采用逻辑可与之互操作。",
+          "Iterable": "Iterable 是 TypeScript/JavaScript 中描述可迭代协议的类型。实现 Symbol.iterator 后，可被 for...of、Array.from 等消费。",
+          "元组": "元组是长度和元素类型固定的数组类型。TypeScript 用它精确表达参数列表的顺序与类型。",
+          "tsd": "tsd 是 TypeScript 声明文件的类型测试工具。它用 expectType/expectError 在编译期断言类型，不执行运行时逻辑。",
+          "吞吐量": "吞吐量是单位时间内完成的工作量。基准中常用操作数除以耗时计算，但不能单独反映尾延迟和资源压力。",
+          "事件循环": "事件循环是 JavaScript 运行时调度同步代码、微任务和宏任务的机制。它决定回调执行顺序，也影响异步任务的延迟表现。",
+          "Array.from": "Array.from 是从可迭代对象或 array-like 创建数组的静态方法。它可接收映射回调，在构建数组时逐个转换元素。",
+          "并发": "并发是多个任务在重叠时间段内推进的执行方式。它不一定并行，具体交错由调度器和事件循环决定。"
+        },
+        "security": {
+          "excludedFiles": 1,
+          "redactedFiles": 0,
+          "redactionMatches": 0,
+          "categories": {
+            "credential-file": 1
+          }
+        },
+        "generationDiagnostics": {
+          "version": 1,
+          "status": "succeeded",
+          "contextStrategy": "structure-v1",
+          "tokenEstimateMethod": "mixed-text-v1",
+          "estimatedInputTokens": 27013,
+          "inputTokenBudget": 64000,
+          "reservedOutputTokens": 65536,
+          "actualUsage": {
+            "inputTokens": 14851,
+            "outputTokens": 34662,
+            "totalTokens": 49513
+          },
+          "usageComplete": true,
+          "requestCount": 1,
+          "repairRequestCount": 0,
+          "compensationRequestCount": 0,
+          "contextBuildMs": 195,
+          "modelMs": 181660,
+          "totalMs": 181892,
+          "selectedFiles": 15,
+          "selectedRegions": 15,
+          "omittedFiles": 0
+        },
+        "evaluationDiagnostics": {
+          "version": 1,
+          "status": "succeeded",
+          "contextStrategy": "structure-v1",
+          "tokenEstimateMethod": "mixed-text-v1",
+          "estimatedInputTokens": 27013,
+          "inputTokenBudget": 64000,
+          "reservedOutputTokens": 65536,
+          "actualUsage": {
+            "inputTokens": 14851,
+            "outputTokens": 34662,
+            "totalTokens": 49513
+          },
+          "usageComplete": true,
+          "requestCount": 1,
+          "repairRequestCount": 0,
+          "compensationRequestCount": 0,
+          "contextBuildMs": 195,
+          "modelMs": 181660,
+          "totalMs": 181892,
+          "selectedFiles": 15,
+          "selectedRegions": 15,
+          "omittedFiles": 0
+        }
+      }
+    }
+  ],
+  "questions": [
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "pLimit 如何处理数字与 options 两种入参？传入 null、非整数并发或非法 rejectOnClear 时，异常顺序是什么？",
+      "answer": "要点是先用 typeof 区分对象入参，再做并发校验，最后校验 rejectOnClear。\n\n- 数字直接进入 validateConcurrency；对象分支解构 `{concurrency, rejectOnClear = false}`，其余字段忽略。\n- 由于 `typeof null === 'object'`，`pLimit(null)` 会先在解构 null 时抛出原生 TypeError，而不是走到自定义的并发错误；数组也会被当作对象解构。\n- validateConcurrency 只接受 `Number.isInteger` 或 `Number.POSITIVE_INFINITY` 且大于 0；0、-1、1.2、undefined、true、`{}`、`{concurrency:0}` 都抛 TypeError。\n- rejectOnClear 在并发校验之后检查，非 boolean 抛 TypeError；因此两者都非法时先报 concurrency。",
+      "followUps": [
+        {
+          "question": "为什么允许 Infinity 作为并发上限？",
+          "answer": "允许 `Number.POSITIVE_INFINITY` 表示不限制并发；resumeNext 中 `activeCount < concurrency` 恒真，队列中有任务就立即启动。注意仍受队列长度和内存限制，不是“无成本”。",
+          "followUps": []
+        },
+        {
+          "question": "对象检测为什么不用更严格的方式？",
+          "answer": "当前用 typeof 能覆盖普通 options 和数组，但 null 会产生非预期错误；更稳妥可先判 `concurrency !== null && typeof concurrency === 'object'` 或 isPlainObject，再给自定义 TypeError。这是设计建议，不是现有行为。",
+          "followUps": []
+        },
+        {
+          "question": "如果 options 的 concurrency 是 getter 会怎样？",
+          "answer": "解构会同步触发 getter，抛错会直接传播；当前没有 try/catch 包裹。读取后仍要过 validateConcurrency，因此 getter 返回非法值会抛自定义 TypeError。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "默认导出的 limit 函数为什么用 Object.defineProperties 挂载 activeCount、pendingCount、clearQueue、concurrency 和 map？这些属性的职责是什么？",
+      "answer": "默认导出不是普通函数对象，而是带只读计数、可写并发和方法的可调用对象。\n\n- activeCount/pendingCount 是 [[getter]]，分别返回闭包中的 activeCount 和 queue.size。\n- clearQueue 是 value 方法，读取闭包中的 queue 与 rejectOnClear 决定丢弃还是拒绝。\n- concurrency 通过 [[getter]] 和 [[setter]] 暴露：setter 会校验并排队启动。\n- map 是 async value 方法，复用同一个 generator 调度输入。\n- 这些属性没有用 class 暴露，而是闭包加 defineProperties，外部不能直接拿到 queue。",
+      "followUps": [
+        {
+          "question": "getter 返回 activeCount 是否实时？",
+          "answer": "是，读取时访问闭包变量；但 activeCount 在任务真正调用前就可能自增，因此它表示已占用的并发槽，不是严格等于正在执行的函数体数量。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不让外部直接操作 queue？",
+          "answer": "直接暴露会破坏不变量，例如外部 dequeue 后 activeCount 不会同步，clearQueue 的拒绝策略也会绕过。封装成方法能保持计数与队列一致，但当前实现仍要小心外部并发调用。",
+          "followUps": []
+        },
+        {
+          "question": "用 class 改写有什么差异？",
+          "answer": "class 更容易类型化，但默认导出必须同时可调用又有属性；可以返回带方法的函数。当前闭包方案避免 this 绑定问题，map/clearQueue 被解构后仍能工作。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "项目如何依赖 yocto-queue？从 index.js 的调用看，它对队列抽象提出了哪些最小接口要求？",
+      "answer": "`package.json` 把 `yocto-queue` 放在 dependencies，`index.js` 默认导入 `Queue` 并 `new Queue()`。\n\n代码只使用四个操作：`enqueue(item)` 入队、`dequeue()` 取出并返回队首、`size` 读取长度、`clear()` 清空。队列项是 `{reject, run}`，其中 run 由内部 [[Promise]] 的 resolve 赋值。\n\n从这些调用可以确认它是 [[FIFO]] 队列抽象，但上下文中没有 yocto-queue 源码，不能据此断言其内部复杂度或所有边界行为；只能确认 p-limit 依赖上述 API。",
+      "followUps": [
+        {
+          "question": "为什么不用数组 push/shift？",
+          "answer": "数组也能实现同样语义，但 shift 在常见实现中可能移动元素；使用专用 [[队列]] 可把入队/出队职责交给依赖。不过没有基准数据不能断言本项目里一定更快，需实测。",
+          "followUps": []
+        },
+        {
+          "question": "如果 yocto-queue 的 dequeue 返回 undefined 怎么处理？",
+          "answer": "当前 resumeNext 只在 `queue.size > 0` 时调用 dequeue，并假设返回值是队列项；没有判空。若依赖违反契约会在此处抛错，属于未防护的信任边界。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 queueItem 要存 reject？",
+          "answer": "reject 用于 rejectOnClear 分支直接拒绝等待中的外层 [[Promise]]；run 则用于稍后启动任务。两者分离让清空队列时不必执行任务也能结算调用方。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "从 package.json 与 CI 配置看，这个包的导出、模块格式和运行环境承诺是什么？benchmark 是否在 CI 覆盖范围内？",
+      "answer": "包是 [[ESM]]（`type: module`），exports 同时映射 `types` 与 `default`，发布文件只含 `index.js` 和 `index.d.ts`，并声明 [[sideEffects]] 为 false。`engines` 要求 Node >=20，[[CI]] 在 Node 20/22/24 上执行 `npm test`。\n\n运行依赖只有 yocto-queue；README 声称浏览器可用，但当前上下文没有浏览器测试或 browser 字段，不能仅凭声明确认所有浏览器行为。`benchmark.js` 使用 `using`、`fs.mkdtempDisposableSync`、`styleText` 等较新 API，且 `npm test` 不包含 [[benchmark]]，因此 benchmark 不在 CI 验证范围内，无法确认 Node 20 下可运行。",
+      "followUps": [
+        {
+          "question": "`sideEffects: false` 对打包意味着什么？",
+          "answer": "它告诉支持 [[tree-shaking]] 的打包器：未被使用的模块导入可被删除。前提是包内模块确实无导入副作用；当前 index.js 只在调用 pLimit 时创建闭包和队列，但打包器是否完全删除仍取决于使用方式。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 exports 同时写 types 和 default？",
+          "answer": "让 [[TypeScript]] 解析声明文件，运行时解析 ESM 入口；顺序上 types 在前可避免被 default 覆盖。若只写 default，类型消费者可能找不到声明。",
+          "followUps": []
+        },
+        {
+          "question": "README 的浏览器承诺如何验证？",
+          "answer": "需要浏览器测试矩阵或至少无 Node 内置模块的构建验证。当前 index.js 只用 yocto-queue 和全局 AbortSignal，理论上可打包，但 rejectOnClear 依赖 [[AbortSignal]].abort，不能从现有 CI 推断旧浏览器兼容。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "一次 limit(fn) 从 enqueue 到真正调用 fn 经过哪些步骤？为什么这里要借助一个内部 Promise 和 then？",
+      "answer": "核心是排队项先入队，再由内部 [[Promise]] 的 resolve 触发 [[微任务]] 中的 run。\n\n1. generator 创建外层 [[Promise]]，executor 调 enqueue。\n2. enqueue 建 `queueItem={reject}`，再建内部 [[Promise]]；executor 同步把 `queueItem.run=internalResolve` 并 `queue.enqueue`。\n3. 给内部 [[Promise]] 挂 `.then(run.bind(...))`。\n4. 若 `activeCount < concurrency`，resumeNext 出队、activeCount++、调用 queueItem.run()。\n5. 内部 [[Promise]] 进入已决议，run 在随后的 [[微任务]] 执行，fn 此时才被调用。\n\n因此即使有空槽，fn 也不会在 limit 调用栈内同步执行；这也让 [[AsyncLocalStorage]] 上下文能在 then 注册时被捕获。",
+      "followUps": [
+        {
+          "question": "如果直接 queue.dequeue().run 而不经过内部 Promise 会怎样？",
+          "answer": "任务可能更早同步启动，破坏“所有任务异步执行”的测试预期；更重要的是 run 会在 resumeNext 的调用上下文执行，可能丢失调用方通过 [[AsyncLocalStorage]] 建立的上下文。当前 then 是在调用方上下文注册的。",
+          "followUps": []
+        },
+        {
+          "question": "activeCount 在 fn 调用前就增加，会带来什么语义？",
+          "answer": "它把已占槽但尚未执行的调度也计入 activeCount，所以刚调用 limit 后读数可能已大于实际执行中的函数数。这是槽位计数，不是严格运行中计数。",
+          "followUps": []
+        },
+        {
+          "question": "内部 Promise 一直不 resolve 会怎样？",
+          "answer": "对应队列项不会启动，外层 [[Promise]] 保持 pending；clearQueue 默认分支正是丢弃这些项。若 rejectOnClear，则外层被拒绝，但内部 [[Promise]] 仍可能保持 pending，当前没有额外清理。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "activeCount 与 pendingCount 在实现中如何更新？它们与 README 的“currently running”表述是否完全一致？",
+      "answer": "pendingCount 直接返回 `queue.size`；activeCount 是闭包变量，在 resumeNext 中自增、在 next 中自减。\n\n- resumeNext 在出队前判断 `activeCount < concurrency`，满足则先 `activeCount++` 再调用队列项的 run。\n- run 等任务结果 settle 后调用 next；next 先 `activeCount--`，再 resumeNext 启动下一个。\n- 因此 activeCount 统计的是“已占用并发槽”的任务，包括已出队但尚未在 [[微任务]] 中调用 fn 的任务。测试 `runs all tasks asynchronously` 中两次 limit 后立即断言 activeCount 为 2，正说明这一点。\n\n它不等同于“函数体正在执行”的精确数量；pendingCount 则是仍在队列中、尚未出队的数量。",
+      "followUps": [
+        {
+          "question": "任务 reject 时 activeCount 会减吗？",
+          "answer": "会。run 中 `try { await result } catch {}` 捕获内部 await 的拒绝，随后仍执行 next()；调用方拿到的外层 [[Promise]] 仍按原结果 reject。",
+          "followUps": []
+        },
+        {
+          "question": "pendingCount 包含正在执行的任务吗？",
+          "answer": "不包含。出队时 run 被调用，队列长度已减少；正在执行或已占槽的任务只体现在 activeCount。clearQueue 后 pendingCount 归零，但 activeCount 不变。",
+          "followUps": []
+        },
+        {
+          "question": "如果并发上限调低到小于 activeCount？",
+          "answer": "不会取消已占槽任务；resumeNext 因 `activeCount < concurrency` 为假而暂停启动新任务，直到 next 把 activeCount 降到新上限以下。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "run 中为什么先 `resolve(result)`，再 `await result` 并吞掉异常？这样错误还能传到调用方吗？",
+      "answer": "能。`result` 是 `(async () => function_(...arguments_))()` 返回的 [[Promise]]；`resolve(result)` 让外层 [[Promise]] 采用它的状态，所以调用方看到原始成功值或拒绝原因。\n\n随后的 `try { await result } catch {}` 只是为了在内部等待任务结束，避免内部 await 产生未处理的拒绝；它吞掉的是内部这一路的异常，不会改变已交给调用方的 [[Promise]] 的状态。任务 settle 后执行 next()，释放槽位。\n\n注意 `resolve` 发生在 await 之前，但 [[Promise]] 的状态传播仍是异步的；调用方不会同步拿到值。",
+      "followUps": [
+        {
+          "question": "如果去掉 catch 会怎样？",
+          "answer": "内部 `await result` 的拒绝会变成 run 返回 [[Promise]] 的拒绝；该 [[Promise]] 没有被消费者，可能触发 [[unhandledRejection]]。调用方仍能收到拒绝，但进程可能报未处理拒绝。",
+          "followUps": []
+        },
+        {
+          "question": "如果 fn 返回 thenable 而非原生 Promise？",
+          "answer": "async 立即执行函数会采用 [[thenable]] 的状态，`await result` 也会等待其 settle；因此 [[thenable]] 的拒绝同样会走到 catch。若 [[thenable]] 永不 settle，槽位也永不释放。",
+          "followUps": []
+        },
+        {
+          "question": "resolve(result) 与 resolve(await result) 有何区别？",
+          "answer": "前者让外层 [[Promise]] 采用 result 的状态，调用方更早拿到同一个拒绝/成功传播；后者会先等 result settle，外层再结算。当前实现让调用方与任务结果直接关联，同时内部再等待以释放槽位。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "limit 如何支持同步抛错函数和返回非 Promise 的函数？为什么同步 throw 不会让后续任务卡住？",
+      "answer": "`run` 用异步立即执行函数包住调用：`const result = (async () => function_(...arguments_))();`。同步 throw 会变成 result 的拒绝，而不是在 run 调用栈中直接炸出；返回 null 等普通值则变成 fulfilled 的 [[Promise]]。\n\n外层 `resolve(result)` 把拒绝传给调用方；内部 `await result` 的 catch 吞掉内部异常后仍执行 `next()`，所以下一个排队任务会被 resumeNext 启动。测试 `continues after sync throw` 验证了第二个任务仍会执行。\n\n这依赖 async 函数对同步异常和返回值的统一包装，不需要额外 Promise.resolve。",
+      "followUps": [
+        {
+          "question": "如果 fn 直接返回一个已拒绝 Promise 呢？",
+          "answer": "结果同样是外层拒绝，内部 catch 后 next；与同步 throw 的差别只在拒绝产生位置。调用方必须处理外层 [[Promise]]，否则会有未处理拒绝。",
+          "followUps": []
+        },
+        {
+          "question": "非 Promise 返回值在类型上允许吗？",
+          "answer": "LimitFunction 调用签名允许 `PromiseLike<ReturnType> | ReturnType`，所以类型允许同步值；但 limitFunction 的类型只允许 [[PromiseLike]]，运行时却仍可接受同步值，存在类型与运行时差异。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不在 enqueue 时直接 try/catch fn？",
+          "answer": "enqueue 只负责排队，真正调用在 run 的异步阶段；提前调用会破坏并发限制和异步上下文。把 try/catch 放在 async 包装里能统一处理同步与异步错误。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "limit.concurrency 的 setter 如何生效？调大、调小以及设为 Infinity 时分别会发生什么？",
+      "answer": "动态调整[[并发]]上限的入口是 concurrency setter。setter 先 validateConcurrency(newConcurrency)，通过后直接更新闭包变量，再用 queueMicrotask 排一个循环：只要 `activeCount < concurrency && queue.size > 0`，就 resumeNext。\n\n- 调大：新上限在[[微任务]]中生效，循环可一次启动多个等待任务。\n- 调小：不会取消已运行任务；resumeNext 因 activeCount 大于上限而暂停，等 next 把 activeCount 降下来才继续。\n- 设为 Infinity：条件恒真，[[微任务]]会把当前队列全部启动；仍受实际资源限制。\n\n如果新值非法，会同步抛 TypeError，原 concurrency 不变。",
+      "followUps": [
+        {
+          "question": "为什么 setter 不立即 resumeNext 而要 queueMicrotask？",
+          "answer": "延迟到[[微任务]]可避免在属性赋值栈内同步启动任务，保持调用后的状态一致，也给同一轮同步修改留出空间。代价是启动不是立即发生。",
+          "followUps": []
+        },
+        {
+          "question": "连续多次设置会怎样？",
+          "answer": "每次都会排一个[[微任务]]；循环条件使用最新 concurrency，所以多个[[微任务]]可能重复检查。由于 resumeNext 每次都重新判断上限，不会超过最终上限，但会有额外[[微任务]]开销。",
+          "followUps": []
+        },
+        {
+          "question": "调小到 1 时已运行 5 个任务会立即停吗？",
+          "answer": "不会。已经出队的任务继续运行，activeCount 仍为 5；只有它们 settle 触发 next，且 activeCount 降到 1 以下后才会启动新任务。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "clearQueue 在默认模式和 rejectOnClear 模式下分别如何处理等待中的 Promise？会改变 activeCount 吗？",
+      "answer": "默认模式只执行 `queue.clear()`，把队列项丢掉；这些等待中的外层 [[Promise]] 既不 resolve 也不 reject，会永久 pending。rejectOnClear 为 true 时，先取 `[[AbortSignal]].abort().reason`，再逐个 dequeue 并调用队列项的 reject，因此等待中的调用会以 [[AbortError]] 拒绝。\n\n两种模式都不碰 activeCount，因为被清理的任务从未出队、从未占槽；已经运行的任务不受影响。pendingCount 在清理后归零。",
+      "followUps": [
+        {
+          "question": "默认模式下 Promise.all 会怎样？",
+          "answer": "只要有一个被清理的等待 [[Promise]] 未 settle，[[Promise.all]] 就永远不会 settle。README 因此建议在 await 返回 [[Promise]] 时启用 rejectOnClear；否则应只等待已运行任务。",
+          "followUps": []
+        },
+        {
+          "question": "为什么 rejectOnClear 不直接 new Error？",
+          "answer": "使用 `[[AbortSignal]].abort().reason` 得到标准的 [[DOMException]] 类型 [[AbortError]]，便于调用方用 name 判断。当前要求运行环境支持该静态方法，未提供降级。",
+          "followUps": []
+        },
+        {
+          "question": "clearQueue 后再调用 limit 会怎样？",
+          "answer": "队列已空，新调用会正常入队；若 activeCount 仍低于 concurrency 会启动。旧任务若已清理则不会再执行，新旧任务之间没有代际隔离。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "rejectOnClear 分支为什么用 `AbortSignal.abort().reason` 生成错误？Node 20 的测试跳过说明了什么？",
+      "answer": "`[[AbortSignal]].abort()` 返回一个已中止的 [[AbortSignal]]，其 `reason` 是标准 [[DOMException]]，name 为 [[AbortError]]。这样调用方可用 `error.name === 'AbortError'` 识别清理导致的拒绝，而不依赖自定义错误类。\n\n`test.js` 仅在 Node 20 跳过 `clearQueue rejects...`，注释说 Node 20 有 [[DOMException]] 与 [[AVA]] `throwsAsync` 的兼容问题；这不能证明业务代码在 Node 20 一定失败，只能说明该断言路径未被 [[CI]] 的 Node 20 验证。浏览器端还依赖 [[AbortSignal]].abort 静态方法，当前没有 polyfill。",
+      "followUps": [
+        {
+          "question": "不用 AbortSignal，自己创建 Error 并设置 name 可行吗？",
+          "answer": "可行，且兼容性更广；但会失去标准 [[DOMException]] 类型。若库承诺标准 [[AbortError]]，应统一构造方式并写清兼容要求，或提供降级。",
+          "followUps": []
+        },
+        {
+          "question": "Node 20 测试跳过会带来什么风险？",
+          "answer": "该分支在 Node 20 上没有回归覆盖，未来改动可能未被发现；[[CI]] 的 Node 20 仍跑其他测试。建议用不依赖 [[AVA]] 特殊处理的断言方式补回覆盖。",
+          "followUps": []
+        },
+        {
+          "question": "调用方如何区分 AbortError 和任务自身错误？",
+          "answer": "检查 `error.name === 'AbortError'` 或 `error instanceof [[DOMException]]`；但任务自身也可能抛同名错误。更严谨可附加自定义标记，当前实现没有。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "clearQueue 不取消运行中任务，这对优雅关闭和等待逻辑有什么影响？recipes.md 的 graceful shutdown 为什么只等待 runningPromises？",
+      "answer": "clearQueue 只丢弃尚未出队的项，已经调用 fn 的任务继续执行；activeCount 不会因清理而减少，直到这些任务 settle 后 next 才释放。\n\n默认模式下被清理的调用永久 pending，因此若直接 `await [[Promise.all]](promises)` 会挂住；recipes.md 用 runningPromises 集合只收集已启动的 fetch，并在 shutdown 时 `[[Promise.allSettled]]([...runningPromises])`，避免等待被丢弃的 pending 调用。\n\n若启用 rejectOnClear，等待中的 [[Promise]] 会以 [[AbortError]] 拒绝，调用方可以继续用 [[Promise.allSettled]] 收尾，但仍不会中止运行中的 fetch。",
+      "followUps": [
+        {
+          "question": "运行中的任务能取消吗？",
+          "answer": "不能，p-limit 没有传入 [[AbortSignal]] 给 fn，也没有中止机制。需要取消时应在任务内部使用 [[AbortController]]，并由业务层在 shutdown 时触发。",
+          "followUps": []
+        },
+        {
+          "question": "rejectOnClear 下 runningPromises 还有必要吗？",
+          "answer": "仍有必要。它只解决等待中 [[Promise]] 不结算的问题，不取消已运行任务；关闭时仍应等待已启动任务完成或自行中止。",
+          "followUps": []
+        },
+        {
+          "question": "clearQueue 后 pendingCount 与 activeCount 的关系？",
+          "answer": "pendingCount 归零，activeCount 保持清理前的运行数量；两者不再表示总未完成任务数，因为被清理的调用已从队列移除但仍可能被调用方持有。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "如果对 limit.map 返回的 Promise 调用 clearQueue，会发生什么？默认模式与 rejectOnClear 模式有何不同？",
+      "answer": "map 会把每个输入转成 generator 返回的 [[Promise]]，最后交给 [[Promise.all]]。因此 clearQueue 的影响通过各个任务 [[Promise]] 汇聚到 map 的返回 [[Promise]]。\n\n- 默认模式：被清理的等待 [[Promise]] 永久 pending，只要 map 中有任何一个这样的任务，[[Promise.all]] 就永远不 settle，map 的 [[Promise]] 也一直 pending。\n- rejectOnClear：等待中的任务以 [[AbortError]] 拒绝，[[Promise.all]] 以其中一个拒绝而拒绝，map 的返回 [[Promise]] 也随之拒绝；已启动的 mapper 仍继续运行，结果被丢弃。\n\n如果所有任务都已出队运行，clearQueue 不影响 map，它仍等待这些任务。",
+      "followUps": [
+        {
+          "question": "map 的 Promise.all 会等待所有 mapper 吗？",
+          "answer": "成功路径会等待全部结果；失败路径只要有一个拒绝就立即拒绝，不等其他 mapper，但其他已调度任务仍会继续占槽并最终执行 next。",
+          "followUps": []
+        },
+        {
+          "question": "rejectOnClear 下 map 一定以 AbortError 拒绝吗？",
+          "answer": "不一定。若某个已运行 mapper 先以自身错误拒绝，[[Promise.all]] 可能先以该错误拒绝；取决于 settle 时序。被清理任务产生的 [[AbortError]] 只是候选原因之一。",
+          "followUps": []
+        },
+        {
+          "question": "如何让 map 在 clearQueue 后安全收尾？",
+          "answer": "启用 rejectOnClear 并用 [[Promise.allSettled]] 或 catch 处理拒绝，同时单独跟踪已启动任务；不要假设 clearQueue 能取消 mapper。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "limit.map 如何把可迭代对象转成受限并发任务？为什么 map 被解构后仍能工作？",
+      "answer": "map 是定义在 generator 上的 async 方法，闭包引用同一个 generator。它用 `[[Array.from]](iterable, (value,index) => { const promise=generator(function_, value,index); promises.push(promise); return promise; })` 同步消费输入，然后返回 `[[Promise.all]](promises)`。\n\n每个 mapper 调用都走同一[[队列]]，因此共享并发上限；[[Promise.all]] 保持输入顺序的结果数组。map 不依赖 this，解构后仍能通过闭包访问 generator，所以 detached 调用可用。\n\n注意它会先完整消费[[可迭代对象]]再等待结果，不是流式处理，也不会对无限[[可迭代对象]]做[[背压]]。",
+      "followUps": [
+        {
+          "question": "mapper 收到的 index 如何保证顺序？",
+          "answer": "[[Array.from]] 的映射回调按迭代顺序同步执行，index 由 [[Array.from]] 提供；任务完成顺序可能乱，但结果数组由 [[Promise.all]] 按 promise 数组顺序排列。",
+          "followUps": []
+        },
+        {
+          "question": "如果 iterable 是无限生成器？",
+          "answer": "map 会卡在 [[Array.from]] 的同步消费上，永远到不了 [[Promise.all]]，也不会启动已排任务之外的新调度；这是设计边界，不是[[背压]]。",
+          "followUps": []
+        },
+        {
+          "question": "为什么不用 p-map？",
+          "answer": "[[p-map]] 功能更全，适合复杂映射；这里 map 是轻量便利方法，复用现有 limit。README 也建议复杂场景用 [[p-map]]。当前实现不是 [[p-map]] 的替代。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "当 iterable 在迭代过程中抛错时，map 如何避免未处理拒绝？已经调度的 mapper 还会运行吗？",
+      "answer": "[[Array.from]] 在同步迭代中抛错后，map 进入 catch：对 `promises` 中已经创建的每个 [[Promise]] 执行 `promise.catch(() => {})`，然后重新抛出原始错误。这样这些 [[Promise]] 的拒绝被观察，不会变成 [[unhandledRejection]]。\n\n已经通过 generator 入队的 mapper 仍会继续运行，结果被丢弃；map 返回的 [[Promise]] 以迭代器错误立即拒绝，不等这些任务完成。测试用 `await limit(() => {})` 等已排任务结束，再断言队列清空。\n\n这是“不取消已调度任务、只观察拒绝”的策略。",
+      "followUps": [
+        {
+          "question": "为什么 catch 里只 catch 不记录？",
+          "answer": "目标是避免 [[unhandledRejection]]，而不是改变 map 的拒绝原因；map 已决定以迭代器错误拒绝，其他 mapper 错误属于被丢弃结果的一部分。",
+          "followUps": []
+        },
+        {
+          "question": "如果 mapper 在迭代器抛错前已拒绝？",
+          "answer": "同步迭代期间 mapper 还未真正执行，因为 run 在[[微任务]]中；通常迭代器错误先成为 map 的拒绝原因。若之后 mapper 拒绝，catch 已挂上，仍被观察。",
+          "followUps": []
+        },
+        {
+          "question": "这种策略有什么资源风险？",
+          "answer": "已调度任务不会被取消，可能继续占用并发槽和外部资源；调用方若想尽快停止，需要在 mapper 内自行检查取消信号或使用可中止的任务实现。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "limit.map 对空 iterable、array-like 和 mapper 拒绝分别是什么行为？它是否提供任务取消？",
+      "answer": "空 iterable 时 `promises` 为空，`[[Promise.all]]([])` 立即 resolve 为 `[]`，mapper 不会被调用。[[array-like]] 对象如 `{0:'a',1:'b',length:2}` 也能被 [[Array.from]] 处理，回调收到值和索引。\n\nmapper 拒绝时，对应任务 [[Promise]] 拒绝，[[Promise.all]] 以第一个拒绝原因拒绝；其他已调度任务仍继续运行，不会自动取消。map 本身没有 [[AbortSignal]] 参数，也没有取消队列的入口。\n\n因此它适合批量输入，不适合需要中途取消或流式[[背压]]的场景。",
+      "followUps": [
+        {
+          "question": "array-like 和可迭代对象有什么区别？",
+          "answer": "[[Array.from]] 优先使用迭代器；没有迭代器时按 length 和索引读取 [[array-like]]。因此 map 既能接受 Set、[[生成器]]，也能接受带 length 的对象。",
+          "followUps": []
+        },
+        {
+          "question": "Promise.all 第一个拒绝后，其他拒绝会怎样？",
+          "answer": "[[Promise.all]] 只报告第一个原因，但它已为每个任务 [[Promise]] 注册处理器，其他拒绝会被观察而非未处理；只是结果被忽略。",
+          "followUps": []
+        },
+        {
+          "question": "如何给 map 增加取消能力？",
+          "answer": "需要设计层支持：给 mapper 传入 [[AbortSignal]]，或在 map 外层维护取消标志并拒绝后续任务；当前 API 没有该能力，clearQueue 只丢弃等待项，不中止运行项。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "limitFunction 如何复用 pLimit？它向调用方暴露了哪些能力，又有哪些没有暴露？",
+      "answer": "limitFunction 先 `const limit = pLimit(options)`，再返回 `(...args) => limit(() => function_(...args))`；每次调用都通过同一个 limit 排队，因此共享并发上限。\n\n它用 `Object.defineProperty` 只挂了 `clearQueue`，值是 `limit.clearQueue`。由于 clearQueue 使用闭包而非 this，解构后仍可调用。activeCount、pendingCount、concurrency、map 都没有转发，调用方拿不到这些状态。\n\n每次调用多一层闭包，换来的是把参数捕获到内部任务函数中；类型上返回函数与 `Pick<LimitFunction,'clearQueue'>` 相交。",
+      "followUps": [
+        {
+          "question": "为什么只暴露 clearQueue？",
+          "answer": "这是有意的最小 API：limitFunction 关注单个函数的并发执行，不承诺队列内省。若需要动态并发或计数，应直接使用 pLimit 返回的 limit。",
+          "followUps": []
+        },
+        {
+          "question": "limitFunction 的 clearQueue 与 limit.clearQueue 是同一个函数吗？",
+          "answer": "运行时是同一个函数引用，不是绑定副本；它不依赖 this，所以可以直接赋给 limitedFunction。若未来改成使用 this 的方法，这种转发会失效。",
+          "followUps": []
+        },
+        {
+          "question": "怎样让 limitFunction 支持动态并发？",
+          "answer": "当前没有暴露 concurrency setter；可以改为返回带 concurrency 访问器的对象，或让调用方保留底层 limit。直接改实现需注意类型声明也要同步。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "index.d.ts 中 LimitFunction 的调用签名和 map 泛型分别约束了什么？limitFunction 的返回类型与 LimitFunction 有何差异？",
+      "answer": "LimitFunction 的调用签名是 `<Arguments extends unknown[], ReturnType>(function_: (...args: Arguments) => [[PromiseLike]]<ReturnType> | ReturnType, ...args: Arguments): Promise<ReturnType>`，用[[元组]]形式的[[泛型]]把传入参数与函数参数绑定，支持额外参数透传，并允许同步返回值。\n\nmap 是 `<Input, ReturnType>(iterable: [[Iterable]]<Input>, mapper: (input, index) => [[PromiseLike]]<ReturnType> | ReturnType) => Promise<ReturnType[]>`，约束输入可迭代、mapper 接收值和索引。\n\nlimitFunction 的函数参数只接受 `[[PromiseLike]]<ReturnType>`，不接受同步 ReturnType；返回类型是函数与 `Pick<LimitFunction,'clearQueue'>` 的交叉，不包含 activeCount、concurrency、map。",
+      "followUps": [
+        {
+          "question": "为什么 LimitFunction 用 `Arguments extends unknown[]` 而不是简单 `...args: any[]`？",
+          "answer": "[[元组]]形式的[[泛型]]能保留每个参数的类型和顺序，使 `limit(fn, 'x', 1)` 能检查 fn 的签名；any[] 会丢失参数约束，容易放过错误调用。",
+          "followUps": []
+        },
+        {
+          "question": "limitFunction 类型拒绝同步返回值，但运行时接受，这是 bug 吗？",
+          "answer": "是类型与运行时契约不一致。设计上可能有意要求异步函数；若运行时继续用 async 包装，类型应明确同步值是否支持，或在实现中拒绝同步返回。",
+          "followUps": []
+        },
+        {
+          "question": "Options 中 concurrency 是 readonly，LimitFunction 中可写，矛盾吗？",
+          "answer": "不矛盾。Options 是构造时输入，声明只读表达不应在对象上改；LimitFunction 的 concurrency 是运行期可调属性，因此可写。两者描述不同对象。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "index.test-d.ts 覆盖了哪些类型契约？tsd 能验证 clearQueue 的运行时行为或 rejectOnClear 的实际抛错吗？",
+      "answer": "index.test-d.ts 用 [[tsd]] 的 expectType/expectError 检查：limit 的返回 [[Promise]] 类型、参数透传、activeCount/pendingCount 为 number、clearQueue 返回 void、limitFunction 要求异步函数、非法 rejectOnClear 被拒绝，以及 map 接受 Set 和数组迭代器。\n\n[[tsd]] 只做类型检查，不执行代码，因此不能验证 clearQueue 是否真的拒绝、[[AbortError]] 的 name、或 activeCount 的运行时数值；这些由 [[AVA]] 测试覆盖。反过来，[[AVA]] 也不验证类型。二者需要同时存在。\n\n类型测试中的 expectError 只证明当前声明会拒绝该写法，不证明运行时也会拒绝。",
+      "followUps": [
+        {
+          "question": "为什么类型测试要单独用 tsd？",
+          "answer": "普通单元测试运行 JavaScript，不会检查声明文件的类型推导；[[tsd]] 在编译期断言类型，能防止声明回归。它不替代运行时测试，二者互补。",
+          "followUps": []
+        },
+        {
+          "question": "`expectError(limitFunction((_a: string) => 'x', ...))` 说明了什么？",
+          "answer": "说明声明要求 limitFunction 的 fn 返回 [[PromiseLike]]；同步返回在类型层被拒绝。运行时包装并没有强制检查，因此这是类型契约而非运行时保证。",
+          "followUps": []
+        },
+        {
+          "question": "如何发现类型与运行时不一致？",
+          "answer": "需要同时写类型测试和运行时测试，并对边界值做对照；例如 limitFunction 同步返回、null options、非法 rejectOnClear。仅靠 [[tsd]] 或 [[AVA]] 单边都会漏掉。",
+          "followUps": []
+        }
+      ]
+    },
+    {
+      "caseId": "p-limit",
+      "variant": "generation",
+      "question": "benchmark.js 覆盖了哪些场景？从 index.js 看，每个受限任务至少产生哪些调度开销？这些基准结果应如何解读？",
+      "answer": "benchmark.js 用 Benchmarker 覆盖 API 限流、文件处理、数据库连接池、混合 CPU/IO、高任务量队列、limitFunction 对比和动态并发调整；默认 iterations 为 1，warmup 默认 false，计时为墙钟时间，并可用返回的操作数计算[[吞吐量]]。\n\n从 index.js 看，每次 limit 调用至少创建外层 [[Promise]]、队列项、内部 [[Promise]] 和 then 回调，并经历入队/出队与[[微任务]]切换；任务结束还要 await 和 next。高并发下这些分配和[[微任务]]可能成为可观开销，但当前上下文没有[[benchmark]]运行数据，不能断言具体量级。\n\n[[benchmark]]受随机 sleep、机器负载和单次采样影响，不能直接当作生产性能保证。",
+      "followUps": [
+        {
+          "question": "为什么默认 iterations 为 1 会削弱结论？",
+          "answer": "单次采样无法区分噪声和真实差异，尤其场景里有随机延迟。应增加重复次数、报告中位数/分位数，并在稳定环境运行；当前默认值只适合快速 smoke。",
+          "followUps": []
+        },
+        {
+          "question": "如何降低每任务内部 Promise 的开销？",
+          "answer": "可以评估直接调度队列项、减少一层 [[Promise]]，但会牺牲异步上下文和统一错误处理；需要[[benchmark]]与语义测试共同验证。当前实现优先保持异步边界，不能只凭性能直觉改。",
+          "followUps": []
+        },
+        {
+          "question": "高任务量场景最应观察什么指标？",
+          "answer": "除总耗时外，应看内存分配、[[事件循环]]延迟、activeCount 是否稳定、队列长度峰值和尾延迟。只看 ops/s 可能掩盖长尾和内存压力。",
+          "followUps": []
+        }
+      ]
+    }
+  ],
+  "status": "complete",
+  "humanReview": {
+    "status": "pending",
+    "reviewedCount": 0,
+    "coverage": 0,
+    "templatePath": "review-template.json"
+  },
+  "limitations": [
+    "Keyword coverage is not factual correctness.",
+    "Real token usage is null when the provider omits bounded usage metadata.",
+    "Human review has not been completed; pending is not a passing result."
+  ],
+  "network": {
+    "blockedRequests": 0,
+    "requests": [
+      {
+        "attempt": "initial",
+        "inputChars": 52166,
+        "promptHash": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+        "elapsedMs": 181645,
+        "status": 200,
+        "errorType": null,
+        "usage": {
+          "inputTokens": 14851,
+          "outputTokens": 34662,
+          "totalTokens": 49513
+        }
+      }
+    ],
+    "usage": {
+      "inputTokens": 14851,
+      "outputTokens": 34662,
+      "totalTokens": 49513
+    }
+  }
+}

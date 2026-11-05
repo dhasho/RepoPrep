@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "repoprep-assistant-cohort-review-summary-v1",
+  "cohortFileSha256": "7b41ff8299b953f8092ccf0fa15748eab38c4dcc46d925bda48705b6a618af9a",
+  "humanReviewStatus": "pending",
+  "questions": 80,
+  "reviewedFacts": 28,
+  "aggregate": {
+    "covered": 25,
+    "partial": 1,
+    "missing": 2,
+    "contradicted": 0,
+    "incorrect": 8,
+    "imprecise": 2
+  },
+  "sourceReviews": [
+    {
+      "caseId": "mitt",
+      "originRunId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/assistant-review-mitt.json",
+      "sha256": "784c3459cb523acdbb49afe465f232beaebc09a41d033950376d0ea05e9cb5b9",
+      "counts": {
+        "covered": 6,
+        "partial": 0,
+        "missing": 0,
+        "contradicted": 0,
+        "incorrect": 4,
+        "imprecise": 0
+      },
+      "questions": 20,
+      "followUpsRead": 41
+    },
+    {
+      "caseId": "p-limit",
+      "originRunId": "00032e42-668d-40c6-ae6f-1937906571f2",
+      "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-p-limit/assistant-review-p-limit.json",
+      "sha256": "0f389c5e0795937e976dad329e6e33206c6c862bd8feaf015c2fc86cdc49a0ab",
+      "counts": {
+        "covered": 7,
+        "partial": 0,
+        "missing": 0,
+        "contradicted": 0,
+        "incorrect": 2,
+        "imprecise": 0
+      },
+      "questions": 20,
+      "followUpsRead": 60
+    },
+    {
+      "caseId": "requests",
+      "originRunId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+      "reportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+      "reference": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/assistant-review-requests.json",
+      "sha256": "52c437f51eaff9473d1b1a63ea38b9eaaf6ee740ed2b0f16e2ebebef77d12371",
+      "counts": {
+        "covered": 5,
+        "partial": 1,
+        "missing": 2,
+        "contradicted": 0,
+        "incorrect": 2,
+        "imprecise": 2
+      },
+      "questions": 20,
+      "followUpsRead": 44
+    },
+    {
+      "caseId": "schedule",
+      "originRunId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "reportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "reference": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/assistant-review-schedule.json",
+      "sha256": "f2b4273b030aa7b2a1ca3c93594f8467f4778d69612e720a4820f7ba83462f68",
+      "counts": {
+        "covered": 7,
+        "partial": 0,
+        "missing": 0,
+        "contradicted": 0,
+        "incorrect": 0,
+        "imprecise": 0
+      },
+      "questions": 20,
+      "followUpsRead": 40
+    }
+  ],
+  "selectedMeasurementRequests": 4,
+  "campaignRequests": 5,
+  "selectedProviderUsage": {
+    "inputTokens": 110151,
+    "outputTokens": 102859,
+    "totalTokens": 213010
+  },
+  "campaignProviderUsage": {
+    "inputTokens": 152360,
+    "outputTokens": 145627,
+    "totalTokens": 297987
+  },
+  "qualityGate": {
+    "status": "core-fact-coverage-improved; overall-answer-quality-benefit-not-established",
+    "baselineCoveredFacts": 23,
+    "candidateCoveredFacts": 25,
+    "baselineIncorrect": 4,
+    "candidateIncorrect": 8,
+    "scope": "Frozen compound facts improved, while retained incorrect mechanisms increased. No human accuracy or universal improvement claim."
+  }
+}

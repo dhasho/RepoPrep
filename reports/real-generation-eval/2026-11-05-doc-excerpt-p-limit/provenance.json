@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "repoprep-real-subset-provenance-v1",
+  "verdict": "ARTIFACTS-OK",
+  "runId": "00032e42-668d-40c6-ae6f-1937906571f2",
+  "reportDigest": "sha256:03596e0930e71bacb4dfa656a97c707afe2c6c2fdc9d69203f331a1b4920d3da",
+  "reportFileSha256": "7d7a828dfa2391297e7055ade432fa347841c13dedada3022682ec062375c98c",
+  "sourceFiles": 107,
+  "snapshot": ".validation/frozen-generation-sources/00032e42-668d-40c6-ae6f-1937906571f2",
+  "cases": [
+    {
+      "caseId": "p-limit",
+      "questions": 20,
+      "requestHash": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+      "tokens": {
+        "inputTokens": 14851,
+        "outputTokens": 34662,
+        "totalTokens": 49513
+      },
+      "estimatedInputTokens": 27013
+    }
+  ],
+  "observedAt": "2026-11-05T08:10:51.109Z",
+  "sourceProducerCommit": "6208425e18414bf304e9a3821e02ad0e87648dab",
+  "same107SourceHashesAsOtherThreeCases": true,
+  "providerUsageMatchesTransportObserver": true,
+  "additionalAuthorizedRequests": 1,
+  "actualRequests": 1,
+  "cumulativeCampaignRequests": 5,
+  "savedSettingsAndBackupAndLocalStateUnchanged": true
+}
