@@ -1,0 +1,115 @@
+{
+  "mode": "isolated-syntax-only",
+  "providerRequests": 0,
+  "upstreamCodeExecuted": false,
+  "pythonVersion": "3.12.10",
+  "selectorSha256": "04f1668c4f1c43d116a55cc6c89d5efa99f28ff089cd3a69bcc8012125d6ad5e",
+  "sampleCount": 11,
+  "allNonDocumentationAstEqual": true,
+  "method": "Authorized redacted source; parse region.text with a uniform if-block wrapper. Mask only first ordinary docstring values in class/function nodes; compare AST without locations. Display framing is not parsed as code.",
+  "limitations": [
+    "Docstring values and line locations are deliberately not preserved.",
+    "AST equality after masking docs is not general runtime-semantic equivalence or unique AST identity of selected snippets."
+  ],
+  "rows": [
+    {
+      "id": "requests/src/requests/models.py:32209:34929:Response.iter_content",
+      "originalSha256": "6d332d1d3425ea7b4177e78fce9411f127ce37c3cb530a33bd4c356345f47bc2",
+      "compactedSha256": "bedb7df8b4a6b2b9e25ddcc9a92691196137ccf6976b944186aa9d06652a9709",
+      "documentationRanges": 1,
+      "originalChars": 2720,
+      "compactedChars": 1979,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "requests/src/requests/models.py:23975:25017:PreparedRequest.prepare_cookies",
+      "originalSha256": "57dcf4a8302fad3bbdc2c1736ce7390b9abc9eef2c5924ed4dfc3d9e5cc47b2a",
+      "compactedSha256": "ba28a7a7147a220e556c214b56cf44ce771df9cea93bd1c0ff40b95260536fe3",
+      "documentationRanges": 1,
+      "originalChars": 1042,
+      "compactedChars": 687,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "requests/src/requests/models.py:11785:25424:PreparedRequest",
+      "originalSha256": "9abb8086f8da8835b45d0095267e5e7caafb22d1c340c881916768de6f1be8db",
+      "compactedSha256": "9ddda7570a1585da0f4131c1c46d98e6fcb5eda117f843a127f28c1b6ee78be2",
+      "documentationRanges": 10,
+      "originalChars": 13639,
+      "compactedChars": 12887,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "requests/src/requests/models.py:25424:42646:Response",
+      "originalSha256": "0306bb605d4c26049493b8f9ece34acf7f8ce77b228fe28691d125bcc20d1563",
+      "compactedSha256": "07c6aa52e626e036809772fc14f6ab3cd93749b5680bfda1b5aa5744b236aebf",
+      "documentationRanges": 17,
+      "originalChars": 17222,
+      "compactedChars": 16481,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "requests/src/requests/models.py:8458:11785:Request",
+      "originalSha256": "fa573a9612d541be131cf963906199e6b0415e0548254f5296471975f9d57fa1",
+      "compactedSha256": "c5f96803dda9bc7fa5b1ecf74e8fb8a5d4b34da51d81333f1c82b34052cbdbb0",
+      "documentationRanges": 2,
+      "originalChars": 3327,
+      "compactedChars": 2329,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "requests/src/requests/sessions.py:20738:24972:Session.request",
+      "originalSha256": "0b3141707b17fe2792c3e3d30ac09db38e91e8cb5c0fe468061b112cbca8d2ed",
+      "compactedSha256": "158da69b94d459db703a9cb2b368339cc6995efd634917e56d36dc2f6e1ac311",
+      "documentationRanges": 1,
+      "originalChars": 4234,
+      "compactedChars": 1805,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "requests/src/requests/sessions.py:15041:34589:Session",
+      "originalSha256": "a19497f7bf1701e519477a047a25b4a38f70b3415e173e7a59e7b6d25da08f49",
+      "compactedSha256": "9bbfd43781d0141a1650f10f7369ee1878bcae56788253bd05b6e7fd8f03199a",
+      "documentationRanges": 15,
+      "originalChars": 19548,
+      "compactedChars": 17119,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "schedule/schedule/__init__.py:23045:24057:Job.run",
+      "originalSha256": "d645e8beea33f9e2739efbf0fbd1cc93ba8a1b1aa487c58aed0adb3c37d367ae",
+      "compactedSha256": "4c6d55b1e5ffd1144e50fc1eaff15441344a5e286434b2bd357947da6235c89e",
+      "documentationRanges": 1,
+      "originalChars": 1012,
+      "compactedChars": 663,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "schedule/schedule/__init__.py:19097:21987:Job.until",
+      "originalSha256": "c921290cc444313c5f2b70e9e0de58015a5f66ae0c30c8c8269421a7500c80b6",
+      "compactedSha256": "420c221ba78920bc400da2f4c7ceb1d4ba48f36283b69282925b6a4df70da182",
+      "documentationRanges": 1,
+      "originalChars": 2890,
+      "compactedChars": 1942,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "schedule/schedule/__init__.py:14903:18530:Job.at",
+      "originalSha256": "c67f47895d00b2f1407ad9d68876a8e42684f8ae7cb860079d3b7a300ac590cc",
+      "compactedSha256": "0abefc4fd6af082ddcc792a1d4c9535ca649c2e33ecbb6cb39e00b8261b21c2c",
+      "documentationRanges": 1,
+      "originalChars": 3627,
+      "compactedChars": 2914,
+      "state": "equal-except-documentation"
+    },
+    {
+      "id": "schedule/schedule/__init__.py:6124:29647:Job",
+      "originalSha256": "88173bddd8cc61f5aa213e7ec88ad2ab48d1a5d468708369649bbd0c5c755ab7",
+      "compactedSha256": "60b46ad2ce42abd1796c00d2df7dedf8899b10e2d7a476c7cc3896a35c29069f",
+      "documentationRanges": 12,
+      "originalChars": 23523,
+      "compactedChars": 21073,
+      "state": "equal-except-documentation"
+    }
+  ]
+}

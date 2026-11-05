@@ -1,0 +1,326 @@
+{
+  "schemaVersion": "repoprep-rejected-policy-observations-v1",
+  "mode": "context-only",
+  "providerRequests": 0,
+  "sourceBaseCommit": "a60b20a0d08751bc99ac5793ee93c2e11a32ee24",
+  "noRankingPolicyAdopted": true,
+  "policies": [
+    {
+      "id": "A",
+      "requestBodyHashes": {
+        "mitt": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+        "p-limit": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+        "schedule": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+        "requests": "4fb187cd8e074423ce42ebef57f5e28612b29b2fc435001647420fb5b7308572"
+      },
+      "estimatedInputTokens": {
+        "mitt": 14570,
+        "p-limit": 27013,
+        "schedule": 63997,
+        "requests": 63861
+      },
+      "added": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 25017,
+          "endOffset": 25424,
+          "startLine": 722,
+          "endLine": 731,
+          "symbol": "PreparedRequest.prepare_hooks",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "8cc2346e52e218676afa785959c198a00a6cc327e7d1a7de33a6fcf382dd4424"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 28283,
+          "endOffset": 28340,
+          "startLine": 812,
+          "endLine": 814,
+          "symbol": "Response.__enter__",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "9f35db46fe9e8190e88cf0247bec115ad3be5a66e66d6021f3de8cc3d7c96fd1"
+        }
+      ],
+      "lost": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 15246,
+          "endOffset": 15506,
+          "startLine": 473,
+          "endLine": 482,
+          "symbol": "PreparedRequest._get_idna_encoded_host",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "a2764daffbb8c9955fe31071a04150406ae58763b07ef66fe10afa6d03c40a3b"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 29974,
+          "endOffset": 30119,
+          "startLine": 857,
+          "endLine": 860,
+          "symbol": "Response.__iter__",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "6fc94cbbefd2064c159624423f56dc1531eaf1d3b60f8b55dacf770e3163d4ad"
+        }
+      ],
+      "adopted": false,
+      "reason": "One missing hook implementation was supplied, but other supplied helper units were displaced; no demonstrated net quality benefit."
+    },
+    {
+      "id": "B",
+      "requestBodyHashes": {
+        "mitt": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+        "p-limit": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+        "schedule": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+        "requests": "dd8019714ba7f6fd3202700766550a4450fefcb35236d7770c05dd50eb67e309"
+      },
+      "estimatedInputTokens": {
+        "mitt": 14570,
+        "p-limit": 27013,
+        "schedule": 63997,
+        "requests": 63944
+      },
+      "added": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 25017,
+          "endOffset": 25424,
+          "startLine": 722,
+          "endLine": 731,
+          "symbol": "PreparedRequest.prepare_hooks",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "8cc2346e52e218676afa785959c198a00a6cc327e7d1a7de33a6fcf382dd4424"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 28283,
+          "endOffset": 28340,
+          "startLine": 812,
+          "endLine": 814,
+          "symbol": "Response.__enter__",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "9f35db46fe9e8190e88cf0247bec115ad3be5a66e66d6021f3de8cc3d7c96fd1"
+        }
+      ],
+      "lost": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 15246,
+          "endOffset": 15506,
+          "startLine": 473,
+          "endLine": 482,
+          "symbol": "PreparedRequest._get_idna_encoded_host",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "a2764daffbb8c9955fe31071a04150406ae58763b07ef66fe10afa6d03c40a3b"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 29974,
+          "endOffset": 30119,
+          "startLine": 857,
+          "endLine": 860,
+          "symbol": "Response.__iter__",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "6fc94cbbefd2064c159624423f56dc1531eaf1d3b60f8b55dacf770e3163d4ad"
+        }
+      ],
+      "adopted": false,
+      "reason": "One missing hook implementation was supplied, but other supplied helper units were displaced; no demonstrated net quality benefit."
+    },
+    {
+      "id": "C-fixed",
+      "requestBodyHashes": {
+        "mitt": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+        "p-limit": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+        "schedule": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+        "requests": "79064649c4935a8dc0f8a379f4c61f71b0695bf9928fbd153fdeced55ca4e25f"
+      },
+      "estimatedInputTokens": {
+        "mitt": 14570,
+        "p-limit": 27013,
+        "schedule": 63997,
+        "requests": 63897
+      },
+      "added": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 41092,
+          "endOffset": 42178,
+          "startLine": 1144,
+          "endLine": 1172,
+          "symbol": "Response.raise_for_status",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "d7109b46885198fa347cc9ddb3e7a919f95a60050ccc5e9c1e812e18642ae88d"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 37435,
+          "endOffset": 38809,
+          "startLine": 1053,
+          "endLine": 1090,
+          "symbol": "Response.text",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "4fef88f3a45d15e9d88bd59f88c23aa80e16fde4f6b2f9747caab3cf418669d5"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 31293,
+          "endOffset": 31484,
+          "startLine": 891,
+          "endLine": 895,
+          "symbol": "Response.next",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "f2f07fb6d5d3524d72b673859d3512cca026cfb2375e48e433120fc317f04e6b"
+        }
+      ],
+      "lost": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 13401,
+          "endOffset": 14503,
+          "startLine": 424,
+          "endLine": 452,
+          "symbol": "PreparedRequest.prepare",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "6cf03a7f1341433d30b01e1639c2baff5d5506a33e79a642da15a98df610e67f"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 22062,
+          "endOffset": 22807,
+          "startLine": 654,
+          "endLine": 669,
+          "symbol": "PreparedRequest.prepare_content_length",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "b15e15cb8d44c8176f9682fe3bddbcd461866c55d3873b9f74bbbd5c6b658aed"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 15006,
+          "endOffset": 15246,
+          "startLine": 467,
+          "endLine": 472,
+          "symbol": "PreparedRequest.prepare_method",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "fb65947525d7566e6193227eb1266a75789677272d21d70b7164a9442470e559"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 15246,
+          "endOffset": 15506,
+          "startLine": 473,
+          "endLine": 482,
+          "symbol": "PreparedRequest._get_idna_encoded_host",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "a2764daffbb8c9955fe31071a04150406ae58763b07ef66fe10afa6d03c40a3b"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 29974,
+          "endOffset": 30119,
+          "startLine": 857,
+          "endLine": 860,
+          "symbol": "Response.__iter__",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "6fc94cbbefd2064c159624423f56dc1531eaf1d3b60f8b55dacf770e3163d4ad"
+        }
+      ],
+      "adopted": false,
+      "reason": "Critical preparation implementations were displaced."
+    },
+    {
+      "id": "D",
+      "requestBodyHashes": {
+        "mitt": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+        "p-limit": "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1",
+        "schedule": "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a",
+        "requests": "f35e1bc74cdd3c824c35195ad2771b5ef549ffa6bddbec7dd3b84a0118098225"
+      },
+      "estimatedInputTokens": {
+        "mitt": 14570,
+        "p-limit": 27013,
+        "schedule": 63997,
+        "requests": 63824
+      },
+      "added": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 31484,
+          "endOffset": 31907,
+          "startLine": 896,
+          "endLine": 905,
+          "symbol": "Response.apparent_encoding",
+          "baselineState": "file-dispatched-region-not-observed",
+          "candidateState": "source-region-provided",
+          "candidateSha256": "24ae3c3ca8a6ee29892c86448cfe198a8f9150ba26e57718c999e09f3530633b"
+        }
+      ],
+      "lost": [
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 15246,
+          "endOffset": 15506,
+          "startLine": 473,
+          "endLine": 482,
+          "symbol": "PreparedRequest._get_idna_encoded_host",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "a2764daffbb8c9955fe31071a04150406ae58763b07ef66fe10afa6d03c40a3b"
+        },
+        {
+          "caseId": "requests",
+          "path": "src/requests/models.py",
+          "startOffset": 29974,
+          "endOffset": 30119,
+          "startLine": 857,
+          "endLine": 860,
+          "symbol": "Response.__iter__",
+          "baselineState": "source-region-provided",
+          "candidateState": "file-dispatched-region-not-observed",
+          "candidateSha256": "6fc94cbbefd2064c159624423f56dc1531eaf1d3b60f8b55dacf770e3163d4ad"
+        }
+      ],
+      "adopted": false,
+      "reason": "The missing target references were not supplied; two provided units were displaced."
+    }
+  ],
+  "limitations": [
+    "Exploratory observations on development cases; not model-quality measurements.",
+    "Candidate boundaries and source text stayed fixed; selected source units changed.",
+    "Detailed prototype patches, failures and captures remain in local verified recovery archives."
+  ]
+}

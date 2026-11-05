@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "repoprep-local-context-provenance-v1",
+  "mode": "context-only",
+  "sourceCommit": "f6d8676b0c1201ace398af5858da6761558f4eb9",
+  "sourceFiles": 107,
+  "sourceHashMapMatchedMain": true,
+  "providerRequests": 0,
+  "syntheticCaptures": 4,
+  "baselineReference": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/context-audit.json",
+  "baselineSha256": "0261deecc5f587529d7bd58dd4960d849f3c346f558803d87d84a1e5b2f5d17f",
+  "actualProviderUsage": null,
+  "modelQualityMeasured": false,
+  "astSamples": 11,
+  "unchangedRequestCases": [
+    "mitt",
+    "p-limit",
+    "schedule"
+  ],
+  "changedRequestCases": [
+    "requests"
+  ],
+  "validation": {
+    "typecheck": "passed",
+    "fileSelection": 102,
+    "questionBudget": 118,
+    "nativeSmoke": "SMOKE-OK; exit0; fixture cleaned"
+  },
+  "files": [
+    {
+      "filename": "report.json",
+      "sha256": "02c4661b3fb5b381978473754e32c145cb6c14a0844c29211a9b1c0607823c9b"
+    },
+    {
+      "filename": "comparison.json",
+      "sha256": "e70e4e1ec16ca5fa60c24f3a52952b24ee3592c74be05bc4baaeab4577f92d2c"
+    },
+    {
+      "filename": "ast-proof.json",
+      "sha256": "6147a2e4f83b66be9cb323e4832992dc42076fdbda3d8e73cc4ee4b4390ad424"
+    },
+    {
+      "filename": "rejected-policies.json",
+      "sha256": "ad491e36640f7ef9694aa5c5466842039991287e94a5d01793c2b8e5caca117c"
+    }
+  ]
+}

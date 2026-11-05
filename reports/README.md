@@ -2,6 +2,8 @@
 
 本目录存放可复核的评测产物。数字、请求回执、源码与 fixture 哈希、题目指纹一律以各 run 目录内的 JSON 为准，Markdown 只是概览。建议先读当前有效对比与原基线；历史实验目录用于追溯中间失败与设计演变，不代表当前结论。评测方法见[生成评测指南](../docs/generation-evaluation.md)与[真实模型评测指南](../docs/real-generation-evaluation.md)。
 
+后续主分支已合入调用顺序与父区域文档节选修复，见[离线验证](context-selection-audit/2026-11-05-local-coverage/report.md)：三个请求正文保持，Requests 正文改变；四例没有新增真实模型测量。下列真实结果绑定原生产源码，不冒充当前代码的质量或成本成绩。
+
 ## 真实模型评测（`real-generation-eval/`）
 
 普通运行以 `report.json` 保存逐题结果、请求与用量、配置、源码/fixture 哈希和 report digest；`report.md` 提供概览，逐事实复核见已有的 `assistant-review-*.json`。对比产物为 `comparison.md`/`comparison.json`。cohort 目录以 `cohort.json` 汇总已有测量，并保存复用证明和来源引用；它不代表重新执行了一次完整运行。

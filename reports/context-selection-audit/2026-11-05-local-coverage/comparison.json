@@ -1,0 +1,79 @@
+{
+  "mode": "context-only-comparison",
+  "providerRequests": 0,
+  "baselineSourceFiles": 107,
+  "candidateSourceFiles": 107,
+  "allCandidateBoundariesAndProjectTextMatched": true,
+  "criticalSourceRetentionPassed": true,
+  "limitation": "Unchanged aggregate fact evidence states do not certify full implementations or factual answers.",
+  "cases": [
+    {
+      "id": "mitt",
+      "beforeRequestHashes": [
+        "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389"
+      ],
+      "afterRequestHashes": [
+        "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389"
+      ],
+      "identicalRequest": true,
+      "beforeEstimate": 14570,
+      "afterEstimate": 14570,
+      "added": [],
+      "lost": [],
+      "changes": [],
+      "criticalLost": [],
+      "factChanges": []
+    },
+    {
+      "id": "p-limit",
+      "beforeRequestHashes": [
+        "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1"
+      ],
+      "afterRequestHashes": [
+        "ca9e2d596a97cd821209e135d9b925fe1c6f32bf3c6b2ed0107dd914d37fc2f1"
+      ],
+      "identicalRequest": true,
+      "beforeEstimate": 27013,
+      "afterEstimate": 27013,
+      "added": [],
+      "lost": [],
+      "changes": [],
+      "criticalLost": [],
+      "factChanges": []
+    },
+    {
+      "id": "schedule",
+      "beforeRequestHashes": [
+        "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a"
+      ],
+      "afterRequestHashes": [
+        "0680bd7b6a138ceb29e48ccc01bc41f5ecd50b8cefb801f210292456a64b9d7a"
+      ],
+      "identicalRequest": true,
+      "beforeEstimate": 63997,
+      "afterEstimate": 63997,
+      "added": [],
+      "lost": [],
+      "changes": [],
+      "criticalLost": [],
+      "factChanges": []
+    },
+    {
+      "id": "requests",
+      "beforeRequestHashes": [
+        "6f0c16713b528f4a0cdbde070b83ca33c9f7171b2b9e64715283e5e44a9d7769"
+      ],
+      "afterRequestHashes": [
+        "e0a302e5c8377bcc4269254484288697b3d12be01fa8ce3264781e3b4b9885a4"
+      ],
+      "identicalRequest": false,
+      "beforeEstimate": 63878,
+      "afterEstimate": 63995,
+      "added": [],
+      "lost": [],
+      "changes": [],
+      "criticalLost": [],
+      "factChanges": []
+    }
+  ]
+}
