@@ -27,3 +27,5 @@ Keyword coverage records configured keyword matches; it does not measure factual
 实际用量 mitt 为 31,464 tokens，schedule 为 68,756 tokens，合计 100,220；这是这两项生成的 provider usage，不是整轮研究账单。低推理强度可能引入不同输出，不能把变化单独归因于上下文节选。未执行上游项目或脚本；npm-run-all 调度语义另外核对了 [官方文档](https://github.com/mysticatea/npm-run-all/blob/master/docs/npm-run-all.md)，没有安装或运行它。
 
 本目录不是一次四例运行，也不包含 p-limit。代理辅助复核非独立人工盲审，人工状态仍 pending。
+
+mitt 四类错误的项目源码引用可见性另见[零网络误述归因](../2026-11-04-doc-excerpt-requests/finding-context-audit.md)。九个引用范围均完整提供；外部语言或工具语义的证据限制单列，该分析不改变本目录的评分或真实用量。

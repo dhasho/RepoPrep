@@ -55,5 +55,35 @@
     "filename": "prompt-template-proof.json",
     "sha256": "7c1602f2d5a1bca644b5c0558e4f5fa5f8d9ead2ae312d9a011c2cd67917acc8",
     "scope": "TypeScript syntax-only comparison of stored producer source snapshots, normalized CRLF to LF. Project context text changed; complete request bodies are deliberately different. No compiler host, upstream execution, provider call or credentials."
+  },
+  "findingContextAudit": {
+    "mode": "context-only",
+    "providerRequests": 0,
+    "syntheticCaptures": 2,
+    "originalRatingsUnchanged": true,
+    "producerSourceFiles": 107,
+    "producerSourceMapSha256": "7fd0cdeb0587d84ca7d5f6cbb20a878948aef32c556b9dc5fcbe6ab3b4947a3f",
+    "findingCount": 8,
+    "uniqueSourceReferences": 21,
+    "referenceCounts": {
+      "raw-reference-provided": 16,
+      "file-dispatched-no-reference-overlap": 4,
+      "partial-reference-with-documentation-excerpt": 1
+    },
+    "files": [
+      {
+        "filename": "finding-context-audit.json",
+        "sha256": "309c785d57129a1e6369a3706f85d85b60d66f0bb97b4faae663e6688f2943d4"
+      },
+      {
+        "filename": "audit-finding-context.mjs",
+        "sha256": "62cac84628da89de1969c0b927347209e207306bd3de8c0c1bd2ddb81409a937"
+      },
+      {
+        "filename": "finding-context-audit.md",
+        "sha256": "4282e538595598c7647c086f3589d1c32c097b1fa09dfa0ea4ee2fbb16fa3f91"
+      }
+    ],
+    "review": "Primary recapture verified the original 107 source hashes, report/review bindings and both exact request hashes. Actual same-file dispatch spans were verified in final messages; partial overlap is kept distinct from wholly unobserved references."
   }
 }

@@ -21,6 +21,8 @@ Keyword coverage records configured keyword matches; it does not measure factual
 
 零网络上下文证据见 [context-audit.json](context-audit.json)，包含四个固定公开仓库的 dispatch 区域与哈希，不含源码正文或完整请求，也不评价答案质量。[prompt-template-proof.json](prompt-template-proof.json) 记录前后提示词模板的语法节点哈希；实际项目上下文已改变。两份证据的文件哈希见 [provenance.json](provenance.json)。
 
+对既有误述的逐引用可见性分析见 [finding-context-audit.md](finding-context-audit.md)。它独立复现相同请求哈希，区分完整提供、部分提供和未观测范围，不新增真实调用或改变原评分。
+
 ## 源码复核与同条件对照
 
 20 道主问题与全部 44 条追问已逐项源码复核。冻结复合事实为完整 5/8、部分 1、缺失 2，上一轮为完整 3、部分 3、缺失 2；新增完整覆盖会话请求设置合并和环境配置合并。Response.ok/布尔与重定向上限仍缺失。另记 2 类实质错误和 2 条不精确表述：认证 hooks 丢失推断、请求 cookie 的类型转换与合并路径、Response.next 的 property/method 混淆、chunk_size=None 例外。比上一轮多一类实质错误，不能把覆盖提升当作所有答案更准确。见 [逐项复核](assistant-review-requests.json)。

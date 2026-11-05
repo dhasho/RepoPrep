@@ -1,0 +1,1437 @@
+{
+  "schemaVersion": "repoprep-finding-context-audit-v1",
+  "status": "complete",
+  "mode": "context-only",
+  "providerRequests": 0,
+  "syntheticCaptures": 2,
+  "producerSourceFiles": 107,
+  "producerSourceMapSha256": "7fd0cdeb0587d84ca7d5f6cbb20a878948aef32c556b9dc5fcbe6ab3b4947a3f",
+  "sourceHashesMatchOriginalRuns": true,
+  "method": "Production serialization and dispatch metadata; same-file span text is verified in the in-memory final request. No Markdown header parsing.",
+  "cases": [
+    {
+      "caseId": "requests",
+      "repository": "psf/requests",
+      "commit": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "originalReport": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/report.json",
+      "originalRunId": "0a84cfe5-0b30-41e0-8ff7-4e30328f9d02",
+      "originalReportDigest": "sha256:74b6844961c3235a7c39f941f25ed257a80689f13a42b79f5979d71b5771c9ab",
+      "originalReportSha256": "dc54d42681dcca5a303cb9f258c667e2f92920e6f8c772b89d1c854da8df94fa",
+      "originalReview": "reports/real-generation-eval/2026-11-04-doc-excerpt-requests/assistant-review-requests.json",
+      "originalReviewSha256": "52c437f51eaff9473d1b1a63ea38b9eaaf6ee740ed2b0f16e2ebebef77d12371",
+      "questionFingerprints": [
+        "919a38e7747450c8c48b77e423d622ae8e685b18194db4ff04164121d75bfde3",
+        "f6ade84b3b2fb3992a056b2c3e428527499cb5b9d68192f0222a625786046680",
+        "e178194120f7a2875331c9e6dd02a8d350b0b387d851d7a1abf9ade00d087a61",
+        "6290f25e3aae851c4fe2794198250ca04c431175d5b29e82fa2ad4200e8db6ca",
+        "7ff9f61a9960ad926b08a638bc7972fe1802feb6ec3e946f950cbb3024f826c7",
+        "90cd39703606294eb7a419f9de975a80ddc24dc45458f49d91ccd1976f23372d",
+        "12859afc27d2c62dc62b164dfa19f4a183dc4ff937d808dfcfe3d0ca1610cc22",
+        "a0431642aa5f381372a13c4f3a2d804cc19b09a8eb0907f10d86b1adeb5ad8ac",
+        "ca417a7353afbda7eddde02d698ace1811db5c3fcd6ec9d0fe2c21e9c45a7462",
+        "ce82be96680186405df5af1a6c5da401e25e4b212e5ec78efb072a6bd10d8a4c",
+        "a83bf1ac4e9d2a46d98585d6800371e9eb9cfa32108d43cfb11ae041828b6910",
+        "cd4221f5318256048a18af67213e48b303fe13b929ce4d936323cdc319ca4a9e",
+        "f985c74ce18b3f6d893e7b26e5c8051df19b872416e7ff49cb7f34910bb81e50",
+        "b2b765c907a648cdbcb69848c8ac15827b9f098204084c1350de24c13c673771",
+        "a8d83fedf2ca5a653e81520cfe9e3ec4cd5bd88c4968b3fb75e3d82590225b32",
+        "4aa5fabfefa9acb3304a6b271ec9a09a498d34e08d7a5fb35823a00368bc1dea",
+        "f5516e9031459f60cf366e9f9e27cf7066bdde3757d059aaa5d047372b38563b",
+        "dfd339efbdb87d6a0b78d6cf760fcab64016db300ab043f4db59a70e9490daac",
+        "3785314e2308ce6e49ab7ed8ea6949f614405d59809826e2fa02262fb0697ba9",
+        "88864f0b28e9de29f727b2366726b3a67de85323b61ae7b86d229c8716566461"
+      ],
+      "requestBodyHash": "6f0c16713b528f4a0cdbde070b83ca33c9f7171b2b9e64715283e5e44a9d7769",
+      "requestHashMatched": true,
+      "providerRequests": 0,
+      "syntheticCaptures": 1,
+      "dispatchSelections": [
+        {
+          "relPath": "pyproject.toml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "README.md",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/compat.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "docs/_static/custom.css",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/models.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 13401,
+              "end": 14503,
+              "complete": true
+            },
+            {
+              "start": 15006,
+              "end": 15246,
+              "complete": true
+            },
+            {
+              "start": 15246,
+              "end": 15506,
+              "complete": true
+            },
+            {
+              "start": 18852,
+              "end": 22062,
+              "complete": true
+            },
+            {
+              "start": 22062,
+              "end": 22807,
+              "complete": true
+            },
+            {
+              "start": 29974,
+              "end": 30119,
+              "complete": true
+            },
+            {
+              "start": 30119,
+              "end": 30686,
+              "complete": true
+            },
+            {
+              "start": 32209,
+              "end": 34929,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 36706,
+              "end": 37435,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "docs/_templates/sidebar.html",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/_types.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/structures.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/cookies.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 4193,
+              "end": 4963,
+              "complete": true
+            },
+            {
+              "start": 6008,
+              "end": 6231,
+              "complete": true
+            },
+            {
+              "start": 7662,
+              "end": 8441,
+              "complete": true
+            },
+            {
+              "start": 12310,
+              "end": 12688,
+              "complete": true
+            },
+            {
+              "start": 12688,
+              "end": 13058,
+              "complete": true
+            },
+            {
+              "start": 13058,
+              "end": 13281,
+              "complete": true
+            },
+            {
+              "start": 13281,
+              "end": 13625,
+              "complete": true
+            },
+            {
+              "start": 13625,
+              "end": 14022,
+              "complete": true
+            },
+            {
+              "start": 14952,
+              "end": 16416,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 16946,
+              "end": 17182,
+              "complete": true
+            },
+            {
+              "start": 17182,
+              "end": 17312,
+              "complete": true
+            },
+            {
+              "start": 17840,
+              "end": 18987,
+              "complete": true
+            },
+            {
+              "start": 18987,
+              "end": 19993,
+              "complete": true
+            },
+            {
+              "start": 20384,
+              "end": 21246,
+              "complete": true
+            },
+            {
+              "start": 21246,
+              "end": 22129,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "docs/make.bat",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 5300,
+              "end": 5489,
+              "complete": false
+            },
+            {
+              "start": 5489,
+              "end": 5695,
+              "complete": false
+            },
+            {
+              "start": 5695,
+              "end": 5903,
+              "complete": false
+            },
+            {
+              "start": 5903,
+              "end": 6092,
+              "complete": false
+            },
+            {
+              "start": 6092,
+              "end": 6346,
+              "complete": false
+            },
+            {
+              "start": 6346,
+              "end": 6593,
+              "complete": false
+            },
+            {
+              "start": 6593,
+              "end": 6844,
+              "complete": false
+            },
+            {
+              "start": 6844,
+              "end": 7030,
+              "complete": false
+            },
+            {
+              "start": 7030,
+              "end": 7247,
+              "complete": false
+            },
+            {
+              "start": 7247,
+              "end": 7258,
+              "complete": false
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/_internal_utils.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/auth.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 2559,
+              "end": 2694,
+              "complete": true
+            },
+            {
+              "start": 3029,
+              "end": 3198,
+              "complete": true
+            },
+            {
+              "start": 3444,
+              "end": 3523,
+              "complete": true
+            },
+            {
+              "start": 3523,
+              "end": 3693,
+              "complete": true
+            },
+            {
+              "start": 3805,
+              "end": 3981,
+              "complete": true
+            },
+            {
+              "start": 4475,
+              "end": 4742,
+              "complete": true
+            },
+            {
+              "start": 4742,
+              "end": 5181,
+              "complete": true
+            },
+            {
+              "start": 5181,
+              "end": 9077,
+              "complete": true
+            },
+            {
+              "start": 9077,
+              "end": 9281,
+              "complete": true
+            },
+            {
+              "start": 9281,
+              "end": 11152,
+              "complete": true
+            },
+            {
+              "start": 11152,
+              "end": 12196,
+              "complete": true
+            },
+            {
+              "start": 12196,
+              "end": 12442,
+              "complete": true
+            },
+            {
+              "start": 12442,
+              "end": 12519,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/status_codes.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/__version__.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/adapters.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 7812,
+              "end": 8887,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 8887,
+              "end": 10443,
+              "complete": true
+            },
+            {
+              "start": 14188,
+              "end": 16990,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 16990,
+              "end": 19246,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 21058,
+              "end": 21384,
+              "complete": true
+            },
+            {
+              "start": 23313,
+              "end": 24151,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 24151,
+              "end": 28768,
+              "complete": false,
+              "documentationOmitted": true
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/exceptions.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/hooks.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/sessions.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 19025,
+              "end": 20738,
+              "complete": true
+            },
+            {
+              "start": 20738,
+              "end": 24972,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 28867,
+              "end": 31822,
+              "complete": true
+            },
+            {
+              "start": 31822,
+              "end": 33267,
+              "complete": true
+            },
+            {
+              "start": 33267,
+              "end": 33723,
+              "complete": true
+            },
+            {
+              "start": 33723,
+              "end": 33879,
+              "complete": true
+            },
+            {
+              "start": 33879,
+              "end": 34293,
+              "complete": true
+            },
+            {
+              "start": 34442,
+              "end": 34589,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/api.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 405,
+              "end": 3431,
+              "complete": false,
+              "documentationOmitted": true
+            },
+            {
+              "start": 3431,
+              "end": 3980,
+              "complete": true
+            },
+            {
+              "start": 3980,
+              "end": 4363,
+              "complete": true
+            },
+            {
+              "start": 4363,
+              "end": 4921,
+              "complete": true
+            },
+            {
+              "start": 4921,
+              "end": 5635,
+              "complete": true
+            },
+            {
+              "start": 5635,
+              "end": 6293,
+              "complete": true
+            },
+            {
+              "start": 6293,
+              "end": 6957,
+              "complete": true
+            },
+            {
+              "start": 6957,
+              "end": 7332,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/certs.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/packages.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/utils.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 20146,
+              "end": 20256,
+              "complete": true
+            },
+            {
+              "start": 23535,
+              "end": 24155,
+              "complete": true
+            },
+            {
+              "start": 25924,
+              "end": 28162,
+              "complete": true
+            },
+            {
+              "start": 28162,
+              "end": 28444,
+              "complete": true
+            },
+            {
+              "start": 29200,
+              "end": 30315,
+              "complete": true
+            },
+            {
+              "start": 30315,
+              "end": 30513,
+              "complete": true
+            },
+            {
+              "start": 30513,
+              "end": 30879,
+              "complete": true
+            },
+            {
+              "start": 34313,
+              "end": 34791,
+              "complete": true
+            },
+            {
+              "start": 34791,
+              "end": 35170,
+              "complete": true
+            },
+            {
+              "start": 35170,
+              "end": 36107,
+              "complete": true
+            },
+            {
+              "start": 36107,
+              "end": 36531,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/__init__.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 1281,
+              "end": 2791,
+              "complete": true
+            },
+            {
+              "start": 2791,
+              "end": 3277,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "src/requests/help.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 562,
+              "end": 2086,
+              "complete": true
+            },
+            {
+              "start": 2086,
+              "end": 4033,
+              "complete": true
+            },
+            {
+              "start": 4033,
+              "end": 4160,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/expired/ca/Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/AI_POLICY.md",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "tests/__init__.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/testserver/__init__.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "ext/LICENSE",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/requests/py.typed",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "docs/requirements.txt",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "setup.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/expired/Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/CODE_OF_CONDUCT.md",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/compat.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/testserver/server.py",
+          "wholeFile": false,
+          "regions": [
+            {
+              "start": 1466,
+              "end": 1661,
+              "complete": true
+            },
+            {
+              "start": 1661,
+              "end": 2216,
+              "complete": true
+            },
+            {
+              "start": 2523,
+              "end": 2839,
+              "complete": true
+            },
+            {
+              "start": 3399,
+              "end": 3982,
+              "complete": true
+            },
+            {
+              "start": 5095,
+              "end": 5323,
+              "complete": true
+            }
+          ]
+        },
+        {
+          "relPath": "docs/api.rst",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": ".pre-commit-config.yaml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/expired/server/Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/CONTRIBUTING.md",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "tests/conftest.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "docs/community/faq.rst",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": ".readthedocs.yaml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/mtls/client/Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/dependabot.yml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/test_adapters.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "docs/community/out-there.rst",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "AUTHORS.rst",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/mtls/Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/FUNDING.yml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/test_help.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "docs/community/recommended.rst",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "HISTORY.md",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/valid/server/Makefile",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/ISSUE_TEMPLATE.md",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/test_hooks.py",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "docs/community/release-process.rst",
+          "wholeFile": false,
+          "regions": []
+        },
+        {
+          "relPath": "requirements-dev.txt",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tests/certs/expired/README.md",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/ISSUE_TEMPLATE/Bug_report.md",
+          "wholeFile": true,
+          "regions": []
+        }
+      ],
+      "referenceCounts": {
+        "file-dispatched-no-reference-overlap": 4,
+        "partial-reference-with-documentation-excerpt": 1,
+        "raw-reference-provided": 7
+      },
+      "sourceReferences": [
+        {
+          "path": "src/requests/models.py",
+          "startLine": 424,
+          "endLine": 451,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 13401,
+          "endOffset": 14499,
+          "referenceSha256": "d0e7333560705296259bd275577003834cd41bbf45636673e1b96cd295cb5190",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 13401,
+              "end": 14503,
+              "complete": true,
+              "documentationOmitted": false,
+              "renderedSha256": "427072492cf002b615b63469dd79c651e70b7af2bfbfdf20bf2518ee760c4e4e",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        },
+        {
+          "path": "src/requests/models.py",
+          "startLine": 257,
+          "endLine": 270,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 7572,
+          "endOffset": 8117,
+          "referenceSha256": "210234e12b81a4edfe7961b39399cf7ca72a0e4ec46cd2f444886cc4636814e8",
+          "state": "file-dispatched-no-reference-overlap",
+          "spanEvidence": []
+        },
+        {
+          "path": "src/requests/models.py",
+          "startLine": 675,
+          "endLine": 697,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 22920,
+          "endOffset": 23971,
+          "referenceSha256": "c0d821da27b5ce93d78a5b6195272de13053fc91287827a27845f43a13a2d480",
+          "state": "file-dispatched-no-reference-overlap",
+          "spanEvidence": []
+        },
+        {
+          "path": "src/requests/models.py",
+          "startLine": 722,
+          "endLine": 729,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 25017,
+          "endOffset": 25418,
+          "referenceSha256": "04ac2ba703d9d0b711ef77be1be94673c9441b16b8002f387806a94c4452ed89",
+          "state": "file-dispatched-no-reference-overlap",
+          "spanEvidence": []
+        },
+        {
+          "path": "src/requests/auth.py",
+          "startLine": 321,
+          "endLine": 342,
+          "sourceSha256": "c35ba30ee054ed8744989fee2cddd06a581255a6929e58f0947d1824530095f1",
+          "redactedSourceSha256": "3c6fe684d3cecac8e608706bc7c92d1f7e4d91b132aadcffc76959b6f937d13e",
+          "startOffset": 11152,
+          "endOffset": 12174,
+          "referenceSha256": "f07836a6d9c58f67bd3719a437b7afea938ab13805bec7e88958243292d3e59f",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 11152,
+              "end": 12196,
+              "complete": true,
+              "documentationOmitted": false,
+              "renderedSha256": "7fe592ace9a85b2481bb55abf2c36b3608bed02b73de4cda7e5a4efac40f0659",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        },
+        {
+          "path": "src/requests/sessions.py",
+          "startLine": 817,
+          "endLine": 824,
+          "sourceSha256": "03cef27dd6ce31c5bd1b724a80156a24e9ccb2e7041f1d6c3500fa60c3871d21",
+          "redactedSourceSha256": "525f964cec0dbb23ab82f2edb6890d9a30b6248d13868a546f320292a428a126",
+          "startOffset": 31327,
+          "endOffset": 31749,
+          "referenceSha256": "34ee832c6da17d918cc8487f7622c93fca85636414f28ad2103484987f84d061",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 28867,
+              "end": 31822,
+              "complete": true,
+              "documentationOmitted": false,
+              "renderedSha256": "0ff7c7c9eac6b94e0a3dcb09f724e0668f11bc81054c61dcca172721e7d3d313",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        },
+        {
+          "path": "src/requests/models.py",
+          "startLine": 891,
+          "endLine": 894,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 31293,
+          "endOffset": 31480,
+          "referenceSha256": "d9205238ada878b619f394d1f556fb5d5cd7aeb60a5aacdd6db7f6ad6a41ff4d",
+          "state": "file-dispatched-no-reference-overlap",
+          "spanEvidence": []
+        },
+        {
+          "path": "src/requests/sessions.py",
+          "startLine": 524,
+          "endLine": 533,
+          "sourceSha256": "03cef27dd6ce31c5bd1b724a80156a24e9ccb2e7041f1d6c3500fa60c3871d21",
+          "redactedSourceSha256": "525f964cec0dbb23ab82f2edb6890d9a30b6248d13868a546f320292a428a126",
+          "startOffset": 19606,
+          "endOffset": 19952,
+          "referenceSha256": "79655241722b58064dd49d22e12e4c0507f43b4209c9c243be89332966a3ec91",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 19025,
+              "end": 20738,
+              "complete": true,
+              "documentationOmitted": false,
+              "renderedSha256": "04b5de4c504b51dbc83e4667ba8a8f7809ad45407fff1c94b0fd530d3a438616",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        },
+        {
+          "path": "src/requests/cookies.py",
+          "startLine": 604,
+          "endLine": 623,
+          "sourceSha256": "bddbad7b2e9c1d53f1cb7eb9e8f3e3a271f06f6dd44a4d4f891751a7cf5ee3f2",
+          "redactedSourceSha256": "bddbad7b2e9c1d53f1cb7eb9e8f3e3a271f06f6dd44a4d4f891751a7cf5ee3f2",
+          "startOffset": 21246,
+          "endOffset": 22103,
+          "referenceSha256": "d52423a376b6f0682f5cf0c0e3600daf00dbc3928bcc2e61028e7eef0b782aa3",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 21246,
+              "end": 22129,
+              "complete": true,
+              "documentationOmitted": false,
+              "renderedSha256": "d730fd84fef2f376da0cd08dc0accfc9ca9d067395b7ee7639cdef3a39942ad9",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        },
+        {
+          "path": "src/requests/cookies.py",
+          "startLine": 391,
+          "endLine": 399,
+          "sourceSha256": "bddbad7b2e9c1d53f1cb7eb9e8f3e3a271f06f6dd44a4d4f891751a7cf5ee3f2",
+          "redactedSourceSha256": "bddbad7b2e9c1d53f1cb7eb9e8f3e3a271f06f6dd44a4d4f891751a7cf5ee3f2",
+          "startOffset": 13625,
+          "endOffset": 14018,
+          "referenceSha256": "f19e623f96511a031fdbaf4801cd475d3de7ccffca73d35d963d3a780e4996b7",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 13625,
+              "end": 14022,
+              "complete": true,
+              "documentationOmitted": false,
+              "renderedSha256": "d9bc14509258d77047f62cfbb1250f91e870da40dcc10cb17d571b66fb16e409",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        },
+        {
+          "path": "src/requests/models.py",
+          "startLine": 907,
+          "endLine": 927,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 31922,
+          "endOffset": 32984,
+          "referenceSha256": "c55455e8fe4b2190e8bdc7c64a38bec9a240d04423570b9e4ba5a945b22a3825",
+          "state": "partial-reference-with-documentation-excerpt",
+          "spanEvidence": [
+            {
+              "start": 32209,
+              "end": 34929,
+              "complete": false,
+              "documentationOmitted": true,
+              "renderedSha256": "2b6463a09832df5e39fdfacfca0cdc36aa3fbc757ee333e499dabe38112bd0c0",
+              "matchedInFinalBody": true,
+              "coversReference": false,
+              "intersectsDocumentation": true
+            }
+          ]
+        },
+        {
+          "path": "src/requests/models.py",
+          "startLine": 958,
+          "endLine": 965,
+          "sourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "redactedSourceSha256": "2d4b5a2738256b3d10cbe8b6e5ad572b9579b847396de6b4093affa5e328150c",
+          "startOffset": 34178,
+          "endOffset": 34552,
+          "referenceSha256": "e422c55116bde0012704bfe47617b181afa4140d2cfe7509f4f6721dc8fbb715",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "start": 32209,
+              "end": 34929,
+              "complete": false,
+              "documentationOmitted": true,
+              "renderedSha256": "2b6463a09832df5e39fdfacfca0cdc36aa3fbc757ee333e499dabe38112bd0c0",
+              "matchedInFinalBody": true,
+              "coversReference": true,
+              "intersectsDocumentation": false
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "kind": "incorrect",
+          "questionNumber": 2,
+          "questionFingerprint": "f6ade84b3b2fb3992a056b2c3e428527499cb5b9d68192f0222a625786046680",
+          "sourceReferences": [
+            "src/requests/models.py:424-451",
+            "src/requests/models.py:257-270",
+            "src/requests/models.py:675-697",
+            "src/requests/models.py:722-729",
+            "src/requests/auth.py:321-342"
+          ],
+          "evidenceLimit": null
+        },
+        {
+          "kind": "imprecise",
+          "questionNumber": 3,
+          "questionFingerprint": "e178194120f7a2875331c9e6dd02a8d350b0b387d851d7a1abf9ade00d087a61",
+          "sourceReferences": [
+            "src/requests/sessions.py:817-824",
+            "src/requests/models.py:891-894"
+          ],
+          "evidenceLimit": null
+        },
+        {
+          "kind": "incorrect",
+          "questionNumber": 9,
+          "questionFingerprint": "ca417a7353afbda7eddde02d698ace1811db5c3fcd6ec9d0fe2c21e9c45a7462",
+          "sourceReferences": [
+            "src/requests/sessions.py:524-533",
+            "src/requests/cookies.py:604-623",
+            "src/requests/cookies.py:391-399"
+          ],
+          "evidenceLimit": null
+        },
+        {
+          "kind": "imprecise",
+          "questionNumber": 17,
+          "questionFingerprint": "f5516e9031459f60cf366e9f9e27cf7066bdde3757d059aaa5d047372b38563b",
+          "sourceReferences": [
+            "src/requests/models.py:907-927",
+            "src/requests/models.py:958-965"
+          ],
+          "evidenceLimit": null
+        }
+      ]
+    },
+    {
+      "caseId": "mitt",
+      "repository": "developit/mitt",
+      "commit": "6b41670516ed8e8b738612f60491995470aa63b3",
+      "originalReport": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/report.json",
+      "originalRunId": "835a902a-59ce-4880-a279-f8ff7abec2b2",
+      "originalReportDigest": "sha256:5c0c4f37f32a6e6bd5ae2803b19e086c65925e95c9ffdfa7efb282f0217853fd",
+      "originalReportSha256": "a360dc183aaf5012b42ce57ba0cad2a3869ff02ae36da69d6d90264b8492b903",
+      "originalReview": "reports/real-generation-eval/2026-11-05-doc-excerpt-mitt-schedule/assistant-review-mitt.json",
+      "originalReviewSha256": "784c3459cb523acdbb49afe465f232beaebc09a41d033950376d0ea05e9cb5b9",
+      "questionFingerprints": [
+        "48aebe70d9367bf4bc5c022aa49eed544099248bb95b84c47ff5bb75cbade8a4",
+        "a31b8eb35d36e1a94b3d440e12a2cf9953469d66690317ee636c36e19a15f94a",
+        "a26d1f2020999ad8224a3b4f6c7c71c9f5de6c36fd810747dc8fce39ff09bdb6",
+        "c3760fa392d5f9f9ebcaa301cea5141f33288f8bec12b9a3a30616ac44f63b06",
+        "0267a345b812f7ff86eaf1bd440e7ada110b5d89fe6275555fde22acf0a5b0cb",
+        "565e1d240e5fac7947eddd09572d54c39517cd96cd30edeb7595fb85b141d7fe",
+        "4876174cfb28d38b71f61620ac860f12ae98d5a79cbce2b04d6fbc923bbbb25f",
+        "a53645c6e3061967af2feff8ef41f3b289d64e9c10d08bc5affaf0b8fbed296d",
+        "3a279a5ca6e746b5f1ac5df3327f8be9c21e408435a841ff85465100fb2fcb5a",
+        "468ad6caf5607963ec0b2f30d551c076b6ba8c2c6f2f5e6d49e085e93c3cc6e5",
+        "c5a1c1ab9f703928daf2b4d168ccb0e627f1adff540e202820c8c3d24b321838",
+        "21a8570b9a9cd9719aeb5d402fc752fc064d0e1cd77091df5e7f8a64daaedd2c",
+        "1a5db0a14bc5fc8f0b0be7cbd60783fb9b2338988c708caaf9a0d03f134a3327",
+        "48395cb5623ec35f8abb71fad5c1009dcfc4da06c77ba1c980921af9748e714b",
+        "6af98d2022b7f247cd0059f49da2a90ab5933cab0849891a55ae8e68e53d0813",
+        "afd9c3b93b951816b611120512028122f1ae1bee817e8de56dc9a8b268bf9321",
+        "9cb75d11165aa3f21643920708864758fec6e86789648cf67fdada19250a14df",
+        "a8a9d20fed0d6b2e6143468c570924f9bdac46872987e6d91f4acb640eb26ac0",
+        "b7efbfff9acee95f1607771790d5bb51bf1184ef84b49808f00c55440783c620",
+        "55e592864f258611e33610850509862d8bc448a0d850c0ad3a1e955b5887689c"
+      ],
+      "requestBodyHash": "e9a9260fc89a14830c80bb7aa186d5cad5124008c6bf7efdb3419f53d7cd7389",
+      "requestHashMatched": true,
+      "providerRequests": 0,
+      "syntheticCaptures": 1,
+      "dispatchSelections": [
+        {
+          "relPath": "package.json",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "README.md",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "src/index.ts",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".eslintrc",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/PULL_REQUEST_TEMPLATE.md",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "test/index_test.ts",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "tsconfig.json",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/workflows/compressed-size.yml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "test/test-types-compilation.ts",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".editorconfig",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".github/workflows/main.yml",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": ".gitignore",
+          "wholeFile": true,
+          "regions": []
+        },
+        {
+          "relPath": "LICENSE",
+          "wholeFile": true,
+          "regions": []
+        }
+      ],
+      "referenceCounts": {
+        "raw-reference-provided": 9
+      },
+      "sourceReferences": [
+        {
+          "path": "src/index.ts",
+          "startLine": 82,
+          "endLine": 91,
+          "sourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "redactedSourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "startOffset": 2691,
+          "endOffset": 3001,
+          "referenceSha256": "19b40ba8abe364398ad0d888e9a8407a1128ff28bd57419d3b3023858087fbcd",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 1,
+          "endLine": 1,
+          "sourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "redactedSourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "startOffset": 0,
+          "endOffset": 40,
+          "referenceSha256": "f30d6e6b5a53f50245f92c63b3b44bb68f2a77a41ee9e381dd1565d7661c91f9",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 18,
+          "endLine": 38,
+          "sourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "redactedSourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "startOffset": 603,
+          "endOffset": 1349,
+          "referenceSha256": "8a618cbb4e74660b5b3738b630080d5e32bfbd4993290f54492eccefcce2729f",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 46,
+          "endLine": 48,
+          "sourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "redactedSourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "startOffset": 1459,
+          "endOffset": 1585,
+          "referenceSha256": "3744742bd4178fce9c7b2cfc2887ff2faef682bbb6e9658137398467c1b3c5a9",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "test/test-types-compilation.ts",
+          "startLine": 10,
+          "endLine": 20,
+          "sourceSha256": "e51902b52927f4b9432478d2c97548ff078cb785d7b363c374da073b173250eb",
+          "redactedSourceSha256": "e51902b52927f4b9432478d2c97548ff078cb785d7b363c374da073b173250eb",
+          "startOffset": 191,
+          "endOffset": 465,
+          "referenceSha256": "35a1516730b7d34e1b8a9de20ea288089736c3bd6c3d7036d9d47fe45a95e262",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "e51902b52927f4b9432478d2c97548ff078cb785d7b363c374da073b173250eb",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "test/test-types-compilation.ts",
+          "startLine": 34,
+          "endLine": 38,
+          "sourceSha256": "e51902b52927f4b9432478d2c97548ff078cb785d7b363c374da073b173250eb",
+          "redactedSourceSha256": "e51902b52927f4b9432478d2c97548ff078cb785d7b363c374da073b173250eb",
+          "startOffset": 709,
+          "endOffset": 903,
+          "referenceSha256": "e5c15c9923adf8604e98c49f9eb7514f0f98fa4573afd8505f90f3930074c319",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "e51902b52927f4b9432478d2c97548ff078cb785d7b363c374da073b173250eb",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 6,
+          "endLine": 9,
+          "sourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "redactedSourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "startOffset": 191,
+          "endOffset": 300,
+          "referenceSha256": "84baa42ead0ddf19acc642874cb09c53a211c93c9e37a9d540971655f91ccba2",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "src/index.ts",
+          "startLine": 26,
+          "endLine": 27,
+          "sourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "redactedSourceSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+          "startOffset": 891,
+          "endOffset": 1026,
+          "referenceSha256": "ce7cc0fcf3ab9d4e14c9f5e955c0ffb4e694227afbed2e37665bcd50b0f6baa5",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "ffb3324e03d36ff7fcc9439177b3981ed9243a1e8cca1ebf5c98468eda306bb7",
+              "matchedInFinalBody": true
+            }
+          ]
+        },
+        {
+          "path": "package.json",
+          "startLine": 24,
+          "endLine": 27,
+          "sourceSha256": "44295a0a60bcfe97e15140d991af079283ac472a194e24044f51679a0a61d2ed",
+          "redactedSourceSha256": "44295a0a60bcfe97e15140d991af079283ac472a194e24044f51679a0a61d2ed",
+          "startOffset": 755,
+          "endOffset": 976,
+          "referenceSha256": "81057a2e6f2b15c923adba9ef27ab574aba04b13436b90c2d1169b739b6f86a2",
+          "state": "raw-reference-provided",
+          "spanEvidence": [
+            {
+              "wholeFile": true,
+              "renderedSha256": "44295a0a60bcfe97e15140d991af079283ac472a194e24044f51679a0a61d2ed",
+              "matchedInFinalBody": true
+            }
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "kind": "incorrect",
+          "questionNumber": 5,
+          "questionFingerprint": "0267a345b812f7ff86eaf1bd440e7ada110b5d89fe6275555fde22acf0a5b0cb",
+          "sourceReferences": [
+            "src/index.ts:82-91"
+          ],
+          "evidenceLimit": null
+        },
+        {
+          "kind": "incorrect",
+          "questionNumber": 7,
+          "questionFingerprint": "4876174cfb28d38b71f61620ac860f12ae98d5a79cbce2b04d6fbc923bbbb25f",
+          "sourceReferences": [
+            "src/index.ts:1-1",
+            "src/index.ts:18-38",
+            "src/index.ts:46-48"
+          ],
+          "evidenceLimit": "The source signatures are visible; the later TypeScript 5.9.3 probe was not generation context."
+        },
+        {
+          "kind": "incorrect",
+          "questionNumber": 16,
+          "questionFingerprint": "afd9c3b93b951816b611120512028122f1ae1bee817e8de56dc9a8b268bf9321",
+          "sourceReferences": [
+            "test/test-types-compilation.ts:10-20",
+            "test/test-types-compilation.ts:34-38",
+            "src/index.ts:6-9",
+            "src/index.ts:26-27"
+          ],
+          "evidenceLimit": null
+        },
+        {
+          "kind": "incorrect",
+          "questionNumber": 18,
+          "questionFingerprint": "a8a9d20fed0d6b2e6143468c570924f9bdac46872987e6d91f4acb640eb26ac0",
+          "sourceReferences": [
+            "package.json:24-27"
+          ],
+          "evidenceLimit": "The project script is visible; external npm-run-all mixed-group semantics were not included."
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Reference text visibility does not prove answer correctness, unique AST identity, or a cause of an error.",
+    "A partially provided reference is distinct from a wholly unobserved reference.",
+    "Project source visibility does not establish that all external language or dependency semantics were supplied.",
+    "The frozen assistant reviews are non-blind; this audit adds no human review or fresh model-quality measurement."
+  ]
+}
