@@ -111,8 +111,10 @@
       "assets": [
         {
           "id": "m02-fixtures",
-          "status": "not-materialized",
-          "sha256": null
+          "status": "available",
+          "required": true,
+          "path": "scripts/agentic/fixtures/m02.json",
+          "sha256": "5013066934c22d0f7a52fe3173f388625aacebc22877381554833cb7fdf9d9c1"
         }
       ]
     },
@@ -136,8 +138,10 @@
       "assets": [
         {
           "id": "m03-fixtures",
-          "status": "not-materialized",
-          "sha256": null
+          "status": "available",
+          "required": true,
+          "path": "scripts/agentic/fixtures/m03.json",
+          "sha256": "564aa61b3227e76ccb2b67336cb407ed9ec4cd9ec14cf763c62cc4ec6cbae523"
         }
       ]
     },

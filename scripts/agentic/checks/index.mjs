@@ -4,6 +4,15 @@
  * fixture declarations or an absent checker into a pass.
  */
 export async function loadChecks(_moduleId) {
+  if (['M02', 'M03', 'M04', 'M05'].includes(_moduleId)) {
+    try {
+      const implementation = await import(`./${_moduleId.toLowerCase()}.mjs`)
+      return implementation.createChecks()
+    } catch (error) {
+      if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error
+      return new Map()
+    }
+  }
   if (_moduleId === 'P0') {
     const implementation = await import('./p0.mjs')
     return implementation.createChecks()
