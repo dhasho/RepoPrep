@@ -1,0 +1,845 @@
+{
+  "schemaVersion": 1,
+  "labels": [
+    {
+      "sampleId": "sample-73a8d0aaf19d",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The catch calls onDone with the error, then the while loop continues to pending jobs."
+      ]
+    },
+    {
+      "sampleId": "sample-41257ce68bf4",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "issue adds lifetimeMs to now and returns that as expiresAt."
+      ]
+    },
+    {
+      "sampleId": "sample-6aec8fc7dd6a",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "It accepts any number of cells and parses the first cell as the amount.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: It requires exactly two cells, converts the second to a finite number, and trims the first for id."
+        }
+      ],
+      "facts": [
+        "It requires exactly two cells, converts the second to a finite number, and trims the first for id."
+      ]
+    },
+    {
+      "sampleId": "sample-25122607a461",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A busy field raises PermanentFailure.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: A request mapping with a truthy broken field raises PermanentFailure."
+        }
+      ],
+      "facts": [
+        "A request mapping with a truthy broken field raises PermanentFailure."
+      ]
+    },
+    {
+      "sampleId": "sample-06281f54b083",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "It sends a 404 response with body missing when no route handler exists."
+      ]
+    },
+    {
+      "sampleId": "sample-e978f0e39638",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "It accepts any number of cells and parses the first cell as the amount.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: It requires exactly two cells, converts the second to a finite number, and trims the first for id."
+        }
+      ],
+      "facts": [
+        "It requires exactly two cells, converts the second to a finite number, and trims the first for id."
+      ]
+    },
+    {
+      "sampleId": "sample-767d811de118",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Admin is independent of Principal and only stores a name.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: Admin subclasses Principal and initializes the inherited fields through super().__init__."
+        }
+      ],
+      "facts": [
+        "Admin subclasses Principal and initializes the inherited fields through super().__init__."
+      ]
+    },
+    {
+      "sampleId": "sample-029ed71dcb54",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index."
+      ]
+    },
+    {
+      "sampleId": "sample-ca765822d2fc",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Yes. discount imports memberRate and always uses its configured value.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: No. discount uses a literal 0.2; memberRate is exported but not imported there."
+        }
+      ],
+      "facts": [
+        "No. discount uses a literal 0.2; memberRate is exported but not imported there."
+      ]
+    },
+    {
+      "sampleId": "sample-2501d58403ef",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Yes. can_write returns true for an Admin instance after the owner check fails."
+      ]
+    },
+    {
+      "sampleId": "sample-5bed220c5fbd",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The returned closure deletes that listener from the Set."
+      ]
+    },
+    {
+      "sampleId": "sample-000a58269d59",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "request retries PermanentFailure and immediately returns on TemporaryFailure.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: request catches TemporaryFailure and retries until the configured final attempt."
+        }
+      ],
+      "facts": [
+        "request catches TemporaryFailure and retries until the configured final attempt."
+      ]
+    },
+    {
+      "sampleId": "sample-5b13c9572f64",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "importRows calls onInvalid for rows where parseRow returns null and continues."
+      ]
+    },
+    {
+      "sampleId": "sample-02bd5fe8c458",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A malformed line propagates the parsing exception and stops the loop.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: import_lines increments rejected, invokes on_error with the line and exception, then continues."
+        }
+      ],
+      "facts": [
+        "import_lines increments rejected, invokes on_error with the line and exception, then continues."
+      ]
+    },
+    {
+      "sampleId": "sample-852f24713ee6",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "No. invalid sessions return false before next is called; there is no refresh path."
+      ]
+    },
+    {
+      "sampleId": "sample-1d795ba0b258",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "load calls fetch(key), stores the returned value, then returns it."
+      ]
+    },
+    {
+      "sampleId": "sample-929ceed01958",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "The queue accepts unlimited jobs because maxPending is not checked.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: add rejects a new job when pending length is already at maxPending, configured as 2."
+        }
+      ],
+      "facts": [
+        "add rejects a new job when pending length is already at maxPending, configured as 2."
+      ]
+    },
+    {
+      "sampleId": "sample-58e358d54cef",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "It returns true when quantity is below warningThreshold, which is 5."
+      ]
+    },
+    {
+      "sampleId": "sample-9cf94eb2fd9d",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The route map contains /health and /items."
+      ]
+    },
+    {
+      "sampleId": "sample-74e1f36ac88e",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "WarehouseStock copies quantity into an unrelated public field.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+        }
+      ],
+      "facts": [
+        "WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+      ]
+    },
+    {
+      "sampleId": "sample-73007837976f",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "importRows calls onInvalid for rows where parseRow returns null and continues."
+      ]
+    },
+    {
+      "sampleId": "sample-a55738d197eb",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "It sends a 404 response with body missing when no route handler exists."
+      ]
+    },
+    {
+      "sampleId": "sample-72bbeb75306e",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Cache.put removes the most recently inserted key whenever the cache reaches capacity.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+        }
+      ],
+      "facts": [
+        "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+      ]
+    },
+    {
+      "sampleId": "sample-cfb4aadfdd10",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "It returns true when quantity is below warningThreshold, which is 5."
+      ]
+    },
+    {
+      "sampleId": "sample-c99bd8066b06",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The code sums userId character codes and takes the result modulo 100."
+      ]
+    },
+    {
+      "sampleId": "sample-787522d34468",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Cache.put removes the most recently inserted key whenever the cache reaches capacity.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+        }
+      ],
+      "facts": [
+        "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+      ]
+    },
+    {
+      "sampleId": "sample-974d4c8f8ff0",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The code sums userId character codes and takes the result modulo 100."
+      ]
+    },
+    {
+      "sampleId": "sample-64dbab382fbe",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index."
+      ]
+    },
+    {
+      "sampleId": "sample-ffe75e009ac5",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "request retries PermanentFailure and immediately returns on TemporaryFailure.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: request catches TemporaryFailure and retries until the configured final attempt."
+        }
+      ],
+      "facts": [
+        "request catches TemporaryFailure and retries until the configured final attempt."
+      ]
+    },
+    {
+      "sampleId": "sample-b5b4f9fee8f6",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "WarehouseStock copies quantity into an unrelated public field.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+        }
+      ],
+      "facts": [
+        "WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+      ]
+    },
+    {
+      "sampleId": "sample-ce150323e261",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Read allows the owner or a principal whose role is reader/admin; write allows owner or Admin instance."
+      ]
+    },
+    {
+      "sampleId": "sample-124336236368",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "No. invalid sessions return false before next is called; there is no refresh path."
+      ]
+    },
+    {
+      "sampleId": "sample-859d1fa81456",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Yes. emit rethrows the first listener exception.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: No. each callback has its own try/catch inside the loop over a listener snapshot."
+        }
+      ],
+      "facts": [
+        "No. each callback has its own try/catch inside the loop over a listener snapshot."
+      ]
+    },
+    {
+      "sampleId": "sample-cac6ce23622d",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A busy field raises PermanentFailure.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: A request mapping with a truthy broken field raises PermanentFailure."
+        }
+      ],
+      "facts": [
+        "A request mapping with a truthy broken field raises PermanentFailure."
+      ]
+    },
+    {
+      "sampleId": "sample-a54fc9c7710e",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "parse splits the line on a colon and converts the second part to int."
+      ]
+    },
+    {
+      "sampleId": "sample-c3f32e4fbacb",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
+      ]
+    },
+    {
+      "sampleId": "sample-8ccee7ad2efa",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "emit returns the number of listener callbacks that threw."
+      ]
+    },
+    {
+      "sampleId": "sample-16ecfc5c705e",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "request retries PermanentFailure and immediately returns on TemporaryFailure.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: request catches TemporaryFailure and retries until the configured final attempt."
+        }
+      ],
+      "facts": [
+        "request catches TemporaryFailure and retries until the configured final attempt."
+      ]
+    },
+    {
+      "sampleId": "sample-b65c5893b2cb",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "emit returns the number of listener callbacks that threw."
+      ]
+    },
+    {
+      "sampleId": "sample-9bf08c353449",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "response always returns new when rollout is greater than zero.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: response returns new when isEnabled is true and old otherwise."
+        }
+      ],
+      "facts": [
+        "response returns new when isEnabled is true and old otherwise."
+      ]
+    },
+    {
+      "sampleId": "sample-fd99b134858e",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "The exception escapes dispatch without calling send.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: dispatch catches the exception and sends a 500 response with body failed."
+        }
+      ],
+      "facts": [
+        "dispatch catches the exception and sends a 500 response with body failed."
+      ]
+    },
+    {
+      "sampleId": "sample-def18eaa1e28",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "response always returns new when rollout is greater than zero.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: response returns new when isEnabled is true and old otherwise."
+        }
+      ],
+      "facts": [
+        "response returns new when isEnabled is true and old otherwise."
+      ]
+    },
+    {
+      "sampleId": "sample-d0d48fcca154",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Read allows the owner or a principal whose role is reader/admin; write allows owner or Admin instance."
+      ]
+    },
+    {
+      "sampleId": "sample-9948a6b36eaa",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Every member receives a 30 discount regardless of subtotal.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: A member with subtotal at least 100 receives a discount capped at 30."
+        }
+      ],
+      "facts": [
+        "A member with subtotal at least 100 receives a discount capped at 30."
+      ]
+    },
+    {
+      "sampleId": "sample-6c563c6d7c59",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Yes. emit rethrows the first listener exception.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: No. each callback has its own try/catch inside the loop over a listener snapshot."
+        }
+      ],
+      "facts": [
+        "No. each callback has its own try/catch inside the loop over a listener snapshot."
+      ]
+    },
+    {
+      "sampleId": "sample-c21cbcb82e42",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A positive rollout value enables the feature even when enabled is false.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: settings.enabled must be true; partial rollout then compares a deterministic user bucket with rollout."
+        }
+      ],
+      "facts": [
+        "settings.enabled must be true; partial rollout then compares a deterministic user bucket with rollout."
+      ]
+    },
+    {
+      "sampleId": "sample-17b9642caa7f",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Yes. valid accepts expiresAt equal to now.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: No. valid requires expiresAt to be strictly greater than now."
+        }
+      ],
+      "facts": [
+        "No. valid requires expiresAt to be strictly greater than now."
+      ]
+    },
+    {
+      "sampleId": "sample-c961aafe1464",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The catch calls onDone with the error, then the while loop continues to pending jobs."
+      ]
+    },
+    {
+      "sampleId": "sample-adc14109ba00",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The route map contains /health and /items."
+      ]
+    },
+    {
+      "sampleId": "sample-1da47ae03693",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Yes. can_write returns true for an Admin instance after the owner check fails."
+      ]
+    },
+    {
+      "sampleId": "sample-066a92b3e90a",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "load calls fetch(key), stores the returned value, then returns it."
+      ]
+    },
+    {
+      "sampleId": "sample-17bb2f9f756d",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "The exception escapes dispatch without calling send.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: dispatch catches the exception and sends a 500 response with body failed."
+        }
+      ],
+      "facts": [
+        "dispatch catches the exception and sends a 500 response with body failed."
+      ]
+    },
+    {
+      "sampleId": "sample-a1ebfc75f519",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Cache.put removes the most recently inserted key whenever the cache reaches capacity.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+        }
+      ],
+      "facts": [
+        "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+      ]
+    },
+    {
+      "sampleId": "sample-3be777ffd049",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "It rejects only counts greater than the warning threshold.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: It rejects non-integers, non-positive counts, and counts greater than current quantity."
+        }
+      ],
+      "facts": [
+        "It rejects non-integers, non-positive counts, and counts greater than current quantity."
+      ]
+    },
+    {
+      "sampleId": "sample-608decc5f4a8",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The returned closure deletes that listener from the Set."
+      ]
+    },
+    {
+      "sampleId": "sample-19f365a95185",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
+      ]
+    },
+    {
+      "sampleId": "sample-b07aeccda1b9",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "total subtracts the discount, applies tax to the remainder, and rounds to two decimals."
+      ]
+    },
+    {
+      "sampleId": "sample-e52678e8433d",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
+      ]
+    },
+    {
+      "sampleId": "sample-246f11083f55",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "It returns only the number of accepted records.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: It returns a pair containing accepted record dictionaries and the rejected count."
+        }
+      ],
+      "facts": [
+        "It returns a pair containing accepted record dictionaries and the rejected count."
+      ]
+    },
+    {
+      "sampleId": "sample-b63ec7a63470",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A busy field raises PermanentFailure.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: A request mapping with a truthy broken field raises PermanentFailure."
+        }
+      ],
+      "facts": [
+        "A request mapping with a truthy broken field raises PermanentFailure."
+      ]
+    },
+    {
+      "sampleId": "sample-439d1a6d10ee",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A malformed line propagates the parsing exception and stops the loop.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: import_lines increments rejected, invokes on_error with the line and exception, then continues."
+        }
+      ],
+      "facts": [
+        "import_lines increments rejected, invokes on_error with the line and exception, then continues."
+      ]
+    },
+    {
+      "sampleId": "sample-2429377c1505",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "total subtracts the discount, applies tax to the remainder, and rounds to two decimals."
+      ]
+    },
+    {
+      "sampleId": "sample-a3ddb7d8abf6",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Admin is independent of Principal and only stores a name.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: Admin subclasses Principal and initializes the inherited fields through super().__init__."
+        }
+      ],
+      "facts": [
+        "Admin subclasses Principal and initializes the inherited fields through super().__init__."
+      ]
+    },
+    {
+      "sampleId": "sample-fbcbd01ead87",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "parseRow substitutes zero for every invalid amount.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: parseRow returns null when Number(cells[1]) is not finite."
+        }
+      ],
+      "facts": [
+        "parseRow returns null when Number(cells[1]) is not finite."
+      ]
+    },
+    {
+      "sampleId": "sample-74de702662d8",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "It rejects only counts greater than the warning threshold.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: It rejects non-integers, non-positive counts, and counts greater than current quantity."
+        }
+      ],
+      "facts": [
+        "It rejects non-integers, non-positive counts, and counts greater than current quantity."
+      ]
+    },
+    {
+      "sampleId": "sample-b50df2dbe0ed",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Every member receives a 30 discount regardless of subtotal.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: A member with subtotal at least 100 receives a discount capped at 30."
+        }
+      ],
+      "facts": [
+        "A member with subtotal at least 100 receives a discount capped at 30."
+      ]
+    },
+    {
+      "sampleId": "sample-7de372865000",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Yes. discount imports memberRate and always uses its configured value.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: No. discount uses a literal 0.2; memberRate is exported but not imported there."
+        }
+      ],
+      "facts": [
+        "No. discount uses a literal 0.2; memberRate is exported but not imported there."
+      ]
+    },
+    {
+      "sampleId": "sample-690f0f7980f7",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Admin is independent of Principal and only stores a name.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: Admin subclasses Principal and initializes the inherited fields through super().__init__."
+        }
+      ],
+      "facts": [
+        "Admin subclasses Principal and initializes the inherited fields through super().__init__."
+      ]
+    },
+    {
+      "sampleId": "sample-680bb8470544",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index."
+      ]
+    },
+    {
+      "sampleId": "sample-94b7021c3434",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "Yes. can_write returns true for an Admin instance after the owner check fails."
+      ]
+    },
+    {
+      "sampleId": "sample-b6a08e5da9c1",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "Yes. valid accepts expiresAt equal to now.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: No. valid requires expiresAt to be strictly greater than now."
+        }
+      ],
+      "facts": [
+        "No. valid requires expiresAt to be strictly greater than now."
+      ]
+    },
+    {
+      "sampleId": "sample-1913bfb51114",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "It returns only the number of accepted records.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: It returns a pair containing accepted record dictionaries and the rejected count."
+        }
+      ],
+      "facts": [
+        "It returns a pair containing accepted record dictionaries and the rejected count."
+      ]
+    },
+    {
+      "sampleId": "sample-3fd3d50bf592",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "parse splits the line on a colon and converts the second part to int."
+      ]
+    },
+    {
+      "sampleId": "sample-76267c74474a",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "A positive rollout value enables the feature even when enabled is false.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: settings.enabled must be true; partial rollout then compares a deterministic user bucket with rollout."
+        }
+      ],
+      "facts": [
+        "settings.enabled must be true; partial rollout then compares a deterministic user bucket with rollout."
+      ]
+    },
+    {
+      "sampleId": "sample-1c23766663d8",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "The queue accepts unlimited jobs because maxPending is not checked.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: add rejects a new job when pending length is already at maxPending, configured as 2."
+        }
+      ],
+      "facts": [
+        "add rejects a new job when pending length is already at maxPending, configured as 2."
+      ]
+    },
+    {
+      "sampleId": "sample-4f517501eca8",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "submit returns a resolved Promise with false when queue.add returns false."
+      ]
+    },
+    {
+      "sampleId": "sample-ee1b534bf84b",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "load calls fetch(key), stores the returned value, then returns it."
+      ]
+    },
+    {
+      "sampleId": "sample-b49a5a6a3001",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "submit returns a resolved Promise with false when queue.add returns false."
+      ]
+    },
+    {
+      "sampleId": "sample-e4b8cfc053b4",
+      "materialError": false,
+      "errors": [],
+      "facts": [
+        "issue adds lifetimeMs to now and returns that as expiresAt."
+      ]
+    },
+    {
+      "sampleId": "sample-97714782fe69",
+      "materialError": true,
+      "errors": [
+        {
+          "claim": "parseRow substitutes zero for every invalid amount.",
+          "explanation": "The cited source contradicts this claim; the supported behavior is: parseRow returns null when Number(cells[1]) is not finite."
+        }
+      ],
+      "facts": [
+        "parseRow returns null when Number(cells[1]) is not finite."
+      ]
+    }
+  ]
+}

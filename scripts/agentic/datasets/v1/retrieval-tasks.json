@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "tasks": [
+    {
+      "id": "retrieval-01",
+      "projectId": "py-cache",
+      "objective": "Where is cache expiration decided, and what causes an item to be evicted?",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "tags": [
+        "Python",
+        "conditions-exceptions"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-02",
+      "projectId": "py-cache",
+      "objective": "Trace a cache miss from the public load function through insertion.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "tags": [
+        "Python",
+        "cross-file"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-03",
+      "projectId": "py-retry",
+      "objective": "How many send attempts occur and how does delay change after each temporary failure?",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "tags": [
+        "Python",
+        "conditions-exceptions"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-04",
+      "projectId": "py-retry",
+      "objective": "Which failure type is retried, and which payload condition produces a permanent failure?",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "tags": [
+        "Python",
+        "conditions-exceptions",
+        "cross-file",
+        "index-failure"
+      ],
+      "indexMode": "unavailable"
+    },
+    {
+      "id": "retrieval-05",
+      "projectId": "py-permissions",
+      "objective": "Compare the actual admin write rule with the README claim about all resources.",
+      "roleFocus": "security",
+      "granularity": "medium",
+      "tags": [
+        "Python",
+        "config-vs-behavior"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-06",
+      "projectId": "py-permissions",
+      "objective": "How does Admin inherit Principal initialization and how is that inheritance used for authorization?",
+      "roleFocus": "security",
+      "granularity": "fine",
+      "tags": [
+        "Python",
+        "inheritance-callback",
+        "cross-file"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-07",
+      "projectId": "py-importer",
+      "objective": "What malformed input is caught, and does one bad line stop later lines from being processed?",
+      "roleFocus": "data",
+      "granularity": "medium",
+      "tags": [
+        "Python",
+        "conditions-exceptions",
+        "cross-file"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-08",
+      "projectId": "py-importer",
+      "objective": "What does the error callback receive, and how are accepted and rejected records reported?",
+      "roleFocus": "data",
+      "granularity": "fine",
+      "tags": [
+        "Python",
+        "inheritance-callback",
+        "index-failure"
+      ],
+      "indexMode": "unavailable"
+    },
+    {
+      "id": "retrieval-09",
+      "projectId": "js-queue",
+      "objective": "What happens when a job handler rejects, and does draining continue with later jobs?",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "tags": [
+        "JavaScript",
+        "conditions-exceptions"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-10",
+      "projectId": "js-queue",
+      "objective": "How is queue capacity enforced and what does submit return when the queue is full?",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "tags": [
+        "JavaScript",
+        "config-vs-behavior",
+        "cross-file"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-11",
+      "projectId": "js-pricing",
+      "objective": "In what order are the member discount and tax applied, and what cap limits the discount?",
+      "roleFocus": "commerce",
+      "granularity": "fine",
+      "tags": [
+        "JavaScript",
+        "cross-file",
+        "conditions-exceptions"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-12",
+      "projectId": "js-pricing",
+      "objective": "Does the configured memberRate control the actual discount calculation?",
+      "roleFocus": "commerce",
+      "granularity": "medium",
+      "tags": [
+        "JavaScript",
+        "config-vs-behavior",
+        "index-failure"
+      ],
+      "indexMode": "unavailable"
+    },
+    {
+      "id": "retrieval-13",
+      "projectId": "js-router",
+      "objective": "How are unknown routes and handler exceptions translated into responses?",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "tags": [
+        "JavaScript",
+        "conditions-exceptions"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-14",
+      "projectId": "js-router",
+      "objective": "Trace a request from the server adapter into the selected route callback and response sender.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "tags": [
+        "JavaScript",
+        "cross-file",
+        "inheritance-callback"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-15",
+      "projectId": "js-config",
+      "objective": "Which settings must be true for a user to receive the new feature, including boundary rollout cases?",
+      "roleFocus": "product",
+      "granularity": "fine",
+      "tags": [
+        "JavaScript",
+        "conditions-exceptions",
+        "config-vs-behavior"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-16",
+      "projectId": "js-config",
+      "objective": "How does controller response depend on the feature decision?",
+      "roleFocus": "product",
+      "granularity": "medium",
+      "tags": [
+        "JavaScript",
+        "cross-file",
+        "index-failure"
+      ],
+      "indexMode": "unavailable"
+    },
+    {
+      "id": "retrieval-17",
+      "projectId": "ts-events",
+      "objective": "What does emit return when listeners throw, and will the remaining listeners still run?",
+      "roleFocus": "platform",
+      "granularity": "medium",
+      "tags": [
+        "TypeScript",
+        "conditions-exceptions"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-18",
+      "projectId": "ts-events",
+      "objective": "How does subscribe let a caller remove a listener, and what set is traversed during emit?",
+      "roleFocus": "platform",
+      "granularity": "fine",
+      "tags": [
+        "TypeScript",
+        "inheritance-callback",
+        "cross-file"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-19",
+      "projectId": "ts-inventory",
+      "objective": "What validation prevents an invalid reservation, and when does the restock warning activate?",
+      "roleFocus": "commerce",
+      "granularity": "medium",
+      "tags": [
+        "TypeScript",
+        "conditions-exceptions",
+        "cross-file"
+      ],
+      "indexMode": "normal"
+    },
+    {
+      "id": "retrieval-20",
+      "projectId": "ts-session",
+      "objective": "Does authorize refresh an expired session or reject it, and what callback behavior follows a valid session?",
+      "roleFocus": "security",
+      "granularity": "fine",
+      "tags": [
+        "TypeScript",
+        "inheritance-callback",
+        "conditions-exceptions",
+        "index-failure"
+      ],
+      "indexMode": "unavailable"
+    }
+  ]
+}

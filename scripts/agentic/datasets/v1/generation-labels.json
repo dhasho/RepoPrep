@@ -1,0 +1,401 @@
+{
+  "schemaVersion": 1,
+  "labels": [
+    {
+      "taskId": "generation-01",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 22,
+          "sha256": "c8029e50210fe2fe869bb93bba258a5d94e67e214b4c29e57f9623c6ab9bc27a"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-01-fact-1",
+          "claim": "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
+        },
+        {
+          "id": "generation-01-fact-2",
+          "claim": "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+        },
+        {
+          "id": "generation-01-fact-3",
+          "claim": "load calls fetch(key), stores the returned value, then returns it."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-02",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 22,
+          "sha256": "c8029e50210fe2fe869bb93bba258a5d94e67e214b4c29e57f9623c6ab9bc27a"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-02-fact-1",
+          "claim": "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
+        },
+        {
+          "id": "generation-02-fact-2",
+          "claim": "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+        },
+        {
+          "id": "generation-02-fact-3",
+          "claim": "load calls fetch(key), stores the returned value, then returns it."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-03",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        },
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12,
+          "sha256": "d4a52384faf3991c3c7d198eeac8ec9f2f3647b5c545a0d200153ab394e18d0d"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-03-fact-1",
+          "claim": "request catches TemporaryFailure and retries until the configured final attempt."
+        },
+        {
+          "id": "generation-03-fact-2",
+          "claim": "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index."
+        },
+        {
+          "id": "generation-03-fact-3",
+          "claim": "A request mapping with a truthy broken field raises PermanentFailure."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-04",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        },
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12,
+          "sha256": "d4a52384faf3991c3c7d198eeac8ec9f2f3647b5c545a0d200153ab394e18d0d"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-04-fact-1",
+          "claim": "request catches TemporaryFailure and retries until the configured final attempt."
+        },
+        {
+          "id": "generation-04-fact-2",
+          "claim": "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index."
+        },
+        {
+          "id": "generation-04-fact-3",
+          "claim": "A request mapping with a truthy broken field raises PermanentFailure."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-05",
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 4,
+          "endLine": 19,
+          "sha256": "e9583a6a00ac9cb2905a7c028d7dba8432d48edbf26729f613aa5da383ca0bbd"
+        },
+        {
+          "path": "service.js",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "93d53966106a8acf612d2e4f1a43dec41032814b8a0e66a958ecd58c43216883"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-05-fact-1",
+          "claim": "The catch calls onDone with the error, then the while loop continues to pending jobs."
+        },
+        {
+          "id": "generation-05-fact-2",
+          "claim": "add rejects a new job when pending length is already at maxPending, configured as 2."
+        },
+        {
+          "id": "generation-05-fact-3",
+          "claim": "submit returns a resolved Promise with false when queue.add returns false."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-06",
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 4,
+          "endLine": 19,
+          "sha256": "e9583a6a00ac9cb2905a7c028d7dba8432d48edbf26729f613aa5da383ca0bbd"
+        },
+        {
+          "path": "service.js",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "93d53966106a8acf612d2e4f1a43dec41032814b8a0e66a958ecd58c43216883"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-06-fact-1",
+          "claim": "The catch calls onDone with the error, then the while loop continues to pending jobs."
+        },
+        {
+          "id": "generation-06-fact-2",
+          "claim": "add rejects a new job when pending length is already at maxPending, configured as 2."
+        },
+        {
+          "id": "generation-06-fact-3",
+          "claim": "submit returns a resolved Promise with false when queue.add returns false."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-07",
+      "evidence": [
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "18e43fc30019fedba53bbfc36403bb23493d8b042a0a0efe930a06b93740dbc4"
+        },
+        {
+          "path": "checkout.js",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "96438295befc2e5aa115b99d81d7ca52edf9c5b11f9ad2acaca12909a68121d1"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-07-fact-1",
+          "claim": "A member with subtotal at least 100 receives a discount capped at 30."
+        },
+        {
+          "id": "generation-07-fact-2",
+          "claim": "total subtracts the discount, applies tax to the remainder, and rounds to two decimals."
+        },
+        {
+          "id": "generation-07-fact-3",
+          "claim": "No. discount uses a literal 0.2; memberRate is exported but not imported there."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-08",
+      "evidence": [
+        {
+          "path": "routes.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "026fcf6f50c6a35d6150635ee7e0615792852d81248c410fc1620864a8511aab"
+        },
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8,
+          "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-08-fact-1",
+          "claim": "It sends a 404 response with body missing when no route handler exists."
+        },
+        {
+          "id": "generation-08-fact-2",
+          "claim": "dispatch catches the exception and sends a 500 response with body failed."
+        },
+        {
+          "id": "generation-08-fact-3",
+          "claim": "The route map contains /health and /items."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-09",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 3,
+          "endLine": 16,
+          "sha256": "a4e541f94f0f3bd71e85b8b58d9dc29fc48955b9c928848e9481c61fa819f4cd"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-09-fact-1",
+          "claim": "emit returns the number of listener callbacks that threw."
+        },
+        {
+          "id": "generation-09-fact-2",
+          "claim": "No. each callback has its own try/catch inside the loop over a listener snapshot."
+        },
+        {
+          "id": "generation-09-fact-3",
+          "claim": "The returned closure deletes that listener from the Set."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-10",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 3,
+          "endLine": 16,
+          "sha256": "a4e541f94f0f3bd71e85b8b58d9dc29fc48955b9c928848e9481c61fa819f4cd"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-10-fact-1",
+          "claim": "emit returns the number of listener callbacks that threw."
+        },
+        {
+          "id": "generation-10-fact-2",
+          "claim": "No. each callback has its own try/catch inside the loop over a listener snapshot."
+        },
+        {
+          "id": "generation-10-fact-3",
+          "claim": "The returned closure deletes that listener from the Set."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-11",
+      "evidence": [
+        {
+          "path": "base.ts",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "87abc15683cafeae446a8dbba526a706373257c86dbdaca2afaa23546367b367"
+        },
+        {
+          "path": "warehouse.ts",
+          "startLine": 3,
+          "endLine": 10,
+          "sha256": "cab71254e413aa4c5ef584d7283682b8a53f66ca3fdef1cd7119a360d4827a6d"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-11-fact-1",
+          "claim": "It rejects non-integers, non-positive counts, and counts greater than current quantity."
+        },
+        {
+          "id": "generation-11-fact-2",
+          "claim": "It returns true when quantity is below warningThreshold, which is 5."
+        },
+        {
+          "id": "generation-11-fact-3",
+          "claim": "WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    },
+    {
+      "taskId": "generation-12",
+      "evidence": [
+        {
+          "path": "base.ts",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "87abc15683cafeae446a8dbba526a706373257c86dbdaca2afaa23546367b367"
+        },
+        {
+          "path": "warehouse.ts",
+          "startLine": 3,
+          "endLine": 10,
+          "sha256": "cab71254e413aa4c5ef584d7283682b8a53f66ca3fdef1cd7119a360d4827a6d"
+        }
+      ],
+      "expectedFacts": [
+        {
+          "id": "generation-12-fact-1",
+          "claim": "It rejects non-integers, non-positive counts, and counts greater than current quantity."
+        },
+        {
+          "id": "generation-12-fact-2",
+          "claim": "It returns true when quantity is below warningThreshold, which is 5."
+        },
+        {
+          "id": "generation-12-fact-3",
+          "claim": "WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+        }
+      ],
+      "pitfalls": [
+        "Do not infer behavior from README claims when implementation differs.",
+        "Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source."
+      ]
+    }
+  ]
+}

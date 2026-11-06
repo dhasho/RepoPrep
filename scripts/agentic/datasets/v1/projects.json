@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "split": "development-synthetic",
+  "projects": [
+    {
+      "id": "py-cache",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Fast cache\nThe cache uses a fixed 60 second timeout.\n",
+          "sha256": "701bc62c267fd86ac467db654cf252d558f7f35a6a0b966e0020933be1b025ff"
+        },
+        {
+          "path": "settings.py",
+          "content": "TTL_SECONDS = 60\nMAX_ENTRIES = 3\n",
+          "sha256": "faae65212c66b82a65bc71d256f53602d48835a0f74692870f87a5480a6c67ef"
+        },
+        {
+          "path": "cache.py",
+          "content": "from time import monotonic\nfrom settings import TTL_SECONDS, MAX_ENTRIES\n\nclass Cache:\n    def __init__(self):\n        self.items = {}\n\n    def put(self, key, value):\n        self.items[key] = (value, monotonic())\n        if len(self.items) > MAX_ENTRIES:\n            oldest = min(self.items, key=lambda item: self.items[item][1])\n            del self.items[oldest]\n\n    def get(self, key):\n        entry = self.items.get(key)\n        if entry is None:\n            return None\n        value, created = entry\n        if monotonic() - created >= TTL_SECONDS:\n            del self.items[key]\n            return None\n        return value\n",
+          "sha256": "bdd9658b59f734411be02a75742f40a20c2433e29422cd292e2b4b3a141f5f2f"
+        },
+        {
+          "path": "service.py",
+          "content": "from cache import Cache\n\n_cache = Cache()\n\ndef load(key, fetch):\n    cached = _cache.get(key)\n    if cached is not None:\n        return cached\n    value = fetch(key)\n    _cache.put(key, value)\n    return value\n",
+          "sha256": "5f69473a202b507964cf1e1ddf9bec93b828a80e22efed0657e68aaa7fe48c7f"
+        }
+      ],
+      "contentSha256": "3573a045a2f465a5a9f2351613ed97f672b6a20af3eb3ecb63bca37de8b5a263"
+    },
+    {
+      "id": "py-retry",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Retry client\nNetwork retries wait a constant interval.\n",
+          "sha256": "b6609ab38402706ea9941b205e28324d417a6d84bef8627a26bbdbd9166c81e1"
+        },
+        {
+          "path": "config.py",
+          "content": "ATTEMPTS = 4\nBASE_DELAY = 0.05\n",
+          "sha256": "9e410f6ee647764a42e2aadc5bb2aeab21fe040f642d4e4e45f5ad29f06c9c42"
+        },
+        {
+          "path": "transport.py",
+          "content": "class TemporaryFailure(Exception):\n    pass\n\nclass PermanentFailure(Exception):\n    pass\n\ndef send(request):\n    if request.get(\"broken\"):\n        raise PermanentFailure(\"invalid request\")\n    if request.get(\"busy\"):\n        raise TemporaryFailure(\"busy\")\n    return {\"ok\": True}\n",
+          "sha256": "3ac6cf144f2913e19689ad36da772b7b82cd9be35035c31eb364a01b2c0e2775"
+        },
+        {
+          "path": "client.py",
+          "content": "from time import sleep\nfrom config import ATTEMPTS, BASE_DELAY\nfrom transport import TemporaryFailure, send\n\ndef request(payload):\n    for attempt in range(ATTEMPTS):\n        try:\n            return send(payload)\n        except TemporaryFailure:\n            if attempt + 1 == ATTEMPTS:\n                raise\n            sleep(BASE_DELAY * (2 ** attempt))\n",
+          "sha256": "6bad950901b4c51d5f1eceeee4f3bba8f72e3b6719b651c46dd4faac2fdab70d"
+        }
+      ],
+      "contentSha256": "2badd6bca34412644a8089434245a84d4106a6bc71accd80b62b5029658c6546"
+    },
+    {
+      "id": "py-permissions",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Permission helper\nAdmins always inherit access to every resource.\n",
+          "sha256": "7f0ac322cb201f009ea72ad5dc942dc45cfcb2fb475b74c6e55b30e47a0df07a"
+        },
+        {
+          "path": "policy.py",
+          "content": "DEFAULT_ROLE = \"reader\"\n",
+          "sha256": "49139c64c656b2050734e80fb59da248714f68ff68b9980f9289d23c9fc700a6"
+        },
+        {
+          "path": "roles.py",
+          "content": "from policy import DEFAULT_ROLE\n\nclass Principal:\n    def __init__(self, name, role=None):\n        self.name = name\n        self.role = role or DEFAULT_ROLE\n\nclass Admin(Principal):\n    def __init__(self, name):\n        super().__init__(name, \"admin\")\n\nclass Resource:\n    def __init__(self, owner):\n        self.owner = owner\n",
+          "sha256": "04c839af54ad6c380c54f1b4031b8698960b27fc2d7370128b8e4bc30bf841e8"
+        },
+        {
+          "path": "access.py",
+          "content": "from roles import Admin\n\ndef can_write(principal, resource):\n    if principal.name == resource.owner:\n        return True\n    return isinstance(principal, Admin)\n\ndef can_read(principal, resource):\n    return principal.name == resource.owner or principal.role in {\"reader\", \"admin\"}\n",
+          "sha256": "f2fcebe13d79b35ef2296be35693b2b145d4b2f2ab993e54e1576c949f3d063d"
+        }
+      ],
+      "contentSha256": "d45c89c39543f9671318576b062e9b638d5ed66e8d52bad16610ac00c04e6ee2"
+    },
+    {
+      "id": "py-importer",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Import worker\nMalformed records stop the import.\n",
+          "sha256": "a1b2a24a047d5e999b5dc62212322ee1c747ac584301c0d20a4fb672b087bda6"
+        },
+        {
+          "path": "config.py",
+          "content": "STRICT = True\n",
+          "sha256": "70eb8e364442289ae44f6e7e9ef9741647cc9f4a89c30aa19cd27d96561d8664"
+        },
+        {
+          "path": "parser.py",
+          "content": "def parse(line):\n    name, raw = line.split(\":\")\n    return name, int(raw)\n",
+          "sha256": "cab57cfd377dde27e9b67d8f153254a9f3a449e9ad91ae533014a07481b8ab39"
+        },
+        {
+          "path": "worker.py",
+          "content": "from parser import parse\n\ndef import_lines(lines, on_error):\n    accepted = []\n    rejected = 0\n    for line in lines:\n        try:\n            name, amount = parse(line)\n        except (ValueError, TypeError) as error:\n            rejected += 1\n            on_error(line, error)\n            continue\n        accepted.append({\"name\": name, \"amount\": amount})\n    return accepted, rejected\n",
+          "sha256": "168458774a4e472009e3800c48433e680d18cc4a1b59d1fe0252d165c6e5cd6d"
+        }
+      ],
+      "contentSha256": "dd5517c5424e32f517377dce9f562cb48f57c0e8a9320718c35dd18ce72ddeda"
+    },
+    {
+      "id": "js-queue",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Work queue\nThe queue retries every failed job three times.\n",
+          "sha256": "559207c1af3551878d233866205f970f304b62b68f7cba38920e2cce5733121a"
+        },
+        {
+          "path": "config.js",
+          "content": "export const maxPending = 2\n",
+          "sha256": "deb7c4e801c219a4dcdc0d4f6a967cb941ba0292226b2041af2a47ae1ed6bbf9"
+        },
+        {
+          "path": "queue.js",
+          "content": "import { maxPending } from './config.js'\n\nexport class Queue {\n  constructor() { this.pending = []; this.running = false }\n  add(job) {\n    if (this.pending.length >= maxPending) return false\n    this.pending.push(job)\n    return true\n  }\n  async drain(run, onDone) {\n    if (this.running) return\n    this.running = true\n    try {\n      while (this.pending.length) {\n        const job = this.pending.shift()\n        try { onDone(job, await run(job), null) }\n        catch (error) { onDone(job, null, error) }\n      }\n    } finally { this.running = false }\n  }\n}\n",
+          "sha256": "69c0d78f17219a83f2791d62c72c57e96e4b9457835baf2dd16b271dba6bb0f8"
+        },
+        {
+          "path": "service.js",
+          "content": "import { Queue } from './queue.js'\nexport const queue = new Queue()\nexport const submit = (job, run, done) => {\n  if (!queue.add(job)) return Promise.resolve(false)\n  return queue.drain(run, done).then(() => true)\n}\n",
+          "sha256": "8d86f99d9b406e01e927a8d9b6db285c965c82743a81a16cf2b565cade971e9a"
+        }
+      ],
+      "contentSha256": "974ae166e72bcdeaa66401cf985bcdb71766a3982be319a6132dbb12b6f5e425"
+    },
+    {
+      "id": "js-pricing",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Price calculator\nAll discounts are applied before tax.\n",
+          "sha256": "0b62cd3ea35c9128f0447040cd3108908eba5d3eefe100c6655a801f9132ace3"
+        },
+        {
+          "path": "config.js",
+          "content": "export const taxRate = 0.1\nexport const memberRate = 0.2\n",
+          "sha256": "7db88df8f09a9562f0218a971e301a8764e73f696b033cb4fdead37e05de8c66"
+        },
+        {
+          "path": "discount.js",
+          "content": "export function discount(subtotal, member) {\n  if (!member || subtotal < 100) return 0\n  return Math.min(subtotal * 0.2, 30)\n}\n",
+          "sha256": "fce8b84f093a89e9e405f84828ab14d8d86ef8285dfc89691da5f573140279ae"
+        },
+        {
+          "path": "checkout.js",
+          "content": "import { taxRate } from './config.js'\nimport { discount } from './discount.js'\nexport function total(subtotal, member) {\n  const afterDiscount = subtotal - discount(subtotal, member)\n  return Number((afterDiscount * (1 + taxRate)).toFixed(2))\n}\n",
+          "sha256": "cec0b395ef59a05de79ee4f2700a30a2479d075901385c845a5787d02986b8ba"
+        }
+      ],
+      "contentSha256": "8f568ac3c56731fe3521aa06a422dd8f97b718b3c728d75b25724b9ac575b10e"
+    },
+    {
+      "id": "js-router",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Request router\nA missing route returns a 404 response.\n",
+          "sha256": "1fd06703ca499549e063cbfdad87b5d9931f153421fb862f990ffe00a9d213a1"
+        },
+        {
+          "path": "routes.js",
+          "content": "export const routes = new Map([\n  ['/health', () => ({ status: 200, body: 'ok' })],\n  ['/items', () => ({ status: 200, body: 'items' })]\n])\n",
+          "sha256": "c65654d2008d4064616999df4085f8e747ca0cb7b0e30b3d7b9aff5213024904"
+        },
+        {
+          "path": "router.js",
+          "content": "import { routes } from './routes.js'\nexport function dispatch(path, send) {\n  const handler = routes.get(path)\n  if (!handler) return send({ status: 404, body: 'missing' })\n  try { return send(handler()) }\n  catch (error) { return send({ status: 500, body: 'failed' }) }\n}\n",
+          "sha256": "4c7cd17b9336ca317f47aec38069375a0ec538c1078f8b2197127f5a11f5775e"
+        },
+        {
+          "path": "server.js",
+          "content": "import { dispatch } from './router.js'\nexport const handle = (request, send) => dispatch(request.path, send)\n",
+          "sha256": "bc181e2077e8297a0c923da2431a3c60d9f2a5103d71176b376c918c37a3f228"
+        }
+      ],
+      "contentSha256": "eb98cfa022ad8705d3bc85aca1979d692efbc7c7443d1ba0c3e59d4323c404a3"
+    },
+    {
+      "id": "js-config",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Feature switch\nThe production flag defaults to false.\n",
+          "sha256": "83eeecfe6326cdf985f3ec92f3d3390a91464e06a5f98a9e86b46f4d7295fad4"
+        },
+        {
+          "path": "settings.json",
+          "content": "{\"enabled\":false,\"rollout\":25}\n",
+          "sha256": "d45573ab418a4eb7c067c2f70dcaa0b6875a6de550bd38cb54fc924721c89dc5"
+        },
+        {
+          "path": "feature.js",
+          "content": "export function isEnabled(settings, userId) {\n  if (settings.enabled !== true) return false\n  if (settings.rollout >= 100) return true\n  if (settings.rollout <= 0) return false\n  const bucket = [...userId].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 100\n  return bucket < settings.rollout\n}\n",
+          "sha256": "3ad43b2d452976839a285c0bb57aa42f4e59ddb423471a5b2f45bdc12578cd86"
+        },
+        {
+          "path": "controller.js",
+          "content": "import { isEnabled } from './feature.js'\nexport function response(settings, userId) {\n  return isEnabled(settings, userId) ? 'new' : 'old'\n}\n",
+          "sha256": "7724c9c4655a4a954eb651718da875788626cea9e22150835f623f4aabcddf18"
+        }
+      ],
+      "contentSha256": "d0a36b330281d3f3f09a6dff5e14bec08d981f3e189d55a5e42b9a5c646ac146"
+    },
+    {
+      "id": "ts-events",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Event dispatcher\nListener exceptions are swallowed and delivery continues.\n",
+          "sha256": "67eebbb77d7ac4e1dae38c733596e14c8f048fcb2681a8d6d3aacbd912ddfeb0"
+        },
+        {
+          "path": "types.ts",
+          "content": "export type Listener<T> = (event: T) => void\n",
+          "sha256": "4a8106681c60ad8be5e0878547944f0e5c13773e7ed96773aa60a310f8c7bf03"
+        },
+        {
+          "path": "emitter.ts",
+          "content": "import type { Listener } from './types.js'\nexport class Emitter<T> {\n  private listeners = new Set<Listener<T>>()\n  subscribe(listener: Listener<T>): () => void {\n    this.listeners.add(listener)\n    return () => this.listeners.delete(listener)\n  }\n  emit(event: T): number {\n    let failures = 0\n    for (const listener of [...this.listeners]) {\n      try { listener(event) }\n      catch { failures += 1 }\n    }\n    return failures\n  }\n}\n",
+          "sha256": "7d43bd2044937fc1daedd9e3ccfbd5f7e87d04ad27b20734057fde33560b31d3"
+        },
+        {
+          "path": "app.ts",
+          "content": "import { Emitter } from './emitter.js'\nexport const events = new Emitter<string>()\n",
+          "sha256": "2643b88a9b8da802fbbc3d7ac0f2978f8fb9caf77ecb6eeaa5d7a4ce84d25884"
+        }
+      ],
+      "contentSha256": "836e4c13bf154a9e100b1f7da7ad438b54707490fe559b659058d1d848638739"
+    },
+    {
+      "id": "ts-inventory",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Inventory\nAvailable stock can never be negative.\n",
+          "sha256": "154f331ccfe357080c8e92ee4d9e969d8a1d8a7e97edfc4a12a61c05d5736693"
+        },
+        {
+          "path": "config.ts",
+          "content": "export const warningThreshold = 5\n",
+          "sha256": "3c3f883136ff38074db8dd36ec5857d1d3ca577468e9a0b047db7d8a1055e1f0"
+        },
+        {
+          "path": "base.ts",
+          "content": "export class StockRecord {\n  constructor(public readonly sku: string, protected quantity: number) {}\n  available(): number { return this.quantity }\n}\n",
+          "sha256": "8b826e3ad55ab86fc9aff1d6cca3934794f53858a974ec800221319893f7648e"
+        },
+        {
+          "path": "warehouse.ts",
+          "content": "import { StockRecord } from './base.js'\nimport { warningThreshold } from './config.js'\nexport class WarehouseStock extends StockRecord {\n  reserve(count: number): boolean {\n    if (!Number.isInteger(count) || count <= 0 || count > this.quantity) return false\n    this.quantity -= count\n    return true\n  }\n  needsRestock(): boolean { return this.quantity < warningThreshold }\n}\n",
+          "sha256": "9845c93fd7cca86e4fc1a8d2736cbb44fba8dc6fe224fba8d5e8ca482b28551a"
+        }
+      ],
+      "contentSha256": "8ee8031163cc9a180c0b675e8ecab953352444afa6fb13e24ecab981808e12b1"
+    },
+    {
+      "id": "ts-session",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Session tokens\nExpired sessions are refreshed automatically.\n",
+          "sha256": "3b25ce41f45d34dbce102a045a4bf09a4add01498a0cd90833225ffe66b10b3a"
+        },
+        {
+          "path": "config.ts",
+          "content": "export const lifetimeMs = 1000\n",
+          "sha256": "61e89c105b1582851bbb420865ab3ad0b4e1e82d0134e9fe22337eb6cf288208"
+        },
+        {
+          "path": "session.ts",
+          "content": "import { lifetimeMs } from './config.js'\nexport type Session = { token: string; expiresAt: number }\nexport function valid(session: Session, now: number): boolean {\n  return Boolean(session.token) && session.expiresAt > now\n}\nexport function issue(token: string, now: number): Session {\n  return { token, expiresAt: now + lifetimeMs }\n}\n",
+          "sha256": "d28ec124791135e50c0a997e0c6bce869f408f3362e9defbc354172d126ac951"
+        },
+        {
+          "path": "guard.ts",
+          "content": "import { valid, type Session } from './session.js'\nexport function authorize(session: Session, now: number, next: () => void): boolean {\n  if (!valid(session, now)) return false\n  next()\n  return true\n}\n",
+          "sha256": "a42100afea70708a8a7433de3d8ee21fab1ccc1fcf96e0bcc9a02fe28a0def3d"
+        }
+      ],
+      "contentSha256": "1ad1c3fdbee5406c90151a930ec9a3c375d32633c77c8b55416f7a7cb3a629bb"
+    },
+    {
+      "id": "ts-parser",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# CSV parser\nRows with missing columns are rejected.\n",
+          "sha256": "112ecf280b9932b6f702d0eda3f87255c4f95e7c4ec970550795d99185f817b4"
+        },
+        {
+          "path": "schema.ts",
+          "content": "export const columns = ['id', 'amount'] as const\n",
+          "sha256": "2bb05a4924d06557c54b963774500c4c703bb2bb86663aa1490e7b98318bdca3"
+        },
+        {
+          "path": "parse.ts",
+          "content": "import { columns } from './schema.js'\nexport type Row = { id: string; amount: number }\nexport function parseRow(cells: string[]): Row | null {\n  if (cells.length !== columns.length) return null\n  const amount = Number(cells[1])\n  if (!Number.isFinite(amount)) return null\n  return { id: cells[0].trim(), amount }\n}\n",
+          "sha256": "4596cc9ee88fff6533066ea7ba2725dc20b2fe768ef3b18d04712601baa23959"
+        },
+        {
+          "path": "import.ts",
+          "content": "import { parseRow, type Row } from './parse.js'\nexport function importRows(lines: string[], onInvalid: (line: string) => void): Row[] {\n  const rows: Row[] = []\n  for (const line of lines) {\n    const row = parseRow(line.split(','))\n    if (row) rows.push(row)\n    else onInvalid(line)\n  }\n  return rows\n}\n",
+          "sha256": "99a545eefb223841057de32991d115c5e7caa2736ce99b42dee21ec023c8e4d9"
+        }
+      ],
+      "contentSha256": "c6b5b59c55151e0216dd89ea58bc7bdd6f061f08e2a250319f956addbbd28c66"
+    }
+  ]
+}

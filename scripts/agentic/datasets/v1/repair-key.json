@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "labels": [
+    {
+      "sampleId": "repair-3e54320fdcd4",
+      "expectedRepairFacts": [
+        "import_lines increments rejected, invokes on_error with the line and exception, then continues."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by worker.py lines 4-13."
+    },
+    {
+      "sampleId": "repair-6087f30b4a28",
+      "expectedRepairFacts": [
+        "No. valid requires expiresAt to be strictly greater than now."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by session.ts lines 3-5."
+    },
+    {
+      "sampleId": "repair-ca6b5435c197",
+      "expectedRepairFacts": [
+        "emit returns the number of listener callbacks that threw."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by emitter.ts lines 8-16."
+    },
+    {
+      "sampleId": "repair-439264df4a88",
+      "expectedRepairFacts": [
+        "No. invalid sessions return false before next is called; there is no refresh path."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by guard.ts lines 2-6."
+    },
+    {
+      "sampleId": "repair-4ce19b8e0a4f",
+      "expectedRepairFacts": [
+        "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by cache.py lines 8-12."
+    },
+    {
+      "sampleId": "repair-38a73b4a45d9",
+      "expectedRepairFacts": [
+        "load calls fetch(key), stores the returned value, then returns it."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by service.py lines 5-10."
+    },
+    {
+      "sampleId": "repair-dc521cdc54b5",
+      "expectedRepairFacts": [
+        "request catches TemporaryFailure and retries until the configured final attempt."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by client.py lines 5-13."
+    },
+    {
+      "sampleId": "repair-dff8bd662c46",
+      "expectedRepairFacts": [
+        "total subtracts the discount, applies tax to the remainder, and rounds to two decimals."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by checkout.js lines 3-7."
+    },
+    {
+      "sampleId": "repair-9b0b18c313ee",
+      "expectedRepairFacts": [
+        "WarehouseStock extends StockRecord and uses the inherited protected quantity field."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by base.ts lines 1-4."
+    },
+    {
+      "sampleId": "repair-27c7677a3857",
+      "expectedRepairFacts": [
+        "It returns true when quantity is below warningThreshold, which is 5."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by warehouse.ts lines 8-10."
+    },
+    {
+      "sampleId": "repair-ad2dd9c69f83",
+      "expectedRepairFacts": [
+        "The code sums userId character codes and takes the result modulo 100."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by feature.js lines 4-7."
+    },
+    {
+      "sampleId": "repair-4360ae419377",
+      "expectedRepairFacts": [
+        "parse splits the line on a colon and converts the second part to int."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by parser.py lines 1-3."
+    },
+    {
+      "sampleId": "repair-bcd5431abe03",
+      "expectedRepairFacts": [
+        "settings.enabled must be true; partial rollout then compares a deterministic user bucket with rollout."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by feature.js lines 1-8."
+    },
+    {
+      "sampleId": "repair-96ff794e93ed",
+      "expectedRepairFacts": [
+        "response returns new when isEnabled is true and old otherwise."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by controller.js lines 2-4."
+    },
+    {
+      "sampleId": "repair-efa3c1f46518",
+      "expectedRepairFacts": [
+        "No. discount uses a literal 0.2; memberRate is exported but not imported there."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by config.js lines 1-2."
+    },
+    {
+      "sampleId": "repair-973c16f56bf2",
+      "expectedRepairFacts": [
+        "A member with subtotal at least 100 receives a discount capped at 30."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by discount.js lines 1-4."
+    },
+    {
+      "sampleId": "repair-e29ebb2bfdc2",
+      "expectedRepairFacts": [
+        "Read allows the owner or a principal whose role is reader/admin; write allows owner or Admin instance."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by access.py lines 3-10."
+    },
+    {
+      "sampleId": "repair-fccd170ad2c6",
+      "expectedRepairFacts": [
+        "submit returns a resolved Promise with false when queue.add returns false."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by service.js lines 3-6."
+    },
+    {
+      "sampleId": "repair-2919142e8a52",
+      "expectedRepairFacts": [
+        "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by cache.py lines 14-22."
+    },
+    {
+      "sampleId": "repair-0abddf64096d",
+      "expectedRepairFacts": [
+        "Admin subclasses Principal and initializes the inherited fields through super().__init__."
+      ],
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by roles.py lines 4-11."
+    }
+  ]
+}
