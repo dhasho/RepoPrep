@@ -1,0 +1,14 @@
+{
+  "sourceFixtureVersion": "m02-temp-projects-v1",
+  "requiredCheckIds": [
+    "m02:ordinary-project",
+    "m02:nested-ignore",
+    "m02:sensitive-path",
+    "m02:symlink-escape",
+    "m02:read-time-change",
+    "m02:unreadable-file",
+    "m02:file-size-limit",
+    "m02:text-fallback"
+  ],
+  "construction": "Each check creates a fresh temporary project and uses production scanProject, project snapshot approval, and the guarded content reader. No source fixture from an external project is used."
+}
