@@ -189,6 +189,8 @@ export interface CallOptions {
   timeoutMs?: number
   maxOutputTokens?: number
   includeUsage?: boolean
+  /** Main-process admission guard. Unlike observers, rejection must prevent fetch. */
+  beforeRequest?: () => void
   onUsage?: (usage: LlmUsage) => void
   onRequest?: () => void
 }
@@ -268,6 +270,9 @@ async function request(
     const url = endpoint(profile)
     const headers = requestHeaders(profile)
     const body = JSON.stringify(requestBody(profile, messages, stream, opts))
+    throwIfAborted()
+    try { opts.beforeRequest?.() }
+    catch (error) { callbackFailed = true; callbackFailure = error; throw error }
     throwIfAborted()
     try { opts.onRequest?.() } catch { /* diagnostics cannot affect generation */ }
     response = await fetch(url, {

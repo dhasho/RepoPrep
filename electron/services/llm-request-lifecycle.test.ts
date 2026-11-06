@@ -36,6 +36,32 @@ function assertKind(error: unknown, kind: LlmRequestError['kind']): void {
   assert.equal(error.kind, kind)
 }
 
+test('a blocking admission guard prevents fetch and preserves its safe failure', async () => {
+  let fetched = 0
+  let observed = 0
+  const guardFailure = new Error('Request admission rejected.')
+  await withFetch(async () => { fetched++; return jsonResponse() }, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => {}, {
+      beforeRequest: () => { throw guardFailure },
+      onRequest: () => { observed++ }
+    }), error => error === guardFailure)
+  })
+  assert.equal(fetched, 0)
+  assert.equal(observed, 0)
+})
+
+test('cancellation inside the admission guard prevents fetch', async () => {
+  let fetched = 0
+  const controller = new AbortController()
+  await withFetch(async () => { fetched++; return jsonResponse() }, async () => {
+    await assert.rejects(chatCompletion(profile, messages, {
+      signal: controller.signal,
+      beforeRequest: () => controller.abort()
+    }), error => { assertKind(error, 'cancelled'); return true })
+  })
+  assert.equal(fetched, 0)
+})
+
 type FakeTimer = { callback: () => void; delay: number; cleared: boolean }
 async function withFakeTimers(run: (timers: FakeTimer[]) => Promise<void>): Promise<void> {
   const originalSetTimeout = globalThis.setTimeout
