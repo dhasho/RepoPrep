@@ -24,6 +24,7 @@ export interface InvestigationResult {
   readonly statistics: Readonly<{
     decisions: number
     toolRequests: number
+    readRequests: number
     repeatedReads: number
     invalidActions: number
     invalidToolExecutions: number
