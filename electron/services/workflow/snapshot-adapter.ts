@@ -9,6 +9,8 @@ import { redactSensitiveContent } from '../sensitive.ts'
 import { analyzeSource } from '../source-analysis.ts'
 // @ts-ignore TS5097 -- direct Node TS test runner requires explicit extension.
 import type { ScanResult, ScannedFile } from '../scanner.ts'
+// @ts-ignore TS5097 -- direct Node TS test runner requires explicit extension.
+import type { ProjectSnapshot } from '../project-snapshot.ts'
 import { WorkflowError, type ApprovedProjectRead, type EvidenceSourceKind, type WorkflowFile, type WorkflowProjectSnapshot } from './project-contract'
 
 const DEFAULT_CACHE_BYTES = 8 * 1024 * 1024
@@ -38,6 +40,19 @@ function freezeDeep<T>(value: T): T {
   }
   return value
 }
+function cloneProjectSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot {
+  return freezeDeep({
+    identity: { ...snapshot.identity },
+    entries: snapshot.entries.map((entry) => ({
+      ...entry,
+      ...(entry.names ? { names: [...entry.names] } : {}),
+      ...(entry.identity ? { identity: { ...entry.identity } } : {})
+    })),
+    valid: snapshot.valid,
+    contentReadable: snapshot.contentReadable,
+    maxContentFileBytes: snapshot.maxContentFileBytes
+  })
+}
 function sourceKind(file: ScannedFile): EvidenceSourceKind {
   const ext = file.ext.toLowerCase()
   if (/^(md|mdx|txt|rst|adoc)$/.test(ext) || /readme/i.test(file.relPath)) return 'documentation'
@@ -65,15 +80,16 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
   if ((options.reader !== undefined && typeof options.reader !== 'function') || (options.analyzer !== undefined && typeof options.analyzer !== 'function')) fail('invalid-argument')
   const reader = options.reader ?? readProjectContent
   const analyzer = options.analyzer ?? analyzeSource
-  let captured
-  try { captured = await captureProjectSnapshot(scan) } catch { fail('permission-denied') }
+  let captured: ProjectSnapshot
+  try { captured = cloneProjectSnapshot(await captureProjectSnapshot(scan)) } catch { fail('permission-denied') }
   if (!captured.valid || captured.contentReadable !== true || !(await isProjectSnapshotCurrent(captured))) fail('stale-snapshot')
   const approvals = new Set(captured.entries.filter((entry) => entry.type === 'file' && entry.contentApproved === true).map((entry) => entry.path))
   const candidateFiles = scan.files.filter((file) => file.isContentCandidate && approvals.has(file.relPath))
   const snapshotSeed = canonical({ project: options.projectId, entries: captured.entries, policyVersion, redactionVersion, parserVersion })
   const snapshotId = digest(snapshotSeed)
   const fileMap = new Map<string, StateFile>()
-  const files: WorkflowFile[] = candidateFiles.map((scanFile) => {
+  const files: WorkflowFile[] = candidateFiles.map((originalScanFile) => {
+    const scanFile = freezeDeep({ ...originalScanFile, ...(originalScanFile.sensitive ? { sensitive: { ...originalScanFile.sensitive } } : {}) }) as ScannedFile
     if (typeof scanFile.relPath !== 'string' || scanFile.relPath.startsWith('/') || scanFile.relPath.split('/').some((part) => !part || part === '.' || part === '..') || !Number.isSafeInteger(scanFile.size) || scanFile.size < 0) fail('permission-denied')
     const fileId = digest(`${snapshotId}\0${scanFile.relPath}`)
     const file = freezeDeep({ fileId, relPath: scanFile.relPath, byteLength: scanFile.size, sourceKind: sourceKind(scanFile) })
@@ -106,15 +122,16 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
       try { checkAbort(signal); raw = await reader(scan, entry.scanFile); checkAbort(signal) }
       catch (error) { if (error instanceof WorkflowError) throw error; if (signal?.aborted) fail('cancelled'); fail('unreadable') }
       await assertCurrent(signal)
-      const redaction = redactSensitiveContent(raw)
+      const normalized = raw.replace(/\r\n?/g, '\n')
+      const redaction = redactSensitiveContent(normalized)
       const content = redaction.content
-      const beforeLines = (raw.match(/\n/g) ?? []).length
+      const beforeLines = (normalized.match(/\n/g) ?? []).length
       const afterLines = (content.match(/\n/g) ?? []).length
       let analysis = null
       try { analysis = analyzer(entry.scanFile.relPath, content) } catch { analysis = null }
       if (analysis && !analysis.parseable) analysis = null
       const read = freezeDeep({ snapshotId, fileId, relPath: entry.file.relPath, sourceKind: entry.file.sourceKind, text: content,
-        contentHash: digest(content), readBytes: entry.scanFile.size, lineMapping: beforeLines === afterLines ? 'preserved' as const : 'unknown' as const,
+        contentHash: digest(content), readBytes: entry.scanFile.size, lineMapping: redaction.totalMatches === 0 && beforeLines === afterLines ? 'preserved' as const : 'unknown' as const,
         redactionVersion, parserVersion, analysis, indexStatus: analysis ? 'available' as const : 'unavailable' as const })
       checkAbort(signal)
       if (state.cacheBytes + Buffer.byteLength(content, 'utf8') <= maxCacheBytes) { state.cache.set(fileId, read); state.cacheBytes += Buffer.byteLength(content, 'utf8') }

@@ -11,6 +11,8 @@ import path from 'node:path'
 // @ts-ignore TS5097 -- Node executes this test through the direct TypeScript runner.
 import { scanProject } from '../scanner.ts'
 // @ts-ignore TS5097 -- Node executes this test through the direct TypeScript runner.
+import { captureProjectSnapshot } from '../project-snapshot.ts'
+// @ts-ignore TS5097 -- Node executes this test through the direct TypeScript runner.
 import { createWorkflowSnapshot } from './snapshot-adapter.ts'
 
 async function fixture(files: Record<string, string> = { 'src/a.ts': 'export const value = 1\n' }) {
@@ -50,6 +52,53 @@ test('changed snapshot invalidates reads and prior capabilities', async (t) => {
   await writeFile(path.join(root, 'src/a.ts'), 'export const value = 2\n')
   await assert.rejects(snapshot.readFile(snapshot.files[0].fileId), (error: unknown) => (error as { code?: string }).code === 'stale-snapshot')
   assert.equal(snapshot.ownsRead(read.read), false)
+})
+
+test('file IDs stay bound to captured file metadata after caller mutation', async (t) => {
+  const { root, scan } = await fixture({ 'src/a.ts': "export const marker = 'A'\n", 'src/b.js': "export const marker = 'B'\n" })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const snapshot = await createWorkflowSnapshot(scan, { projectId: 'project-1' })
+  const a = snapshot.files.find(file => file.relPath === 'src/a.ts')!
+  const originalA = scan.files.find(file => file.relPath === 'src/a.ts')!
+  const originalB = scan.files.find(file => file.relPath === 'src/b.js')!
+  assert.equal(originalA.size, originalB.size)
+  originalA.relPath = 'src/b.js'
+  originalA.size = originalB.size
+  originalA.ext = 'js'
+  originalA.isContentCandidate = true
+  const read = await snapshot.readFile(a.fileId)
+  assert.equal(read.read.relPath, 'src/a.ts')
+  assert.match(read.read.text, /marker = 'A'/)
+})
+
+test('captured snapshot metadata is isolated from later capture-object mutation', async (t) => {
+  const { root, scan } = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const snapshot = await createWorkflowSnapshot(scan, { projectId: 'project-1' })
+  const externalCapture = await captureProjectSnapshot(scan)
+  const entry = externalCapture.entries.find(item => item.path === 'src/a.ts')!
+  entry.path = 'tampered.ts'
+  await snapshot.assertCurrent()
+})
+
+test('normalizes CRLF and CR before redaction and marks transformed line mapping unknown', async (t) => {
+  const { root, scan } = await fixture({ 'src/lines.ts': 'placeholder\n' })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const source = 'const first = 1\r\nconst token = "sk-proj-abcdefghijklmnop"\rconst last = 3\r'
+  let analyzedText = ''
+  const snapshot = await createWorkflowSnapshot(scan, {
+    projectId: 'project-1',
+    reader: async () => source,
+    analyzer: (relPath, text) => {
+      analyzedText = text
+      return { parseable: true, imports: [], symbols: [] }
+    }
+  })
+  const read = await snapshot.readFile(snapshot.files[0].fileId)
+  assert.equal(read.read.text.includes('\r'), false)
+  assert.equal((read.read.text.match(/\n/g) ?? []).length, 3)
+  assert.equal(analyzedText, read.read.text)
+  assert.equal(read.read.lineMapping, 'unknown')
 })
 
 test('unsupported parser keeps plain redacted text available', async (t) => {
