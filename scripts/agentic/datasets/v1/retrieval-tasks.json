@@ -55,7 +55,7 @@
       "id": "retrieval-05",
       "projectId": "py-permissions",
       "objective": "Compare the actual admin write rule with the README claim about all resources.",
-      "roleFocus": "security",
+      "roleFocus": "backend",
       "granularity": "medium",
       "tags": [
         "Python",
@@ -67,7 +67,7 @@
       "id": "retrieval-06",
       "projectId": "py-permissions",
       "objective": "How does Admin inherit Principal initialization and how is that inheritance used for authorization?",
-      "roleFocus": "security",
+      "roleFocus": "backend",
       "granularity": "fine",
       "tags": [
         "Python",
@@ -80,7 +80,7 @@
       "id": "retrieval-07",
       "projectId": "py-importer",
       "objective": "What malformed input is caught, and does one bad line stop later lines from being processed?",
-      "roleFocus": "data",
+      "roleFocus": "backend",
       "granularity": "medium",
       "tags": [
         "Python",
@@ -93,7 +93,7 @@
       "id": "retrieval-08",
       "projectId": "py-importer",
       "objective": "What does the error callback receive, and how are accepted and rejected records reported?",
-      "roleFocus": "data",
+      "roleFocus": "backend",
       "granularity": "fine",
       "tags": [
         "Python",
@@ -131,7 +131,7 @@
       "id": "retrieval-11",
       "projectId": "js-pricing",
       "objective": "In what order are the member discount and tax applied, and what cap limits the discount?",
-      "roleFocus": "commerce",
+      "roleFocus": "backend",
       "granularity": "fine",
       "tags": [
         "JavaScript",
@@ -144,7 +144,7 @@
       "id": "retrieval-12",
       "projectId": "js-pricing",
       "objective": "Does the configured memberRate control the actual discount calculation?",
-      "roleFocus": "commerce",
+      "roleFocus": "backend",
       "granularity": "medium",
       "tags": [
         "JavaScript",
@@ -182,7 +182,7 @@
       "id": "retrieval-15",
       "projectId": "js-config",
       "objective": "Which settings must be true for a user to receive the new feature, including boundary rollout cases?",
-      "roleFocus": "product",
+      "roleFocus": "general",
       "granularity": "fine",
       "tags": [
         "JavaScript",
@@ -195,7 +195,7 @@
       "id": "retrieval-16",
       "projectId": "js-config",
       "objective": "How does controller response depend on the feature decision?",
-      "roleFocus": "product",
+      "roleFocus": "general",
       "granularity": "medium",
       "tags": [
         "JavaScript",
@@ -208,7 +208,7 @@
       "id": "retrieval-17",
       "projectId": "ts-events",
       "objective": "What does emit return when listeners throw, and will the remaining listeners still run?",
-      "roleFocus": "platform",
+      "roleFocus": "backend",
       "granularity": "medium",
       "tags": [
         "TypeScript",
@@ -220,7 +220,7 @@
       "id": "retrieval-18",
       "projectId": "ts-events",
       "objective": "How does subscribe let a caller remove a listener, and what set is traversed during emit?",
-      "roleFocus": "platform",
+      "roleFocus": "backend",
       "granularity": "fine",
       "tags": [
         "TypeScript",
@@ -233,7 +233,7 @@
       "id": "retrieval-19",
       "projectId": "ts-inventory",
       "objective": "What validation prevents an invalid reservation, and when does the restock warning activate?",
-      "roleFocus": "commerce",
+      "roleFocus": "backend",
       "granularity": "medium",
       "tags": [
         "TypeScript",
@@ -246,7 +246,7 @@
       "id": "retrieval-20",
       "projectId": "ts-session",
       "objective": "Does authorize refresh an expired session or reject it, and what callback behavior follows a valid session?",
-      "roleFocus": "security",
+      "roleFocus": "backend",
       "granularity": "fine",
       "tags": [
         "TypeScript",

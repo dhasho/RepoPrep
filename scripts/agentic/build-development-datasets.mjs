@@ -88,22 +88,22 @@ const retrievalSpecs = [
   ['py-cache','Trace a cache miss from the public load function through insertion.','backend','fine',['Python','cross-file'], 'normal',[group('miss',ref('py-cache','service.py',5,10)),group('store',ref('py-cache','cache.py',8,12))]],
   ['py-retry','How many send attempts occur and how does delay change after each temporary failure?','backend','medium',['Python','conditions-exceptions'], 'normal',[group('policy',ref('py-retry','config.py',1,2)),group('retry',ref('py-retry','client.py',5,13))]],
   ['py-retry','Which failure type is retried, and which payload condition produces a permanent failure?','backend','medium',['Python','conditions-exceptions','cross-file'], 'unavailable',[group('errors',ref('py-retry','transport.py',1,13)),group('handler',ref('py-retry','client.py',8,13))]],
-  ['py-permissions','Compare the actual admin write rule with the README claim about all resources.','security','medium',['Python','config-vs-behavior'], 'normal',[group('write',ref('py-permissions','access.py',3,6)),group('admin',ref('py-permissions','roles.py',9,11))]],
-  ['py-permissions','How does Admin inherit Principal initialization and how is that inheritance used for authorization?','security','fine',['Python','inheritance-callback','cross-file'], 'normal',[group('inherit',ref('py-permissions','roles.py',4,11)),group('check',ref('py-permissions','access.py',3,6))]],
-  ['py-importer','What malformed input is caught, and does one bad line stop later lines from being processed?','data','medium',['Python','conditions-exceptions','cross-file'], 'normal',[group('parse',ref('py-importer','parser.py',1,3)),group('loop',ref('py-importer','worker.py',4,13))]],
-  ['py-importer','What does the error callback receive, and how are accepted and rejected records reported?','data','fine',['Python','inheritance-callback'], 'unavailable',[group('callback',ref('py-importer','worker.py',2,14))]],
+  ['py-permissions','Compare the actual admin write rule with the README claim about all resources.','backend','medium',['Python','config-vs-behavior'], 'normal',[group('write',ref('py-permissions','access.py',3,6)),group('admin',ref('py-permissions','roles.py',9,11))]],
+  ['py-permissions','How does Admin inherit Principal initialization and how is that inheritance used for authorization?','backend','fine',['Python','inheritance-callback','cross-file'], 'normal',[group('inherit',ref('py-permissions','roles.py',4,11)),group('check',ref('py-permissions','access.py',3,6))]],
+  ['py-importer','What malformed input is caught, and does one bad line stop later lines from being processed?','backend','medium',['Python','conditions-exceptions','cross-file'], 'normal',[group('parse',ref('py-importer','parser.py',1,3)),group('loop',ref('py-importer','worker.py',4,13))]],
+  ['py-importer','What does the error callback receive, and how are accepted and rejected records reported?','backend','fine',['Python','inheritance-callback'], 'unavailable',[group('callback',ref('py-importer','worker.py',2,14))]],
   ['js-queue','What happens when a job handler rejects, and does draining continue with later jobs?','backend','medium',['JavaScript','conditions-exceptions'], 'normal',[group('drain',ref('js-queue','queue.js',10,19))]],
   ['js-queue','How is queue capacity enforced and what does submit return when the queue is full?','backend','medium',['JavaScript','config-vs-behavior','cross-file'], 'normal',[group('limit',ref('js-queue','config.js',1,1)),group('add',ref('js-queue','queue.js',4,9)),group('submit',ref('js-queue','service.js',3,6))]],
-  ['js-pricing','In what order are the member discount and tax applied, and what cap limits the discount?','commerce','fine',['JavaScript','cross-file','conditions-exceptions'], 'normal',[group('discount',ref('js-pricing','discount.js',1,4)),group('total',ref('js-pricing','checkout.js',3,7))]],
-  ['js-pricing','Does the configured memberRate control the actual discount calculation?','commerce','medium',['JavaScript','config-vs-behavior'], 'unavailable',[group('config',ref('js-pricing','config.js',1,2)),group('behavior',ref('js-pricing','discount.js',1,4))]],
+  ['js-pricing','In what order are the member discount and tax applied, and what cap limits the discount?','backend','fine',['JavaScript','cross-file','conditions-exceptions'], 'normal',[group('discount',ref('js-pricing','discount.js',1,4)),group('total',ref('js-pricing','checkout.js',3,7))]],
+  ['js-pricing','Does the configured memberRate control the actual discount calculation?','backend','medium',['JavaScript','config-vs-behavior'], 'unavailable',[group('config',ref('js-pricing','config.js',1,2)),group('behavior',ref('js-pricing','discount.js',1,4))]],
   ['js-router','How are unknown routes and handler exceptions translated into responses?','backend','medium',['JavaScript','conditions-exceptions'], 'normal',[group('dispatch',ref('js-router','router.js',2,8))]],
   ['js-router','Trace a request from the server adapter into the selected route callback and response sender.','backend','fine',['JavaScript','cross-file','inheritance-callback'], 'normal',[group('entry',ref('js-router','server.js',1,2)),group('route',ref('js-router','routes.js',1,4)),group('dispatch',ref('js-router','router.js',2,8))]],
-  ['js-config','Which settings must be true for a user to receive the new feature, including boundary rollout cases?','product','fine',['JavaScript','conditions-exceptions','config-vs-behavior'], 'normal',[group('flag',ref('js-config','settings.json',1,1)),group('logic',ref('js-config','feature.js',1,8))]],
-  ['js-config','How does controller response depend on the feature decision?','product','medium',['JavaScript','cross-file'], 'unavailable',[group('decision',ref('js-config','feature.js',1,8)),group('consumer',ref('js-config','controller.js',1,4))]],
-  ['ts-events','What does emit return when listeners throw, and will the remaining listeners still run?','platform','medium',['TypeScript','conditions-exceptions'], 'normal',[group('emit',ref('ts-events','emitter.ts',8,16))]],
-  ['ts-events','How does subscribe let a caller remove a listener, and what set is traversed during emit?','platform','fine',['TypeScript','inheritance-callback','cross-file'], 'normal',[group('api',ref('ts-events','emitter.ts',3,16)),group('use',ref('ts-events','app.ts',1,2))]],
-  ['ts-inventory','What validation prevents an invalid reservation, and when does the restock warning activate?','commerce','medium',['TypeScript','conditions-exceptions','cross-file'], 'normal',[group('base',ref('ts-inventory','base.ts',1,4)),group('behavior',ref('ts-inventory','warehouse.ts',3,10)),group('threshold',ref('ts-inventory','config.ts',1,1))]],
-  ['ts-session','Does authorize refresh an expired session or reject it, and what callback behavior follows a valid session?','security','fine',['TypeScript','inheritance-callback','conditions-exceptions'], 'unavailable',[group('validity',ref('ts-session','session.ts',3,8)),group('guard',ref('ts-session','guard.ts',2,6)),group('setting',ref('ts-session','config.ts',1,1))]],
+  ['js-config','Which settings must be true for a user to receive the new feature, including boundary rollout cases?','general','fine',['JavaScript','conditions-exceptions','config-vs-behavior'], 'normal',[group('flag',ref('js-config','settings.json',1,1)),group('logic',ref('js-config','feature.js',1,8))]],
+  ['js-config','How does controller response depend on the feature decision?','general','medium',['JavaScript','cross-file'], 'unavailable',[group('decision',ref('js-config','feature.js',1,8)),group('consumer',ref('js-config','controller.js',1,4))]],
+  ['ts-events','What does emit return when listeners throw, and will the remaining listeners still run?','backend','medium',['TypeScript','conditions-exceptions'], 'normal',[group('emit',ref('ts-events','emitter.ts',8,16))]],
+  ['ts-events','How does subscribe let a caller remove a listener, and what set is traversed during emit?','backend','fine',['TypeScript','inheritance-callback','cross-file'], 'normal',[group('api',ref('ts-events','emitter.ts',3,16)),group('use',ref('ts-events','app.ts',1,2))]],
+  ['ts-inventory','What validation prevents an invalid reservation, and when does the restock warning activate?','backend','medium',['TypeScript','conditions-exceptions','cross-file'], 'normal',[group('base',ref('ts-inventory','base.ts',1,4)),group('behavior',ref('ts-inventory','warehouse.ts',3,10)),group('threshold',ref('ts-inventory','config.ts',1,1))]],
+  ['ts-session','Does authorize refresh an expired session or reject it, and what callback behavior follows a valid session?','backend','fine',['TypeScript','inheritance-callback','conditions-exceptions'], 'unavailable',[group('validity',ref('ts-session','session.ts',3,8)),group('guard',ref('ts-session','guard.ts',2,6)),group('setting',ref('ts-session','config.ts',1,1))]],
 ]
 const tasks = retrievalSpecs.map((s,i)=>({id:`retrieval-${String(i+1).padStart(2,'0')}`,projectId:s[0],objective:s[1],roleFocus:s[2],granularity:s[3],tags:s[5] === 'unavailable' ? [...s[4], 'index-failure'] : s[4],indexMode:s[5]}))
 const retrievalLabels = retrievalSpecs.map((s,i)=>({taskId:tasks[i].id,requiredEvidenceGroups:s[6],notes:'Agent-authored label based on the complete fixture source; synthetic development data only.'}))
@@ -113,23 +113,29 @@ const generationSpecs = [
   ['py-cache','Trace how a cache miss invokes fetch and stores its result.','backend','fine','cache miss flow'],
   ['py-retry','Explain retry eligibility, attempt count, and exponential delay.','backend','medium','retry policy'],
   ['py-retry','Compare permanent and temporary transport failures.','backend','medium','failure classification'],
-  ['py-permissions','Explain how inheritance affects read and write access decisions.','security','fine','authorization rules'],
-  ['py-importer','Explain row parsing, error callback behavior, and continued processing.','data','medium','import errors'],
+  ['py-permissions','Explain how inheritance affects read and write access decisions.','backend','fine','authorization rules'],
+  ['py-importer','Explain row parsing, error callback behavior, and continued processing.','backend','medium','import errors'],
   ['js-queue','Explain queue capacity and draining behavior when job callbacks fail.','backend','fine','async queue'],
   ['js-queue','Trace the submit return value and completion callback path.','backend','medium','submit contract'],
-  ['js-pricing','Explain discount eligibility, cap, tax order, and rounding.','commerce','fine','checkout calculation'],
+  ['js-pricing','Explain discount eligibility, cap, tax order, and rounding.','backend','fine','checkout calculation'],
   ['js-router','Explain route selection and response behavior for missing routes and thrown errors.','backend','medium','router behavior'],
-  ['js-config','Explain the runtime feature rollout decision and its controller consumer.','product','fine','feature rollout'],
-  ['js-config','Explain which settings actually affect feature eligibility.','product','medium','feature configuration'],
-  ['ts-events','Explain listener registration, unsubscribe, and exception handling during emit.','platform','fine','event emitter'],
-  ['ts-events','Explain the return value from event delivery and its meaning.','platform','medium','event failures'],
-  ['ts-inventory','Explain the stock reservation invariant and restock threshold behavior.','commerce','fine','inventory'],
-  ['ts-inventory','Trace inherited stock state into reservation validation and mutation.','commerce','medium','inheritance'],
+  ['js-config','Explain the runtime feature rollout decision and its controller consumer.','general','fine','feature rollout'],
+  ['js-config','Explain which settings actually affect feature eligibility.','general','medium','feature configuration'],
+  ['ts-events','Explain listener registration, unsubscribe, and exception handling during emit.','backend','fine','event emitter'],
+  ['ts-events','Explain the return value from event delivery and its meaning.','backend','medium','event failures'],
+  ['ts-inventory','Explain the stock reservation invariant and restock threshold behavior.','backend','fine','inventory'],
+  ['ts-inventory','Trace inherited stock state into reservation validation and mutation.','backend','medium','inheritance'],
   ['ts-session','Explain session validity and how authorization invokes its continuation.','security','fine','session guard'],
   ['ts-session','Explain how session expiry is computed and whether expiry triggers refresh.','security','medium','session expiry'],
 ]
 const frozenGenerationSpecs = [...generationSpecs.slice(0,4), ...generationSpecs.slice(6,10), ...generationSpecs.slice(12,16)]
 const generationTasks = frozenGenerationSpecs.map((s,i)=>({id:`generation-${String(i+1).padStart(2,'0')}`,projectId:s[0],objective:s[1],roleFocus:s[2],granularity:s[3],topic:s[4]}))
+const allowedRoleFocus = new Set(['general','frontend','backend','algorithm'])
+const allowedGranularity = new Set(['coarse','medium','fine'])
+for (const task of [...tasks, ...generationTasks]) {
+  if (!allowedRoleFocus.has(task.roleFocus)) throw new Error(`Dataset freeze check failed: invalid roleFocus ${task.roleFocus} on ${task.id}`)
+  if (!allowedGranularity.has(task.granularity)) throw new Error(`Dataset freeze check failed: invalid granularity ${task.granularity} on ${task.id}`)
+}
 const sourceLines = {
   'py-cache': [['cache.py',8,22]], 'py-retry': [['client.py',5,13],['transport.py',7,12]], 'py-permissions': [['roles.py',9,14],['access.py',3,10]], 'py-importer': [['parser.py',1,3],['worker.py',2,14]],
   'js-queue': [['queue.js',4,19],['service.js',3,6]], 'js-pricing': [['discount.js',1,4],['checkout.js',3,7]], 'js-router': [['routes.js',1,4],['router.js',2,8]], 'js-config': [['feature.js',1,8],['controller.js',2,4]],

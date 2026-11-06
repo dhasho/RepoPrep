@@ -53,7 +53,7 @@
       "id": "generation-07",
       "projectId": "js-pricing",
       "objective": "Explain discount eligibility, cap, tax order, and rounding.",
-      "roleFocus": "commerce",
+      "roleFocus": "backend",
       "granularity": "fine",
       "topic": "checkout calculation"
     },
@@ -69,7 +69,7 @@
       "id": "generation-09",
       "projectId": "ts-events",
       "objective": "Explain listener registration, unsubscribe, and exception handling during emit.",
-      "roleFocus": "platform",
+      "roleFocus": "backend",
       "granularity": "fine",
       "topic": "event emitter"
     },
@@ -77,7 +77,7 @@
       "id": "generation-10",
       "projectId": "ts-events",
       "objective": "Explain the return value from event delivery and its meaning.",
-      "roleFocus": "platform",
+      "roleFocus": "backend",
       "granularity": "medium",
       "topic": "event failures"
     },
@@ -85,7 +85,7 @@
       "id": "generation-11",
       "projectId": "ts-inventory",
       "objective": "Explain the stock reservation invariant and restock threshold behavior.",
-      "roleFocus": "commerce",
+      "roleFocus": "backend",
       "granularity": "fine",
       "topic": "inventory"
     },
@@ -93,7 +93,7 @@
       "id": "generation-12",
       "projectId": "ts-inventory",
       "objective": "Trace inherited stock state into reservation validation and mutation.",
-      "roleFocus": "commerce",
+      "roleFocus": "backend",
       "granularity": "medium",
       "topic": "inheritance"
     }
