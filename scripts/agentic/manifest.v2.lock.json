@@ -1,0 +1,10 @@
+{
+  "lockVersion": 1,
+  "baselineSourceCommit": "9ef10caae918a2b86c27afdd8b19cbe5ad40869c",
+  "manifestSha256": "9c697ec9f91729f5bffc267ae33c84f6695496c0b3cb92b7ed74cfead4768e56",
+  "hashes": {
+    "configurationSha256": "6cb4d792d715ed86df49f06fdb544794b6859be50594ef0dd35d6277d6177d3e",
+    "dataSha256": "1e0317093ccf0d1cd72c7db8ab6ec64b6f70d6addddba7c07e90b7c3f326c0c4",
+    "schemaSha256": "5eb3e6088b3f92dfd75d7ccb35b48cf062e82cf2e52024fb8a6f38215a04d8f7"
+  }
+}

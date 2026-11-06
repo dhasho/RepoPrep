@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "coordinator-observed-collaboration-invocations",
+  "protocol": "agent-review-v1",
+  "observedBy": "/root",
+  "limitation": "The collaboration tool exposes task names and completion results, not provider-signed session or usage receipts.",
+  "invocations": [
+    {
+      "invocationId": "/root/reviewer_a",
+      "tool": "collaboration.spawn_agent",
+      "taskName": "/root/reviewer_a",
+      "forkTurns": "none",
+      "model": "gpt-6-luna",
+      "inputPacketSha256": "66057b38e9df2fa9f217e0bf56a8548a7f22134e248d1a98bf9812ce44be2866",
+      "outputCommit": "a19289d56e66a6f14464196e769c27d6d8ad1887",
+      "outputPath": "scripts/agentic/reviews/v1/reviewer-a.json",
+      "outputSha256": "8efba36bbcf0c6b417ff07837842815061c2abc06298c480bbdb566496f0bbe7",
+      "integratedCommit": "9abf0f643c80980e555d4d8189de0dcf4b6be580"
+    },
+    {
+      "invocationId": "/root/reviewer_b",
+      "tool": "collaboration.spawn_agent",
+      "taskName": "/root/reviewer_b",
+      "forkTurns": "none",
+      "model": "gpt-6-luna",
+      "inputPacketSha256": "66057b38e9df2fa9f217e0bf56a8548a7f22134e248d1a98bf9812ce44be2866",
+      "outputCommit": "b8d504c500d0db83a677d1ab2b6bfc65b67b2656",
+      "outputPath": "scripts/agentic/reviews/v1/reviewer-b.json",
+      "outputSha256": "45c41f4b12f66483011f484a8030d3780a8b9cb3d9d317168eb9d1bc7bd41cde",
+      "integratedCommit": "3ff36448c09da91b87958bf25fc1d19965c6a91b"
+    }
+  ]
+}

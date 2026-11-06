@@ -108,6 +108,11 @@ test('static provider and opt-in trace preserve exact dispatched messages, resul
   assert.equal(events.at(-1)?.status, 'succeeded')
   assert.ok(events.some(event => event.span === 'validation' && event.status === 'succeeded'))
   assert.doesNotMatch(JSON.stringify(snapshot), /SYNTHETIC_PRIVATE_KEY|value\.trim|Static comparison|baseUrl|apiKey/)
+  if (process.env.REPOPREP_TRACE_SAMPLE === '1') {
+    const folder = path.join(process.cwd(), '.validation', 'agentic', 'static-samples')
+    await fs.mkdir(folder, { recursive: true })
+    await fs.writeFile(path.join(folder, `${snapshot.traceId}.json`), `${JSON.stringify(snapshot, null, 2)}\n`, { flag: 'wx' })
+  }
 })
 
 test('trace write failure cannot change result persistence or terminal outcome and missing usage stays unknown', async t => {

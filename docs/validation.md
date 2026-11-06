@@ -17,6 +17,8 @@
 | --- | --- |
 | `npm run typecheck` | 对 Node/Electron 与 Web 两套 TypeScript 配置执行 `tsc --noEmit`。 |
 | `npm run test:agentic` | 运行契约、metadata trace、静态生成等价性和门禁 runner 自测；不调用真实模型，不代表 P0/P1 或完整 M11 通过。 |
+| `npm run test:agentic:holdout` | 核对固定公开源码与48条事实范围、链接及哈希变更拒绝；需要本地主工作树 `.validation/agentic-holdout-sources/` 下四个固定 SHA 的干净仓库，不自动下载或运行项目代码。 |
+| `npm run verify:agentic:p0` | 校验20/12/80/20任务矩阵、源码与标签哈希、两份独立代理评审、全部分歧裁定和保留集冻结；输出 P0 新报告。当前协议见 `docs/adr/agentic-subagent-evaluation.md`。 |
 | `npm run verify:agentic:m01` | 执行冻结的 M01 必需断言并输出带源码/配置/资产哈希的新报告。 |
 | `npm run verify:agentic:m02` 至 `npm run verify:agentic:m13` | 已注册的失败关闭入口；未实现的检查及资产输出 incomplete/非 0。M06/M08/M09/M13 的 `-- --mode real` 无授权时输出 blocked/非 0，不回退合成响应。 |
 | `npm run test:ipc` | IPC schema、调用方权限、handler 防护与安全结果测试，OpenAI/Claude 格式、流式响应和本地合成模型生成链路。 |

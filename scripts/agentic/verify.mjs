@@ -23,7 +23,7 @@ try {
   const checks = await loadChecks(moduleId)
   const result = await runGate({ module: moduleId, mode, checks, sourceRoot: process.cwd(), printSummary: true })
   process.exitCode = result.status === 'pass' ? 0 : 1
-} catch (error) {
-  process.stdout.write(`${JSON.stringify({ module: null, status: 'failed', failed: 1, missing: 0, skipped: 0, unknown: 0, report: null, error: error instanceof Error ? error.message : String(error) })}\n`)
+} catch {
+  process.stdout.write(`${JSON.stringify({ module: null, status: 'failed', failed: 1, missing: 0, skipped: 0, unknown: 0, report: null, errorCode: 'GATE_START_FAILED' })}\n`)
   process.exitCode = 1
 }

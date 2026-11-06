@@ -142,3 +142,15 @@ test('invalid module names cannot escape the fresh report directory', async () =
     assert.match(path.basename(result.reportPath), /^unknown\.json$/)
   })
 })
+
+test('an available required asset cannot omit its path or content hash', async () => {
+  await withOutput(async outRoot => {
+    const manifest = makeManifest()
+    manifest.modules.M01.assets = [{ id: 'missing-bytes', required: true, status: 'available' }]
+    const checks = passingChecks()
+    checks.one = ctx => ctx.recordMetric('metric', true)
+    const result = await runGate({ module: 'M01', manifest, checks, sourceRoot: process.cwd(), outRoot })
+    assert.notEqual(result.status, 'pass')
+    assert.ok(result.counts.failed > 0)
+  })
+})

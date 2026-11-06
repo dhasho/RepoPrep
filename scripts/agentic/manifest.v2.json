@@ -1,0 +1,787 @@
+{
+  "manifestVersion": 2,
+  "planVersion": "1.3",
+  "schema": {
+    "gateReportVersion": 1,
+    "contract": "agentic-module-gate-v1",
+    "manifestFile": "manifest.v2.json",
+    "datasetVersion": 1,
+    "reviewProtocol": "agent-review-v1"
+  },
+  "freezeStatus": "agent-review-v1-assets-frozen",
+  "baselineSourceCommit": "9ef10caae918a2b86c27afdd8b19cbe5ad40869c",
+  "hashAlgorithm": "sha256",
+  "configuration": {
+    "quality": {
+      "relativeMaterialErrorReduction": 0.2,
+      "minimumCoreFactCoverageDelta": 0,
+      "minimumTopicValueDelta": -0.2,
+      "maxTokenRatio": 1.1,
+      "maxP95LatencyRatio": 1.5,
+      "staticZeroErrorCandidateErrorRate": 0,
+      "staticZeroErrorMinimumCoverageDelta": 0.05,
+      "p95Method": "nearest-rank"
+    },
+    "limits": {
+      "investigation": {
+        "llmDecisionsPerTask": 3,
+        "toolCallsPerTask": 8,
+        "inputTokensPerTask": 18000,
+        "outputTokensPerTask": 6000,
+        "readBytesPerTask": 2097152,
+        "secondsPerTask": 180
+      },
+      "endToEnd": {
+        "requestsPerCoarseOrMediumRun": 5,
+        "requestsPerFineRun": 14,
+        "inputTokensPerRun": 128000,
+        "outputTokensPerRun": 65536,
+        "secondsPerRun": 600,
+        "usageRequired": true
+      }
+    },
+    "retention": {
+      "maxRuns": 20,
+      "maxAgeDays": 7,
+      "maxBytes": 104857600,
+      "sourcePayloadPersisted": false,
+      "promptPersisted": false
+    },
+    "reviewProtocol": {
+      "version": 1,
+      "kind": "independent-subagent",
+      "model": "gpt-6-luna",
+      "reviewers": 2,
+      "adjudicatorOnDisagreement": true,
+      "hideStrategyAndAuthorLabels": true,
+      "numericThresholdsUnchanged": true,
+      "externalModelAuthorizationUnchanged": true
+    }
+  },
+  "modules": {
+    "M01": {
+      "requiredCheckIds": [
+        "m01:valid-spec-accepted",
+        "m01:invalid:missing-identity",
+        "m01:invalid:malformed-identity",
+        "m01:invalid:unknown-policy",
+        "m01:invalid:unknown-role",
+        "m01:invalid:unknown-granularity",
+        "m01:invalid:negative-budget",
+        "m01:invalid:non-finite-budget",
+        "m01:invalid:window-overflow",
+        "m01:invalid:output-reserve",
+        "m01:invalid:renderer-private-key",
+        "m01:invalid:unknown-action",
+        "m01:invalid:incompatible-config-version",
+        "m01:fingerprint-stable",
+        "m01:private-fields-rejected"
+      ],
+      "requiredMetricIds": [
+        "validSpecAccepted",
+        "invalidSpecsRejected",
+        "fingerprintStable",
+        "privateFieldsRejected"
+      ],
+      "limits": {
+        "invalidSpecs": 12
+      },
+      "assets": []
+    },
+    "M02": {
+      "requiredCheckIds": [
+        "m02:ordinary-project",
+        "m02:nested-ignore",
+        "m02:sensitive-path",
+        "m02:symlink-escape",
+        "m02:read-time-change",
+        "m02:unreadable-file",
+        "m02:file-size-limit",
+        "m02:text-fallback"
+      ],
+      "requiredMetricIds": [
+        "unauthorizedReads",
+        "staleSnapshotAccepted",
+        "cacheInvalidationPassed",
+        "textFallbackPassed"
+      ],
+      "limits": {
+        "fixtureClasses": 8
+      },
+      "assets": [
+        {
+          "id": "m02-fixtures",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M03": {
+      "requiredCheckIds": [
+        "m03:forged-id",
+        "m03:stale-snapshot",
+        "m03:path-escape",
+        "m03:overlapping-ranges",
+        "m03:same-text-distinct-source",
+        "m03:redaction-location",
+        "m03:capacity-exhaustion"
+      ],
+      "requiredMetricIds": [
+        "invalidEvidenceAccepted",
+        "sourcePayloadInTrace"
+      ],
+      "limits": {
+        "fixtureClasses": 7
+      },
+      "assets": [
+        {
+          "id": "m03-fixtures",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M04": {
+      "requiredCheckIds": [
+        "m04:get_overview:valid",
+        "m04:get_overview:invalid",
+        "m04:get_overview:unauthorized",
+        "m04:get_overview:cancel",
+        "m04:get_overview:budget-exhausted",
+        "m04:get_overview:duplicate",
+        "m04:list_symbols:valid",
+        "m04:list_symbols:invalid",
+        "m04:list_symbols:unauthorized",
+        "m04:list_symbols:cancel",
+        "m04:list_symbols:budget-exhausted",
+        "m04:list_symbols:duplicate",
+        "m04:search_text:valid",
+        "m04:search_text:invalid",
+        "m04:search_text:unauthorized",
+        "m04:search_text:cancel",
+        "m04:search_text:budget-exhausted",
+        "m04:search_text:duplicate",
+        "m04:read_region:valid",
+        "m04:read_region:invalid",
+        "m04:read_region:unauthorized",
+        "m04:read_region:cancel",
+        "m04:read_region:budget-exhausted",
+        "m04:read_region:duplicate",
+        "m04:read_declaration_context:valid",
+        "m04:read_declaration_context:invalid",
+        "m04:read_declaration_context:unauthorized",
+        "m04:read_declaration_context:cancel",
+        "m04:read_declaration_context:budget-exhausted",
+        "m04:read_declaration_context:duplicate"
+      ],
+      "requiredMetricIds": [
+        "unexpectedSideEffects",
+        "unsafeErrorLeaks"
+      ],
+      "limits": {
+        "tools": 5,
+        "casesPerTool": 6,
+        "minimumIndependentChecks": 30
+      },
+      "assets": [
+        {
+          "id": "m04-fixtures",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M05": {
+      "requiredCheckIds": [
+        "m05:normal-settlement",
+        "m05:investigation-exhaustion",
+        "m05:generation-reserve",
+        "m05:pre-request-failure",
+        "m05:dispatched-request-failure",
+        "m05:partial-receipt",
+        "m05:missing-receipt",
+        "m05:retry",
+        "m05:compensation",
+        "m05:cancellation",
+        "m05:duplicate-receipt",
+        "m05:unknown-after-recovery"
+      ],
+      "requiredMetricIds": [
+        "overspendAdmissions",
+        "doubleSettlements",
+        "unknownUsageTreatedAsZero",
+        "generationReserveProtected"
+      ],
+      "limits": {
+        "ledgerSequences": 12
+      },
+      "assets": [
+        {
+          "id": "m05-sequences",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M06": {
+      "requiredCheckIds": [
+        "m06:frozen-retrieval-tasks"
+      ],
+      "requiredMetricIds": [
+        "completeEvidenceTaskRate",
+        "invalidToolExecution",
+        "repeatedReadRate",
+        "limitViolations",
+        "usageComplete"
+      ],
+      "limits": {
+        "tasks": 20,
+        "repeatsPerTask": 2,
+        "completeEvidenceTaskRateMin": 0.9,
+        "invalidToolExecutionMax": 0,
+        "repeatedReadRateMax": 0.2,
+        "limitViolationsMax": 0,
+        "llmDecisionsPerTask": 3,
+        "toolCallsPerTask": 8,
+        "inputTokensPerTask": 18000,
+        "outputTokensPerTask": 6000,
+        "readBytesPerTask": 2097152,
+        "secondsPerTask": 180
+      },
+      "assets": [
+        {
+          "id": "m06-retrieval-tasks",
+          "path": "scripts/agentic/datasets/v1/retrieval-tasks.json",
+          "status": "available",
+          "required": true,
+          "sha256": "cf1c1f621600ae995b8e51776c886ef835adf74a42d44c8ad898403425f1a4d4"
+        },
+        {
+          "id": "m06-retrieval-labels",
+          "path": "scripts/agentic/datasets/v1/retrieval-labels.json",
+          "status": "available",
+          "required": true,
+          "sha256": "bde2306764264c38bc34fd1438ba0ae4ed49fc0ea904511e42623bc72a464634"
+        },
+        {
+          "id": "m06-projects",
+          "path": "scripts/agentic/datasets/v1/projects.json",
+          "status": "available",
+          "required": true,
+          "sha256": "ed91743803c28495d91e426d0c9a767d704aa548652114cd347f5b33a6d2d323"
+        }
+      ]
+    },
+    "M07": {
+      "requiredCheckIds": [
+        "m07:complete-pack",
+        "m07:exact-budget",
+        "m07:over-budget-by-one",
+        "m07:overlap",
+        "m07:same-text-distinct-source",
+        "m07:required-bundle-does-not-fit",
+        "m07:unknown-id",
+        "m07:stale-snapshot",
+        "m07:unicode",
+        "m07:document-excerpt",
+        "m07:declaration-context",
+        "m07:final-fit-truncation"
+      ],
+      "requiredMetricIds": [
+        "fabricatedSourceAccepted",
+        "silentRequiredBundleDrops",
+        "budgetViolations",
+        "deterministicReplay",
+        "dispatchManifestMatched"
+      ],
+      "limits": {
+        "fixtureClasses": 12
+      },
+      "assets": [
+        {
+          "id": "m07-fixtures",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M08": {
+      "requiredCheckIds": [
+        "m08:frozen-sufficient-evidence-tasks"
+      ],
+      "requiredMetricIds": [
+        "unpackedEvidenceCited",
+        "materialErrorRate",
+        "staticControlMaterialErrorRate",
+        "topicValueMean",
+        "staticControlTopicValueMean",
+        "usageComplete"
+      ],
+      "limits": {
+        "tasks": 12,
+        "languages": {
+          "Python": 4,
+          "JavaScript": 4,
+          "TypeScript": 4
+        },
+        "repeatsPerStrategy": 2,
+        "unpackedEvidenceCitedMax": 0,
+        "materialErrorRateAtMostStatic": true,
+        "topicValueDeltaMin": -0.2
+      },
+      "assets": [
+        {
+          "id": "m08-generation-tasks",
+          "path": "scripts/agentic/datasets/v1/generation-tasks.json",
+          "status": "available",
+          "required": true,
+          "sha256": "0930f2c553cc25915cfabb2f3144f5cdd8b18ed987ba6925a7d40d09e06e603e"
+        },
+        {
+          "id": "m08-generation-labels",
+          "path": "scripts/agentic/datasets/v1/generation-labels.json",
+          "status": "available",
+          "required": true,
+          "sha256": "7e47b958c8ffffa1c10d199395b2f7d65bd2c327a4c0e0b0ee4973e0161b7f77"
+        },
+        {
+          "id": "m08-projects",
+          "path": "scripts/agentic/datasets/v1/projects.json",
+          "status": "available",
+          "required": true,
+          "sha256": "ed91743803c28495d91e426d0c9a767d704aa548652114cd347f5b33a6d2d323"
+        }
+      ]
+    },
+    "M09": {
+      "requiredCheckIds": [
+        "m09:frozen-review-and-repair-set"
+      ],
+      "requiredMetricIds": [
+        "errorRecall",
+        "falsePositiveRate",
+        "correctRepairs",
+        "introducedMaterialErrors",
+        "budgetCompliant"
+      ],
+      "limits": {
+        "erroneousSamples": 40,
+        "correctSamples": 40,
+        "repairSamples": 20,
+        "errorRecallMin": 0.85,
+        "falsePositiveRateMax": 0.1,
+        "correctRepairsMin": 14,
+        "introducedMaterialErrorsMax": 0
+      },
+      "assets": [
+        {
+          "id": "m09-review-packet",
+          "path": "scripts/agentic/datasets/v1/review-packet.json",
+          "status": "available",
+          "required": true,
+          "sha256": "26f0b354d3b850b9778ad244749e35d7ef76480142c66a047cad2e6070187385"
+        },
+        {
+          "id": "m09-review-key",
+          "path": "scripts/agentic/datasets/v1/review-key.json",
+          "status": "available",
+          "required": true,
+          "sha256": "2d36c3399be608668d08f6dc143c5a42a51ba48ae1b9d7719ceac17d432a358e"
+        },
+        {
+          "id": "m09-repair-samples",
+          "path": "scripts/agentic/datasets/v1/repair-samples.json",
+          "status": "available",
+          "required": true,
+          "sha256": "c4bc19d0eccaa8ae6f6e7b4ad8572df7605a7add2f177c703eb73aafe2ba0780"
+        },
+        {
+          "id": "m09-repair-key",
+          "path": "scripts/agentic/datasets/v1/repair-key.json",
+          "status": "available",
+          "required": true,
+          "sha256": "b54bc2fa7ce4c6cf8e32e549e98f128173cb62b1d6e3d87f0a405dd8204ad553"
+        }
+      ]
+    },
+    "M10": {
+      "requiredCheckIds": [
+        "m10:scanning:cancel",
+        "m10:scanning:crash",
+        "m10:scanning:late-event",
+        "m10:investigating:cancel",
+        "m10:investigating:crash",
+        "m10:investigating:late-event",
+        "m10:tool-execution:cancel",
+        "m10:tool-execution:crash",
+        "m10:tool-execution:late-event",
+        "m10:packing:cancel",
+        "m10:packing:crash",
+        "m10:packing:late-event",
+        "m10:generating:cancel",
+        "m10:generating:crash",
+        "m10:generating:late-event",
+        "m10:validating:cancel",
+        "m10:validating:crash",
+        "m10:validating:late-event",
+        "m10:reviewing:cancel",
+        "m10:reviewing:crash",
+        "m10:reviewing:late-event",
+        "m10:revising:cancel",
+        "m10:revising:crash",
+        "m10:revising:late-event",
+        "m10:persisting:cancel",
+        "m10:persisting:crash",
+        "m10:persisting:late-event",
+        "m10:old-draft",
+        "m10:missing-snapshot",
+        "m10:disk-failure",
+        "m10:duplicate-start",
+        "m10:cross-project"
+      ],
+      "requiredMetricIds": [
+        "staleWrites",
+        "duplicateDispatchesOnRecovery",
+        "oldDataOverwritten"
+      ],
+      "limits": {
+        "phases": 9,
+        "lifecycleChecksPerPhase": 3,
+        "otherChecks": 5,
+        "minimumIndependentChecks": 32
+      },
+      "assets": [
+        {
+          "id": "m10-lifecycle-fixtures",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M11": {
+      "requiredCheckIds": [
+        "m11:scenario:normal",
+        "m11:scenario:out-of-order",
+        "m11:scenario:cancellation",
+        "m11:scenario:tool-failure",
+        "m11:scenario:model-stream-interruption",
+        "m11:scenario:unknown-usage",
+        "m11:scenario:trace-write-failure",
+        "m11:scenario:missing-evidence-snapshot",
+        "m11:replay-mode:deterministic-tools",
+        "m11:replay-mode:recorded-model",
+        "m11:replay-mode:real-model"
+      ],
+      "requiredMetricIds": [
+        "requiredSpanCoverage",
+        "lineageValidity",
+        "secretLeaks",
+        "fabricatedReplay",
+        "replayModesDistinguished"
+      ],
+      "limits": {
+        "scenarioClasses": 8,
+        "requiredSpanCoverageMin": 1,
+        "lineageValidityMin": 1,
+        "secretLeaksMax": 0,
+        "fabricatedReplayMax": 0
+      },
+      "requiredSpans": [
+        "run.started",
+        "snapshot.ready",
+        "investigation.started",
+        "tool.completed",
+        "evidence.created",
+        "packing.completed",
+        "generation.started",
+        "generation.completed",
+        "validation.completed",
+        "run.terminal"
+      ],
+      "assets": [
+        {
+          "id": "m11-scenarios",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M12": {
+      "requiredCheckIds": [
+        "m12:static:first-generation",
+        "m12:static:cancel-investigation",
+        "m12:static:cancel-generation",
+        "m12:static:compatible-recovery",
+        "m12:static:project-switch-late-completion",
+        "m12:static:read-legacy-result",
+        "m12:static:stale-snapshot-citation",
+        "m12:static:markdown-export-glossary",
+        "m12:agentic:first-generation",
+        "m12:agentic:cancel-investigation",
+        "m12:agentic:cancel-generation",
+        "m12:agentic:compatible-recovery",
+        "m12:agentic:project-switch-late-completion",
+        "m12:agentic:read-legacy-result",
+        "m12:agentic:stale-snapshot-citation",
+        "m12:agentic:markdown-export-glossary"
+      ],
+      "requiredMetricIds": [
+        "workflowOk",
+        "electronExitCode",
+        "fixtureDeleted",
+        "crossProjectUpdates",
+        "invalidCitationNavigation"
+      ],
+      "limits": {
+        "journeysPerStrategy": 8,
+        "strategies": 2
+      },
+      "assets": [
+        {
+          "id": "m12-journeys",
+          "status": "not-materialized",
+          "sha256": null
+        }
+      ]
+    },
+    "M13": {
+      "requiredCheckIds": [
+        "m13:holdout-matrix",
+        "m13:blind-review-and-adjudication",
+        "m13:receipts-and-failures-accounted"
+      ],
+      "requiredMetricIds": [
+        "releaseGatePassed",
+        "relativeMaterialErrorReduction",
+        "coreFactCoverageDelta",
+        "topicValueDelta",
+        "totalTokenRatio",
+        "p95LatencyRatio",
+        "allSafetyAndBudgetGatesPassed"
+      ],
+      "limits": {
+        "repositories": 4,
+        "repositoriesByLanguage": {
+          "Python": 2,
+          "JavaScript": 1,
+          "TypeScript": 1
+        },
+        "granularities": [
+          "coarse",
+          "medium",
+          "fine"
+        ],
+        "strategies": [
+          "static",
+          "agentic"
+        ],
+        "repeatsPerCell": 2,
+        "endToEndRuns": 48,
+        "relativeMaterialErrorReductionMin": 0.2,
+        "coreFactCoverageDeltaMin": 0,
+        "topicValueDeltaMin": -0.2,
+        "maxTokenRatio": 1.1,
+        "maxP95LatencyRatio": 1.5,
+        "staticZeroErrorCandidateErrorRateMax": 0,
+        "staticZeroErrorCoverageDeltaMin": 0.05,
+        "blindReviewers": 2,
+        "adjudicatorOnDisagreement": true
+      },
+      "assets": [
+        {
+          "id": "m13-holdout-repositories",
+          "path": "scripts/agentic/assets/holdout-repositories.v1.json",
+          "status": "available",
+          "required": true,
+          "sha256": "68862c6b457082a03603503b9e58d36042d465613eb8f00f312ad8d200ab585c"
+        },
+        {
+          "id": "m13-review-rubric",
+          "path": "scripts/agentic/assets/review-rubric.v2.json",
+          "status": "available",
+          "required": true,
+          "sha256": "48f2fb6b033dc998c8535c3c36105d1a7cc713b3a210eed559f49895db9ddc3b"
+        },
+        {
+          "id": "m13-review-roles",
+          "path": "scripts/agentic/reviews/v1/roles.json",
+          "status": "available",
+          "required": true,
+          "sha256": "a6d95412ba7a1f86c5ed5b53d46390f10fc1940e18adba4e60f5f01ed8239d28"
+        },
+        {
+          "id": "m13-real-run-matrix-and-blind-results",
+          "status": "not-materialized",
+          "required": true,
+          "sha256": null
+        }
+      ]
+    },
+    "P0": {
+      "requiredCheckIds": [
+        "p0:task-matrix",
+        "p0:source-evidence-integrity",
+        "p0:review-balance",
+        "p0:repair-independence",
+        "p0:oracle-isolation",
+        "p0:independent-review-a",
+        "p0:independent-review-b",
+        "p0:adjudication",
+        "p0:holdout-freeze",
+        "p0:review-protocol",
+        "p0:baseline-and-thresholds"
+      ],
+      "requiredMetricIds": [
+        "taskMatrixComplete",
+        "sourceEvidenceValid",
+        "reviewSamplesBalanced",
+        "repairSamplesIndependent",
+        "oracleIsolated",
+        "independentReviewers",
+        "adjudicationComplete",
+        "holdoutFrozen",
+        "reviewProtocolBound",
+        "thresholdsUnchanged"
+      ],
+      "assets": [
+        {
+          "id": "p0-projects",
+          "path": "scripts/agentic/datasets/v1/projects.json",
+          "status": "available",
+          "required": true,
+          "sha256": "ed91743803c28495d91e426d0c9a767d704aa548652114cd347f5b33a6d2d323"
+        },
+        {
+          "id": "p0-retrieval-tasks",
+          "path": "scripts/agentic/datasets/v1/retrieval-tasks.json",
+          "status": "available",
+          "required": true,
+          "sha256": "cf1c1f621600ae995b8e51776c886ef835adf74a42d44c8ad898403425f1a4d4"
+        },
+        {
+          "id": "p0-retrieval-labels",
+          "path": "scripts/agentic/datasets/v1/retrieval-labels.json",
+          "status": "available",
+          "required": true,
+          "sha256": "bde2306764264c38bc34fd1438ba0ae4ed49fc0ea904511e42623bc72a464634"
+        },
+        {
+          "id": "p0-generation-tasks",
+          "path": "scripts/agentic/datasets/v1/generation-tasks.json",
+          "status": "available",
+          "required": true,
+          "sha256": "0930f2c553cc25915cfabb2f3144f5cdd8b18ed987ba6925a7d40d09e06e603e"
+        },
+        {
+          "id": "p0-generation-labels",
+          "path": "scripts/agentic/datasets/v1/generation-labels.json",
+          "status": "available",
+          "required": true,
+          "sha256": "7e47b958c8ffffa1c10d199395b2f7d65bd2c327a4c0e0b0ee4973e0161b7f77"
+        },
+        {
+          "id": "p0-review-packet",
+          "path": "scripts/agentic/datasets/v1/review-packet.json",
+          "status": "available",
+          "required": true,
+          "sha256": "26f0b354d3b850b9778ad244749e35d7ef76480142c66a047cad2e6070187385"
+        },
+        {
+          "id": "p0-review-key",
+          "path": "scripts/agentic/datasets/v1/review-key.json",
+          "status": "available",
+          "required": true,
+          "sha256": "2d36c3399be608668d08f6dc143c5a42a51ba48ae1b9d7719ceac17d432a358e"
+        },
+        {
+          "id": "p0-repair-samples",
+          "path": "scripts/agentic/datasets/v1/repair-samples.json",
+          "status": "available",
+          "required": true,
+          "sha256": "c4bc19d0eccaa8ae6f6e7b4ad8572df7605a7add2f177c703eb73aafe2ba0780"
+        },
+        {
+          "id": "p0-repair-key",
+          "path": "scripts/agentic/datasets/v1/repair-key.json",
+          "status": "available",
+          "required": true,
+          "sha256": "b54bc2fa7ce4c6cf8e32e549e98f128173cb62b1d6e3d87f0a405dd8204ad553"
+        },
+        {
+          "id": "review-a",
+          "path": "scripts/agentic/reviews/v1/reviewer-a.json",
+          "status": "available",
+          "required": true,
+          "sha256": "8efba36bbcf0c6b417ff07837842815061c2abc06298c480bbdb566496f0bbe7"
+        },
+        {
+          "id": "review-b",
+          "path": "scripts/agentic/reviews/v1/reviewer-b.json",
+          "status": "available",
+          "required": true,
+          "sha256": "45c41f4b12f66483011f484a8030d3780a8b9cb3d9d317168eb9d1bc7bd41cde"
+        },
+        {
+          "id": "adjudication",
+          "path": "scripts/agentic/reviews/v1/adjudication.json",
+          "status": "available",
+          "required": true,
+          "sha256": "029eb9121ea0de995b466a0463137575aea6c9af7c3978a9ae2a6880e4e05272"
+        },
+        {
+          "id": "review-roles",
+          "path": "scripts/agentic/reviews/v1/roles.json",
+          "status": "available",
+          "required": true,
+          "sha256": "a6d95412ba7a1f86c5ed5b53d46390f10fc1940e18adba4e60f5f01ed8239d28"
+        },
+        {
+          "id": "review-rubric",
+          "path": "scripts/agentic/assets/review-rubric.v2.json",
+          "status": "available",
+          "required": true,
+          "sha256": "48f2fb6b033dc998c8535c3c36105d1a7cc713b3a210eed559f49895db9ddc3b"
+        },
+        {
+          "id": "holdout-repositories",
+          "path": "scripts/agentic/assets/holdout-repositories.v1.json",
+          "status": "available",
+          "required": true,
+          "sha256": "68862c6b457082a03603503b9e58d36042d465613eb8f00f312ad8d200ab585c"
+        },
+        {
+          "id": "blind-packet",
+          "path": "scripts/agentic/reviews/v1/blind-packet.json",
+          "status": "available",
+          "required": true,
+          "sha256": "66057b38e9df2fa9f217e0bf56a8548a7f22134e248d1a98bf9812ce44be2866"
+        },
+        {
+          "id": "holdout-labels",
+          "path": "scripts/agentic/assets/holdout-labels.v1.json",
+          "status": "available",
+          "required": true,
+          "sha256": "56800c5e83cbf0731c708b9d2245915d1948af366e508931e5d38cf5d0f20ef9"
+        },
+        {
+          "id": "review-invocations",
+          "path": "scripts/agentic/reviews/v1/invocations.json",
+          "status": "available",
+          "required": true,
+          "sha256": "d20de24aae3f6841a859d6da1dff730391eb0fc86712ef22163bd621ae0a8279"
+        }
+      ]
+    }
+  },
+  "realOnlyModules": [
+    "M06",
+    "M08",
+    "M09",
+    "M13"
+  ],
+  "authorization": {
+    "realRunsApproved": false,
+    "reference": null
+  },
+  "assetPolicy": "Agent-authored and independently agent-reviewed development data is explicit. Real holdout quality requires separate actual runs, usage receipts, and blinded source-based reviews. No human-review claim."
+}

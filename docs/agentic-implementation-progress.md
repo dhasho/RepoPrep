@@ -1,12 +1,12 @@
 # Agentic 重构实施账本
 
-日期：2026-11-06。验收标准沿用 [PLAN.md](../PLAN.md) v1.1 第 11 节。当前交付是 P0 的冻结资产和 P1 的准备代码；**P0 未通过，尚未进入 P2，没有完成默认策略切换**。
+日期：2026-11-06。数值标准沿用 [PLAN.md](../PLAN.md) v1.1 第 11 节；评审人员来源按 v1.3 和用户授权改为独立子代理。**P0 和 P1 最小静态链路已通过，继续实施 P2；完整 M11、真实质量验收及默认策略切换尚未完成。**
 
 ## 工作包与边界
 
 | 工作包 | 关联目标 | 输入 → 输出 | 状态与证据 |
 | --- | --- | --- | --- |
-| 验收基线 | G4/G5、P0、M13 最小实现 | PLAN v1.1、`9ef10ca` → 固定 manifest、rubric、四个新保留集 SHA、fail-closed runner | 数值和身份已冻结；任务及人工标注尚未冻结，不能判 P0 完成 |
+| 验收基线 | G4/G5、P0、M13 最小实现 | PLAN 数值、`9ef10ca` → manifest v2、代理 rubric、任务/标注、四个保留集 SHA、fail-closed runner | P0 通过；并非 M13 真实质量门禁通过 |
 | 运行契约 | G2/G6、M01 | 不可信公开配置 → 不可变 RunSpec、题量、配置指纹和预算预留 | 实际断言覆盖 12 类非法输入；`verify:agentic:m01` 单独验收 |
 | 静态上下文边界 | G2、P1 | 原授权 ScanResult → 原 BuiltContext | static adapter 委托原 builder；没有增加 renderer/IPC 能力 |
 | Metadata trace | G3/G4、M11 最小实现 | 主进程阶段、最终 dispatch、usage → 内存事件 | 不落源码、prompt 或凭据；缺证据链时明确 unavailable；完整 M11 仍未完成 |
@@ -14,14 +14,15 @@
 
 实现文件限定于 `electron/services/workflow/`、生成器接缝、`scripts/agentic/`、对应测试及实施文档。没有依赖更新、凭据迁移、持久化版本变更或真实模型调用。共享文件由主代理串行整合，模块实现和复核由 Luna 子代理在隔离 worktree 完成。
 
-## P0 仍缺少的资产
+## P0 已冻结的资产
 
-- 20 个检索任务及必要证据组，包含 PLAN 要求的语言、跨文件、继承/回调、条件/异常、配置差异和索引失败覆盖。
+- 12 个 `development-synthetic` 项目，20 个检索任务及必要证据组，包含各语言、跨文件、继承/回调、条件/异常、配置差异和索引失败覆盖。
 - 12 个充分证据题答任务（Python/JS/TS 各 4 个），以及独立固定的源码证据。
-- 40 个错误样本、40 个正确样本和 20 个独立修订样本及人工标注。
-- 两名盲评人员和一名分歧裁定人员；按固定 rubric 实际完成评审后才能产生发布质量结论。
+- 40 个错误样本、40 个正确样本和 20 个独立修订样本及代理标注。
+- 两个不继承实现/作者标签上下文的评审代理，各逐项审阅全部80个题答；第三个代理处理65处评分分歧并复核20/12/20项标注。五处初次证据缺口已修正，失败记录和修订前版本保留。
+- 四个固定 SHA 的真实保留集及48条复合事实，标注代理单独读取源码；实现代理不接收事实清单。只读校验器核对真实工作树、远端身份、文件与范围哈希。
 
-已选定的新保留集为 `encode/httpx`、`pallets/itsdangerous`、`caolan/async`、`colinhacks/zod`。SHA 和语言配额存于版本化资产；目前仅查询了公开提交身份，没有读取或据其源码调参。原四仓继续作为开发回归集。未产生真实模型质量、token 或延迟对照成绩；外部模型调用次数为 **0**。
+新保留集为 `encode/httpx`、`pallets/itsdangerous`、`caolan/async`、`colinhacks/zod`。源码仅供独立数据代理标注和只读哈希校验，没有用于实现调参。原四仓继续作为开发回归集。尚无真实生成质量、token 或延迟对照成绩；未调用用户配置的外部模型端点。代理标注/评审的底层 token 收据不可得，成本记为 unknown，不补零，不计作生产运行 usage。
 
 ## 契约决策
 
@@ -38,7 +39,9 @@ Trace 目前只在本次进程内存中存在，可由主进程显式注入；�
 | 命令 | 本次结果 |
 | --- | --- |
 | `npm run typecheck` | Node/Web 均通过 |
-| `npm run test:agentic` | 30/30 通过（契约、trace、静态等价性及 runner） |
+| `npm run test:agentic` | 41/41 通过（契约、trace、静态等价性、runner、数据契约及冻结安全） |
+| `npm run test:agentic:holdout` | 正常本机权限下7/7通过、0 skip，包含实际链接逃逸拒绝 |
+| `npm run verify:agentic:p0` | 11项必需检查通过，failed/missing/skipped/unknown均为0 |
 | `npm run test:question-budget` | 118/118 通过 |
 | `npm run test:ipc` | 268/268 通过 |
 | `npm run test:recovery` | 34/34 通过 |
@@ -49,4 +52,4 @@ Trace 目前只在本次进程内存中存在，可由主进程显式注入；�
 
 首次普通沙箱下的 IPC/恢复测试遇到临时目录重命名及 loopback 权限失败，Electron 也未输出成功 verdict；失败日志保留。在正常本机权限下使用合成凭据和本地 HTTP 重跑，通过不等于真实服务验收。
 
-回退时移除 `contextProvider`/`workflowTrace` 注入即沿原 static 路径运行。没有生产注入点或默认策略变更，没有旧数据重写；如需撤销准备代码，可回退本 PR 的提交。P0 没有通过前，不开启调查控制器或真实实验。
+回退时移除 `contextProvider`/`workflowTrace` 注入即沿原 static 路径运行。没有默认策略变更或旧数据重写；如需撤销新代码，可回退本 PR 的提交。P2 必须通过 M02–M05 门禁后才进入 P3；代理评审不替代真实控制器/生成器的运行和 usage 收据。

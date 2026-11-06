@@ -1,6 +1,6 @@
 # ADR: Agentic evaluation foundation and honest gates
 
-- Status: accepted as preparatory P0/P1 infrastructure; P0 remains incomplete
+- Status: historical foundation decision; P0 subsequently passed under the user-authorized `agent-review-v1` protocol in [the replacement ADR](agentic-subagent-evaluation.md)
 - Date: 2026-11-06
 - Baseline: `9ef10caae918a2b86c27afdd8b19cbe5ad40869c`
 - Scope: the frozen numerical standards in `PLAN.md` v1.1 remain authoritative

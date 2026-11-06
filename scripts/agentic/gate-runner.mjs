@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-export const DEFAULT_MANIFEST_PATH = path.join(here, 'manifest.v1.json')
+export const DEFAULT_MANIFEST_PATH = path.join(here, 'manifest.v2.json')
 export const GATE_MODES = Object.freeze(['synthetic', 'real'])
 const checkOutcome = Symbol('agentic-gate-check-outcome')
 
@@ -29,11 +29,11 @@ export function canonicalJson(value) {
 
 export function validateManifest(manifest) {
   const problems = []
-  if (manifest?.manifestVersion !== 1) problems.push('manifestVersion must be 1')
+  if (![1, 2].includes(manifest?.manifestVersion)) problems.push('manifestVersion must be 1 or 2')
   if (!/^[0-9a-f]{40}$/.test(manifest?.baselineSourceCommit ?? '')) problems.push('baselineSourceCommit must be a full commit hash')
   if (!manifest?.modules || typeof manifest.modules !== 'object') problems.push('modules are required')
   for (const [moduleId, definition] of Object.entries(manifest?.modules ?? {})) {
-    if (!/^M\d{2}$/.test(moduleId)) problems.push(`invalid module id: ${moduleId}`)
+    if (!/^(?:M\d{2}|P0)$/.test(moduleId)) problems.push(`invalid module id: ${moduleId}`)
     if (!Array.isArray(definition.requiredCheckIds) || definition.requiredCheckIds.length === 0) {
       problems.push(`${moduleId}: requiredCheckIds must be a non-empty array`)
     } else if (new Set(definition.requiredCheckIds).size !== definition.requiredCheckIds.length) {
@@ -41,10 +41,11 @@ export function validateManifest(manifest) {
     }
     if (!Array.isArray(definition.requiredMetricIds)) problems.push(`${moduleId}: requiredMetricIds must be an array`)
     for (const asset of definition.assets ?? []) {
+      if (asset.required !== undefined && typeof asset.required !== 'boolean') problems.push(`${moduleId}/${asset.id}: required must be boolean`)
       if (asset.status === 'not-materialized' && asset.sha256 !== null) {
         problems.push(`${moduleId}/${asset.id}: missing asset must have null SHA256`)
       }
-      if (asset.path && !/^[0-9a-f]{64}$/.test(asset.sha256 ?? '')) problems.push(`${moduleId}/${asset.id}: path asset needs a SHA256`)
+      if (asset.status === 'available' && (typeof asset.path !== 'string' || !asset.path || !/^[0-9a-f]{64}$/.test(asset.sha256 ?? ''))) problems.push(`${moduleId}/${asset.id}: available asset needs a path and SHA256`)
     }
   }
   return problems
@@ -90,7 +91,9 @@ async function verifyAssets(definition, sourceRoot) {
     return { missing: (definition?.assets ?? []).map((asset) => asset.id), mismatched: (definition?.assets ?? []).filter((asset) => asset.path).map((asset) => asset.id) }
   }
   for (const asset of definition?.assets ?? []) {
-    if (asset.status !== 'available') missing.push(asset.id)
+    if (asset.status !== 'available' && asset.required !== false) missing.push(asset.id)
+    if (asset.status === 'available' && !asset.path) { mismatched.push(asset.id); continue }
+    if (asset.status === 'not-materialized' && asset.sha256 === null) continue
     if (!asset.path) continue
     try {
       if (path.isAbsolute(asset.path)) throw new Error('absolute asset path')
@@ -157,7 +160,7 @@ export async function runGate({
   outRoot = path.join(sourceRoot, '.validation', 'agentic'),
   authorization = null,
   expectedHashes = null,
-  manifestLockPath = path.join(path.dirname(manifestPath), 'manifest.lock.json'),
+  manifestLockPath = path.join(path.dirname(manifestPath), path.basename(manifestPath) === 'manifest.v2.json' ? 'manifest.v2.lock.json' : 'manifest.lock.json'),
   printSummary = false
 }) {
   const rawManifest = manifest === undefined ? await readFile(manifestPath) : null
@@ -175,7 +178,7 @@ export async function runGate({
   }
   const malformed = validateManifest(frozenManifest)
   const definition = frozenManifest.modules?.[moduleId]
-  const safeModuleId = /^M\d{2}$/.test(moduleId ?? '') ? moduleId : null
+  const safeModuleId = /^(?:M\d{2}|P0)$/.test(moduleId ?? '') ? moduleId : null
   const validMode = GATE_MODES.includes(mode)
   const checkEntries = normalizeChecks(checks)
   const byId = new Map()
