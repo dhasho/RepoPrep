@@ -224,7 +224,8 @@ export function createChecks() {
       assert.deepEqual(ctx.manifest.configuration.limits, original.configuration.limits)
       for (const [id, definition] of Object.entries(original.modules)) {
         assert.deepEqual(ctx.manifest.modules[id].limits, definition.limits)
-        assert.deepEqual(ctx.manifest.modules[id].requiredCheckIds, definition.requiredCheckIds)
+        assert.ok(definition.requiredCheckIds.every(checkId => ctx.manifest.modules[id].requiredCheckIds.includes(checkId)))
+        if (definition.requiredSpans) assert.deepEqual(ctx.manifest.modules[id].requiredSpans, definition.requiredSpans)
       }
       metric(ctx, 'thresholdsUnchanged', true)
     }]

@@ -26,6 +26,7 @@ type Analyzer = typeof analyzeSource
 
 function fail(code: ConstructorParameters<typeof WorkflowError>[0]): never { throw new WorkflowError(code) }
 function validTag(value: unknown): value is string { return typeof value === 'string' && value.length > 0 && value.length <= 128 && /^[\w.-]+$/.test(value) }
+function validIdentity(value: unknown): value is string { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value) }
 function digest(value: string): string { return createHash('sha256').update(value, 'utf8').digest('hex') }
 function canonical(value: unknown): string {
   if (typeof value === 'bigint') return `"${value.toString()}n"`
@@ -71,7 +72,7 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
   reader?: Reader
   analyzer?: Analyzer
 }): Promise<WorkflowProjectSnapshot> {
-  if (!scan || typeof scan !== 'object' || !Array.isArray(scan.files) || !options || !validTag(options.projectId)) fail('invalid-argument')
+  if (!scan || typeof scan !== 'object' || !Array.isArray(scan.files) || !options || !validIdentity(options.projectId)) fail('invalid-argument')
   const policyVersion = options.policyVersion ?? DEFAULT_POLICY
   const redactionVersion = options.redactionVersion ?? DEFAULT_REDACTION
   const parserVersion = options.parserVersion ?? DEFAULT_PARSER

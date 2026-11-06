@@ -176,7 +176,14 @@
         "m04:read_declaration_context:unauthorized",
         "m04:read_declaration_context:cancel",
         "m04:read_declaration_context:budget-exhausted",
-        "m04:read_declaration_context:duplicate"
+        "m04:read_declaration_context:duplicate",
+        "m04:read-reservation-and-cache",
+        "m04:read-budget-exhausted",
+        "m04:cancel-during-read",
+        "m04:time-budget-after-read",
+        "m04:unsupported-index-fallback",
+        "m04:stale-cache-denied",
+        "m04:side-effects-and-error-redaction"
       ],
       "requiredMetricIds": [
         "unexpectedSideEffects",
@@ -190,8 +197,10 @@
       "assets": [
         {
           "id": "m04-fixtures",
-          "status": "not-materialized",
-          "sha256": null
+          "path": "scripts/agentic/fixtures/m04.json",
+          "status": "available",
+          "required": true,
+          "sha256": "4df76ba93e69c2596d1a17750db875044c34979c4f64c46a32bab3508e0a4d97"
         }
       ]
     },
@@ -221,9 +230,11 @@
       },
       "assets": [
         {
-          "id": "m05-sequences",
-          "status": "not-materialized",
-          "sha256": null
+          "id": "m05-fixtures",
+          "path": "scripts/agentic/fixtures/m05.json",
+          "status": "available",
+          "required": true,
+          "sha256": "f213676a8c5b09147e06c54c4fb5d2250640dc7a52d9595869314ff31a992b06"
         }
       ]
     },

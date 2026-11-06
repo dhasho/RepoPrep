@@ -191,3 +191,41 @@ test('gateway retries and compensation share actual request cap', async () => {
   await assert.rejects(gateway.complete({ id: 'attempt-3', stage: 'repair', messages }))
   assert.equal(ledger.snapshot().total.dispatchedRequests, 2)
 })
+
+test('late unguarded transport keeps unknown costs and asynchronous final consumers cannot overrun the deadline', async () => {
+  let time = 0
+  const runSpec = spec(); const ledger = createBudgetLedger(runSpec, { clock: () => time })
+  const unguarded = createModelGateway(runSpec, profile(), ledger, { transport: async () => { time = 600_000; return 'untracked response' } })
+  await assert.rejects(unguarded.complete({ id: 'late-unguarded', stage: 'generation', messages }), error => hasCode(error, 'model-failed'))
+  assert.equal(ledger.snapshot().usageComplete, false)
+  assert.equal(ledger.snapshot().total.reservedRequests, 1)
+  assert.equal(ledger.snapshot().total.outputTokens, runSpec.generationOutputTokens)
+
+  time = 0
+  const consumerLedger = createBudgetLedger(runSpec, { clock: () => time })
+  const gateway = createModelGateway(runSpec, profile(), consumerLedger, { transport: async (_p, _m, delta, options) => {
+    options.beforeRequest!(); await delta('tail'); options.onUsage!(usage); return 'tail'
+  } })
+  await assert.rejects(gateway.complete({ id: 'late-consumer', stage: 'generation', messages, onDelta: async () => { time = 600_000 } }), error => hasCode(error, 'budget-exhausted'))
+  assert.deepEqual(consumerLedger.snapshot().total.actualProviderUsage, usage)
+})
+
+test('a transport ignoring cancellation cannot return a successful result', async () => {
+  const controller = new AbortController(); const ledger = createBudgetLedger(spec())
+  const gateway = createModelGateway(spec(), profile(), ledger, { transport: async (_p, _m, _d, options) => {
+    options.beforeRequest!(); options.onUsage!(usage); controller.abort(); return 'late response'
+  } })
+  await assert.rejects(gateway.complete({ id: 'ignored-cancel', stage: 'generation', messages, signal: controller.signal }), error => hasCode(error, 'cancelled'))
+  assert.deepEqual(ledger.snapshot().total.actualProviderUsage, usage)
+})
+
+test('credential holdback preserves Unicode code points in forwarded deltas', async () => {
+  const text = `😀${'x'.repeat(profile().apiKey.length - 2)}`
+  const chunks: string[] = []
+  const gateway = createModelGateway(spec(), profile(), createBudgetLedger(spec()), { transport: async (_p, _m, delta, options) => {
+    options.beforeRequest!(); await delta(text); options.onUsage!(usage); return text
+  } })
+  await gateway.complete({ id: 'unicode-filter', stage: 'generation', messages, onDelta: delta => { chunks.push(delta) } })
+  assert.equal(chunks.join(''), text)
+  assert.ok(chunks.every(chunk => Array.from(chunk).every(char => char.length === 2 || !/[\uD800-\uDFFF]/.test(char))))
+})

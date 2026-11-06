@@ -49,6 +49,8 @@ const cloneAction = action => ({ ...action, args: { ...action.args } })
 
 export function createChecks() {
   const checks = new Map()
+  let unsafeErrorLeaks = 0
+  let unexpectedSideEffects = 0
   for (const tool of tools) {
     checks.set(`m04:${tool}:valid`, async ctx => {
       const f = await fixture()
@@ -62,8 +64,9 @@ export function createChecks() {
         if (tool === 'search_text') assert.equal(result.data.matches.length, 1, 'search treats metacharacters literally')
         if (tool === 'list_symbols') assert.equal(result.data.indexStatus, 'available')
         if (tool === 'read_declaration_context') assert.equal(result.data.contextMode, 'declaration')
-        assert.equal(JSON.stringify(result).includes('sk-proj-abcdefghijklmnop'), false)
-        ctx.recordMetric('unsafeErrorLeaks', 0, 'assertion:m04:redacted-output-and-static-errors')
+        const leaked = JSON.stringify(result).includes('sk-proj-abcdefghijklmnop') || JSON.stringify(result).includes(f.root)
+        unsafeErrorLeaks += Number(leaked)
+        assert.equal(leaked, false)
         return { valid: true, evidenceCount: result.evidenceIds.length }
       } finally { await rm(f.root, { recursive: true, force: true }) }
     })
@@ -82,10 +85,8 @@ export function createChecks() {
         assert.equal((await f.gateway.execute({ actionId: 'nested-getter', tool: 'search_text', args: { query: 'x', fileIds: hostileIds } })).status, 'rejected')
         const hostile = Object.assign(Object.create({ polluted: true }), actions[tool](f))
         assert.equal((await f.gateway.execute(hostile)).status, 'rejected')
-        if (tool === 'get_overview') {
-          ctx.recordMetric('unexpectedSideEffects', 0, 'assertion:m04:invalid-input-does-not-create-read-evidence-or-filesystem-effects')
-          ctx.recordMetric('unsafeErrorLeaks', 0, 'assertion:m04:invalid-getter-errors-are-static')
-        }
+        unexpectedSideEffects += f.counts.toolCalls + f.store.metadata().records
+        assert.equal(unexpectedSideEffects, 0)
         return { unknownKeysAndAccessorsRejected: true }
       } finally { await rm(f.root, { recursive: true, force: true }) }
     })
@@ -249,8 +250,8 @@ export function createChecks() {
       const after = JSON.stringify({ files: f.snapshot.files, store: f.store.metadata(), reads: f.counts })
       assert.notEqual(before, after, 'the rejected operation can consume a tool call but creates no evidence')
       assert.equal(f.store.metadata().records, 0)
-      ctx.recordMetric('unexpectedSideEffects', 0, 'assertion:m04:no-project-mutation-or-extra-capability')
-      ctx.recordMetric('unsafeErrorLeaks', 0, 'assertion:m04:static-result-errors')
+      ctx.recordMetric('unexpectedSideEffects', unexpectedSideEffects, 'assertion:m04:no-project-mutation-or-extra-capability')
+      ctx.recordMetric('unsafeErrorLeaks', unsafeErrorLeaks, 'assertion:m04:static-result-errors')
       return { noProjectWritesAndNoUnsafeErrorText: true }
     } finally { await rm(f.root, { recursive: true, force: true }) }
   })
@@ -259,5 +260,5 @@ export function createChecks() {
 
 export const checks = createChecks()
 const manifest = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../manifest.v2.json', import.meta.url), 'utf8'))
-assert.deepEqual([...checks.keys()].filter(id => id.startsWith('m04:') && id.split(':').length === 3), manifest.modules.M04.requiredCheckIds)
+assert.deepEqual([...checks.keys()], manifest.modules.M04.requiredCheckIds)
 assert.equal(checks.size, 37)

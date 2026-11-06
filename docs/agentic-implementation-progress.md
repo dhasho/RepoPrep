@@ -1,6 +1,6 @@
 # Agentic 重构实施账本
 
-日期：2026-11-06。数值标准沿用 [PLAN.md](../PLAN.md) v1.1 第 11 节；评审人员来源按 v1.3 和用户授权改为独立子代理。**P0 和 P1 最小静态链路已通过，继续实施 P2；完整 M11、真实质量验收及默认策略切换尚未完成。**
+日期：2026-11-06。数值标准沿用 [PLAN.md](../PLAN.md) v1.1 第 11 节；评审人员来源按 v1.3 和用户授权改为独立子代理。**P0、P1 最小静态链路及 P2 模块门禁已通过，继续实施 P3；完整 M11、真实质量验收及默认策略切换尚未完成。**
 
 ## 工作包与边界
 
@@ -11,6 +11,8 @@
 | 静态上下文边界 | G2、P1 | 原授权 ScanResult → 原 BuiltContext | static adapter 委托原 builder；没有增加 renderer/IPC 能力 |
 | Metadata trace | G3/G4、M11 最小实现 | 主进程阶段、最终 dispatch、usage → 内存事件 | 不落源码、prompt 或凭据；缺证据链时明确 unavailable；完整 M11 仍未完成 |
 | 静态链路接入 | G2/G6、P1 | 原生成请求 → 原题答、原 checkpoint，加可选观测 | 对照测试核对实际消息、正文、题量和保存记录；trace 失败不能改变任务结果 |
+| 快照与证据池 | G2/G3/G6、P2、M02/M03 | 批准扫描 → 不可变快照/能力 → 程序签发的证据 ID | 8项快照、7项证据门禁通过；失效、伪造、重叠、容量与脱敏定位按实际断言检查 |
+| 预算与工具 | G2/G4/G6、P2、M04/M05 | 受限动作/调用 → 脱敏证据与保守账本 | 37项工具、12种账本序列通过；实际 M02/M03/M05 组合验证缓存和8次工具上限 |
 
 实现文件限定于 `electron/services/workflow/`、生成器接缝、`scripts/agentic/`、对应测试及实施文档。没有依赖更新、凭据迁移、持久化版本变更或真实模型调用。共享文件由主代理串行整合，模块实现和复核由 Luna 子代理在隔离 worktree 完成。
 
@@ -28,7 +30,7 @@
 
 RunSpec 的配置指纹排除 run/project/snapshot 身份，身份另存，不能用配置指纹代替项目授权或快照验证。题量仍只来自 `GRANULARITY_QUESTION_BUDGET`。
 
-新契约的实验性总读取上限为 8 MiB，可配置为更小的非负数。它是独立的全局上限，取值参考现有扫描器允许的最大单文件大小，**不是原实现已有总读取限制**。该契约尚未接入生产预算网关，不改变 static 的读取行为；未来对照实验必须明确配对读取条件。调查和生成还需 M05 的真实预留/结算实现，不能把本次配置校验当作运行时预算阻断证明。
+新契约的实验性总读取上限为 8 MiB，可配置为更小的非负数。它是独立的全局上限，取值参考现有扫描器允许的最大单文件大小，**不是原实现已有总读取限制**。M05 已实现新工作流的预留/结算，M04 在实际文件读取前预留原文件字节；调查受2 MiB/8工具/180秒约束。尚未替换生产 static 路径，不能据此声称旧生成器已经受新全局账本保护；未来对照必须明确配对读取条件。
 
 Trace 目前只在本次进程内存中存在，可由主进程显式注入；尚无生产 trace 落盘。保留 20 次/7 天/100 MiB 的策略只已冻结在 manifest，尚未实现清理服务。Replay 字段描述输入可用性，没有执行重放；M11 的完整 required spans 和 replay gate 保持未通过，不缩小分母。
 
@@ -39,14 +41,18 @@ Trace 目前只在本次进程内存中存在，可由主进程显式注入；�
 | 命令 | 本次结果 |
 | --- | --- |
 | `npm run typecheck` | Node/Web 均通过 |
-| `npm run test:agentic` | 41/41 通过（契约、trace、静态等价性、runner、数据契约及冻结安全） |
+| `npm run test:agentic` | 99/99 通过（加入快照、证据、工具、模型网关和账本边界） |
 | `npm run test:agentic:holdout` | 正常本机权限下7/7通过、0 skip，包含实际链接逃逸拒绝 |
 | `npm run verify:agentic:p0` | 11项必需检查通过，failed/missing/skipped/unknown均为0 |
 | `npm run test:question-budget` | 118/118 通过 |
-| `npm run test:ipc` | 268/268 通过 |
+| `npm run test:ipc` | 270/270 通过（含 fetch 前阻断/取消） |
 | `npm run test:recovery` | 34/34 通过 |
 | `npm run test:smoke` | `VERDICT SMOKE-OK`、退出 0、runner 确认隔离目录已删除 |
+| `npm run test:security` | 构建通过；77通过、0失败、3项既有平台跳过 |
+| `npm run test:scan-cache` | 补齐既有命令的导入解析注册器后60通过、0失败、2项既有平台跳过；M02独立门禁的8项均无skip |
+| `npm run test:file-selection` | 102/102通过 |
 | `npm run verify:agentic:m01` | 15 个必需 check 通过，其中非法输入 12/12 拒绝；四类失败计数为 0 |
+| `npm run verify:agentic:m02`、`npm run verify:agentic:m03`、`npm run verify:agentic:m04`、`npm run verify:agentic:m05` | 8/7/37/12项通过，失败/缺失/跳过/未知均为0 |
 | `npm run verify:agentic:m11` | 预期 incomplete/退出 1；完整证据链和重放未交付 |
 | `npm run verify:agentic:m13 -- --mode real` | 预期 blocked/退出 1；未授权调用，未访问模型端点 |
 

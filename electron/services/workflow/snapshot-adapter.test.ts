@@ -44,6 +44,15 @@ test('snapshot exposes only approved relative paths and immutable redacted reads
   assert.equal(cached.read, first.read)
 })
 
+test('snapshot identity accepts the same bounded identity syntax as RunSpec', async t => {
+  const { root, scan } = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const snapshot = await createWorkflowSnapshot(scan, { projectId: 'project:authorized-1' })
+  assert.equal(snapshot.projectId, 'project:authorized-1')
+  const read = await snapshot.readFile(snapshot.files[0].fileId)
+  assert.equal(read.read.snapshotId, snapshot.snapshotId)
+})
+
 test('changed snapshot invalidates reads and prior capabilities', async (t) => {
   const { root, scan } = await fixture()
   t.after(() => rm(root, { recursive: true, force: true }))

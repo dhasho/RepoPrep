@@ -1,5 +1,7 @@
 import type { ApprovedProjectRead, EvidenceRecord, WorkflowEvidenceStore, WorkflowFile, WorkflowProjectSnapshot } from './project-contract'
 import { WorkflowError } from './project-contract'
+// @ts-ignore TS5097 -- direct Node tests require explicit TypeScript extensions.
+import { safeClipText } from '../../../shared/context-budget.ts'
 
 export type ToolName = 'get_overview' | 'list_symbols' | 'search_text' | 'read_region' | 'read_declaration_context'
 export type ModelStage = 'investigation' | 'generation' | 'review' | 'repair' | 'compensation'
@@ -83,7 +85,7 @@ function canonical(value: unknown): string {
 function lineAt(text: string, offset: number): number { return text.slice(0, Math.max(0, offset)).split('\n').length }
 function lineCount(text: string): number { return text.length === 0 ? 1 : text.split('\n').length }
 function sliceLines(lines: string[], startLine: number, endLine: number): string { return lines.slice(startLine - 1, endLine).join('\n') }
-function capText(value: string): string { return value.length <= MAX_PREVIEW ? value : `${value.slice(0, MAX_PREVIEW)}\n[preview truncated]` }
+function capText(value: string): string { return safeClipText(value, MAX_PREVIEW, '\n[preview truncated]') }
 function validateArgs(tool: ToolName, args: unknown): boolean {
   switch (tool) {
     case 'get_overview': return dataObject(args, ['offset', 'limit', 'pathQuery']) && (args.offset === undefined || int(args.offset, 0, 250000)) && (args.limit === undefined || int(args.limit, 1, 100)) && (args.pathQuery === undefined || safeString(args.pathQuery, 0, 200))
@@ -104,7 +106,7 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
     const reportedBytes = Number.isFinite(readBytes) && readBytes >= 0 ? readBytes : 0
     const output: ToolResult = { actionId, tool, status, ...(reasonCode ? { reasonCode } : {}), evidenceIds: Object.freeze([...new Set(evidenceIds)].slice(0, 512)), preview: capText(preview), consumption: Object.freeze({ readBytes: reportedBytes, toolCalls, cacheHit }), ...(data === undefined ? {} : { data }) }
     const bounded = JSON.stringify(output)
-    if (Buffer.byteLength(bounded, 'utf8') > MAX_RESULT) return deepFreeze({ ...output, data: undefined, preview: capText(output.preview.slice(0, 1000)), evidenceIds: output.evidenceIds.slice(0, 100), reasonCode: 'result-truncated' })
+    if (Buffer.byteLength(bounded, 'utf8') > MAX_RESULT) return deepFreeze({ ...output, data: undefined, preview: safeClipText(output.preview, 1000), evidenceIds: output.evidenceIds.slice(0, 100), reasonCode: 'result-truncated' })
     return deepFreeze(output)
   }
   const makeContext = async (file: WorkflowFile, actionId: string, signal?: AbortSignal): Promise<Context> => {

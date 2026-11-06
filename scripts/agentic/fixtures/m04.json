@@ -30,6 +30,13 @@
     "m04:read_declaration_context:unauthorized",
     "m04:read_declaration_context:cancel",
     "m04:read_declaration_context:budget-exhausted",
-    "m04:read_declaration_context:duplicate"
+    "m04:read_declaration_context:duplicate",
+    "m04:read-reservation-and-cache",
+    "m04:read-budget-exhausted",
+    "m04:cancel-during-read",
+    "m04:time-budget-after-read",
+    "m04:unsupported-index-fallback",
+    "m04:stale-cache-denied",
+    "m04:side-effects-and-error-redaction"
   ]
 }

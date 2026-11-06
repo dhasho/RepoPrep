@@ -83,6 +83,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
       if (!Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > spec.generationOutputTokens || outputTokens > maxStageOutput || (spec.model.maxOutputTokens !== undefined && outputTokens > spec.model.maxOutputTokens) || (spec.model.contextWindowTokens !== undefined && outputTokens >= spec.model.contextWindowTokens)) throw new WorkflowError('invalid-argument')
       const estimatedInputTokens = estimateMessageTokens(messages)
       if (!Number.isSafeInteger(estimatedInputTokens) || (spec.model.contextWindowTokens !== undefined && estimatedInputTokens + outputTokens > spec.model.contextWindowTokens)) throw new WorkflowError('budget-exhausted')
+      if (input.signal?.aborted) throw new WorkflowError('cancelled')
       ledger.assertCanContinue(input.stage)
       ledger.reserveModel({ id: input.id, stage: input.stage, inputTokens: estimatedInputTokens, outputTokens, contextChars: messages.reduce((sum, message) => sum + message.content.length, 0) })
       safeTrace({ type: 'reserved', id: input.id, stage: input.stage })
@@ -103,7 +104,8 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           pendingDelta = ''
           throw new WorkflowError('model-failed')
         }
-        const safeLength = Math.max(0, combined.length - apiKey.length + 1)
+        let safeLength = Math.max(0, combined.length - apiKey.length + 1)
+        if (safeLength > 0 && safeLength < combined.length && /[\uD800-\uDBFF]/.test(combined[safeLength - 1]) && /[\uDC00-\uDFFF]/.test(combined[safeLength])) safeLength--
         const safe = combined.slice(0, safeLength)
         pendingDelta = combined.slice(safeLength)
         return safe ? input.onDelta(safe) : undefined
@@ -127,17 +129,20 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           beforeRequest,
           onUsage: (usage) => { receipt = normalizeUsage(usage) }
         })
-        // A custom transport or synchronous response handling may outlive the timer. Never return a result after either hard deadline.
-        ledger.assertCanContinue(input.stage)
         if (!dispatched) {
           ledger.markUnknownUnsent(input.id)
           unknownUnsent = true
           throw new WorkflowError('model-failed')
         }
+        // A custom transport or synchronous response handling may outlive the timer. Never return a result after either hard deadline.
+        if (input.signal?.aborted) throw new WorkflowError('cancelled')
+        ledger.assertCanContinue(input.stage)
         if (typeof rawContent !== 'string') throw new WorkflowError('model-failed')
         if (apiKey && rawContent.includes(apiKey)) throw new WorkflowError('model-failed')
         if (pendingDelta && input.onDelta) await input.onDelta(pendingDelta)
         pendingDelta = ''
+        if (input.signal?.aborted) throw new WorkflowError('cancelled')
+        ledger.assertCanContinue(input.stage)
         content = rawContent
         return Object.freeze({ content, usage: normalizeUsage(receipt) })
       } catch (error) {

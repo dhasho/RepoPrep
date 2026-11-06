@@ -22,10 +22,10 @@ import { createRunSpec } from './run-spec.ts'
 import { createBudgetLedger } from './budget-ledger.ts'
 
 const text = 'export function greet(name: string) {\n  return `hello ${name}`\n}\n'
-async function fixture() {
+async function fixture(source = text) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'm04-gateway-'))
   await mkdir(path.join(root, 'src'), { recursive: true })
-  await writeFile(path.join(root, 'src', 'sample.ts'), text)
+  await writeFile(path.join(root, 'src', 'sample.ts'), source)
   const snapshot = await createWorkflowSnapshot(await scanProject(root), { projectId: 'gateway-test' })
   const store = createEvidenceStore(snapshot)
   const counts = { calls: 0, reserved: 0, settled: 0 }
@@ -64,6 +64,17 @@ test('rejects accessors, extra fields and forged file ids without reading', asyn
   const accessor = Object.defineProperty({}, 'actionId', { get() { throw Error('no') } })
   assert.equal((await f.gateway.execute(accessor)).status, 'rejected')
   assert.equal(f.counts.reserved, 0)
+})
+
+test('tool previews include truncation markers inside the cap and preserve Unicode', async t => {
+  const source = `export const glyphs = '${'😀'.repeat(2500)}'\n`
+  const f = await fixture(source); t.after(() => rm(f.root, { recursive: true, force: true }))
+  const result = await f.gateway.execute({ actionId: 'unicode-preview', tool: 'read_region', args: { fileId: f.snapshot.files[0].fileId, startLine: 1, endLine: 1 } })
+  assert.equal(result.status, 'ok')
+  assert.ok(result.preview.length <= 4000)
+  assert.match(result.preview, /preview truncated/)
+  assert.ok(Array.from(result.preview).every(char => char.length === 2 || !/[\uD800-\uDFFF]/.test(char)))
+  assert.equal(result.consumption.readBytes, Buffer.byteLength(source))
 })
 
 test('exact duplicate action returns frozen result without additional budget or evidence', async t => {
