@@ -229,3 +229,21 @@ test('credential holdback preserves Unicode code points in forwarded deltas', as
   assert.equal(chunks.join(''), text)
   assert.ok(chunks.every(chunk => Array.from(chunk).every(char => char.length === 2 || !/[\uD800-\uDFFF]/.test(char))))
 })
+
+test('the final evidence manifest guard can block default transport before fetch', async () => {
+  const original = globalThis.fetch
+  let fetched = 0
+  globalThis.fetch = async () => { fetched++; throw new Error('Unexpected fetch') }
+  const ledger = createBudgetLedger(spec())
+  try {
+    const gateway = createModelGateway(spec(), profile(), ledger)
+    await assert.rejects(gateway.complete({ id: 'manifest-conflict', stage: 'generation', messages, dispatchGuard: actual => {
+      assert.deepEqual(actual, messages)
+      assert.ok(Object.isFrozen(actual) && Object.isFrozen(actual[0]))
+      throw new WorkflowError('invalid-argument')
+    } }), error => hasCode(error, 'invalid-argument'))
+    assert.equal(fetched, 0)
+    assert.equal(ledger.snapshot().total.dispatchedRequests, 0)
+    assert.equal(ledger.snapshot().total.reservedRequests, 0)
+  } finally { globalThis.fetch = original }
+})

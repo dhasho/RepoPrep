@@ -21,6 +21,8 @@ export interface ModelCompletionInput {
   readonly messages: readonly ChatMessage[]
   readonly signal?: AbortSignal
   readonly onDelta?: (delta: string) => unknown
+  /** Main-process proof that the exact frozen messages still satisfy their evidence manifest. */
+  readonly dispatchGuard?: (messages: readonly ChatMessage[]) => void
   readonly maxOutputTokens?: number
 }
 export interface ModelCompletion { readonly content: string; readonly usage: LlmUsage | null }
@@ -72,6 +74,8 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
     async complete(input: ModelCompletionInput): Promise<ModelCompletion> {
       if (!input || typeof input !== 'object' || !Array.isArray(input.messages) || input.messages.length > 256 || typeof input.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.id) || !['investigation', 'generation', 'review', 'repair', 'compensation'].includes(input.stage)) throw new WorkflowError('invalid-argument')
       if (input.onDelta !== undefined && typeof input.onDelta !== 'function') throw new WorkflowError('invalid-argument')
+      if (input.dispatchGuard !== undefined && typeof input.dispatchGuard !== 'function') throw new WorkflowError('invalid-argument')
+      const dispatchGuard = input.dispatchGuard
       const maxChars = input.stage === 'investigation' ? Math.min(CONTEXT_CHAR_BUDGETS[spec.granularity], spec.budget.investigation.inputTokens * 4) : CONTEXT_CHAR_BUDGETS[spec.granularity]
       if (!input.messages.every(message => message && ['system', 'user', 'assistant'].includes(message.role) && typeof message.content === 'string') || !validateMessageCharBudget(input.messages, maxChars)) throw new WorkflowError('budget-exhausted')
       // This scan is now bounded by the shared per-granularity character ceiling.
@@ -117,6 +121,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
         const beforeRequest = (): void => {
           assertConfiguration(spec, profile)
           ledger.assertCanContinue(input.stage)
+          dispatchGuard?.(messages)
           ledger.markDispatched(input.id)
           dispatched = true
           safeTrace({ type: 'dispatched', id: input.id, stage: input.stage })
