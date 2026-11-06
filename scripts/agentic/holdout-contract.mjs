@@ -26,7 +26,7 @@ function normalizeOrigin(value) {
 
 function safeRelativePath(value) {
   if (typeof value !== 'string' || value.length === 0 || value.length > 400) return false
-  if (value.includes('\\') || value.startsWith('/') || /^[a-zA-Z]:/.test(value)) return false
+  if (/[\u0000-\u001f\u007f:]/.test(value) || value.includes('\\') || value.startsWith('/') || /^[a-zA-Z]:/.test(value)) return false
   const parts = value.split('/')
   return parts.every((part) => part !== '' && part !== '.' && part !== '..')
 }
@@ -60,12 +60,21 @@ export async function validateHoldoutSources(labels, reposRoot) {
   if (!labels || labels.schemaVersion !== 1 || labels.split !== 'holdout') issue('labels must use schemaVersion 1 and split holdout')
   if (!labels || labels.provenance?.kind !== 'agent-annotated' || labels.provenance?.model !== 'gpt-6-luna' || labels.provenance?.implementationContextProvided !== false) issue('annotation provenance is invalid')
   if (!Array.isArray(labels?.repositories) || labels.repositories.length !== EXPECTED.size) issue('expected exactly four repositories')
-  if (!reposRoot || typeof reposRoot !== 'string') issue('reposRoot must be a path')
+  if (!reposRoot || typeof reposRoot !== 'string') {
+    issue('reposRoot must be a path')
+    return { valid: false, issues, repositories, facts }
+  }
 
   let resolvedRoot
   try {
-    resolvedRoot = await realpath(reposRoot)
-    if ((await lstat(reposRoot)).isSymbolicLink()) issue('repositories root must not be a symlink')
+    const absoluteRoot = path.resolve(reposRoot)
+    const filesystemRoot = path.parse(absoluteRoot).root
+    const relativeRoot = path.relative(filesystemRoot, absoluteRoot).split(path.sep).join('/')
+    if (await hasSymlinkBetween(filesystemRoot, relativeRoot)) {
+      issue('repositories root path must not traverse a symlink')
+      return { valid: false, issues, repositories, facts }
+    }
+    resolvedRoot = await realpath(absoluteRoot)
   } catch {
     issue('repositories root is unavailable')
     return { valid: false, issues, repositories, facts }
@@ -82,18 +91,52 @@ export async function validateHoldoutSources(labels, reposRoot) {
     if (seenRepos.has(repo.id)) issue('repository identity is duplicated')
     seenRepos.add(repo.id)
     repositories += 1
-    if (repo.directory !== expected.directory || repo.language !== expected.language || repo.commit !== expected.commit) issue(`repository metadata mismatch: ${repo.id}`)
+    if (repo.directory !== expected.directory || repo.language !== expected.language || repo.commit !== expected.commit) {
+      issue(`repository metadata mismatch: ${repo.id}`)
+      continue
+    }
     const repoPath = path.join(resolvedRoot, expected.directory)
+    let resolvedRepo
     try {
-      if ((await lstat(repoPath)).isSymbolicLink()) issue(`repository path is a symlink: ${repo.id}`)
-      const resolvedRepo = await realpath(repoPath)
-      if (!resolvedRepo.startsWith(`${resolvedRoot}${path.sep}`)) issue(`repository escapes source root: ${repo.id}`)
-      if (git(resolvedRepo, 'rev-parse', 'HEAD') !== expected.commit) issue(`checkout commit mismatch: ${repo.id}`)
-      if (git(resolvedRepo, 'status', '--porcelain=v1', '--untracked-files=all') !== '') issue(`checkout is not clean: ${repo.id}`)
-      if (normalizeOrigin(git(resolvedRepo, 'remote', 'get-url', 'origin')) !== expected.origin) issue(`origin identity mismatch: ${repo.id}`)
+      const repoStat = await lstat(repoPath)
+      if (repoStat.isSymbolicLink()) {
+        issue(`repository path is a symlink: ${repo.id}`)
+        continue
+      }
+      if (!repoStat.isDirectory()) {
+        issue(`repository path is not a directory: ${repo.id}`)
+        continue
+      }
+      resolvedRepo = await realpath(repoPath)
     } catch {
       issue(`repository checkout is unavailable or invalid: ${repo.id}`)
+      continue
     }
+    const relativeRepo = path.relative(resolvedRoot, resolvedRepo)
+    if (!relativeRepo || relativeRepo === '..' || relativeRepo.startsWith(`..${path.sep}`) || path.isAbsolute(relativeRepo)) {
+      issue(`repository escapes source root: ${repo.id}`)
+      continue
+    }
+
+    let checkoutValid = true
+    try {
+      if (git(resolvedRepo, 'rev-parse', 'HEAD') !== expected.commit) {
+        issue(`checkout commit mismatch: ${repo.id}`)
+        checkoutValid = false
+      }
+      if (git(resolvedRepo, 'status', '--porcelain=v1', '--untracked-files=all') !== '') {
+        issue(`checkout is not clean: ${repo.id}`)
+        checkoutValid = false
+      }
+      if (normalizeOrigin(git(resolvedRepo, 'remote', 'get-url', 'origin')) !== expected.origin) {
+        issue(`origin identity mismatch: ${repo.id}`)
+        checkoutValid = false
+      }
+    } catch {
+      issue(`repository checkout metadata is unavailable: ${repo.id}`)
+      checkoutValid = false
+    }
+    if (!checkoutValid) continue
 
     const files = Array.isArray(repo.files) ? repo.files : []
     if (files.length === 0 || files.length > MAX_FILES) issue(`source file count is invalid: ${repo.id}`)
@@ -136,7 +179,7 @@ export async function validateHoldoutSources(labels, reposRoot) {
 
     const repoFacts = Array.isArray(repo.facts) ? repo.facts : []
     if (repoFacts.length < 12 || repoFacts.length > MAX_FACTS) issue(`fact count is outside bounds: ${repo.id}`)
-    const coverage = new Set()
+    const coverage = new Map([...GRANULARITIES].map((granularity) => [granularity, 0]))
     for (const fact of repoFacts.slice(0, MAX_FACTS)) {
       facts += 1
       if (typeof fact?.id !== 'string' || !/^[a-z0-9][a-z0-9._-]{2,100}$/.test(fact.id) || seenFactIds.has(fact.id)) issue(`fact id is invalid or duplicated: ${repo.id}`)
@@ -144,7 +187,7 @@ export async function validateHoldoutSources(labels, reposRoot) {
       if (typeof fact?.claim !== 'string' || fact.claim.trim().length < 25 || fact.claim.length > 1200) issue(`fact claim is invalid: ${repo.id}`)
       if (!Array.isArray(fact?.pitfalls) || fact.pitfalls.length === 0 || fact.pitfalls.some((item) => typeof item !== 'string' || item.trim().length < 8 || item.length > 400)) issue(`fact pitfalls are invalid: ${repo.id}`)
       if (!Array.isArray(fact?.granularities) || fact.granularities.length === 0 || fact.granularities.some((item) => !GRANULARITIES.has(item))) issue(`fact granularities are invalid: ${repo.id}`)
-      else for (const item of fact.granularities) coverage.add(item)
+      else for (const item of new Set(fact.granularities)) coverage.set(item, (coverage.get(item) ?? 0) + 1)
       if (!Array.isArray(fact?.evidence) || fact.evidence.length === 0 || fact.evidence.length > 10) issue(`fact evidence is invalid: ${repo.id}`)
       for (const evidence of Array.isArray(fact?.evidence) ? fact.evidence : []) {
         const source = fileRecords.get(evidence?.path)
@@ -156,7 +199,7 @@ export async function validateHoldoutSources(labels, reposRoot) {
         if (sha256(Buffer.from(excerpt, 'utf8')) !== evidence.sha256) issue(`evidence hash mismatch: ${repo.id}`)
       }
     }
-    for (const required of GRANULARITIES) if (!coverage.has(required)) issue(`granularity coverage missing: ${repo.id}`)
+    for (const required of GRANULARITIES) if ((coverage.get(required) ?? 0) < 2) issue(`granularity coverage below two facts: ${repo.id}`)
   }
   for (const id of EXPECTED.keys()) if (!seenRepos.has(id)) issue(`required repository missing: ${id}`)
   return { valid: issues.length === 0, issues, repositories, facts }
