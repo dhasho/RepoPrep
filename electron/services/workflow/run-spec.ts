@@ -68,6 +68,7 @@ const SPEC_KEYS = ['version', 'runId', 'projectId', 'snapshotId', 'strategy', 's
 const MODEL_KEYS = ['profileId', 'model', 'protocol', 'reasoningEffort', 'temperature', 'contextWindowTokens', 'maxOutputTokens'] as const
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}-v[1-9][0-9]{0,3}$/
+type MutablePartialRunBudget = { -readonly [Key in keyof RunBudget]?: RunBudget[Key] }
 
 function invalid(): never { throw new Error('Invalid RunSpec input.') }
 function record(value: unknown): value is Record<string, unknown> {
@@ -159,7 +160,7 @@ function parseRequestedBudget(value: unknown, granularity: Granularity): Partial
     readBytes: LIMITS.readBytes,
     wallClockMs: LIMITS.wallClockMs
   }
-  const parsed: Partial<RunBudget> = {}
+  const parsed: MutablePartialRunBudget = {}
   for (const key of keys) {
     if (value[key] !== undefined) parsed[key] = safeInteger(value[key], key === 'maxModelRequests' || key === 'wallClockMs' ? 1 : 0, maxima[key])
   }
