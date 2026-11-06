@@ -2260,298 +2260,801 @@
   ],
   "annotationAudit": {
     "inputHashes": {
-      "retrieval-labels": "b8020c7fe5b014e469be2c0ebed8993d19a220c0dc73b210f4e1f4ff8d5c20ff",
-      "generation-labels": "d5344ad8d37175f249e6ef7a375d88268d6226bb93729423b87f3456d07c68ce",
-      "repair-key": "425f992e51e6be21fbf9992ac489f866555ff04e16589a2b6055f41877f862fb"
+      "projects": "ed91743803c28495d91e426d0c9a767d704aa548652114cd347f5b33a6d2d323",
+      "retrieval-tasks": "cf1c1f621600ae995b8e51776c886ef835adf74a42d44c8ad898403425f1a4d4",
+      "retrieval-labels": "bde2306764264c38bc34fd1438ba0ae4ed49fc0ea904511e42623bc72a464634",
+      "generation-tasks": "0930f2c553cc25915cfabb2f3144f5cdd8b18ed987ba6925a7d40d09e06e603e",
+      "generation-labels": "7e47b958c8ffffa1c10d199395b2f7d65bd2c327a4c0e0b0ee4973e0161b7f77",
+      "review-key": "2d36c3399be608668d08f6dc143c5a42a51ba48ae1b9d7719ceac17d432a358e",
+      "repair-samples": "c4bc19d0eccaa8ae6f6e7b4ad8572df7605a7add2f177c703eb73aafe2ba0780",
+      "repair-key": "b54bc2fa7ce4c6cf8e32e549e98f128173cb62b1d6e3d87f0a405dd8204ad553"
     },
     "retrievalTasks": [
       {
         "taskId": "retrieval-01",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "cache.py",
+            "startLine": 14,
+            "endLine": 22
+          },
+          {
+            "path": "cache.py",
+            "startLine": 8,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "retrieval-02",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "service.py",
+            "startLine": 5,
+            "endLine": 10
+          },
+          {
+            "path": "cache.py",
+            "startLine": 8,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "retrieval-03",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "config.py",
+            "startLine": 1,
+            "endLine": 2
+          },
+          {
+            "path": "client.py",
+            "startLine": 5,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "retrieval-04",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "transport.py",
+            "startLine": 1,
+            "endLine": 12
+          },
+          {
+            "path": "client.py",
+            "startLine": 8,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "retrieval-05",
-        "evidenceSufficient": false,
-        "reason": "The objective explicitly compares the README claim that admins access every resource with the implementation, but no required group cites README.md; access.py only proves the implementation side."
+        "evidenceSufficient": true,
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "access.py",
+            "startLine": 3,
+            "endLine": 6
+          },
+          {
+            "path": "roles.py",
+            "startLine": 9,
+            "endLine": 11
+          },
+          {
+            "path": "README.md",
+            "startLine": 1,
+            "endLine": 2
+          }
+        ]
       },
       {
         "taskId": "retrieval-06",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "roles.py",
+            "startLine": 4,
+            "endLine": 11
+          },
+          {
+            "path": "access.py",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "taskId": "retrieval-07",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "parser.py",
+            "startLine": 1,
+            "endLine": 3
+          },
+          {
+            "path": "worker.py",
+            "startLine": 4,
+            "endLine": 13
+          }
+        ]
       },
       {
         "taskId": "retrieval-08",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "worker.py",
+            "startLine": 2,
+            "endLine": 14
+          }
+        ]
       },
       {
         "taskId": "retrieval-09",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "queue.js",
+            "startLine": 10,
+            "endLine": 19
+          }
+        ]
       },
       {
         "taskId": "retrieval-10",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "config.js",
+            "startLine": 1,
+            "endLine": 1
+          },
+          {
+            "path": "queue.js",
+            "startLine": 4,
+            "endLine": 9
+          },
+          {
+            "path": "service.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "taskId": "retrieval-11",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "discount.js",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "checkout.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "taskId": "retrieval-12",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "config.js",
+            "startLine": 1,
+            "endLine": 2
+          },
+          {
+            "path": "discount.js",
+            "startLine": 1,
+            "endLine": 4
+          }
+        ]
       },
       {
         "taskId": "retrieval-13",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "router.js",
+            "startLine": 2,
+            "endLine": 7
+          }
+        ]
       },
       {
         "taskId": "retrieval-14",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "server.js",
+            "startLine": 1,
+            "endLine": 2
+          },
+          {
+            "path": "routes.js",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "router.js",
+            "startLine": 2,
+            "endLine": 7
+          }
+        ]
       },
       {
         "taskId": "retrieval-15",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "settings.json",
+            "startLine": 1,
+            "endLine": 1
+          },
+          {
+            "path": "feature.js",
+            "startLine": 1,
+            "endLine": 7
+          }
+        ]
       },
       {
         "taskId": "retrieval-16",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "feature.js",
+            "startLine": 1,
+            "endLine": 7
+          },
+          {
+            "path": "controller.js",
+            "startLine": 1,
+            "endLine": 4
+          }
+        ]
       },
       {
         "taskId": "retrieval-17",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "emitter.ts",
+            "startLine": 8,
+            "endLine": 16
+          }
+        ]
       },
       {
         "taskId": "retrieval-18",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "emitter.ts",
+            "startLine": 3,
+            "endLine": 16
+          },
+          {
+            "path": "app.ts",
+            "startLine": 1,
+            "endLine": 2
+          }
+        ]
       },
       {
         "taskId": "retrieval-19",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "base.ts",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "warehouse.ts",
+            "startLine": 3,
+            "endLine": 10
+          },
+          {
+            "path": "config.ts",
+            "startLine": 1,
+            "endLine": 1
+          }
+        ]
       },
       {
         "taskId": "retrieval-20",
         "evidenceSufficient": true,
-        "reason": "The labeled source groups were checked against the objective and cover its named implementation path and conditions."
+        "reason": "All required evidence groups cover the objective; cited ranges were checked against their project source.",
+        "evidence": [
+          {
+            "path": "session.ts",
+            "startLine": 3,
+            "endLine": 8
+          },
+          {
+            "path": "guard.ts",
+            "startLine": 2,
+            "endLine": 6
+          },
+          {
+            "path": "config.ts",
+            "startLine": 1,
+            "endLine": 1
+          }
+        ]
       }
     ],
     "generationTasks": [
       {
         "taskId": "generation-01",
-        "evidenceSufficient": false,
-        "reason": "The label includes load() but cites only cache.py; the fact is in service.py and is outside this expiration/capacity objective."
+        "evidenceSufficient": true,
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "cache.py",
+            "startLine": 8,
+            "endLine": 22
+          }
+        ]
       },
       {
         "taskId": "generation-02",
-        "evidenceSufficient": false,
-        "reason": "The cache-miss objective requires service.py, but the label cites only cache.py and reuses expiration/capacity facts."
+        "evidenceSufficient": true,
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "service.py",
+            "startLine": 5,
+            "endLine": 11
+          },
+          {
+            "path": "cache.py",
+            "startLine": 8,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "generation-03",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "client.py",
+            "startLine": 5,
+            "endLine": 12
+          },
+          {
+            "path": "transport.py",
+            "startLine": 7,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "generation-04",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "client.py",
+            "startLine": 5,
+            "endLine": 12
+          },
+          {
+            "path": "transport.py",
+            "startLine": 7,
+            "endLine": 12
+          }
+        ]
       },
       {
         "taskId": "generation-05",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "queue.js",
+            "startLine": 4,
+            "endLine": 19
+          },
+          {
+            "path": "service.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "taskId": "generation-06",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "queue.js",
+            "startLine": 4,
+            "endLine": 19
+          },
+          {
+            "path": "service.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "taskId": "generation-07",
-        "evidenceSufficient": false,
-        "reason": "The memberRate fact is unsupported by listed ranges; config.js is omitted, and the fact is outside the cited discount/checkout snippets."
+        "evidenceSufficient": true,
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "discount.js",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "checkout.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "taskId": "generation-08",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "routes.js",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "router.js",
+            "startLine": 2,
+            "endLine": 7
+          }
+        ]
       },
       {
         "taskId": "generation-09",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "emitter.ts",
+            "startLine": 3,
+            "endLine": 16
+          }
+        ]
       },
       {
         "taskId": "generation-10",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "emitter.ts",
+            "startLine": 3,
+            "endLine": 16
+          }
+        ]
       },
       {
         "taskId": "generation-11",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "base.ts",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "warehouse.ts",
+            "startLine": 3,
+            "endLine": 10
+          }
+        ]
       },
       {
         "taskId": "generation-12",
         "evidenceSufficient": true,
-        "reason": "Cited ranges support the expected facts relevant to the objective."
+        "reason": "The cited ranges directly support the revised expected facts and cover the task objective.",
+        "evidence": [
+          {
+            "path": "base.ts",
+            "startLine": 1,
+            "endLine": 4
+          },
+          {
+            "path": "warehouse.ts",
+            "startLine": 3,
+            "endLine": 10
+          }
+        ]
       }
     ],
     "repairSamples": [
       {
         "sampleId": "repair-3e54320fdcd4",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches worker.py lines 4-13."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "worker.py",
+            "startLine": 4,
+            "endLine": 13
+          }
+        ]
       },
       {
         "sampleId": "repair-6087f30b4a28",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches session.ts lines 3-5."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "session.ts",
+            "startLine": 3,
+            "endLine": 5
+          }
+        ]
       },
       {
         "sampleId": "repair-ca6b5435c197",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches emitter.ts lines 8-16."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "emitter.ts",
+            "startLine": 8,
+            "endLine": 16
+          }
+        ]
       },
       {
         "sampleId": "repair-439264df4a88",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches guard.ts lines 2-6."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "guard.ts",
+            "startLine": 2,
+            "endLine": 6
+          }
+        ]
       },
       {
         "sampleId": "repair-4ce19b8e0a4f",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches cache.py lines 8-12."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "cache.py",
+            "startLine": 8,
+            "endLine": 12
+          }
+        ]
       },
       {
         "sampleId": "repair-38a73b4a45d9",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches service.py lines 5-10."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "service.py",
+            "startLine": 5,
+            "endLine": 10
+          }
+        ]
       },
       {
         "sampleId": "repair-dc521cdc54b5",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches client.py lines 5-13."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "client.py",
+            "startLine": 5,
+            "endLine": 12
+          }
+        ]
       },
       {
         "sampleId": "repair-dff8bd662c46",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches checkout.js lines 3-7."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "checkout.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "sampleId": "repair-9b0b18c313ee",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches base.ts lines 1-4."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "base.ts",
+            "startLine": 1,
+            "endLine": 4
+          }
+        ]
       },
       {
         "sampleId": "repair-27c7677a3857",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches warehouse.ts lines 8-10."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "warehouse.ts",
+            "startLine": 8,
+            "endLine": 10
+          }
+        ]
       },
       {
         "sampleId": "repair-ad2dd9c69f83",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches feature.js lines 4-7."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "feature.js",
+            "startLine": 4,
+            "endLine": 7
+          }
+        ]
       },
       {
         "sampleId": "repair-4360ae419377",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches parser.py lines 1-3."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "parser.py",
+            "startLine": 1,
+            "endLine": 3
+          }
+        ]
       },
       {
         "sampleId": "repair-bcd5431abe03",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches feature.js lines 1-8."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "feature.js",
+            "startLine": 1,
+            "endLine": 7
+          }
+        ]
       },
       {
         "sampleId": "repair-96ff794e93ed",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches controller.js lines 2-4."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "controller.js",
+            "startLine": 2,
+            "endLine": 4
+          }
+        ]
       },
       {
         "sampleId": "repair-efa3c1f46518",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches config.js lines 1-2."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "config.js",
+            "startLine": 1,
+            "endLine": 2
+          },
+          {
+            "path": "discount.js",
+            "startLine": 1,
+            "endLine": 4
+          }
+        ]
       },
       {
         "sampleId": "repair-973c16f56bf2",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches discount.js lines 1-4."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "discount.js",
+            "startLine": 1,
+            "endLine": 4
+          }
+        ]
       },
       {
         "sampleId": "repair-e29ebb2bfdc2",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches access.py lines 3-10."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "access.py",
+            "startLine": 3,
+            "endLine": 9
+          }
+        ]
       },
       {
         "sampleId": "repair-fccd170ad2c6",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches service.js lines 3-6."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "service.js",
+            "startLine": 3,
+            "endLine": 6
+          }
+        ]
       },
       {
         "sampleId": "repair-2919142e8a52",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches cache.py lines 14-22."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "cache.py",
+            "startLine": 14,
+            "endLine": 22
+          }
+        ]
       },
       {
         "sampleId": "repair-0abddf64096d",
         "repairFactsValid": true,
-        "reason": "The proposed correction matches roles.py lines 4-11."
+        "reason": "The proposed correction is supported by the cited project source ranges.",
+        "evidence": [
+          {
+            "path": "roles.py",
+            "startLine": 4,
+            "endLine": 11
+          }
+        ]
       }
     ],
-    "issues": [
-      {
-        "scope": "generation-01",
-        "issue": "The label includes load() but cites only cache.py; the fact is in service.py and is outside this expiration/capacity objective."
-      },
-      {
-        "scope": "generation-02",
-        "issue": "The cache-miss objective requires service.py, but the label cites only cache.py and reuses expiration/capacity facts."
-      },
-      {
-        "scope": "generation-07",
-        "issue": "The memberRate fact is unsupported by listed ranges; config.js is omitted, and the fact is outside the cited discount/checkout snippets."
-      },
-      {
-        "scope": "retrieval-05",
-        "issue": "Objective requires comparison to README.md claim, but required evidence groups omit README.md."
-      },
-      {
-        "scope": "repair-efa3c1f46518",
-        "issue": "Repair correction is source-true, but the repair sample cites only config.js; discount.js is needed to show hardcoded 0.2 and the missing import."
-      }
-    ]
+    "issues": []
   },
   "provenance": {
     "implementationContextProvided": false,
