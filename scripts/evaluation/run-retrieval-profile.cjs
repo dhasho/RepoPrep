@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const { registerSharedAliasHooks } = require('./run-saved-profile.cjs')
 
@@ -53,23 +54,46 @@ function ensureSafeOutputParent(repoRoot, parent) {
   }
 }
 
+function secureTemporaryDirectory(directory) {
+  const stat = fs.lstatSync(directory)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('private-runtime-unavailable')
+  if (process.platform === 'win32') {
+    const username = process.env.USERNAME
+    if (!username || /[\\/]/u.test(username)) throw new Error('private-runtime-unavailable')
+    const principal = process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${username}` : username
+    const result = spawnSync('icacls', [directory, '/inheritance:r', '/grant:r', `${principal}:(OI)(CI)F`], { stdio: 'ignore', windowsHide: true })
+    if (result.error || result.status !== 0) throw new Error('private-runtime-unavailable')
+  } else {
+    fs.chmodSync(directory, 0o700)
+    if ((fs.statSync(directory).mode & 0o077) !== 0) throw new Error('private-runtime-unavailable')
+  }
+  return true
+}
+
 async function launch(options) {
   await preflight(options)
   const parent = path.dirname(options.outputDir)
   ensureSafeOutputParent(options.repoRoot, parent)
   const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'repoprep-m06-retrieval-'))
-  let child
+  let child, timeout
+  const maxDurationMs = 40 * 180_000 + 120_000
   try {
+    secureTemporaryDirectory(runtimeRoot)
     const esbuild = require('esbuild')
     const outfile = path.join(runtimeRoot, 'entry.cjs')
     await esbuild.build({ entryPoints: [path.join(__dirname, 'run-retrieval-profile-entry.cjs')], bundle: true, platform: 'node', format: 'cjs', target: 'node22', tsconfig: path.join(options.repoRoot, 'tsconfig.node.json'), external: ['electron'], outfile, logLevel: 'silent' })
     const electron = require('electron')
     const args = ['--runtime-root', runtimeRoot, '--repo-root', options.repoRoot, '--settings-dir', options.settingsDir, '--authorization', options.authorizationPath, '--output', options.outputDir, ...(options.profileId ? ['--profile-id', options.profileId] : [])]
     child = require('node:child_process').spawn(electron, [outfile, ...args], { cwd: options.repoRoot, windowsHide: true, stdio: ['ignore', 'inherit', 'inherit'], env: { ...safeEnv(), NODE_OPTIONS: '--experimental-strip-types' } })
-    const exit = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0))) })
-    process.exitCode = exit
+    const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (code, signal) => resolve(code ?? (signal ? 1 : 0))) })
+    timeout = setTimeout(() => { child?.kill() }, maxDurationMs)
+    process.exitCode = await closed
   } finally {
-    if (child && child.exitCode === null) child.kill()
+    clearTimeout(timeout)
+    if (child && child.exitCode === null && child.pid) {
+      child.kill()
+      await new Promise(resolve => child.once('close', resolve))
+    }
     const runtime = path.resolve(runtimeRoot), tmp = path.resolve(os.tmpdir())
     const rel = path.relative(tmp, runtime)
     if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || !path.basename(runtime).startsWith('repoprep-m06-retrieval-')) throw new Error('unsafe-runtime-cleanup')
@@ -84,4 +108,4 @@ if (require.main === module) {
   if (options) launch(options).catch(() => { process.stderr.write('Retrieval evaluation blocked before credential access or failed safely.\n'); process.exitCode = 1 })
 }
 
-module.exports = { parseArgs, preflight }
+module.exports = { parseArgs, preflight, secureTemporaryDirectory }

@@ -4,7 +4,7 @@ The runner evaluates the M06 investigation controller on the 20 frozen developme
 
 ## Authorization and execution
 
-This runner makes no model calls unless a local authorization JSON is supplied and matches the current clean source commit, the hashes of `projects.json`, `retrieval-tasks.json`, and `retrieval-labels.json`, and the saved profile's nonsecret model configuration. It has no synthetic fallback. Missing, malformed, stale, or mismatched authorization blocks before the saved credential is loaded. The runner only adjusts an in-memory profile clone to cap each model response at 2,000 output tokens.
+This runner makes no model calls unless a local authorization JSON is supplied and matches the current clean source commit, the hashes of `projects.json`, `retrieval-tasks.json`, and `retrieval-labels.json`, and the saved profile's nonsecret model configuration. It has no synthetic fallback. Missing, malformed, stale, or mismatched authorization blocks before the saved credential is loaded. An atomic ignored claim is created before the saved profile store is accessed; a claim is one-shot and remains after crashes or partial runs, so unknown paid work is never automatically resent. The runner only adjusts an in-memory profile clone to cap each model response at 2,000 output tokens.
 
 The authorization document is created outside the repository after explicit user approval. Its fields are:
 
@@ -36,7 +36,7 @@ node scripts/evaluation/run-retrieval-profile.cjs `
   --output .validation/agentic/retrieval-approved-run
 ```
 
-The default saved profile is selected unless `--profile-id` is supplied. The launcher validates authorization and repository bindings before opening the Electron profile store. Reports are written under ignored `.validation/agentic/` by default and contain only evidence selection ranges/hashes, bounded receipts, run outcomes, and nonsecret provider configuration metadata.
+The default saved profile is selected unless `--profile-id` is supplied. The launcher validates authorization and repository bindings before opening the Electron profile store, then checks saved public profile fields against the approval before decrypting its credential. The temporary Electron user-data directory is restricted to the current OS user and removed only after the child process closes. Reports, per-run receipts, and an fsynced per-request journal are written under ignored `.validation/agentic/`; they contain evidence selection ranges/hashes, bounded receipts, run outcomes, and nonsecret provider configuration metadata.
 
 ## Gate verification
 
