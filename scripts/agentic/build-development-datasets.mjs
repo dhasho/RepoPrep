@@ -88,7 +88,7 @@ const retrievalSpecs = [
   ['py-cache','Trace a cache miss from the public load function through insertion.','backend','fine',['Python','cross-file'], 'normal',[group('miss',ref('py-cache','service.py',5,10)),group('store',ref('py-cache','cache.py',8,12))]],
   ['py-retry','How many send attempts occur and how does delay change after each temporary failure?','backend','medium',['Python','conditions-exceptions'], 'normal',[group('policy',ref('py-retry','config.py',1,2)),group('retry',ref('py-retry','client.py',5,13))]],
   ['py-retry','Which failure type is retried, and which payload condition produces a permanent failure?','backend','medium',['Python','conditions-exceptions','cross-file'], 'unavailable',[group('errors',ref('py-retry','transport.py',1,13)),group('handler',ref('py-retry','client.py',8,13))]],
-  ['py-permissions','Compare the actual admin write rule with the README claim about all resources.','backend','medium',['Python','config-vs-behavior'], 'normal',[group('write',ref('py-permissions','access.py',3,6)),group('admin',ref('py-permissions','roles.py',9,11))]],
+  ['py-permissions','Compare the actual admin write rule with the README claim about all resources.','backend','medium',['Python','config-vs-behavior'], 'normal',[group('write',ref('py-permissions','access.py',3,6)),group('admin',ref('py-permissions','roles.py',9,11)),group('readme-claim',ref('py-permissions','README.md',1,2))]],
   ['py-permissions','How does Admin inherit Principal initialization and how is that inheritance used for authorization?','backend','fine',['Python','inheritance-callback','cross-file'], 'normal',[group('inherit',ref('py-permissions','roles.py',4,11)),group('check',ref('py-permissions','access.py',3,6))]],
   ['py-importer','What malformed input is caught, and does one bad line stop later lines from being processed?','backend','medium',['Python','conditions-exceptions','cross-file'], 'normal',[group('parse',ref('py-importer','parser.py',1,3)),group('loop',ref('py-importer','worker.py',4,13))]],
   ['py-importer','What does the error callback receive, and how are accepted and rejected records reported?','backend','fine',['Python','inheritance-callback'], 'unavailable',[group('callback',ref('py-importer','worker.py',2,14))]],
@@ -142,7 +142,9 @@ const sourceLines = {
   'ts-events': [['emitter.ts',3,16]], 'ts-inventory': [['base.ts',1,4],['warehouse.ts',3,10]], 'ts-session': [['session.ts',3,8],['guard.ts',2,6]], 'ts-parser': [['parse.ts',1,8],['import.ts',2,10]]
 }
 const generationLabels = generationTasks.map(task=>{
-  const evidence=sourceLines[task.projectId].map(([path,start,end])=>ref(task.projectId,path,start,end))
+  const evidence=task.id === 'generation-02'
+    ? [ref(task.projectId,'service.py',5,11),ref(task.projectId,'cache.py',8,12)]
+    : sourceLines[task.projectId].map(([path,start,end])=>ref(task.projectId,path,start,end))
   return {taskId:task.id,evidence,expectedFacts:[{id:`${task.id}-fact-1`,claim:`The source evidence for ${task.topic} determines the behavior; configuration and README statements alone are not treated as runtime proof.`},{id:`${task.id}-fact-2`,claim:`Boundary conditions, returned values, callback effects, and exception handling must match the cited implementation.`}],pitfalls:['Do not infer behavior from README claims when implementation differs.','Do not claim retries, refresh, inheritance behavior, or error handling unless directly supported by the cited source.']}
 })
 
@@ -187,7 +189,11 @@ const factual = [
 for (const label of generationLabels) {
   const projectId = generationTasks.find(task => task.id === label.taskId).projectId
   const projectFacts = factual.filter(fact => fact[0] === projectId)
-  label.expectedFacts = projectFacts.slice(0, 3).map((fact, index) => ({ id: `${label.taskId}-fact-${index + 1}`, claim: fact[2] }))
+  const factSet = label.taskId === 'generation-01' ? projectFacts.slice(0, 2)
+    : label.taskId === 'generation-02' ? projectFacts.slice(2, 3)
+      : label.taskId === 'generation-07' ? projectFacts.slice(0, 2)
+        : projectFacts.slice(0, 3)
+  label.expectedFacts = factSet.map((fact, index) => ({ id: `${label.taskId}-fact-${index + 1}`, claim: fact[2] }))
 }
 const reviewSamples = []
 const reviewLabels = []
@@ -213,12 +219,15 @@ for(let i=0;i<20;i++){
   const f=factual[(i*7+3)%factual.length]
   const question=`Repair exercise ${String(i+1).padStart(2,'0')}: ${f[1]}`
   const answer=f[3]
-  const followUps=[{question:'Which implementation path controls this behavior?',answer:`The branch and returned value are determined in ${f[4]} lines ${f[5]}-${f[6]}.`}]
-  const evidence=[ref(f[0],f[4],f[5],f[6])]
+  const followUps=[{question:'Which implementation path controls this behavior?',answer:i === 2?'The discount calculation is in discount.js lines 1-4; memberRate is defined in config.js lines 1-2.':`The branch and returned value are determined in ${f[4]} lines ${f[5]}-${f[6]}.`}]
+  const evidence=i === 2
+    ? [ref(f[0],f[4],f[5],f[6]),ref(f[0],'discount.js',1,4)]
+    : [ref(f[0],f[4],f[5],f[6])]
   const fingerprint=sha(canonical({question,answer,followUps}))
   const id=`repair-${sha(`independent-repair-${i+1}`).slice(0,12)}`
   repairSamples.push({id,projectId:f[0],question,answer,followUps,evidence,answerFingerprint:fingerprint})
-  repairLabels.push({sampleId:id,expectedRepairFacts:[f[2]],errorExplanation:`Replace the contradicted statement with the behavior supported by ${f[4]} lines ${f[5]}-${f[6]}.`})
+  const repairBasis=i === 2 ? 'discount.js lines 1-4 and config.js lines 1-2' : `${f[4]} lines ${f[5]}-${f[6]}`
+  repairLabels.push({sampleId:id,expectedRepairFacts:[f[2]],errorExplanation:`Replace the contradicted statement with the behavior supported by ${repairBasis}.`})
 }
 const repairShuffled=shuffle(repairSamples),repairLabelById=new Map(repairLabels.map(label=>[label.sampleId,label]))
 

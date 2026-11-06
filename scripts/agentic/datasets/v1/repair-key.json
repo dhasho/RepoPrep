@@ -104,7 +104,7 @@
       "expectedRepairFacts": [
         "No. discount uses a literal 0.2; memberRate is exported but not imported there."
       ],
-      "errorExplanation": "Replace the contradicted statement with the behavior supported by config.js lines 1-2."
+      "errorExplanation": "Replace the contradicted statement with the behavior supported by discount.js lines 1-4 and config.js lines 1-2."
     },
     {
       "sampleId": "repair-973c16f56bf2",

@@ -19,10 +19,6 @@
         {
           "id": "generation-01-fact-2",
           "claim": "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
-        },
-        {
-          "id": "generation-01-fact-3",
-          "claim": "load calls fetch(key), stores the returned value, then returns it."
         }
       ],
       "pitfalls": [
@@ -34,23 +30,21 @@
       "taskId": "generation-02",
       "evidence": [
         {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 11,
+          "sha256": "2238558607f0589b14defa48fbca34681fd77d4d99644087866af011574287af"
+        },
+        {
           "path": "cache.py",
           "startLine": 8,
-          "endLine": 22,
-          "sha256": "c8029e50210fe2fe869bb93bba258a5d94e67e214b4c29e57f9623c6ab9bc27a"
+          "endLine": 12,
+          "sha256": "c0492881ebb3ee75c3f2e88ce1424a3ba4942f304f952907de7e5e94451884cf"
         }
       ],
       "expectedFacts": [
         {
           "id": "generation-02-fact-1",
-          "claim": "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None."
-        },
-        {
-          "id": "generation-02-fact-2",
-          "claim": "Cache.put removes the key with the smallest recorded creation time after insertion exceeds MAX_ENTRIES."
-        },
-        {
-          "id": "generation-02-fact-3",
           "claim": "load calls fetch(key), stores the returned value, then returns it."
         }
       ],
@@ -223,10 +217,6 @@
         {
           "id": "generation-07-fact-2",
           "claim": "total subtracts the discount, applies tax to the remainder, and rounds to two decimals."
-        },
-        {
-          "id": "generation-07-fact-3",
-          "claim": "No. discount uses a literal 0.2; memberRate is exported but not imported there."
         }
       ],
       "pitfalls": [

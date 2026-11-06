@@ -137,6 +137,17 @@
               "sha256": "9a57c3ac449d7fb257f2b14f2b17efc8a688679324c6aa6bf3e569e22eec84f1"
             }
           ]
+        },
+        {
+          "id": "readme-claim",
+          "allOf": [
+            {
+              "path": "README.md",
+              "startLine": 1,
+              "endLine": 2,
+              "sha256": "9a1c6f95dc20d370cec2ba22ca044ac4bbcd2f08c6b0c81b868d3c625c71fb89"
+            }
+          ]
         }
       ],
       "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."

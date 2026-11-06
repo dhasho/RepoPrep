@@ -303,7 +303,7 @@
       "followUps": [
         {
           "question": "Which implementation path controls this behavior?",
-          "answer": "The branch and returned value are determined in config.js lines 1-2."
+          "answer": "The discount calculation is in discount.js lines 1-4; memberRate is defined in config.js lines 1-2."
         }
       ],
       "evidence": [
@@ -312,9 +312,15 @@
           "startLine": 1,
           "endLine": 2,
           "sha256": "326199b9729690cf2e198eb441bf00f7c89d7c48446061510d13c7fb72c4884b"
+        },
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "18e43fc30019fedba53bbfc36403bb23493d8b042a0a0efe930a06b93740dbc4"
         }
       ],
-      "answerFingerprint": "2399c4c9494e369ffafe094427a97585a1dfbc6b2b93307bcf3f39469afb51b8"
+      "answerFingerprint": "4575a751fc40594ee34aa58cc8cfd86b800b3577417b31ad888924a9272b81fa"
     },
     {
       "id": "repair-973c16f56bf2",
