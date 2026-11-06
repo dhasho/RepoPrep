@@ -10,6 +10,8 @@ import { SCAN_LIMIT_BOUNDS } from '../../../shared/types.ts'
 
 export interface RunModelConfig {
   readonly profileId: string
+  /** SHA-256 of the normalized provider endpoint; never the endpoint or credential itself. */
+  readonly endpointFingerprint: string
   readonly model: string
   readonly protocol?: LlmProtocol
   readonly reasoningEffort?: ReasoningEffort
@@ -65,7 +67,7 @@ const LIMITS = Object.freeze({
 })
 
 const SPEC_KEYS = ['version', 'runId', 'projectId', 'snapshotId', 'strategy', 'strategyVersion', 'roleFocus', 'granularity', 'model', 'promptVersion', 'toolVersion', 'policyVersion', 'budget'] as const
-const MODEL_KEYS = ['profileId', 'model', 'protocol', 'reasoningEffort', 'temperature', 'contextWindowTokens', 'maxOutputTokens'] as const
+const MODEL_KEYS = ['profileId', 'endpointFingerprint', 'model', 'protocol', 'reasoningEffort', 'temperature', 'contextWindowTokens', 'maxOutputTokens'] as const
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}-v[1-9][0-9]{0,3}$/
 type MutablePartialRunBudget = { -readonly [Key in keyof RunBudget]?: RunBudget[Key] }
@@ -106,6 +108,7 @@ function parseModel(value: unknown): RunModelConfig {
   exactKeys(value, MODEL_KEYS)
   const result: RunModelConfig = {
     profileId: id(value.profileId),
+    endpointFingerprint: typeof value.endpointFingerprint === 'string' && /^[a-f0-9]{64}$/.test(value.endpointFingerprint) ? value.endpointFingerprint : invalid(),
     model: typeof value.model === 'string' && value.model.length <= 256 && value.model.length > 0 && !value.model.includes('\0') ? value.model : invalid(),
     ...(value.protocol !== undefined ? { protocol: enumValue(value.protocol, ['openai', 'anthropic'] as const) } : {}),
     ...(value.reasoningEffort !== undefined ? { reasoningEffort: enumValue(value.reasoningEffort, ['low', 'high'] as const) } : {}),
@@ -224,6 +227,7 @@ export function fingerprintRunSpec(spec: RunSpec): string {
     questionBudget: { min: spec.questionBudget.min, target: spec.questionBudget.target, max: spec.questionBudget.max },
     model: {
       profileId: spec.model.profileId,
+      endpointFingerprint: spec.model.endpointFingerprint,
       model: spec.model.model,
       protocol: spec.model.protocol ?? null,
       reasoningEffort: spec.model.reasoningEffort ?? null,

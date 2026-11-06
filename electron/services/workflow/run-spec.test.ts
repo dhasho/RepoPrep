@@ -16,6 +16,7 @@ const validInput = () => ({
   granularity: 'fine',
   model: {
     profileId: 'profile-01',
+    endpointFingerprint: 'a'.repeat(64),
     model: 'example-model',
     protocol: 'openai',
     reasoningEffort: 'high',
@@ -51,6 +52,20 @@ test('fingerprint is stable, normalized and intentionally excludes run/project/s
   assert.equal(fingerprintRunSpec(first), fingerprintRunSpec(changedIdentity))
   assert.match(fingerprintRunSpec(first), /^[a-f0-9]{64}$/)
   assert.notEqual(fingerprintRunSpec(first), fingerprintRunSpec(createRunSpec({ ...validInput(), promptVersion: 'workflow-prompt-v2' })))
+  assert.notEqual(fingerprintRunSpec(first), fingerprintRunSpec({
+    ...first,
+    model: Object.freeze({ ...first.model, endpointFingerprint: 'b'.repeat(64) })
+  }))
+})
+
+test('requires a well-formed endpoint fingerprint without accepting endpoint data', () => {
+  const base = validInput()
+  const missing = { ...base, model: { ...base.model } }
+  delete (missing.model as Partial<typeof base.model>).endpointFingerprint
+  assert.throws(() => createRunSpec(missing))
+  for (const endpointFingerprint of ['', 'A'.repeat(64), '0'.repeat(63), 'https://provider.example/v1']) {
+    assert.throws(() => createRunSpec({ ...base, model: { ...base.model, endpointFingerprint } }))
+  }
 })
 
 test('rejects the exact 12 invalid cases in the M01 plan gate without echoing input', () => {
@@ -90,7 +105,7 @@ test('rejects unsupported global limits and keeps a narrowed request within ceil
   const deepseek = createRunSpec({
     ...validInput(),
     granularity: 'medium',
-    model: { profileId: 'profile-01', model: 'deepseek-flash' },
+    model: { profileId: 'profile-01', endpointFingerprint: 'a'.repeat(64), model: 'deepseek-flash' },
     budget: { outputTokens: 65_536 }
   })
   assert.equal(deepseek.generationOutputTokens, 65_536)
@@ -100,7 +115,7 @@ test('rejects unsupported global limits and keeps a narrowed request within ceil
   const tightened = createRunSpec({
     ...validInput(),
     granularity: 'coarse',
-    model: { profileId: 'profile-01', model: 'small-window', contextWindowTokens: 4096, maxOutputTokens: 2048 },
+    model: { profileId: 'profile-01', endpointFingerprint: 'a'.repeat(64), model: 'small-window', contextWindowTokens: 4096, maxOutputTokens: 2048 },
     budget: { maxModelRequests: 2, inputTokens: 4096, outputTokens: 4096, readBytes: 512, wallClockMs: 1000 }
   })
   assert.equal(tightened.budget.investigation.maxModelRequests, 1)
