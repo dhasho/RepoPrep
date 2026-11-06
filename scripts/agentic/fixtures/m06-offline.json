@@ -1,0 +1,22 @@
+{
+  "fixtureId": "m06-controller-offline-v1",
+  "mode": "synthetic-mechanism-only",
+  "network": false,
+  "projectExecution": false,
+  "modelTransport": "M05 mocked transport with beforeRequest and scripted usage",
+  "decisionsMaximum": 3,
+  "toolRequestsMaximum": 8,
+  "tasks": [
+    { "id": "tool-batch-topic-refine-select", "scenario": "three decisions complete a tool batch, topic proposal, evidence selection, and finish" },
+    { "id": "schema-before-tool", "scenario": "unknown action and unknown tool are rejected before execution" },
+    { "id": "evidence-lineage", "scenario": "only runtime-issued IDs may support topics and selections" },
+    { "id": "untrusted-source-text", "scenario": "README-like prompt injection has no tool authority" },
+    { "id": "empty-evidence", "scenario": "finish without source evidence is insufficient evidence" },
+    { "id": "repeated-reads", "scenario": "repeated source reads count even when gateway cache is reused" },
+    { "id": "cancellation", "scenario": "abort before decision and after dispatch prevents late actions" },
+    { "id": "unknown-usage", "scenario": "missing provider usage remains unknown" },
+    { "id": "static-policy", "scenario": "scripted static investigator issues zero model calls" }
+  ],
+  "qualityClaim": "none; synthetic controller behavior does not establish M06 real-task completion or answer quality",
+  "realGate": "not-passed; the frozen 20 tasks repeated twice still require separate authorization and execution"
+}
