@@ -6,7 +6,7 @@ The runner evaluates the M06 investigation controller on the 20 frozen developme
 
 This runner makes no model calls unless a local authorization JSON is supplied and matches the current clean source commit, the hashes of `projects.json`, `retrieval-tasks.json`, and `retrieval-labels.json`, and the saved profile's nonsecret model configuration. It has no synthetic fallback. Missing, malformed, stale, or mismatched authorization blocks before the saved credential is loaded. An atomic ignored claim is created before the saved profile store is accessed; a claim is one-shot and remains after crashes or partial runs, so unknown paid work is never automatically resent. The runner only adjusts an in-memory profile clone to cap each model response at 2,000 output tokens.
 
-The authorization document is created outside the repository after explicit user approval. Its fields are:
+The authorization document is created outside tracked source after explicit user approval (for example, in ignored `.validation/agentic/authorizations/`). Its fields are:
 
 ```json
 {

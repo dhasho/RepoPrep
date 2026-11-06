@@ -13,6 +13,9 @@
 | 静态链路接入 | G2/G6、P1 | 原生成请求 → 原题答、原 checkpoint，加可选观测 | 对照测试核对实际消息、正文、题量和保存记录；trace 失败不能改变任务结果 |
 | 快照与证据池 | G2/G3/G6、P2、M02/M03 | 批准扫描 → 不可变快照/能力 → 程序签发的证据 ID | 8项快照、7项证据门禁通过；失效、伪造、重叠、容量与脱敏定位按实际断言检查 |
 | 预算与工具 | G2/G4/G6、P2、M04/M05 | 受限动作/调用 → 脱敏证据与保守账本 | 37项工具、12种账本序列通过；实际 M02/M03/M05 组合验证缓存和8次工具上限 |
+| 调查候选 | G1/G2、P3、M06 | 固定目标、工具资料 → 考点卡/选择/缺口 | 15项离线控制器测试通过；实际模型20任务×2尚未运行，M06仍未完成 |
+| 确定性装配 | G2/G3、P3、M07 | 程序签发证据ID → 不可变消息/manifest | 12类门禁与12项单元通过；最终模型发送前检查完整user源码上下文，裁剪/遗漏均阻断 |
+| 真实评测入口 | G4/G5、P3、M13 最小部分 | 一次性授权、临时配置 → 40格矩阵/逐次收据 | 10项离线测试及真实Electron模块加载通过；未解密保存密钥，未调用配置端点 |
 
 实现文件限定于 `electron/services/workflow/`、生成器接缝、`scripts/agentic/`、对应测试及实施文档。没有依赖更新、凭据迁移、持久化版本变更或真实模型调用。共享文件由主代理串行整合，模块实现和复核由 Luna 子代理在隔离 worktree 完成。
 
@@ -41,7 +44,7 @@ Trace 目前只在本次进程内存中存在，可由主进程显式注入；�
 | 命令 | 本次结果 |
 | --- | --- |
 | `npm run typecheck` | Node/Web 均通过 |
-| `npm run test:agentic` | 99/99 通过（加入快照、证据、工具、模型网关和账本边界） |
+| `npm run test:agentic` | 138/138通过，包含调查、装配、收据及授权保护；非真实模型质量成绩 |
 | `npm run test:agentic:holdout` | 正常本机权限下7/7通过、0 skip，包含实际链接逃逸拒绝 |
 | `npm run verify:agentic:p0` | 11项必需检查通过，failed/missing/skipped/unknown均为0 |
 | `npm run test:question-budget` | 118/118 通过 |
@@ -53,9 +56,17 @@ Trace 目前只在本次进程内存中存在，可由主进程显式注入；�
 | `npm run test:file-selection` | 102/102通过 |
 | `npm run verify:agentic:m01` | 15 个必需 check 通过，其中非法输入 12/12 拒绝；四类失败计数为 0 |
 | `npm run verify:agentic:m02`、`npm run verify:agentic:m03`、`npm run verify:agentic:m04`、`npm run verify:agentic:m05` | 8/7/37/12项通过，失败/缺失/跳过/未知均为0 |
+| `npm run verify:agentic:m07` | 12项通过；必需组合不能静默丢弃，JSON序列化计入开销且不重复计算正文 |
+| `npm run verify:agentic:m06 -- --mode real` | 缺少新授权和真实报告时blocked/退出1，不能使用合成响应充当通过 |
 | `npm run verify:agentic:m11` | 预期 incomplete/退出 1；完整证据链和重放未交付 |
 | `npm run verify:agentic:m13 -- --mode real` | 预期 blocked/退出 1；未授权调用，未访问模型端点 |
 
 首次普通沙箱下的 IPC/恢复测试遇到临时目录重命名及 loopback 权限失败，Electron 也未输出成功 verdict；失败日志保留。在正常本机权限下使用合成凭据和本地 HTTP 重跑，通过不等于真实服务验收。
 
 回退时移除 `contextProvider`/`workflowTrace` 注入即沿原 static 路径运行。没有默认策略变更或旧数据重写；如需撤销新代码，可回退本 PR 的提交。P2 必须通过 M02–M05 门禁后才进入 P3；代理评审不替代真实控制器/生成器的运行和 usage 收据。
+
+## P3 下一步的具体边界
+
+候选已具备真实检索评测入口，但 PLAN 第2节不授权新调用。本次拟评测仅使用20个已冻结的合成开发检索任务、各重复2次，不发送用户项目或保留集源码。完整矩阵最多120次请求，按每任务18,000输入/6,000输出、总720,000输入/240,000输出控制，单请求输出上限2,000。服务端收据不完整、额度超限或数据/配置不符会停止；一次性claim及fsync日志保留，不能自动重发状态未知的付费调用。
+
+授权文件与收据只保存在本地未跟踪目录。模型及端点通过保存配置的非秘密指纹匹配，密钥仅在授权后的隔离Electron进程内解密；临时配置不写回原设置。具体操作和失败行为见[执行器说明](agentic-retrieval-evaluation.md)。M06真实门禁未过前，不进入P4或切换默认策略。

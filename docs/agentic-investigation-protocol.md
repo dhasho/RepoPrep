@@ -26,3 +26,6 @@ The scripted static investigator uses the same snapshot, evidence store, tools, 
 ## Verification status
 
 Offline fixtures exercise control flow and evidence plumbing with mocked M05 transport and synthetic usage only. They do not measure retrieval quality, task completion, cost on a real provider, or answer truth. The M06 real gate remains **not passed**: the frozen 20 tasks, each repeated twice, still need separate authorization and evaluation. No synthetic controller result counts as M06 completion.
+## Bounded EOF reads
+
+`read_region` keeps its 500-line request bound. An end line beyond EOF returns only existing lines and explicitly reports the requested end, actual end and total line count. A start beyond EOF is rejected. This lets the investigator read a short file without guessing an unavailable line count; evidence IDs always refer to the actual provided range.

@@ -27,9 +27,9 @@ function parseArgs(argv) {
   return options
 }
 
-function safeEnv() {
+function safeEnv(environment = process.env) {
   const keys = ['PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'HOME']
-  return Object.fromEntries(keys.flatMap(key => process.env[key] ? [[key, process.env[key]]] : []))
+  return Object.fromEntries(keys.flatMap(key => environment[key] ? [[key, environment[key]]] : []))
 }
 
 async function preflight(options) {
@@ -58,10 +58,11 @@ function secureTemporaryDirectory(directory) {
   const stat = fs.lstatSync(directory)
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('private-runtime-unavailable')
   if (process.platform === 'win32') {
-    const username = process.env.USERNAME
-    if (!username || /[\\/]/u.test(username)) throw new Error('private-runtime-unavailable')
-    const principal = process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${username}` : username
-    const result = spawnSync('icacls', [directory, '/inheritance:r', '/grant:r', `${principal}:(OI)(CI)F`], { stdio: 'ignore', windowsHide: true })
+    const system32 = path.join(process.env.SYSTEMROOT || 'C:\\Windows', 'System32')
+    const identity = spawnSync(path.join(system32, 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true })
+    const sid = identity.status === 0 && typeof identity.stdout === 'string' ? identity.stdout.match(/S-1-(?:\d+-){1,14}\d+/u)?.[0] : null
+    if (!sid) throw new Error('private-runtime-unavailable')
+    const result = spawnSync(path.join(system32, 'icacls.exe'), [directory, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], { stdio: 'ignore', windowsHide: true })
     if (result.error || result.status !== 0) throw new Error('private-runtime-unavailable')
   } else {
     fs.chmodSync(directory, 0o700)
@@ -108,4 +109,4 @@ if (require.main === module) {
   if (options) launch(options).catch(() => { process.stderr.write('Retrieval evaluation blocked before credential access or failed safely.\n'); process.exitCode = 1 })
 }
 
-module.exports = { parseArgs, preflight, secureTemporaryDirectory }
+module.exports = { parseArgs, preflight, secureTemporaryDirectory, safeEnv }

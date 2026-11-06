@@ -73,6 +73,21 @@ test('three actual M05 decisions can batch reads, propose, select, and finish wi
   assert.equal(outcome.usageComplete, true)
 })
 
+test('later decisions receive current topics and preserve final evidence gaps', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, (messages, round) => {
+    const user = JSON.parse(messages.at(-1)!.content)
+    assert.deepEqual(user.questionBudget, f.spec.questionBudget)
+    if (round === 3) assert.equal(user.topics[0].id, 'topic-calc')
+    const response = successfulScript(messages, round) as { actions: Array<{ type: string; unresolved?: string[] }> }
+    if (round === 3) response.actions.find(action => action.type === 'finish_investigation')!.unresolved = ['External callers were not inspected.']
+    return response
+  })
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway })
+  assert.equal(outcome.status, 'completed')
+  assert.deepEqual(outcome.selection.unresolved, ['External callers were not inspected.', 'Call-site validation is not checked.'])
+})
+
 test('eight valid reads do not prevent a later decision from selecting and finishing', async t => {
   const f = await fixture(t)
   const mock = modelFor(f, (messages, round) => {

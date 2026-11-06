@@ -77,6 +77,21 @@ test('tool previews include truncation markers inside the cap and preserve Unico
   assert.equal(result.consumption.readBytes, Buffer.byteLength(source))
 })
 
+test('bounded reads can reach EOF without knowing the file line count in advance', async t => {
+  const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }))
+  const result = await f.gateway.execute({ actionId: 'bounded-eof', tool: 'read_region', args: { fileId: f.snapshot.files[0].fileId, startLine: 1, endLine: 500 } })
+  assert.equal(result.status, 'ok')
+  const data = result.data as { endLine: number; requestedEndLine: number; totalLines: number; reachedEndOfFile: boolean }
+  assert.equal(data.endLine, text.split('\n').length)
+  assert.equal(data.requestedEndLine, 500)
+  assert.equal(data.totalLines, data.endLine)
+  assert.equal(data.reachedEndOfFile, true)
+  const records = await f.store.resolve(result.evidenceIds, f.snapshot.snapshotId)
+  assert.ok(records.every(record => record.displayRange.endLine <= data.totalLines))
+  const invalid = await f.gateway.execute({ actionId: 'past-eof', tool: 'read_region', args: { fileId: f.snapshot.files[0].fileId, startLine: 500, endLine: 501 } })
+  assert.equal(invalid.status, 'rejected')
+})
+
 test('exact duplicate action returns frozen result without additional budget or evidence', async t => {
   const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }))
   const action = { actionId: 'same', tool: 'read_region', args: { fileId: f.snapshot.files[0].fileId, startLine: 1, endLine: 2 } }

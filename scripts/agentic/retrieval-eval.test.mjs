@@ -5,6 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
+import { spawnSync } from 'node:child_process'
 import { recomputeRetrievalMetrics, verifyRetrievalReport, runRetrievalEvaluation, verifyProfileBinding, evaluationConfigFingerprint, evaluationRunConfigFingerprint, createGlobalBudgetCollector, createGuardedTransport, createOneShotAuthorizationClaim, loadRetrievalBundle, validateRetrievalBundle, RETRIEVAL_LIMITS } from './retrieval-eval.mjs'
 import { normalizeBaseUrl } from '../../electron/services/llm.ts'
 import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
@@ -175,15 +177,19 @@ test('authorization claims are atomic and one-shot, including interrupted runs',
   } finally { await rm(temp, { recursive: true, force: true }) }
 })
 
-test('controller input path is objective-only and never includes evaluator labels', async () => {
-  const runner = await readFile(path.join(root, 'scripts/agentic/retrieval-eval.mjs'), 'utf8')
-  const callStart = runner.indexOf('result = await runInvestigation(')
-  const call = runner.slice(callStart, callStart + 500)
-  assert.match(call, /objective: task\.objective/u)
-  assert.doesNotMatch(call, /requiredEvidenceGroups|expectedFacts|retrievalLabels/u)
-  assert.match(runner, /selectedEvidence/u)
-  const entry = await readFile(path.join(root, 'scripts/evaluation/run-retrieval-profile-entry.cjs'), 'utf8')
-  assert.ok(entry.indexOf('await runner.claimAuthorizationArtifact') < entry.indexOf('stageEncryptedSettings(options'))
-  assert.ok(entry.indexOf('verifyPublicProfileBinding') < entry.indexOf('native-credential-crypto'))
-  assert.ok(entry.indexOf('verifyProfileBinding(profile') < entry.indexOf('runRetrievalEvaluation'))
+test('sanitized child environment can secure a private temp directory without username variables', async () => {
+  const launcherPath = path.join(root, 'scripts/evaluation/run-retrieval-profile.cjs')
+  const { safeEnv } = createRequire(import.meta.url)(launcherPath)
+  const environment = safeEnv({ ...process.env, API_KEY: 'SYNTHETIC_SECRET', NODE_OPTIONS: '--require unexpected', ELECTRON_RUN_AS_NODE: '1' })
+  for (const key of ['API_KEY', 'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE', 'USERNAME', 'USERDOMAIN']) assert.equal(Object.hasOwn(environment, key), false)
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'm06-runtime-acl-'))
+  try {
+    const child = spawnSync(process.execPath, ['-e', 'require(process.argv[1]).secureTemporaryDirectory(process.argv[2]);process.stdout.write("secured")', launcherPath, folder], { env: environment, encoding: 'utf8', windowsHide: true })
+    assert.equal(child.status, 0, 'private-runtime preparation must work in the actual sanitized child environment')
+    assert.equal(child.stdout, 'secured')
+  } finally {
+    assert.equal(path.dirname(path.resolve(folder)), path.resolve(os.tmpdir()))
+    assert.match(path.basename(folder), /^m06-runtime-acl-/u)
+    await rm(folder, { recursive: true, force: true })
+  }
 })

@@ -315,8 +315,10 @@
       "assets": [
         {
           "id": "m07-fixtures",
-          "status": "not-materialized",
-          "sha256": null
+          "status": "available",
+          "required": true,
+          "path": "scripts/agentic/fixtures/m07.json",
+          "sha256": "f402b8c3cf7045ac6e0230fc3fcb58664e954f07231e58ec36dd066d4d48e705"
         }
       ]
     },

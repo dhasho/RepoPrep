@@ -133,7 +133,7 @@ export async function runInvestigation(input: { spec: RunSpec; snapshot: Workflo
     if (reservedOutput < 1) { stopReason = 'budget-exhausted'; break }
     const evidenceIds = currentEvidence(store)
     evidenceIds.forEach(id => presentedEvidence.add(id))
-    const user = JSON.stringify({ intent: objective, roleFocus: spec.roleFocus, granularity: spec.granularity, project: snapshot.summary, files: snapshot.files.slice(0, 80).map(file => ({ fileId: file.fileId, relPath: file.relPath, byteLength: file.byteLength, sourceKind: file.sourceKind })), evidenceIds, remaining: ledger.snapshot().remaining, history: history.join('\n').slice(-MAX_HISTORY_CHARS), instruction: 'Choose bounded investigation actions. Need actual source evidence before selecting. Finish explicitly.' })
+    const user = JSON.stringify({ intent: objective, roleFocus: spec.roleFocus, granularity: spec.granularity, questionBudget: spec.questionBudget, project: snapshot.summary, files: snapshot.files.slice(0, 80).map(file => ({ fileId: file.fileId, relPath: file.relPath, byteLength: file.byteLength, sourceKind: file.sourceKind })), evidenceIds, topics, selection, remaining: ledger.snapshot().remaining, history: history.join('\n').slice(-MAX_HISTORY_CHARS), instruction: 'Choose bounded investigation actions. Need actual source evidence before selecting. Finish explicitly.' })
     const id = `inv-${randomUUID()}`
     let completion: ModelCompletion
     try { stats.decisions++; completion = await model.complete({ id, stage: 'investigation', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], signal, maxOutputTokens: reservedOutput }) }
@@ -216,6 +216,7 @@ export async function runInvestigation(input: { spec: RunSpec; snapshot: Workflo
         notify(input.onEvent, { type: 'selection', hash: digest(JSON.stringify(selection)) })
       } else if (action.type === 'finish_investigation') {
         unresolved = [...new Set([...action.unresolved, ...selection.unresolved])]
+        selection = Object.freeze({ ...selection, unresolved: Object.freeze(unresolved) })
         const topicsCovered = topics.length > 0 && topics.every(topic => topic.evidenceIds.length > 0 && topic.evidenceIds.every(id => selection.selectedIds.includes(id)))
         const ids = [...new Set(selection.selectedIds)]
         const resolved = await store.resolve(ids, snapshot.snapshotId, signal)

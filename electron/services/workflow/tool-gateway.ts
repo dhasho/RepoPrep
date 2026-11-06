@@ -236,10 +236,11 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
         out = result(action.actionId, action.tool, 'ok', reason, evidenceIds, `${matches.length} literal matches${reason ? `; stopped: ${reason}` : ''}`, { matches, searchComplete: reason === undefined, ...(reason ? { stopReason: reason } : {}) }, bytes, 1, cacheHit)
       } else if (action.tool === 'read_region') {
         const file = snapshot.files.find(item => item.fileId === args.fileId); if (!file) workflow('permission-denied')
-        const ctx = await makeContext(file, action.actionId, merged); const start = args.startLine as number; const end = args.endLine as number
-        if (end > ctx.lines.length) workflow('invalid-argument')
+        const ctx = await makeContext(file, action.actionId, merged); const start = args.startLine as number; const requestedEnd = args.endLine as number
+        if (start > ctx.lines.length) workflow('invalid-argument')
+        const end = Math.min(requestedEnd, ctx.lines.length)
         const cited = await issue(ctx, start, end, merged); const excerpt = sliceLines(ctx.lines, start, end)
-        out = result(action.actionId, action.tool, 'ok', undefined, cited.evidence.map(item => item.id), excerpt, { fileId: file.fileId, relPath: file.relPath, startLine: start, endLine: end, text: capText(excerpt), omitted: excerpt.length > MAX_PREVIEW }, ctx.readBytes, 1, ctx.cacheHit)
+        out = result(action.actionId, action.tool, 'ok', undefined, cited.evidence.map(item => item.id), excerpt, { fileId: file.fileId, relPath: file.relPath, startLine: start, endLine: end, requestedEndLine: requestedEnd, totalLines: ctx.lines.length, reachedEndOfFile: requestedEnd > end, text: capText(excerpt), omitted: excerpt.length > MAX_PREVIEW }, ctx.readBytes, 1, ctx.cacheHit)
       } else {
         const file = snapshot.files.find(item => item.fileId === args.fileId); if (!file) workflow('permission-denied')
         const ctx = await makeContext(file, action.actionId, merged); const target = args.line as number
