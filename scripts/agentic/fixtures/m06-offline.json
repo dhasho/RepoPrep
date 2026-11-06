@@ -8,12 +8,16 @@
   "toolRequestsMaximum": 8,
   "tasks": [
     { "id": "tool-batch-topic-refine-select", "scenario": "three decisions complete a tool batch, topic proposal, evidence selection, and finish" },
+    { "id": "tool-cap-finalization", "scenario": "eight source reads still permit a later bounded decision to select and finish" },
     { "id": "schema-before-tool", "scenario": "unknown action and unknown tool are rejected before execution" },
-    { "id": "evidence-lineage", "scenario": "only runtime-issued IDs may support topics and selections" },
+    { "id": "evidence-lineage", "scenario": "full runtime evidence pool authorizes IDs while the prompt presents at most 100" },
+    { "id": "revised-topic-selection", "scenario": "a revised topic without selected evidence cannot finish as complete" },
     { "id": "untrusted-source-text", "scenario": "README-like prompt injection has no tool authority" },
     { "id": "empty-evidence", "scenario": "finish without source evidence is insufficient evidence" },
     { "id": "repeated-reads", "scenario": "repeated source reads count even when gateway cache is reused" },
+    { "id": "read-metrics", "scenario": "overview navigation is excluded from source read request count and ordinary IO rejection is not a security execution" },
     { "id": "cancellation", "scenario": "abort before decision and after dispatch prevents late actions" },
+    { "id": "observer-abort", "scenario": "an observer aborting terminal notification prevents return" },
     { "id": "unknown-usage", "scenario": "missing provider usage remains unknown" },
     { "id": "static-policy", "scenario": "scripted static investigator issues zero model calls" }
   ],

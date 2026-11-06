@@ -73,6 +73,40 @@ test('three actual M05 decisions can batch reads, propose, select, and finish wi
   assert.equal(outcome.usageComplete, true)
 })
 
+test('eight valid reads do not prevent a later decision from selecting and finishing', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, (messages, round) => {
+    if (round === 1) return actions([{ type: 'request_tools', tools: Array.from({ length: 8 }, (_, index) => ({ actionId: `batch-read-${index}`, tool: 'read_region', args: { fileId: f.fileId, startLine: 1, endLine: 3 } })) }])
+    const ids = evidenceIds(messages)
+    if (round === 2) return actions([{ type: 'propose_topics', topics: [{ id: 'batch-topic', title: 'Calculation behavior', mechanism: 'The function branches on negative values.', valueRationale: 'Exercises validation behavior.', difficulty: 'basic', evidenceIds: ids, evidenceNeeds: [], unconfirmed: [] }] }])
+    return actions([{ type: 'select_evidence', selection: { selectedIds: ids, requiredBundles: [], unresolved: [] } }, { type: 'finish_investigation', unresolved: [] }])
+  })
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway })
+  assert.equal(outcome.status, 'completed')
+  assert.equal(outcome.statistics.decisions, 3)
+  assert.equal(outcome.statistics.toolRequests, 8)
+  assert.equal(outcome.statistics.readRequests, 8)
+})
+
+test('overview calls do not inflate source read request count', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, (messages, round) => {
+    if (round === 1) return actions([{ type: 'request_tools', tools: [
+      { actionId: 'overview-navigation', tool: 'get_overview', args: { limit: 10 } },
+      { actionId: 'overview-source-read', tool: 'read_region', args: { fileId: f.fileId, startLine: 1, endLine: 3 } }
+    ] }])
+    const ids = evidenceIds(messages)
+    return actions([
+      { type: 'propose_topics', topics: [{ id: 'overview-topic', title: 'Behavior', mechanism: 'Observed implementation', valueRationale: 'Source grounded.', difficulty: 'basic', evidenceIds: ids, evidenceNeeds: [], unconfirmed: [] }] },
+      { type: 'select_evidence', selection: { selectedIds: ids, requiredBundles: [], unresolved: [] } },
+      { type: 'finish_investigation', unresolved: [] }
+    ])
+  })
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway })
+  assert.equal(outcome.statistics.toolRequests, 2)
+  assert.equal(outcome.statistics.readRequests, 1)
+})
+
 test('response schema rejects unknown tool action before any tool execution', async t => {
   const f = await fixture(t); let executed = 0
   const model = modelFor(f, () => actions([{ type: 'request_tools', tools: [{ actionId: 'shell', tool: 'shell', args: { command: 'echo unsafe' } }] }]))
@@ -121,6 +155,58 @@ test('two repeated read rounds stop no-progress and repeated cache reads count',
   assert.equal(outcome.stopReason, 'no-progress')
   assert.equal(outcome.statistics.repeatedReads, 1)
   assert.equal(outcome.statistics.toolRequests, 2)
+  assert.equal(outcome.statistics.readRequests, 2)
+})
+
+test('topic revision after selection cannot finish when the revised topic loses selected evidence', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, (messages, round) => {
+    if (round === 1) return actions([{ type: 'request_tools', tools: [{ actionId: 'revision-read', tool: 'read_region', args: { fileId: f.fileId, startLine: 1, endLine: 3 } }] }])
+    const ids = evidenceIds(messages)
+    if (round === 2) return actions([
+      { type: 'propose_topics', topics: [{ id: 'original-topic', title: 'Original', mechanism: 'Observed branch', valueRationale: 'Grounded', difficulty: 'basic', evidenceIds: ids, evidenceNeeds: [], unconfirmed: [] }] },
+      { type: 'select_evidence', selection: { selectedIds: ids, requiredBundles: [], unresolved: [] } }
+    ])
+    return actions([
+      { type: 'propose_topics', topics: [{ id: 'revised-topic', title: 'Revised', mechanism: 'Unsubstantiated mechanism', valueRationale: 'Not supported', difficulty: 'basic', evidenceIds: [], evidenceNeeds: ['Find source evidence.'], unconfirmed: ['Mechanism is unconfirmed.'] }] },
+      { type: 'finish_investigation', unresolved: [] }
+    ])
+  })
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway })
+  assert.equal(outcome.status, 'insufficient-evidence')
+  assert.equal(outcome.topics[0].id, 'revised-topic')
+})
+
+test('evidence authorization sees the full pool while each model prompt presents at most 100 IDs', async t => {
+  const longSource = Array.from({ length: 110 }, (_, index) => `// evidence row ${index + 1}`).join('\n')
+  const f = await fixture(t, longSource)
+  const read = await f.snapshot.readFile(f.fileId)
+  const ids: string[] = []
+  for (let line = 1; line <= 105; line++) ids.push((await f.store.issue(read.read, { startLine: line, endLine: line }))[0].id)
+  const targetId = ids.at(-1)!
+  const mock = modelFor(f, messages => {
+    assert.equal(evidenceIds(messages).length, 100)
+    return actions([
+      { type: 'propose_topics', topics: [{ id: 'late-pool-topic', title: 'Late pool evidence', mechanism: 'A real record in the run evidence store.', valueRationale: 'Tests full-pool authorization.', difficulty: 'intermediate', evidenceIds: [targetId], evidenceNeeds: [], unconfirmed: [] }] },
+      { type: 'select_evidence', selection: { selectedIds: [targetId], requiredBundles: [], unresolved: [] } },
+      { type: 'finish_investigation', unresolved: [] }
+    ])
+  })
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway })
+  assert.equal(outcome.status, 'completed')
+  assert.deepEqual(outcome.selection.selectedIds, [targetId])
+})
+
+test('ordinary tool I/O rejection does not increment invalid tool execution security metrics', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, (_messages, round) => round === 1
+    ? actions([{ type: 'request_tools', tools: [{ actionId: 'io-failure', tool: 'read_region', args: { fileId: f.fileId, startLine: 1, endLine: 1 } }] }])
+    : actions([{ type: 'finish_investigation', unresolved: ['Source read failed.'] }]))
+  const ioFailureTools = { execute: async (action: { actionId: string; tool: string }) => ({ actionId: action.actionId, tool: action.tool, status: 'rejected' as const, reasonCode: 'unreadable', evidenceIds: [], preview: '', consumption: { readBytes: 0, toolCalls: 1, cacheHit: false } }) }
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: ioFailureTools as never, ledger: f.ledger, model: mock.gateway })
+  assert.equal(outcome.statistics.invalidActions, 1)
+  assert.equal(outcome.statistics.invalidToolExecutions, 0)
+  assert.equal(outcome.statistics.readRequests, 1)
 })
 
 test('abort before first decision and abort after dispatch never execute late tool actions', async t => {
@@ -154,4 +240,14 @@ test('zero investigation output quota stops without calling the model', async t 
   assert.equal(outcome.stopReason, 'budget-exhausted')
   assert.equal(outcome.statistics.decisions, 0)
   assert.equal(ledger.snapshot().total.dispatchedRequests, 0)
+})
+
+test('observer abort during terminal notification cancels both investigators before return', async t => {
+  const agentic = await fixture(t)
+  const agenticAbort = new AbortController()
+  const agenticModel = modelFor(agentic, () => actions([{ type: 'finish_investigation', unresolved: ['No source evidence.'] }]))
+  await assert.rejects(runInvestigation({ spec: agentic.spec, snapshot: agentic.snapshot, store: agentic.store, tools: agentic.tools, ledger: agentic.ledger, model: agenticModel.gateway, signal: agenticAbort.signal, onEvent: event => { if (event.type === 'stop') agenticAbort.abort() } }), error => (error as { code?: string }).code === 'cancelled')
+  const scripted = await fixture(t)
+  const staticAbort = new AbortController()
+  await assert.rejects(runStaticInvestigation({ spec: scripted.spec, snapshot: scripted.snapshot, store: scripted.store, tools: scripted.tools, ledger: scripted.ledger, signal: staticAbort.signal, onEvent: event => { if (event.type === 'stop') staticAbort.abort() } }), error => (error as { code?: string }).code === 'cancelled')
 })
