@@ -45,8 +45,8 @@ export interface BudgetLedgerSnapshot {
   /** inputTokens/outputTokens are conservative charged totals (actual receipt or retained reservation). */
   readonly total: Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number; actualProviderUsage: Readonly<ModelUsage> | null; readBytes: number; toolCalls: number }>
   readonly remaining: Readonly<{ modelRequests: number; inputTokens: number; outputTokens: number; readBytes: number; toolCalls: number; investigationRequests: number; investigationInputTokens: number; investigationOutputTokens: number; investigationReadBytes: number; investigationToolCalls: number; investigationWallClockMs: number }>
-  readonly byStage: Readonly<Record<ModelStage, Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number }>>>
-  readonly reservations: readonly Readonly<ModelEntry>[]
+  readonly byStage: Readonly<Record<ModelStage, Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number }>>>
+  readonly reservations: readonly (Readonly<ModelEntry> & Readonly<{ estimatedInputTokens: number }>)[]
 }
 
 export interface BudgetLedger {
@@ -75,6 +75,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
   const models = new Map<string, ModelEntry>()
   const reads = new Map<string, ReadEntry>()
   const tools = new Map<string, ToolEntry>()
+  const issuedIds = new Set<string>()
   let dispatchedRequests = 0; let reservedRequests = 0
   let inputTokens = 0; let outputTokens = 0; let readBytes = 0; let toolCalls = 0
   let investigationInput = 0; let investigationOutput = 0; let investigationRequests = 0; let investigationReadBytes = 0; let investigationTools = 0
@@ -105,8 +106,8 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
   }
   const unique = (id: string): void => {
     validId(id)
-    if (models.has(id) || reads.has(id) || tools.has(id)) throw new WorkflowError('invalid-argument')
-    if (models.size + reads.size + tools.size >= MAX_ENTRIES) budgetExhausted()
+    if (issuedIds.has(id) || models.has(id) || reads.has(id) || tools.has(id)) throw new WorkflowError('invalid-argument')
+    if (issuedIds.size >= MAX_ENTRIES) budgetExhausted()
   }
   const settleUnknown = (entry: ModelEntry): void => {
     entry.state = 'unknown'
@@ -120,6 +121,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       ensureModelCapacity(value.stage, value.inputTokens, value.outputTokens)
       const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, state: 'reserved', usage: null }
       models.set(value.id, entry)
+      issuedIds.add(value.id)
       reservedRequests++; inputTokens += value.inputTokens; outputTokens += value.outputTokens
       if (value.stage === 'investigation') { investigationRequests++; investigationInput += value.inputTokens; investigationOutput += value.outputTokens }
     },
@@ -165,7 +167,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       if (blocked || add(readBytes, bytes) > spec.budget.total.readBytes || add(investigationReadBytes, bytes) > spec.budget.investigation.readBytes) {
         budgetExhausted()
       }
-      reads.set(id, { id, reservedBytes: bytes, state: 'reserved', actualBytes: null }); readBytes += bytes; investigationReadBytes += bytes
+      reads.set(id, { id, reservedBytes: bytes, state: 'reserved', actualBytes: null }); issuedIds.add(id); readBytes += bytes; investigationReadBytes += bytes
     },
     settleRead(id, actualBytes) {
       validId(id); integer(actualBytes); const entry = reads.get(id)
@@ -186,7 +188,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       validId(id); validStage(stage); unique(id); ensureTime(stage)
       const totalLimit = spec.budget.total.maxToolCalls
       if (blocked || (totalLimit !== undefined && toolCalls + 1 > totalLimit) || (stage === 'investigation' && investigationTools + 1 > (spec.budget.investigation.maxToolCalls ?? 0))) budgetExhausted()
-      tools.set(id, { id, stage }); toolCalls++
+      tools.set(id, { id, stage }); issuedIds.add(id); toolCalls++
       if (stage === 'investigation') investigationTools++
     },
     assertCanContinue(stage) { ensureTime(stage); if (blocked) budgetExhausted() },
@@ -196,7 +198,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       if (value.contextChars !== undefined && value.contextChars > CONTEXT_CHAR_BUDGETS[spec.granularity]) throw new WorkflowError('budget-exhausted')
       // Recovered sent work counts as an actual attempt, and its maximum reservation remains charged.
       const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, state: 'unknown', usage: null }
-      models.set(value.id, entry); dispatchedRequests++
+      models.set(value.id, entry); issuedIds.add(value.id); dispatchedRequests++
       inputTokens = add(inputTokens, value.inputTokens); outputTokens = add(outputTokens, value.outputTokens)
       if (value.stage === 'investigation') { investigationRequests++; investigationInput = add(investigationInput, value.inputTokens); investigationOutput = add(investigationOutput, value.outputTokens) }
       if (dispatchedRequests > spec.budget.total.maxModelRequests || inputTokens > spec.budget.total.inputTokens || outputTokens > spec.budget.total.outputTokens || (value.stage === 'investigation' && (investigationRequests > spec.budget.investigation.maxModelRequests || investigationInput > spec.budget.investigation.inputTokens || investigationOutput > spec.budget.investigation.outputTokens))) blocked = true
@@ -210,8 +212,8 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
         : null
       const byStage = Object.fromEntries(STAGES.map(stage => {
         const entries = [...models.values()].filter(entry => entry.stage === stage)
-        return [stage, Object.freeze({ dispatchedRequests: entries.filter(entry => ['dispatched', 'settled', 'unknown'].includes(entry.state)).length, reservedRequests: entries.filter(entry => entry.state === 'reserved' || entry.state === 'unknown-unsent').length, inputTokens: entries.reduce((sum, entry) => sum + (entry.usage?.inputTokens ?? entry.inputTokens), 0), outputTokens: entries.reduce((sum, entry) => sum + (entry.usage?.outputTokens ?? entry.outputTokens), 0) })]
-      })) as Record<ModelStage, Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number }>>
+        return [stage, Object.freeze({ dispatchedRequests: entries.filter(entry => ['dispatched', 'settled', 'unknown'].includes(entry.state)).length, reservedRequests: entries.filter(entry => entry.state === 'reserved' || entry.state === 'unknown-unsent').length, inputTokens: entries.reduce((sum, entry) => sum + (entry.usage?.inputTokens ?? entry.inputTokens), 0), outputTokens: entries.reduce((sum, entry) => sum + (entry.usage?.outputTokens ?? entry.outputTokens), 0), estimatedInputTokens: entries.reduce((sum, entry) => sum + entry.inputTokens, 0) })]
+      })) as Record<ModelStage, Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number }>>
       return Object.freeze({
         elapsedMs: elapsed(), blocked,
         usageComplete,
@@ -232,7 +234,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
           investigationWallClockMs: Math.max(0, spec.budget.investigation.wallClockMs - elapsed())
         }),
         byStage: Object.freeze(byStage),
-        reservations: Object.freeze([...models.values()].map(entry => Object.freeze({ ...entry })))
+        reservations: Object.freeze(modelEntries.map(entry => Object.freeze({ ...entry, estimatedInputTokens: entry.inputTokens })))
       })
     }
   }

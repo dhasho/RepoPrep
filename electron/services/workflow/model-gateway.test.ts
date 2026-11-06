@@ -161,6 +161,26 @@ test('gateway timeout is bounded by the remaining investigation deadline', async
   await gateway.complete({ id: 'bounded-investigation-timeout', stage: 'investigation', messages })
 })
 
+test('gateway rejects responses completed beyond either hard deadline while settling known usage', async () => {
+  for (const scenario of [
+    { stage: 'investigation' as const, deadline: 180_000 },
+    { stage: 'generation' as const, deadline: 600_000 }
+  ]) {
+    let time = 0
+    const runSpec = spec(); const ledger = createBudgetLedger(runSpec, { clock: () => time })
+    const gateway = createModelGateway(runSpec, profile(), ledger, { transport: async (_p, _m, _d, options) => {
+      options.beforeRequest!()
+      options.onUsage!(usage)
+      time = scenario.deadline
+      return 'late response'
+    } })
+    await assert.rejects(gateway.complete({ id: `late-${scenario.stage}`, stage: scenario.stage, messages }), error => hasCode(error, 'budget-exhausted'))
+    assert.equal(ledger.snapshot().usageComplete, true)
+    assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+    assert.deepEqual(ledger.snapshot().total.actualProviderUsage, usage)
+  }
+})
+
 test('gateway retries and compensation share actual request cap', async () => {
   const runSpec = createRunSpec({ version: 1, runId: 'run-01', projectId: 'project-01', snapshotId: 'snapshot-01', strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: 'profile-01', model: 'synthetic', endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile().baseUrl)).digest('hex'), protocol: 'openai', contextWindowTokens: 49152, maxOutputTokens: 4096 }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { maxModelRequests: 2 } })
   const ledger = createBudgetLedger(runSpec)

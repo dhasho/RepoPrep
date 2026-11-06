@@ -127,6 +127,8 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           beforeRequest,
           onUsage: (usage) => { receipt = normalizeUsage(usage) }
         })
+        // A custom transport or synchronous response handling may outlive the timer. Never return a result after either hard deadline.
+        ledger.assertCanContinue(input.stage)
         if (!dispatched) {
           ledger.markUnknownUnsent(input.id)
           unknownUnsent = true

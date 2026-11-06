@@ -61,6 +61,7 @@ test('M05 pre-request-failure releases unsent token and request reservations', (
   assert.equal(ledger.snapshot().total.reservedRequests, 0)
   assert.equal(ledger.snapshot().total.dispatchedRequests, 0)
   assert.equal(ledger.snapshot().total.inputTokens, 0)
+  assert.throws(() => ledger.reserveModel({ id: 'pre', stage: 'generation', inputTokens: 1, outputTokens: 1 }))
 })
 
 test('M05 dispatched-request-failure conservatively retains reservation', () => {
@@ -139,6 +140,7 @@ test('read reservations are atomic and overreads block future admissions', () =>
   const ledger = createBudgetLedger(spec({ readBytes: 10 }))
   ledger.reserveRead('read-before-io-failure', 1)
   ledger.releaseRead('read-before-io-failure')
+  assert.throws(() => ledger.reserveRead('read-before-io-failure', 1))
   assert.equal(ledger.snapshot().remaining.readBytes, 10)
   ledger.reserveRead('read-1', 9)
   assert.throws(() => ledger.reserveRead('read-2', 2))
