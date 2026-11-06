@@ -35,7 +35,7 @@ The report includes per-check results and raw references. Measurement metrics ar
 
 ## Dataset freeze status
 
-No retrieval tasks, sufficient-evidence tasks, review labels, repair labels, rubric, reviewer identities, or result receipts are present yet. Their inventory entries remain explicitly `not-materialized` with `sha256: null`. Synthetic tests can validate runner mechanics but cannot stand in for hidden holdout tasks, real model results, independent labels, or human review.
+No retrieval tasks, sufficient-evidence tasks, review labels, repair labels, reviewer identities, or result receipts are present yet. Their inventory entries remain explicitly `not-materialized` with `sha256: null`. Synthetic tests can validate runner mechanics but cannot stand in for hidden holdout tasks, real model results, independent labels, or human review.
 
 The four M13 public repository identities and commit IDs were selected and observed with `git ls-remote` on 2026-11-06 only, without fetching or reading repository source, to preserve them as holdout metadata:
 
@@ -50,11 +50,13 @@ This metadata freeze is not a full dataset freeze: no task files or evidence lab
 
 ## Consequences
 
+RunSpec is a main-process contract and does not introduce a new IPC input. Its model identity includes a required SHA-256 endpoint fingerprint; the future gateway must derive it from trusted normalized endpoint configuration and compare it before dispatch. The configuration fingerprint omits run/project/snapshot identity, which remains separate and cannot be replaced by a configuration match. Generation capacity is reserved before setting investigation limits. An experimental aggregate read ceiling of 8 MiB is new, distinct from the existing per-file ceiling from which the value was chosen; it can be tightened and is not connected to the production static reader yet. No runtime budget-enforcement claim is made until M05 exists. PLAN v1.2 records this contract decision without changing the v1.1 quality, sample-count, token, or latency acceptance thresholds.
+
 - The final stdout line is the machine-readable summary; exit status is 0 only for `pass`. `incomplete`, `blocked`, and `failed` are nonzero.
 - Every execution creates a fresh report, preserving earlier successes and failures rather than overwriting them.
 - A source/config/data/schema fingerprint documents what ran. A caller may provide expected hashes to enforce an exact binding; mismatches fail.
-- No new runtime dependency, model call, or `package.json` command is introduced in this preparatory change. Public repository metadata was observed using the already-authorized `git ls-remote` operation; repository source was not retrieved.
-- The next implementation step is to add real assertion-backed M01/M11 checkers against their actual contracts, while leaving all unrelated modules incomplete until their dependencies and data exist.
+- No new runtime dependency or model call is introduced. The integration adds test:agentic and verify:agentic:m01 through verify:agentic:m13 commands; unavailable modules fail closed. Public repository metadata was observed using the already-authorized `git ls-remote` operation; repository source was not retrieved.
+- M01 now has an assertion-backed checker against the actual contract. Complete the missing P0 assets before advancing phases; M11 replay and unrelated modules remain incomplete.
 
 ## Alternatives considered
 
