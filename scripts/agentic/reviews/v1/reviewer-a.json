@@ -1,9 +1,10 @@
 {
+  "schemaVersion": 1,
   "reviewerId": "agent-review-a",
   "reviewerKind": "subagent",
   "model": "gpt-6-luna",
   "taskName": "/root/reviewer_a",
-  "protocol": "agentic-review-v1",
+  "protocol": "agent-review-v1",
   "inputPacketSha256": "66057b38e9df2fa9f217e0bf56a8548a7f22134e248d1a98bf9812ce44be2866",
   "reviewedAt": "2026-11-06T01:24:23Z",
   "isolation": {
