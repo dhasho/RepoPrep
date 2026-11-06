@@ -4,6 +4,8 @@
 
 后续主分支已合入调用顺序与父区域文档节选修复，见[离线验证](context-selection-audit/2026-11-05-local-coverage/report.md)：三个请求正文保持，Requests 正文改变；四例没有新增真实模型测量。下列真实结果绑定原生产源码，不冒充当前代码的质量或成本成绩。
 
+2026-11-06已完成本阶段的[收尾与交接](../docs/context-selection-closeout-2026-11-06.md)。后续[Agentic context设计建议](../docs/agentic-context-workflow-proposal.md)讨论模块职责、trace和组件级评测，目前尚未实施。
+
 ## 真实模型评测（`real-generation-eval/`）
 
 普通运行以 `report.json` 保存逐题结果、请求与用量、配置、源码/fixture 哈希和 report digest；`report.md` 提供概览，逐事实复核见已有的 `assistant-review-*.json`。对比产物为 `comparison.md`/`comparison.json`。cohort 目录以 `cohort.json` 汇总已有测量，并保存复用证明和来源引用；它不代表重新执行了一次完整运行。
