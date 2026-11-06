@@ -81,9 +81,42 @@ test('rejects the exact 12 invalid cases in the M01 plan gate without echoing in
 
 test('rejects unsupported global limits and keeps a narrowed request within ceilings', () => {
   assert.throws(() => createRunSpec({ ...validInput(), budget: { inputTokens: 128_001 } }))
-  const spec = createRunSpec({ ...validInput(), budget: { maxModelRequests: 4, inputTokens: 20_000, outputTokens: 10_000 } })
-  assert.equal(spec.budget.total.maxModelRequests, 4)
-  assert.equal(spec.budget.investigation.maxModelRequests, 3)
-  assert.equal(spec.budget.generationReserve.maxModelRequests, 1)
-  assert.equal(spec.budget.generationReserve.inputTokens, 2_000)
+  const minimalCalls = createRunSpec({ ...validInput(), budget: { maxModelRequests: 1 } })
+  assert.equal(minimalCalls.budget.investigation.maxModelRequests, 0)
+  assert.equal(minimalCalls.budget.generationReserve.maxModelRequests, 1)
+  assert.throws(() => createRunSpec({ ...validInput(), budget: { inputTokens: 0 } }))
+  assert.throws(() => createRunSpec({ ...validInput(), budget: { wallClockMs: 0 } }))
+
+  const deepseek = createRunSpec({
+    ...validInput(),
+    granularity: 'medium',
+    model: { profileId: 'profile-01', model: 'deepseek-flash' },
+    budget: { outputTokens: 65_536 }
+  })
+  assert.equal(deepseek.generationOutputTokens, 65_536)
+  assert.equal(deepseek.budget.investigation.outputTokens, 0)
+  assert.equal(deepseek.budget.generationReserve.outputTokens, 65_536)
+
+  const tightened = createRunSpec({
+    ...validInput(),
+    granularity: 'coarse',
+    model: { profileId: 'profile-01', model: 'small-window', contextWindowTokens: 4096, maxOutputTokens: 2048 },
+    budget: { maxModelRequests: 2, inputTokens: 4096, outputTokens: 4096, readBytes: 512, wallClockMs: 1000 }
+  })
+  assert.equal(tightened.budget.investigation.maxModelRequests, 1)
+  assert.equal(tightened.budget.generationReserve.maxModelRequests, 1)
+  assert.equal(tightened.budget.investigation.inputTokens, 2048)
+  assert.equal(tightened.budget.generationReserve.inputTokens, tightened.generationInputTokens)
+  assert.equal(tightened.budget.investigation.outputTokens, 2048)
+  assert.equal(tightened.budget.generationReserve.outputTokens, tightened.generationOutputTokens)
+  assert.equal(tightened.budget.generationReserve.readBytes, 0)
+  assert.equal(tightened.budget.generationReserve.wallClockMs, 1)
+})
+
+test('rejects accessor based input without invoking the getter', () => {
+  const input = validInput() as Record<string, unknown>
+  let invoked = false
+  Object.defineProperty(input, 'projectId', { enumerable: true, get() { invoked = true; return 'project-01' } })
+  assert.throws(() => createRunSpec(input))
+  assert.equal(invoked, false)
 })

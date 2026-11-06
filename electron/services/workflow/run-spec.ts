@@ -56,7 +56,9 @@ const LIMITS = Object.freeze({
   requests: Object.freeze({ coarse: 5, medium: 5, fine: 14 }),
   inputTokens: 128_000,
   outputTokens: 65_536,
-  // Bound matches the scanner's largest approved per-file read ceiling.
+  // New workflow-wide aggregate cap, chosen at the scanner's maximum per-file
+  // ceiling. The workflow ledger must enforce the aggregate; the legacy reader
+  // only enforces each file's approved ceiling.
   readBytes: SCAN_LIMIT_BOUNDS.maxContentFileBytes.max,
   wallClockMs: 600_000,
   investigation: Object.freeze({ requests: 3, tools: 8, inputTokens: 18_000, outputTokens: 6_000, readBytes: 2 * 1024 * 1024, wallClockMs: 180_000 })
@@ -74,7 +76,11 @@ function record(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[]): void {
-  if (Reflect.ownKeys(value).some((key) => typeof key !== 'string' || !allowed.includes(key))) invalid()
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowed.includes(key)) invalid()
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (!descriptor || !('value' in descriptor)) invalid()
+  }
 }
 function id(value: unknown): string {
   if (typeof value !== 'string' || !ID_PATTERN.test(value)) invalid()
@@ -111,7 +117,7 @@ function parseModel(value: unknown): RunModelConfig {
   return result
 }
 
-function makeBudget(granularity: Granularity, requested: Partial<RunBudget> = {}): Readonly<RunSpec['budget']> {
+function makeBudget(granularity: Granularity, requested: Partial<RunBudget>, generationInputTokens: number, generationOutputTokens: number): Readonly<RunSpec['budget']> {
   const totalRequests = requested.maxModelRequests ?? LIMITS.requests[granularity]
   const total = freeze({
     maxModelRequests: totalRequests,
@@ -121,12 +127,13 @@ function makeBudget(granularity: Granularity, requested: Partial<RunBudget> = {}
     wallClockMs: requested.wallClockMs ?? LIMITS.wallClockMs
   })
   const investigation = freeze({
-    maxModelRequests: Math.min(LIMITS.investigation.requests, total.maxModelRequests),
+    // Always retain one request for generation, even when investigation cannot run.
+    maxModelRequests: Math.min(LIMITS.investigation.requests, Math.max(0, total.maxModelRequests - 1)),
     maxToolCalls: LIMITS.investigation.tools,
-    inputTokens: Math.min(LIMITS.investigation.inputTokens, total.inputTokens),
-    outputTokens: Math.min(LIMITS.investigation.outputTokens, total.outputTokens),
+    inputTokens: Math.min(LIMITS.investigation.inputTokens, Math.max(0, total.inputTokens - generationInputTokens)),
+    outputTokens: Math.min(LIMITS.investigation.outputTokens, Math.max(0, total.outputTokens - generationOutputTokens)),
     readBytes: Math.min(LIMITS.investigation.readBytes, total.readBytes),
-    wallClockMs: Math.min(LIMITS.investigation.wallClockMs, total.wallClockMs)
+    wallClockMs: Math.min(LIMITS.investigation.wallClockMs, Math.max(0, total.wallClockMs - 1))
   })
   // This is capacity withheld from investigation: the remainder of every global
   // ceiling remains available to generation, repair and review in the shared ledger.
@@ -154,9 +161,8 @@ function parseRequestedBudget(value: unknown, granularity: Granularity): Partial
   }
   const parsed: Partial<RunBudget> = {}
   for (const key of keys) {
-    if (value[key] !== undefined) parsed[key] = safeInteger(value[key], 0, maxima[key])
+    if (value[key] !== undefined) parsed[key] = safeInteger(value[key], key === 'maxModelRequests' || key === 'wallClockMs' ? 1 : 0, maxima[key])
   }
-  if (parsed.maxModelRequests !== undefined && parsed.maxModelRequests < 1) invalid()
   return parsed
 }
 
@@ -175,8 +181,12 @@ export function createRunSpec(input: unknown): RunSpec {
   const outputTokens = effective.reservedOutputTokens
   if (!Number.isSafeInteger(outputTokens) || outputTokens < 256 || outputTokens > LIMITS.outputTokens) invalid()
   if (effective.contextWindowTokens !== null && (outputTokens >= effective.contextWindowTokens || effective.inputTokens < 1)) invalid()
-  const budget = makeBudget(granularity, parseRequestedBudget(input.budget, granularity))
-  if (outputTokens > budget.total.outputTokens) invalid()
+  const requestedBudget = parseRequestedBudget(input.budget, granularity)
+  const totalInputTokens = requestedBudget.inputTokens ?? LIMITS.inputTokens
+  const totalOutputTokens = requestedBudget.outputTokens ?? LIMITS.outputTokens
+  const generationInputTokens = Math.min(effective.inputTokens, totalInputTokens)
+  if (totalInputTokens < 1 || totalOutputTokens < outputTokens) invalid()
+  const budget = makeBudget(granularity, requestedBudget, generationInputTokens, outputTokens)
   const result: RunSpec = {
     version: 1,
     runId: id(input.runId),
@@ -192,7 +202,7 @@ export function createRunSpec(input: unknown): RunSpec {
     toolVersion: version(input.toolVersion),
     policyVersion: version(input.policyVersion),
     budget,
-    generationInputTokens: Math.min(effective.inputTokens, budget.total.inputTokens),
+    generationInputTokens,
     generationOutputTokens: outputTokens
   }
   return freeze(result)
@@ -231,5 +241,14 @@ export function fingerprintRunSpec(spec: RunSpec): string {
     generationInputTokens: spec.generationInputTokens,
     generationOutputTokens: spec.generationOutputTokens
   }
-  return createHash('sha256').update(JSON.stringify(config)).digest('hex')
+  return createHash('sha256').update(canonicalJson(config)).digest('hex')
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (record(value)) {
+    const members = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+    return `{${members.join(',')}}`
+  }
+  return JSON.stringify(value)
 }
