@@ -1,0 +1,18 @@
+{
+  "fixtureVersion": 1,
+  "module": "M05",
+  "sequenceIds": [
+    "normal-settlement",
+    "investigation-exhaustion",
+    "generation-reserve",
+    "pre-request-failure",
+    "dispatched-request-failure",
+    "partial-receipt",
+    "missing-receipt",
+    "retry",
+    "compensation",
+    "cancellation",
+    "duplicate-receipt",
+    "unknown-after-recovery"
+  ]
+}
