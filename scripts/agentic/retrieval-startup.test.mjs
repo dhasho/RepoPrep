@@ -14,7 +14,7 @@ Module._load = function (request, parent, isMain) {
   if (request === 'electron') return { app: {} }
   return originalLoad.call(this, request, parent, isMain)
 }
-const { args, prepareStartupSynchronously, runStartupStages, staticErrorCode } = require('../evaluation/run-retrieval-profile-entry.cjs')
+const { args, prepareStartupSynchronously, runStartupStages, staticErrorCode, isAllowedAuthorizationOutputCap } = require('../evaluation/run-retrieval-profile-entry.cjs')
 const { parseArgs } = require('../evaluation/run-retrieval-profile.cjs')
 Module._load = originalLoad
 
@@ -36,6 +36,12 @@ test('startup diagnostics expose only allowlisted static codes', () => {
   assert.equal(staticErrorCode(new Error('secret ciphertext or credential data')), 'startup-failed')
   assert.equal(staticErrorCode(new Error('profile-binding-mismatch')), 'profile-binding-mismatch')
   assert.equal(staticErrorCode(new Error('retrieval-evaluation-incomplete')), 'retrieval-evaluation-incomplete')
+})
+
+test('authorization admits only the default or explicitly approved 6000 token output cap', () => {
+  assert.equal(isAllowedAuthorizationOutputCap(2000), true)
+  assert.equal(isAllowedAuthorizationOutputCap(6000), true)
+  for (const value of [0, 1, 2001, 5999, 6001, 8192, 2000.5, '6000']) assert.equal(isAllowedAuthorizationOutputCap(value), false)
 })
 
 test('credential preflight is an explicit option and keeps authorization mandatory', () => {

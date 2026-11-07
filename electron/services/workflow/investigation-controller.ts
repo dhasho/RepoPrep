@@ -104,9 +104,11 @@ function currentEvidence(store: WorkflowEvidenceStore): string[] { return [...ne
 function allEvidence(store: WorkflowEvidenceStore): string[] { return [...new Set(store.metadata().ids)] }
 function selectedTopicEvidence(topics: readonly TopicCard[]): string[] { return [...new Set(topics.flatMap(topic => topic.evidenceIds))] }
 
-export async function runInvestigation(input: { spec: RunSpec; snapshot: WorkflowProjectSnapshot; store: WorkflowEvidenceStore; tools: ToolGateway; ledger: BudgetLedger; model: Model; objective?: string; signal?: AbortSignal; onEvent?: (event: Event) => void }): Promise<InvestigationResult> {
+export async function runInvestigation(input: { spec: RunSpec; snapshot: WorkflowProjectSnapshot; store: WorkflowEvidenceStore; tools: ToolGateway; ledger: BudgetLedger; model: Model; objective?: string; maxOutputTokensPerDecision?: number; signal?: AbortSignal; onEvent?: (event: Event) => void }): Promise<InvestigationResult> {
   const { spec, snapshot, store, tools, ledger, model, signal } = input
   if (!spec || !snapshot || !store || !tools || !ledger || !model || typeof model.complete !== 'function') fail('invalid-argument')
+  const requestedOutputCap = input.maxOutputTokensPerDecision
+  if (requestedOutputCap !== undefined && (!Number.isSafeInteger(requestedOutputCap) || requestedOutputCap < 1 || requestedOutputCap > Math.min(6000, spec.model.maxOutputTokens ?? 6000, spec.budget.investigation.outputTokens))) fail('invalid-argument')
   if (spec.projectId !== snapshot.projectId || spec.snapshotId !== snapshot.snapshotId) fail('stale-snapshot')
   const objective = input.objective ?? `Explore ${spec.roleFocus} mechanisms at ${spec.granularity} depth for interview preparation.`
   if (!str(objective, 1, 800)) fail('invalid-argument')
@@ -129,7 +131,9 @@ export async function runInvestigation(input: { spec: RunSpec; snapshot: Workflo
     checkAbort(signal)
     const budget = ledger.snapshot().remaining
     if (budget.investigationRequests <= 0 || budget.investigationOutputTokens <= 0) { stopReason = 'budget-exhausted'; break }
-    const reservedOutput = Math.min(2000, Math.floor(budget.investigationOutputTokens / (3 - round)))
+    const reservedOutput = requestedOutputCap === undefined
+      ? Math.min(2000, spec.model.maxOutputTokens ?? 2000, Math.floor(budget.investigationOutputTokens / (3 - round)))
+      : Math.min(requestedOutputCap, budget.investigationOutputTokens)
     if (reservedOutput < 1) { stopReason = 'budget-exhausted'; break }
     const evidenceIds = currentEvidence(store)
     evidenceIds.forEach(id => presentedEvidence.add(id))

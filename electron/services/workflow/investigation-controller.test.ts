@@ -24,7 +24,7 @@ import { normalizeBaseUrl } from '../llm.ts'
 import { runInvestigation, runStaticInvestigation } from './investigation-controller.ts'
 
 const source = 'export function calculate(value: number) {\n  if (value < 0) throw new Error("negative")\n  return value * 2\n}\n'
-const profile = { id: 'm06-synthetic', name: 'Synthetic', model: 'synthetic', baseUrl: 'https://m06.invalid/v1', apiKey: 'M06_SYNTHETIC_KEY', protocol: 'openai' as const, contextWindowTokens: 49152, maxOutputTokens: 4096 }
+const profile = { id: 'm06-synthetic', name: 'Synthetic', model: 'synthetic', baseUrl: 'https://m06.invalid/v1', apiKey: 'M06_SYNTHETIC_KEY', protocol: 'openai' as const, contextWindowTokens: 49152, maxOutputTokens: 8192 }
 async function fixture(t: { after(fn: () => unknown): void }, text = source) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'm06-offline-'))
   await writeFile(path.join(root, 'sample.ts'), text)
@@ -36,16 +36,19 @@ async function fixture(t: { after(fn: () => unknown): void }, text = source) {
   const tools = createToolGateway(snapshot, store, ledger)
   return { root, snapshot, store, spec, ledger, tools, fileId: snapshot.files.find(file => file.relPath.endsWith('sample.ts'))!.fileId }
 }
-function modelFor(f: Awaited<ReturnType<typeof fixture>>, script: (messages: readonly { role: string; content: string }[], index: number) => unknown, options: { usage?: boolean; beforeReturn?: (signal?: AbortSignal) => void } = {}) {
+function modelFor(f: Awaited<ReturnType<typeof fixture>>, script: (messages: readonly { role: string; content: string }[], index: number) => unknown, options: { usage?: boolean; outputUsage?: (index: number) => number; beforeReturn?: (signal?: AbortSignal) => void } = {}) {
   let calls = 0
+  const requestedOutputCaps: Array<number | undefined> = []
   const gateway = createModelGateway(f.spec, profile, f.ledger, { transport: async (_profile, messages, _delta, transport) => {
     calls++
+    requestedOutputCaps.push(transport.maxOutputTokens)
     transport.beforeRequest!()
-    if (options.usage !== false) transport.onUsage!({ inputTokens: 15, outputTokens: 10, totalTokens: 25 })
+    const outputTokens = options.outputUsage?.(calls) ?? 10
+    if (options.usage !== false) transport.onUsage!({ inputTokens: 15, outputTokens, totalTokens: 15 + outputTokens })
     options.beforeReturn?.(transport.signal)
     return JSON.stringify(script(messages, calls))
   } })
-  return { gateway, calls: () => calls }
+  return { gateway, calls: () => calls, requestedOutputCaps }
 }
 const actions = (items: unknown[]) => ({ actions: items })
 function evidenceIds(messages: readonly { role: string; content: string }[]): string[] {
@@ -248,13 +251,47 @@ test('unknown usage stays unknown and static policy does not call a model', asyn
 
 test('zero investigation output quota stops without calling the model', async t => {
   const f = await fixture(t)
-  const zeroSpec = createRunSpec({ version: 1, runId: 'm06-zero-output', projectId: f.snapshot.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { outputTokens: 4096 } })
+  const zeroSpec = createRunSpec({ version: 1, runId: 'm06-zero-output', projectId: f.snapshot.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { outputTokens: 8192 } })
   const ledger = createBudgetLedger(zeroSpec)
   const mock = createModelGateway(zeroSpec, profile, ledger, { transport: async () => { throw Error('must not call') } })
   const outcome = await runInvestigation({ spec: zeroSpec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger, model: mock })
   assert.equal(outcome.stopReason, 'budget-exhausted')
   assert.equal(outcome.statistics.decisions, 0)
   assert.equal(ledger.snapshot().total.dispatchedRequests, 0)
+})
+
+test('omitted output cap preserves the default 2000 token request ceiling', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, () => actions([{ type: 'finish_investigation', unresolved: ['No source evidence.'] }]))
+  await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway })
+  assert.deepEqual(mock.requestedOutputCaps, [2000])
+})
+
+test('explicit output cap uses actual remaining budget without reserving equal future rounds', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, (_messages, round) => round === 1
+    ? actions([{ type: 'propose_topics', topics: [] }])
+    : actions([{ type: 'finish_investigation', unresolved: ['No source evidence.'] }]), { outputUsage: round => round === 1 ? 452 : 10 })
+  await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway, maxOutputTokensPerDecision: 6000 })
+  assert.deepEqual(mock.requestedOutputCaps, [6000, 5548])
+})
+
+test('explicit output cap stops when actual investigation output is exhausted', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, () => actions([{ type: 'propose_topics', topics: [] }]), { outputUsage: () => 6000 })
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway, maxOutputTokensPerDecision: 6000 })
+  assert.deepEqual(mock.requestedOutputCaps, [6000])
+  assert.equal(outcome.stopReason, 'budget-exhausted')
+  assert.equal(outcome.statistics.decisions, 1)
+})
+
+test('invalid explicit output cap is rejected before dispatch', async t => {
+  const f = await fixture(t)
+  const mock = modelFor(f, () => actions([{ type: 'finish_investigation', unresolved: [] }]))
+  for (const cap of [0, 6001, 8193, 2000.5, Number.NaN]) {
+    await assert.rejects(runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway, maxOutputTokensPerDecision: cap }), error => (error as { code?: string }).code === 'invalid-argument')
+  }
+  assert.equal(mock.calls(), 0)
 })
 
 test('observer abort during terminal notification cancels both investigators before return', async t => {
