@@ -481,6 +481,7 @@ async function callForJson(
       if (!validateMessageCharBudget(messages, budget) || estimateMessageTokens(messages) > inputTokenBudget) {
         throw new Error('模型请求内容超出支持范围。')
       }
+      counters.pendingSelection = prepared.selection ? cloneRenderedSelection(prepared.selection) : null
       // The prepared packet is final: never fit or mutate it after this point.
     } else if (!validateMessageCharBudget(messages, budget)) throw new Error('模型请求内容超出支持范围。')
     const estimated = estimateMessageTokens(messages)

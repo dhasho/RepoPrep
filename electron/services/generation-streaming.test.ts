@@ -14,6 +14,8 @@ import { generateInterview } from './generator.ts'
 import { chatCompletionStream } from './llm.ts'
 // @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
 import { CitationValidationError, type GenerationRequestAdapter } from './workflow/generation-request.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
+import type { RenderedSelection } from './context-builder.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import type { GenerationCheckpoint } from '../../shared/generation-checkpoint.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -452,4 +454,48 @@ test('request adapter marks bounded follow-up calls as compensation', { timeout:
   assert.equal(stages[0], 'generation')
   assert.ok(stages.includes('compensation'))
   assert.equal(questionList(result).length, 15)
+})
+
+test('request adapter observations use its prepared selection and omit fabricated selection when absent', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const selection: RenderedSelection = {
+    filePaths: ['packed-only.ts'],
+    selectedRegions: 3,
+    providedChars: 500,
+    sourceSelections: [{ relPath: 'packed-only.ts', wholeFile: true, regions: [{ start: 1, end: 8, complete: true }] }]
+  }
+  const questions = Array.from({ length: 20 }, (_, index) => makeQuestion(index + 1))
+  const run = async (preparedSelection?: RenderedSelection) => {
+    const observed: RenderedSelection[] = []
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+    const adapter: GenerationRequestAdapter = {
+      id: 'synthetic-selection-adapter',
+      prepare(input) {
+        const messages = input.buildMessages('PACKED_CONTEXT')
+        return {
+          requestId: input.requestId,
+          stage: input.stage,
+          messages,
+          ...(preparedSelection ? { selection: preparedSelection } : {})
+        }
+      },
+      complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+      acceptQuestion() {}
+    }
+    const result = await withFetch(() => streamResponse([deltaFrame(fullRoot(questions)), finishFrame('stop'), usageFrame(), doneFrame()]), async () =>
+      generateInterview({ ...params, requestAdapter: adapter, onContextDispatch: (value) => observed.push(value) })
+    )
+    return { result, observed }
+  }
+
+  const packed = await run(selection)
+  assert.equal(packed.result.generationDiagnostics?.selectedFiles, 1)
+  assert.equal(packed.result.generationDiagnostics?.selectedRegions, 3)
+  assert.deepEqual(packed.observed, [selection], 'callbacks report the actual prepared selection, not the legacy context render')
+
+  const withoutSelection = await run()
+  assert.equal(withoutSelection.result.generationDiagnostics?.selectedFiles, 0)
+  assert.equal(withoutSelection.result.generationDiagnostics?.selectedRegions, 0)
+  assert.deepEqual(withoutSelection.observed, [], 'an adapter without selection metadata does not fabricate source observations')
 })

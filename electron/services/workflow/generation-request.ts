@@ -1,5 +1,6 @@
 import type { QuestionItem } from '@shared/types'
 import type { ChatMessage, CallOptions } from '../llm'
+import type { RenderedSelection } from '../context-builder'
 
 export type GenerationRequestStage = 'generation' | 'repair' | 'compensation'
 
@@ -22,6 +23,8 @@ export interface PreparedGenerationRequest {
   messages: readonly ChatMessage[]
   /** Adapter-owned dispatch metadata; generator treats this as opaque. */
   dispatch?: unknown
+  /** Exact source selection represented by this prepared packet, when available. */
+  selection?: RenderedSelection
 }
 
 export interface AcceptedGenerationQuestion {
