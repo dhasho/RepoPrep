@@ -624,8 +624,8 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
           readBytes: state.total.readBytes,
           elapsedMs: state.elapsedMs,
           readRequests: Number.isSafeInteger(result?.statistics?.readRequests) ? result.statistics.readRequests : null,
-          repeatedReads: result?.statistics?.repeatedReads ?? 0,
-          invalidToolExecutions: result?.statistics?.invalidToolExecutions ?? 0,
+          repeatedReads: result?.statistics?.repeatedReads ?? null,
+          invalidToolExecutions: result?.statistics?.invalidToolExecutions ?? null,
           overspend: state.overspend,
           blocked: state.blocked,
           reservations: callReceipts.map(({ requestId, estimatedInputTokens, estimatedOutputTokens, contextChars, state: entryState, usage }) => ({ id: requestId, stage: 'investigation', state: entryState, reservedInputTokens: estimatedInputTokens, reservedOutputTokens: estimatedOutputTokens, contextChars, usage }))

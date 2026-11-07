@@ -81,6 +81,36 @@ test('gateway propagates only sanitized model failure metadata', async () => {
   assert.equal(ledger.snapshot().usageComplete, false)
 })
 
+test('client failure tail settles the gateway ledger without turning the call into success', async () => {
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    return new Response([
+      'data: {"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":3}}\n\n',
+      'data: [DONE]\n\n'
+    ].join(''), { headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    const ledger = createBudgetLedger(spec())
+    const gateway = createModelGateway(spec(), profile(), ledger)
+    await assert.rejects(gateway.complete({ id: 'client-length', stage: 'generation', messages }), error => {
+      assert.ok(error instanceof WorkflowError)
+      assert.equal(error.code, 'model-failed')
+      assert.deepEqual(error.modelFailure, { kind: 'response', finishReason: 'length' })
+      return true
+    })
+    const state = ledger.snapshot()
+    assert.equal(calls, 1)
+    assert.equal(state.usageComplete, true)
+    assert.equal(state.reservations[0].state, 'settled')
+    assert.deepEqual(state.reservations[0].usage, usage)
+    assert.equal(state.total.inputTokens, 5)
+    assert.equal(state.total.outputTokens, 3)
+  } finally { globalThis.fetch = originalFetch }
+})
+
 test('gateway treats malformed partial receipt as unknown, never zero', async () => {
   const ledger = createBudgetLedger(spec())
   const gateway = createModelGateway(spec(), profile(), ledger, { transport: async (_p, _m, _d, options) => { options.beforeRequest!(); options.onUsage!({ inputTokens: 1 } as never); return 'response' } })
