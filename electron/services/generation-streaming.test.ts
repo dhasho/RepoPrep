@@ -10,6 +10,10 @@ import path from 'node:path'
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { generateInterview } from './generator.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
+import { chatCompletionStream } from './llm.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
+import { CitationValidationError, type GenerationRequestAdapter } from './workflow/generation-request.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import type { GenerationCheckpoint } from '../../shared/generation-checkpoint.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -76,6 +80,10 @@ function finishFrame(reason: string): Uint8Array {
 }
 
 function doneFrame(): Uint8Array { return encoder.encode('data: [DONE]\n\n') }
+
+function usageFrame(): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } })}\n\n`)
+}
 
 function streamResponse(chunks: Uint8Array[], options: { close?: boolean; onCancel?: () => void } = {}): { response: Response; wasCancelled: () => boolean } {
   let cancelled = false
@@ -333,4 +341,115 @@ test('a legacy v1 checkpoint with an old fingerprint is rejected before a reques
   })
   assert.equal(saves, 0)
   assert.deepEqual(legacy, original, 'rejected legacy checkpoint must remain untouched')
+})
+
+test('request adapter captures raw citation fields after normalization and repairs only the rejected question', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const stages: string[] = []
+  const accepted: Array<{ requestId: string; rawQuestion: unknown; id: string }> = []
+  const dispatchedMessages: string[][] = []
+  const preparedSnapshots: string[][] = []
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-request-adapter',
+    prepare(input) {
+      stages.push(input.stage)
+      const messages = input.buildMessages('PACKED_CONTEXT_SENTINEL')
+      preparedSnapshots.push(messages.map((message) => message.content))
+      return { requestId: input.requestId, stage: input.stage, messages, dispatch: { synthetic: true } }
+    },
+    async complete(prepared, onDelta, options) {
+      const messages = [...prepared.messages]
+      dispatchedMessages.push(messages.map((message) => message.content))
+      assert.deepEqual(dispatchedMessages.at(-1), preparedSnapshots[dispatchedMessages.length - 1], 'the prepared packet must not be refitted or rewritten before completion')
+      return chatCompletionStream(profile, messages, onDelta, options)
+    },
+    acceptQuestion({ requestId, rawQuestion, question }) {
+      if (typeof rawQuestion === 'object' && rawQuestion !== null && 'evidenceIds' in rawQuestion &&
+        Array.isArray((rawQuestion as { evidenceIds?: unknown }).evidenceIds) && (rawQuestion as { evidenceIds: unknown[] }).evidenceIds.includes('unpacked-id')) {
+        throw new CitationValidationError()
+      }
+      accepted.push({ requestId, rawQuestion, id: question.id })
+    }
+  }
+  const rawBad = { ...makeQuestion(1), evidenceIds: ['unpacked-id'], ignoredRawField: 'preserved only for validation' }
+  const repaired = Array.from({ length: 20 }, (_, index) => ({ ...makeQuestion(index + 1), evidenceIds: ['packed-id'], ignoredRawField: `raw-${index + 1}` }))
+
+  const result = await withFetch((_prompt, call) => {
+    const content = call === 1 ? fullRoot([rawBad]) : fullRoot(repaired, { PersistedTerm: 'A synthetic definition.' })
+    return streamResponse([deltaFrame(content), finishFrame('stop'), usageFrame(), doneFrame()])
+  }, async (calls) => {
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+    const output = await generateInterview({ ...params, requestAdapter: adapter })
+    assert.equal(calls.length, 2)
+    assert.deepEqual(stages, ['generation', 'repair'])
+    assert.ok(dispatchedMessages.every((messages) => messages.some((message) => message.includes('PACKED_CONTEXT_SENTINEL'))), 'prepared packet context must reach dispatch without refitting')
+    return output
+  })
+
+  const finalQuestions = questionList(result)
+  assert.equal(finalQuestions.length, 20)
+  assert.equal(accepted.length, 20, 'the invalid citation is rejected before acceptance')
+  assert.ok(accepted.every((item) => typeof item.rawQuestion === 'object' && item.rawQuestion !== null && 'evidenceIds' in item.rawQuestion))
+  assert.deepEqual(finalQuestions.map((question) => question.id), accepted.map((item) => item.id), 'program-created IDs survive normalization and final assembly')
+  assert.equal(result.generationDiagnostics?.requestCount, 2)
+  assert.equal(result.generationDiagnostics?.usageComplete, true, 'citation format failure drains the stream and retains its usage receipt')
+})
+
+test('request adapter cancellation does not become a format repair', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const controller = new AbortController()
+  const stages: string[] = []
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-cancel-adapter',
+    prepare(input) {
+      stages.push(input.stage)
+      return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('CANCEL_CONTEXT') }
+    },
+    complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+    acceptQuestion() {}
+  }
+  const questions = [makeQuestion(1), makeQuestion(2)]
+
+  await withFetch(() => streamResponse([deltaFrame(fullRoot(questions)), finishFrame('stop'), usageFrame(), doneFrame()], { close: false }), async (calls) => {
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan, { signal: controller.signal, onProgress: (_step, detail) => { if (detail?.includes('已校验 1/')) controller.abort() } })
+    await assert.rejects(generateInterview({
+      ...params,
+      requestAdapter: adapter
+    }), /取消/)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(stages, ['generation'])
+  })
+})
+
+test('request adapter marks bounded follow-up calls as compensation', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const stages: string[] = []
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-compensation-adapter',
+    prepare(input) {
+      stages.push(input.stage)
+      return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPENSATION_CONTEXT') }
+    },
+    complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+    acceptQuestion() {}
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  let nextQuestion = 2
+
+  const result = await withFetch((prompt, call) => {
+    const quota = countQuota(prompt) ?? 1
+    const questions = call === 1 ? [makeQuestion(1)] : Array.from({ length: quota }, () => makeQuestion(nextQuestion++))
+    return streamResponse([deltaFrame(fullRoot(questions)), finishFrame('stop'), usageFrame(), doneFrame()])
+  }, async (calls) => {
+    const output = await generateInterview({ ...params, requestAdapter: adapter })
+    assert.ok(calls.length >= 2)
+    return output
+  })
+
+  assert.equal(stages[0], 'generation')
+  assert.ok(stages.includes('compensation'))
+  assert.equal(questionList(result).length, 15)
 })

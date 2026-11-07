@@ -16,7 +16,7 @@ import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@share
 import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES, RESULT_LIMITS } from '@shared/result-contract'
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
 import { contentReadWarning } from '@shared/content-read'
-import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
+import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage, type CallOptions } from './llm'
 import { InterviewJsonStream, type InterviewJsonPreview, type StreamedInterviewQuestion } from './interview-json-stream'
 import { renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
 import { staticContextProvider, type ContextProvider } from './workflow/context-provider'
@@ -26,6 +26,7 @@ import { buildCompensationInstruction, normalizeQuestionKey, selectUniqueQuestio
 import type { ScanResult } from './scanner'
 import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
+import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
@@ -41,6 +42,8 @@ export interface GenerateParams {
   onContextDispatch?: (selection: RenderedSelection) => void
   /** Main-process strategy boundary; omitted keeps the existing static behavior. */
   contextProvider?: ContextProvider
+  /** Optional main-process request boundary; omitted preserves static generation. */
+  requestAdapter?: GenerationRequestAdapter
   /** Opt-in, metadata-only observation. Does not change persisted result formats. */
   workflowTrace?: WorkflowTrace
   checkpoint?: { state?: GenerationCheckpoint | null; save: (state: GenerationCheckpoint) => void | Promise<void> }
@@ -427,13 +430,17 @@ interface StreamingBatchState {
 /** 调用大模型并解析出结构化结果，失败自动带错误重试一次 */
 async function callForJson(
   profile: LlmProfile,
-  buildMessages: (contextLimit: number, repair?: { reply: string; error: string }) => ChatMessage[],
+  buildMessages: (contextLimit: number, repair?: { reply: string; error: string }, contextTextOverride?: string) => ChatMessage[],
   contextChars: number,
   minimumContextChars: number,
   budget: number,
   signal: AbortSignal,
   onRequestTruncation: () => void,
   inputTokenBudget: number,
+  requestAdapter: GenerationRequestAdapter | undefined,
+  requestStage: GenerationRequestStage,
+  batchIndex: number,
+  batchLabel: string,
   onContextDispatch: GenerateParams['onContextDispatch'],
   trace: GenerateParams['workflowTrace'],
   counters: {
@@ -451,8 +458,32 @@ async function callForJson(
     const repair = attempt ? { reply: safeClipText(previousReply, 20_000), error: lastError } : undefined
     const fitted = fitMessages(buildMessages, contextChars, minimumContextChars, budget, repair, inputTokenBudget)
     if (fitted.contextLimit < contextChars) onRequestTruncation()
-    if (!validateMessageCharBudget(fitted.messages, budget)) throw new Error('模型请求内容超出支持范围。')
-    const estimated = estimateMessageTokens(fitted.messages)
+    let prepared: PreparedGenerationRequest | undefined
+    let messages = fitted.messages
+    let requestId: string | undefined
+    if (requestAdapter) {
+      requestId = randomUUID()
+      prepared = await requestAdapter.prepare({
+        requestId,
+        stage: attempt ? 'repair' : requestStage,
+        batchIndex,
+        label: batchLabel,
+        quota: Math.max(0, streaming.quota - batchQuestionCount(streaming.current)),
+        maxChars: budget,
+        maxInputTokens: inputTokenBudget,
+        signal,
+        buildMessages: (contextText) => buildMessages(fitted.contextLimit, repair, contextText)
+      })
+      if (!prepared || prepared.requestId !== requestId || prepared.stage !== (attempt ? 'repair' : requestStage) || !Array.isArray(prepared.messages)) {
+        throw new Error('模型请求准备失败。')
+      }
+      messages = [...prepared.messages]
+      if (!validateMessageCharBudget(messages, budget) || estimateMessageTokens(messages) > inputTokenBudget) {
+        throw new Error('模型请求内容超出支持范围。')
+      }
+      // The prepared packet is final: never fit or mutate it after this point.
+    } else if (!validateMessageCharBudget(messages, budget)) throw new Error('模型请求内容超出支持范围。')
+    const estimated = estimateMessageTokens(messages)
     const requestStarted = Date.now()
     const parser = new InterviewJsonStream()
     streaming.preview(parser.preview())
@@ -478,6 +509,9 @@ async function callForJson(
       if (streaming.excluded.has(key) || batchQuestionCount(streaming.current) >= streaming.quota) return
       const candidate = appendBatchQuestion(supplementMetadata(streaming.current, normalized), section, question)
       try { validateCheckpointBatch(candidate) } catch { throw new Error(RESULT_CONTRACT_MESSAGES.generated) }
+      if (requestAdapter && requestId) {
+        await requestAdapter.acceptQuestion({ requestId, rawQuestion: fragment.question, question })
+      }
       await streaming.save(candidate)
       if (signal.aborted) throw new LlmRequestError('cancelled')
       streaming.current = candidate
@@ -492,18 +526,32 @@ async function callForJson(
     let requestCompleted = false
     let requestUsage: LlmUsage | undefined
     try {
-      reply = await chatCompletionStream(profile, fitted.messages, async (delta) => {
+      const onDelta = async (delta: string): Promise<void> => {
         if (signal.aborted) throw new LlmRequestError('cancelled')
         receivedChars += delta.length
         let fragments: StreamedInterviewQuestion[] = []
+        let citationFailureThisChunk = false
         if (formatFailure === undefined) {
           try { fragments = parser.push(delta) }
           catch (error) { formatFailure = error; fragments = parser.drain(); streaming.preview(undefined) }
         }
-        for (const fragment of fragments) await accept(fragment)
+        for (const fragment of fragments) {
+          if (citationFailureThisChunk) break
+          try { await accept(fragment) }
+          catch (error) {
+            if (error instanceof CitationValidationError) {
+              formatFailure = error
+              citationFailureThisChunk = true
+              streaming.preview(undefined)
+              break
+            }
+            throw error
+          }
+        }
         emitPreview(fragments.length > 0)
         streaming.activity(receivedChars, Date.now() - requestStarted)
-      }, {
+      }
+      const options: CallOptions = {
         signal, timeoutMs: 600_000,
         maxOutputTokens: profile.maxOutputTokens,
         includeUsage: true,
@@ -514,7 +562,7 @@ async function callForJson(
             observeTrace(trace, {
               span: 'model', spanId: requestSpanId, parentSpanId: 'run-1',
               component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started',
-              inputHashes: [sha256(fitted.messages)], budget: { inputTokens: estimated, requestNumber: counters.requests }
+              inputHashes: [sha256(messages)], budget: { inputTokens: estimated, requestNumber: counters.requests }
             })
           }
           if (attempt) counters.repairs++
@@ -529,7 +577,7 @@ async function callForJson(
               observeTrace(trace, {
                 span: 'dispatch', spanId: `dispatch-${counters.requests}`, parentSpanId: requestSpanId,
                 component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'succeeded',
-                inputHashes: [sha256(fitted.messages)], outputHashes: [sha256(selection)],
+                inputHashes: [sha256(messages)], outputHashes: [sha256(selection)],
                 budget: { inputTokens: estimated, requestNumber: counters.requests }
               })
             }
@@ -547,7 +595,10 @@ async function callForJson(
           }
           counters.usageCount++
         }
-      })
+      }
+      reply = requestAdapter && prepared
+        ? await requestAdapter.complete(prepared, onDelta, options)
+        : await chatCompletionStream(profile, messages, onDelta, options)
       requestCompleted = true
     } catch (error) {
       streaming.preview(undefined)
@@ -751,6 +802,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   )
 
   const checkpoint = params.checkpoint
+  if (params.requestAdapter && checkpoint) throw new Error('证据感知生成暂不支持旧版生成检查点。')
   const resumed = Boolean(checkpoint)
   let checkpointState: GenerationCheckpoint | undefined
   let checkpointEntries: GenerationCheckpoint['entries'] = []
@@ -857,7 +909,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         { ...built.batches[index], files: [] }
       ).length + REQUEST_TRUNCATION_MARKER.length
       let activeStream: StreamingBatchState | undefined
-      const makePrompt = (contextLimit: number, repair?: { reply: string; error: string }): ChatMessage[] => {
+      const makePrompt = (contextLimit: number, repair?: { reply: string; error: string }, contextTextOverride?: string): ChatMessage[] => {
         const bounded = renderBatchWithinBudget(
           built.headerText,
           built.treeText,
@@ -874,7 +926,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         const remaining = Math.max(0, quota - (activeStream ? batchQuestionCount(activeStream.current) : 0))
         const continuation = activeStream ? continuationInstruction(activeStream.current, remaining) : ''
         const userPrompt = buildUserPrompt({
-          contextText: bounded.text,
+          contextText: contextTextOverride ?? bounded.text,
           granularity,
           roleFocus,
           isModuleBatch: built.batches[index].kind === 'module',
@@ -981,6 +1033,10 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           signal,
           markRequestTruncation,
           tokenBudget.inputTokens,
+          params.requestAdapter,
+          extraInstruction ? 'compensation' : 'generation',
+          index,
+          built.batches[index].label,
           params.onContextDispatch,
           params.workflowTrace,
           counters,
