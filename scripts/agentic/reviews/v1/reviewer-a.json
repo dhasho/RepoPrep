@@ -1,0 +1,1561 @@
+{
+  "schemaVersion": 1,
+  "reviewerId": "agent-review-a",
+  "reviewerKind": "subagent",
+  "model": "gpt-6-luna",
+  "taskName": "/root/reviewer_a",
+  "protocol": "agent-review-v1",
+  "inputPacketSha256": "66057b38e9df2fa9f217e0bf56a8548a7f22134e248d1a98bf9812ce44be2866",
+  "reviewedAt": "2026-11-06T01:24:23Z",
+  "isolation": {
+    "inheritedImplementationContext": false,
+    "authorLabelsProvided": false,
+    "otherReviewProvided": false
+  },
+  "provenance": {
+    "independentSourceReview": "All 80 primary answers and follow-up answers were checked against packet source files.",
+    "sameModelCorrelatedBias": "This review uses the same gpt-6-luna model family as the other reviewer, so model-specific correlated errors remain possible; independence is contextual, not model-diverse."
+  },
+  "samples": [
+    {
+      "sampleId": "sample-73a8d0aaf19d",
+      "answerFingerprint": "f0e4a51fe4c60ecbbeea56f2c789dc65ed05993e6e8431cf0b77064cec4550f7",
+      "materialError": false,
+      "explanation": "The catch reports the rejected job through onDone; the while loop continues draining pending jobs.",
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 10,
+          "endLine": 19
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-41257ce68bf4",
+      "answerFingerprint": "2bed95e51c5c50565723c2cfbbf651e4ba0fdef200cd5d9a20f93de67ca5b036",
+      "materialError": false,
+      "explanation": "issue returns expiresAt computed as now plus lifetimeMs.",
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 6,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-6aec8fc7dd6a",
+      "answerFingerprint": "2bf43e094a702c814e8c7b3710d9fb5f6b54af96a36808aca90e436fa19afd54",
+      "materialError": true,
+      "explanation": "parseRow requires exactly two configured cells and parses cells[1] as amount; it does not accept arbitrary lengths or parse the first cell as amount.",
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-25122607a461",
+      "answerFingerprint": "d7bdee77c7e3ee53dee33fb7a907f3fc0c0a2983dad3574a408e60c0c16a59a7",
+      "materialError": true,
+      "explanation": "The broken field raises PermanentFailure; busy raises TemporaryFailure, so the answer reverses the condition.",
+      "evidence": [
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-06281f54b083",
+      "answerFingerprint": "ca7f0784baf090a707fe4317858cfb9c7f24680e1564b700c7dba82837048d89",
+      "materialError": false,
+      "explanation": "When no handler exists, dispatch sends status 404 with body missing.",
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-e978f0e39638",
+      "answerFingerprint": "26e5b7b82aa76a6155382ffcef4cc283532d9a0106acb845dd1ae3e61d09c2a0",
+      "materialError": true,
+      "explanation": "parseRow requires exactly two configured cells and parses cells[1] as amount; it does not accept arbitrary lengths or parse the first cell as amount.",
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-767d811de118",
+      "answerFingerprint": "988cef336682fec54af68b16c114d6ea715b287d3dba81c2010070ad6c6a6c49",
+      "materialError": true,
+      "explanation": "Admin is declared as a Principal subclass and calls super; it is not independent.",
+      "evidence": [
+        {
+          "path": "roles.py",
+          "startLine": 4,
+          "endLine": 11
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-029ed71dcb54",
+      "answerFingerprint": "59ccaf42688c638238220233ab61be054544c5dd43ee4463bc8faae3b9779012",
+      "materialError": false,
+      "explanation": "The sleep delay is BASE_DELAY multiplied by 2 raised to the zero-based attempt index.",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-ca765822d2fc",
+      "answerFingerprint": "de1a8e6d41fce4f7539eef246d5f8b5c86ad5edaf2224209219bd76ae1c7c265",
+      "materialError": true,
+      "explanation": "discount uses literal 0.2 and does not import memberRate; the config value does not configure the function.",
+      "evidence": [
+        {
+          "path": "config.js",
+          "startLine": 1,
+          "endLine": 2
+        },
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-2501d58403ef",
+      "answerFingerprint": "8f6ec7e2bd95b269a38670e0801bd192ca52ec7e7960679103f151285d68cce8",
+      "materialError": false,
+      "explanation": "After the owner check, can_write returns whether the principal is an Admin instance.",
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-5bed220c5fbd",
+      "answerFingerprint": "eb0f676dadc30da13d3993ec5805ae88e9eb5428551a1ef0f655601d0155429f",
+      "materialError": false,
+      "explanation": "The returned closure deletes that listener from the Set.",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 3,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-000a58269d59",
+      "answerFingerprint": "9b43d47bb5688ace7fdc2a4d4e67ebc12eb362e770ced3172428b450d75ca4ef",
+      "materialError": true,
+      "explanation": "request catches TemporaryFailure and retries it; PermanentFailure is not caught by this retry loop.",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-5b13c9572f64",
+      "answerFingerprint": "256b752f5aafd8aba6b5235815dccbbe0e922c291f1ef9283e2a59d8cadec4d0",
+      "materialError": false,
+      "explanation": "importRows calls onInvalid when parseRow returns null and continues its loop.",
+      "evidence": [
+        {
+          "path": "import.ts",
+          "startLine": 2,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-02bd5fe8c458",
+      "answerFingerprint": "4edecb6e719094e3a554487ad50369cc27e6b79281f80479481b3ea7ac521596",
+      "materialError": true,
+      "explanation": "worker catches ValueError and TypeError from parse, reports the bad line, increments rejected, and continues instead of propagating and stopping.",
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 4,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-852f24713ee6",
+      "answerFingerprint": "a86a7d3f8ff7fd4670af785230013f0d43f9a2aa8ea83895bcea2b8e1a924f1f",
+      "materialError": false,
+      "explanation": "authorize returns false for an invalid session without refresh; there is no refresh path before next.",
+      "evidence": [
+        {
+          "path": "guard.ts",
+          "startLine": 2,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-1d795ba0b258",
+      "answerFingerprint": "bd37dcf5de899e4bbbfd83bde73325a82467f5ffb129927d35ad1ef35bc62277",
+      "materialError": false,
+      "explanation": "On a cache miss, load fetches the key, stores the fetched value, and returns it.",
+      "evidence": [
+        {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-929ceed01958",
+      "answerFingerprint": "203496986da04b550b55622d092ef274cff44edd10734538fb6138075e850097",
+      "materialError": true,
+      "explanation": "Queue.add rejects when pending length is at least maxPending; maxPending is 2, so the queue enforces a capacity.",
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 4,
+          "endLine": 9
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-58e358d54cef",
+      "answerFingerprint": "e0c83ef240279d041cc3f90968c8e376a6d6cf91c618fdb90a0cb2144ac56381",
+      "materialError": false,
+      "explanation": "needsRestock compares quantity with warningThreshold using less-than; the threshold is 5.",
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 8,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-9cf94eb2fd9d",
+      "answerFingerprint": "9732d4ecd88893240e712503713810cd27eaf006b1e3d9b04c98465ae83b8da8",
+      "materialError": false,
+      "explanation": "The routes map contains /health and /items.",
+      "evidence": [
+        {
+          "path": "routes.js",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-74e1f36ac88e",
+      "answerFingerprint": "f1fd2ce0aa06e225a05242cc1bc35b3af7b9bfd1d1661b7ea17a3e318ca47d91",
+      "materialError": true,
+      "explanation": "WarehouseStock inherits protected quantity from StockRecord; it does not copy it into an unrelated public field.",
+      "evidence": [
+        {
+          "path": "base.ts",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-73007837976f",
+      "answerFingerprint": "36834ea979e2abfa977440d6aeb55214cac5caf8dda73e464f8d7e2bd219cbb3",
+      "materialError": false,
+      "explanation": "importRows calls onInvalid when parseRow returns null and continues its loop.",
+      "evidence": [
+        {
+          "path": "import.ts",
+          "startLine": 2,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-a55738d197eb",
+      "answerFingerprint": "9e017e6bceda65e616235fba388d074d0e5bb835d65c6279946ab482334c231a",
+      "materialError": false,
+      "explanation": "When no handler exists, dispatch sends status 404 with body missing.",
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-72bbeb75306e",
+      "answerFingerprint": "a98dc52cfff2e722a80ef32b20802842c6d62e3588ac56d49d03de2df96c82ea",
+      "materialError": true,
+      "explanation": "When size exceeds MAX_ENTRIES, put finds the smallest timestamp and deletes that oldest key, not the most recent key.",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 12
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-cfb4aadfdd10",
+      "answerFingerprint": "768648b36c406beeed11ce4767e93cca9f6be39f46718ccc99cdc17f49b7f8df",
+      "materialError": false,
+      "explanation": "needsRestock compares quantity with warningThreshold using less-than; the threshold is 5.",
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 8,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-c99bd8066b06",
+      "answerFingerprint": "9199c43ee0b2d4e0cde74c91014b06a61fe0d909358302c4babed881fe151b8a",
+      "materialError": false,
+      "explanation": "feature.js reduces userId character codes to a sum and applies modulo 100 for the bucket.",
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 4,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-787522d34468",
+      "answerFingerprint": "ad0472aaee213374bbcb9c11e66b5abb5d379e80395a936bcd2326ddf46b7ec9",
+      "materialError": true,
+      "explanation": "When size exceeds MAX_ENTRIES, put finds the smallest timestamp and deletes that oldest key, not the most recent key.",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 12
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-974d4c8f8ff0",
+      "answerFingerprint": "9fa170f76cc718ade9ec8d2af341ad4baa6abf31e1615011ee05fffbd607754e",
+      "materialError": false,
+      "explanation": "feature.js reduces userId character codes to a sum and applies modulo 100 for the bucket.",
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 4,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-64dbab382fbe",
+      "answerFingerprint": "21c5f4645af57a49bbc4ddfcece5447f2f16acebe8523882b6be9b637d31300d",
+      "materialError": false,
+      "explanation": "The sleep delay is BASE_DELAY multiplied by 2 raised to the zero-based attempt index.",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-ffe75e009ac5",
+      "answerFingerprint": "f9be9301f03c780106e3b00fc397195a3d03982d63d6d5cf66877c07f4318741",
+      "materialError": true,
+      "explanation": "request catches TemporaryFailure and retries it; PermanentFailure is not caught by this retry loop.",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b5b4f9fee8f6",
+      "answerFingerprint": "843bc40cf9e6a3ab08553f6f0622e06dbb439b4a7deff1fab9fe0482c514a2af",
+      "materialError": true,
+      "explanation": "WarehouseStock inherits protected quantity from StockRecord; it does not copy it into an unrelated public field.",
+      "evidence": [
+        {
+          "path": "base.ts",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-ce150323e261",
+      "answerFingerprint": "c771c0e006b9b4add684096f4345646aa86f97e6b38697ba4225eef5a15eccaf",
+      "materialError": false,
+      "explanation": "can_read allows owner or reader/admin role; can_write allows owner or Admin instance, matching the stated distinction.",
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 4,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-124336236368",
+      "answerFingerprint": "5ce9f4fa1e100ca1ddeb337e1f8266f49a3add5faa7c75802cb49670de73b4a0",
+      "materialError": false,
+      "explanation": "authorize returns false for an invalid session without refresh; there is no refresh path before next.",
+      "evidence": [
+        {
+          "path": "guard.ts",
+          "startLine": 2,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-859d1fa81456",
+      "answerFingerprint": "fb691cf8142625952cac4cfa23348d5a81eda9c6b63c77445d246c22fe49bfa8",
+      "materialError": true,
+      "explanation": "emit catches each listener exception, increments failures, and continues iterating; it does not rethrow the first failure.",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-cac6ce23622d",
+      "answerFingerprint": "a8897e289cf5a41acc25c86666b9ab6726f1f3ab32cd21175d203d24bc5f4ce5",
+      "materialError": true,
+      "explanation": "The broken field raises PermanentFailure; busy raises TemporaryFailure, so the answer reverses the condition.",
+      "evidence": [
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-a54fc9c7710e",
+      "answerFingerprint": "e4c536ab85257b2edea0cde066e0b1412484397aa51c4fa6c430a84ec8dc2c85",
+      "materialError": false,
+      "explanation": "parse splits on colon, unpacks name and raw, and converts raw to int.",
+      "evidence": [
+        {
+          "path": "parser.py",
+          "startLine": 1,
+          "endLine": 3
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-c3f32e4fbacb",
+      "answerFingerprint": "d8778319079a5973af3cd843666f584dd3735232f373067b14f569b55760d6d2",
+      "materialError": false,
+      "explanation": "get compares elapsed monotonic time with TTL_SECONDS; expired entries are deleted and return None.",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 14,
+          "endLine": 22
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-8ccee7ad2efa",
+      "answerFingerprint": "403246e8356e757515f7a3f6333841e21ed1402d2dbf6d7b2cd36912af8b1fa8",
+      "materialError": false,
+      "explanation": "emit returns the failures counter, incremented once per callback that throws.",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-16ecfc5c705e",
+      "answerFingerprint": "a4eedb88f144f2e025d411996db5d17780e62d20ca50505ad487518994d2b836",
+      "materialError": true,
+      "explanation": "request catches TemporaryFailure and retries it; PermanentFailure is not caught by this retry loop.",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b65c5893b2cb",
+      "answerFingerprint": "ea18a1475e577c0d72ebf30e60502f25fb181248bbf386517cd6441a8c0d0f9b",
+      "materialError": false,
+      "explanation": "emit returns the failures counter, incremented once per callback that throws.",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-9bf08c353449",
+      "answerFingerprint": "bd0076243cec53aaecea6bba2b9b96cd6502e9a8b89d2cbc6bb71c708c6ad944",
+      "materialError": true,
+      "explanation": "response delegates to isEnabled, which requires enabled === true and checks the user bucket against rollout; positive rollout alone is insufficient.",
+      "evidence": [
+        {
+          "path": "controller.js",
+          "startLine": 2,
+          "endLine": 4
+        },
+        {
+          "path": "feature.js",
+          "startLine": 1,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-fd99b134858e",
+      "answerFingerprint": "ebb14c352fef67e8eee17eb396b30f08ebcd66b71756d74736ce92eb4c1f6b92",
+      "materialError": true,
+      "explanation": "dispatch catches handler exceptions and sends status 500 with body failed.",
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-def18eaa1e28",
+      "answerFingerprint": "c0d2781865e5392e1be687913df335af048c9e9abb77a666cd8f6b405ee53480",
+      "materialError": true,
+      "explanation": "response delegates to isEnabled, which requires enabled === true and checks the user bucket against rollout; positive rollout alone is insufficient.",
+      "evidence": [
+        {
+          "path": "controller.js",
+          "startLine": 2,
+          "endLine": 4
+        },
+        {
+          "path": "feature.js",
+          "startLine": 1,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-d0d48fcca154",
+      "answerFingerprint": "b137e49b53764607b0c6b86b7e51a4d0609083c229005dea552d73a365bd9ab1",
+      "materialError": false,
+      "explanation": "can_read allows owner or reader/admin role; can_write allows owner or Admin instance, matching the stated distinction.",
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 4,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-9948a6b36eaa",
+      "answerFingerprint": "757a8eeb37bc290b2e8c908cbc8f05bd36d2617251e306458c838eabfb2ff7b9",
+      "materialError": true,
+      "explanation": "discount returns zero unless member is true and subtotal is at least 100; otherwise it returns the lesser of 20% and 30, rather than always 30.",
+      "evidence": [
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-6c563c6d7c59",
+      "answerFingerprint": "5a3928e795619874ace6959001373c69cbef874bc0973c0e26c403b5e368354b",
+      "materialError": true,
+      "explanation": "emit catches each listener exception, increments failures, and continues iterating; it does not rethrow the first failure.",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-c21cbcb82e42",
+      "answerFingerprint": "7276482bfad5db55ba7d4459985df04e9bfd4518fe245f3879429ba51468fab1",
+      "materialError": true,
+      "explanation": "isEnabled immediately returns false unless settings.enabled is true, before checking rollout.",
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 1,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-17b9642caa7f",
+      "answerFingerprint": "323de947a15df21254867b0019bfba3e7606a90509fd170871205ad85f4d58b8",
+      "materialError": true,
+      "explanation": "valid requires expiresAt > now; equality is invalid.",
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 3,
+          "endLine": 5
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-c961aafe1464",
+      "answerFingerprint": "7537155748aabafaac95e4124ee00759efd0fce83e840a3ad030c75a6f9a1fef",
+      "materialError": false,
+      "explanation": "The catch reports the rejected job through onDone; the while loop continues draining pending jobs.",
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 10,
+          "endLine": 19
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-adc14109ba00",
+      "answerFingerprint": "7ae3961fb34c49d7b63b4fde00131278170e5b31fdb390bad85394a4f5bbcc38",
+      "materialError": false,
+      "explanation": "The routes map contains /health and /items.",
+      "evidence": [
+        {
+          "path": "routes.js",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-1da47ae03693",
+      "answerFingerprint": "16fcfcf57e1788fbf1975682b5b2eab90c89a3e68fe2d90a830b735c1c60028a",
+      "materialError": false,
+      "explanation": "After the owner check, can_write returns whether the principal is an Admin instance.",
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-066a92b3e90a",
+      "answerFingerprint": "a73d643b8bb0eba394f32162cb1ea161b1d7b28064e740d57274974f894f8cc9",
+      "materialError": false,
+      "explanation": "On a cache miss, load fetches the key, stores the fetched value, and returns it.",
+      "evidence": [
+        {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-17bb2f9f756d",
+      "answerFingerprint": "308896b5e948e1c864498bbd6d47e03038a63473fc974bb11fdaa2c2c1ed6fda",
+      "materialError": true,
+      "explanation": "dispatch catches handler exceptions and sends status 500 with body failed.",
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-a1ebfc75f519",
+      "answerFingerprint": "ab074d331a1c40752619eef02d85ce8348fedda2a3bee2aaafd00eac09f2cf0d",
+      "materialError": true,
+      "explanation": "When size exceeds MAX_ENTRIES, put finds the smallest timestamp and deletes that oldest key, not the most recent key.",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 12
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-3be777ffd049",
+      "answerFingerprint": "83211ef5f6032a26019f52a650bb87cc6dd4102075c00397e80b667bd1c02ca9",
+      "materialError": true,
+      "explanation": "reserve rejects non-integers, nonpositive counts, and counts above current quantity; warningThreshold is not used.",
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 3,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-608decc5f4a8",
+      "answerFingerprint": "849899dc49960e7eacaca65655e43197804c4b7e5160cde9f0885d7d8f091bd1",
+      "materialError": false,
+      "explanation": "The returned closure deletes that listener from the Set.",
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 3,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-19f365a95185",
+      "answerFingerprint": "e20680d44f35a080d11bfbe540ebb4f3171264b57aeb1d5bed4fdcb5165f7f23",
+      "materialError": false,
+      "explanation": "get compares elapsed monotonic time with TTL_SECONDS; expired entries are deleted and return None.",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 14,
+          "endLine": 22
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b07aeccda1b9",
+      "answerFingerprint": "e3f080613dd7f1bce6ea649b43dac1fdcea51d8292d70d3d82b01498eab59168",
+      "materialError": false,
+      "explanation": "total subtracts discount, applies tax to the remainder, and rounds to two decimal places.",
+      "evidence": [
+        {
+          "path": "checkout.js",
+          "startLine": 3,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-e52678e8433d",
+      "answerFingerprint": "edcf1bfed021a8f43dce3bdccbeb886490e668e49614d9c79594200971b6cea5",
+      "materialError": false,
+      "explanation": "get compares elapsed monotonic time with TTL_SECONDS; expired entries are deleted and return None.",
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 14,
+          "endLine": 22
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-246f11083f55",
+      "answerFingerprint": "da97ff99cf9e4e0bcbefa1e59fd8f4a72dcc4e260ce019fb06de252f1dafc418",
+      "materialError": true,
+      "explanation": "import_lines returns a tuple of accepted records and rejected count, not only a number of accepted records.",
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 2,
+          "endLine": 14
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b63ec7a63470",
+      "answerFingerprint": "870a4f06ee944e046e0da310f811744385310f7c64d57912f11326348a347b58",
+      "materialError": true,
+      "explanation": "The broken field raises PermanentFailure; busy raises TemporaryFailure, so the answer reverses the condition.",
+      "evidence": [
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-439d1a6d10ee",
+      "answerFingerprint": "deaba45497c36352d81ad9c797f6a8e7bb13dd63fb9feea50e183dd66ece133d",
+      "materialError": true,
+      "explanation": "worker catches ValueError and TypeError from parse, reports the bad line, increments rejected, and continues instead of propagating and stopping.",
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 4,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-2429377c1505",
+      "answerFingerprint": "adb3a9d5a8de4c877d9e3fdf2ad8755d5739ec0b3016137a4470cb14587a7fba",
+      "materialError": false,
+      "explanation": "total subtracts discount, applies tax to the remainder, and rounds to two decimal places.",
+      "evidence": [
+        {
+          "path": "checkout.js",
+          "startLine": 3,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-a3ddb7d8abf6",
+      "answerFingerprint": "06526b1e38e8f27be14f682b78c525ab6bf57716e916e7c1a7cd90834e62e656",
+      "materialError": true,
+      "explanation": "Admin is declared as a Principal subclass and calls super; it is not independent.",
+      "evidence": [
+        {
+          "path": "roles.py",
+          "startLine": 4,
+          "endLine": 11
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-fbcbd01ead87",
+      "answerFingerprint": "2e1ee3590a9910cb98424d7833f7ad5957387db9b09161871fa711bc2f25465b",
+      "materialError": true,
+      "explanation": "parseRow returns null when Number(cells[1]) is not finite; it does not substitute zero.",
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-74de702662d8",
+      "answerFingerprint": "142122577a8bac1ffb6af731bdbe67f6777f042d819ff667926cbec5454e030c",
+      "materialError": true,
+      "explanation": "reserve rejects non-integers, nonpositive counts, and counts above current quantity; warningThreshold is not used.",
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 3,
+          "endLine": 7
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b50df2dbe0ed",
+      "answerFingerprint": "aa83b9980a3f936cf4abe847ece8ee668eb8f510d723f1033cc4e544313280ab",
+      "materialError": true,
+      "explanation": "discount returns zero unless member is true and subtotal is at least 100; otherwise it returns the lesser of 20% and 30, rather than always 30.",
+      "evidence": [
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-7de372865000",
+      "answerFingerprint": "49c99eef8aa7cc6e0144f4abc617bf80a8f3d2cb5d1d81493b422c94731fa6f8",
+      "materialError": true,
+      "explanation": "discount uses literal 0.2 and does not import memberRate; the config value does not configure the function.",
+      "evidence": [
+        {
+          "path": "config.js",
+          "startLine": 1,
+          "endLine": 2
+        },
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-690f0f7980f7",
+      "answerFingerprint": "ef03a43689b2647ad7c4329b95c4a3aa11fd2ddcfc4d8cc75d36b16598945ca6",
+      "materialError": true,
+      "explanation": "Admin is declared as a Principal subclass and calls super; it is not independent.",
+      "evidence": [
+        {
+          "path": "roles.py",
+          "startLine": 4,
+          "endLine": 11
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-680bb8470544",
+      "answerFingerprint": "7848056e0ad3c54f7de754d2096f2e4a7ed1dfeefb36d7210e9d880edffb3051",
+      "materialError": false,
+      "explanation": "The sleep delay is BASE_DELAY multiplied by 2 raised to the zero-based attempt index.",
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-94b7021c3434",
+      "answerFingerprint": "52c20dce8664d515226b85bcb96a426c8ffdfbf00ccf77b4d7285a64a8884593",
+      "materialError": false,
+      "explanation": "After the owner check, can_write returns whether the principal is an Admin instance.",
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b6a08e5da9c1",
+      "answerFingerprint": "a6c226c982b4dd602e91fbe4bc511900b9ae17ce031a940d22e7d308d3e6e0dc",
+      "materialError": true,
+      "explanation": "valid requires expiresAt > now; equality is invalid.",
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 3,
+          "endLine": 5
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-1913bfb51114",
+      "answerFingerprint": "b9e489a1553e36ae3f167e07122e2cafa56563b3bf25769bcd6e69dc3b53d825",
+      "materialError": true,
+      "explanation": "import_lines returns a tuple of accepted records and rejected count, not only a number of accepted records.",
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 2,
+          "endLine": 14
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-3fd3d50bf592",
+      "answerFingerprint": "391bd790b6d93748a35c6cc1102767b4fde31ec891200a200240b8290da993d5",
+      "materialError": false,
+      "explanation": "parse splits on colon, unpacks name and raw, and converts raw to int.",
+      "evidence": [
+        {
+          "path": "parser.py",
+          "startLine": 1,
+          "endLine": 3
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-76267c74474a",
+      "answerFingerprint": "ab92c2f86cf4745df3c8f9502d4df6c783742bcdd10efea2245a7402659fdf3e",
+      "materialError": true,
+      "explanation": "isEnabled immediately returns false unless settings.enabled is true, before checking rollout.",
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 1,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-1c23766663d8",
+      "answerFingerprint": "351e739c3f848d698ff63141f69b3da7ad5f3ef7ae1321dc6afbbc64fcbd4ed7",
+      "materialError": true,
+      "explanation": "Queue.add rejects when pending length is at least maxPending; maxPending is 2, so the queue enforces a capacity.",
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 4,
+          "endLine": 9
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-4f517501eca8",
+      "answerFingerprint": "04ca7b578c40d6aebb765757c68cb5be048da1b493402ab88580803b70dbb8c6",
+      "materialError": false,
+      "explanation": "submit resolves false immediately when queue.add returns false.",
+      "evidence": [
+        {
+          "path": "service.js",
+          "startLine": 3,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-ee1b534bf84b",
+      "answerFingerprint": "b4ebd53b58de244522fa55c8d024823fdfc0f0ecc10af078ce8deea629bb9c3c",
+      "materialError": false,
+      "explanation": "On a cache miss, load fetches the key, stores the fetched value, and returns it.",
+      "evidence": [
+        {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 10
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-b49a5a6a3001",
+      "answerFingerprint": "50c6716885add3b4d058a4598570d0cdfc2f4ac307979976e2b35e1c6f585afb",
+      "materialError": false,
+      "explanation": "submit resolves false immediately when queue.add returns false.",
+      "evidence": [
+        {
+          "path": "service.js",
+          "startLine": 3,
+          "endLine": 6
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-e4b8cfc053b4",
+      "answerFingerprint": "e47ecf9e075829d200f85c2d800406c92101a7c5660bc5330c92dc3a439f39ea",
+      "materialError": false,
+      "explanation": "issue returns expiresAt computed as now plus lifetimeMs.",
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 6,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 2,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    },
+    {
+      "sampleId": "sample-97714782fe69",
+      "answerFingerprint": "db774f26d507588eb2d50c747da8168f2db1c91c8437fcc1ea43e9b932e140b6",
+      "materialError": true,
+      "explanation": "parseRow returns null when Number(cells[1]) is not finite; it does not substitute zero.",
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8
+        }
+      ],
+      "topicValue": {
+        "relevance": 4,
+        "mechanismDepth": 3,
+        "evidenceSpecificity": 5,
+        "followupProgression": 1
+      }
+    }
+  ]
+}

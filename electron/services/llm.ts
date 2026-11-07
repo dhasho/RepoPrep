@@ -11,6 +11,12 @@ export interface ChatMessage {
 }
 
 export type LlmRequestErrorKind = 'timeout' | 'cancelled' | 'network' | 'http' | 'response'
+export type LlmFinishReason = 'length' | 'content_filter' | 'tool_calls' | 'function_call' | 'stop' | 'other'
+export interface LlmModelFailure {
+  readonly kind: LlmRequestErrorKind
+  readonly httpStatus?: number
+  readonly finishReason?: LlmFinishReason
+}
 
 const ERROR_MESSAGES: Record<LlmRequestErrorKind, string> = {
   timeout: '请求超时，请重试。',
@@ -26,11 +32,21 @@ const DEFAULT_ANTHROPIC_MAX_OUTPUT_TOKENS = 16_384
 /** Safe request failure; messages never include endpoint, provider body, or credentials. */
 export class LlmRequestError extends Error {
   readonly kind: LlmRequestErrorKind
+  readonly modelFailure: LlmModelFailure
 
-  constructor(kind: LlmRequestErrorKind, message = ERROR_MESSAGES[kind]) {
+  constructor(kind: LlmRequestErrorKind, message = ERROR_MESSAGES[kind], details: { httpStatus?: number; finishReason?: string } = {}) {
     super(message)
     this.name = 'LlmRequestError'
     this.kind = kind
+    const status = details.httpStatus
+    const finishReason = details.finishReason
+    this.modelFailure = Object.freeze({
+      kind,
+      ...(Number.isInteger(status) && status! >= 100 && status! <= 599 ? { httpStatus: status } : {}),
+      ...(finishReason === 'length' || finishReason === 'content_filter' || finishReason === 'tool_calls' || finishReason === 'function_call' || finishReason === 'stop'
+        ? { finishReason }
+        : finishReason ? { finishReason: 'other' as const } : {})
+    })
   }
 }
 
@@ -91,7 +107,7 @@ function parseAnthropicMessage(value: unknown): string {
   if (!isRecord(value) || value.type !== 'message' || !Array.isArray(value.content)) {
     throw new LlmRequestError('response')
   }
-  if (value.stop_reason === 'max_tokens') throw new LlmRequestError('response')
+  if (value.stop_reason === 'max_tokens') throw new LlmRequestError('response', undefined, { finishReason: 'length' })
 
   let content = ''
   for (const block of value.content) {
@@ -189,6 +205,8 @@ export interface CallOptions {
   timeoutMs?: number
   maxOutputTokens?: number
   includeUsage?: boolean
+  /** Main-process admission guard. Unlike observers, rejection must prevent fetch. */
+  beforeRequest?: () => void
   onUsage?: (usage: LlmUsage) => void
   onRequest?: () => void
 }
@@ -244,6 +262,13 @@ async function request(
   let response: Response | null = null
   let callbackFailed = false
   let callbackFailure: unknown
+  let pendingUsageReceipt: LlmUsage | null = null
+  let usageReported = false
+  const reportUsage = (): void => {
+    if (!pendingUsageReceipt || usageReported) return
+    usageReported = true
+    try { opts.onUsage?.(pendingUsageReceipt) } catch { /* diagnostics cannot affect generation */ }
+  }
   const abort = (kind: 'timeout' | 'cancelled'): void => {
     if (abortKind !== null) return
     abortKind = kind
@@ -269,6 +294,9 @@ async function request(
     const headers = requestHeaders(profile)
     const body = JSON.stringify(requestBody(profile, messages, stream, opts))
     throwIfAborted()
+    try { opts.beforeRequest?.() }
+    catch (error) { callbackFailed = true; callbackFailure = error; throw error }
+    throwIfAborted()
     try { opts.onRequest?.() } catch { /* diagnostics cannot affect generation */ }
     response = await fetch(url, {
       method: 'POST',
@@ -280,7 +308,7 @@ async function request(
 
     if (!response.ok) {
       cancelBody(response.body)
-      throw new LlmRequestError('http', `大模型服务返回 HTTP ${response.status}。`)
+      throw new LlmRequestError('http', `大模型服务返回 HTTP ${response.status}。`, { httpStatus: response.status })
     }
 
     if (!stream) {
@@ -296,7 +324,7 @@ async function request(
         throw new LlmRequestError('response')
       }
       const usage = isRecord(json) ? boundedUsage(json.usage, profile.protocol) : null
-      if (usage) { try { opts.onUsage?.(usage) } catch { /* diagnostics cannot affect generation */ } }
+      if (usage) pendingUsageReceipt = usage
       let content: string
       if (profile.protocol === 'anthropic') {
         content = parseAnthropicMessage(json)
@@ -312,6 +340,7 @@ async function request(
         }
       }
       throwIfAborted()
+      reportUsage()
       return content
     }
 
@@ -333,7 +362,7 @@ async function request(
       let json: unknown
       try { json = JSON.parse(text) as unknown } catch { throw new LlmRequestError('response') }
       const usage = isRecord(json) ? boundedUsage(json.usage, profile.protocol) : null
-      if (usage) { try { opts.onUsage?.(usage) } catch { /* diagnostics cannot affect generation */ } }
+      if (usage) pendingUsageReceipt = usage
       const content = profile.protocol === 'anthropic'
         ? parseAnthropicMessage(json)
         : extractOpenAiContent(json)
@@ -343,6 +372,7 @@ async function request(
         catch (error) { callbackFailed = true; callbackFailure = error; throw error }
       }
       throwIfAborted()
+      reportUsage()
       return content
     }
 
@@ -353,32 +383,67 @@ async function request(
     let anthropicInputTokens: unknown
     let anthropicOutputTokens: unknown
     let lastUsageReceipt: LlmUsage | null = null
+    let terminalFailure: LlmRequestError | null = null
+    let anthropicTerminalUsage = false
     const anthropicState: AnthropicStreamState = { completed: false }
     const contentState = { content: '' }
     const deltas: string[] = []
     const notifyDelta = (delta: string): void => { deltas.push(delta) }
-    const usageFromEvent = (value: unknown): void => {
+    const usageFromEvent = (value: unknown, eventType?: string): void => {
       if (!isRecord(value)) return
       if (profile.protocol === 'anthropic') {
         const usageValue = isRecord(value.message) && isRecord(value.message.usage)
           ? value.message.usage
           : isRecord(value.delta) && isRecord(value.delta.usage) ? value.delta.usage : value.usage
+        const hasTerminalOutput = eventType === 'message_delta' && isRecord(usageValue) && Number.isSafeInteger(usageValue.output_tokens) && Number(usageValue.output_tokens) >= 0
         if (isRecord(usageValue)) {
           if (usageValue.input_tokens !== undefined) anthropicInputTokens = usageValue.input_tokens
           if (usageValue.output_tokens !== undefined) anthropicOutputTokens = usageValue.output_tokens
         }
+        if (hasTerminalOutput) anthropicTerminalUsage = true
         const usage = boundedUsage({ input_tokens: anthropicInputTokens, output_tokens: anthropicOutputTokens }, profile.protocol)
-        if (usage) lastUsageReceipt = usage
+        if (usage && anthropicTerminalUsage) {
+          lastUsageReceipt = usage
+          pendingUsageReceipt = usage
+        }
         return
       }
       const usage = boundedUsage(value.usage, profile.protocol)
-      if (usage) lastUsageReceipt = usage
+      if (usage) {
+        lastUsageReceipt = usage
+        pendingUsageReceipt = usage
+      }
     }
     const decoder = new SseDecoder((event) => {
+      if (terminalFailure) {
+        // Once a terminal provider failure is known, only usage metadata is accepted.
+        if (event.data.trim() === '[DONE]' || profile.protocol === 'anthropic' && event.event === 'message_stop') return false
+        if (profile.protocol === 'anthropic') {
+          try {
+            const parsed = event.data.trim() ? JSON.parse(event.data) as unknown : null
+            const type = isRecord(parsed) && typeof parsed.type === 'string' ? parsed.type : event.event
+            if (type === 'message_stop') return false
+            usageFromEvent(isRecord(parsed) && isRecord(parsed.message) ? parsed.message : parsed, type)
+          } catch { /* A malformed tail cannot replace the already-known provider failure. */ }
+        } else {
+          try {
+            const parsed = JSON.parse(event.data) as unknown
+            if (isRecord(parsed)) usageFromEvent(parsed)
+          } catch { /* A malformed tail cannot replace the already-known provider failure. */ }
+        }
+        return true
+      }
       if (profile.protocol === 'anthropic') {
         try {
           const parsed = event.data.trim() ? JSON.parse(event.data) as unknown : null
-          usageFromEvent(isRecord(parsed) && isRecord(parsed.message) ? parsed.message : parsed)
+          const parsedRecord = isRecord(parsed) ? parsed : null
+          const type = parsedRecord && typeof parsedRecord.type === 'string' ? parsedRecord.type : event.event
+          usageFromEvent(isRecord(parsed) && isRecord(parsed.message) ? parsed.message : parsed, type)
+          const reason = type === 'message_delta' && isRecord(parsedRecord?.delta) ? parsedRecord.delta.stop_reason : undefined
+          if (reason === 'max_tokens') {
+            terminalFailure = new LlmRequestError('response', undefined, { finishReason: 'length' })
+            return true
+          }
           const shouldContinue = handleAnthropicStreamEvent(event, anthropicState, contentState, notifyDelta)
           full = contentState.content
           if (shouldContinue === false) completed = true
@@ -449,7 +514,11 @@ async function request(
         sawStop = true
         return
       }
-      throw new LlmRequestError('response')
+      if (finishReason === 'length' || finishReason === 'content_filter' || finishReason === 'tool_calls' || finishReason === 'function_call') {
+        terminalFailure = new LlmRequestError('response', undefined, { finishReason })
+        return true
+      }
+      throw new LlmRequestError('response', undefined, { finishReason: typeof finishReason === 'string' ? finishReason : undefined })
     }, { maxBufferChars: LLM_RESPONSE_LIMITS.chatContentChars })
 
     const feed = async (decoded: string): Promise<boolean> => {
@@ -460,6 +529,7 @@ async function request(
         parseFailure = error instanceof LlmRequestError ? error : new LlmRequestError('response')
       }
       const queued = deltas.splice(0)
+      if (terminalFailure) queued.length = 0
       for (const delta of queued) {
         if (abortKind) throw new LlmRequestError(abortKind)
         try { if (onDelta) await awaitCallback(onDelta(delta), controller.signal) }
@@ -469,7 +539,12 @@ async function request(
       return !decoder.stopped
     }
 
-    await readBodyChunks(response.body, controller.signal, feed, { flushDecoder: true, fatalUtf8: true, initialChunks: probe.chunks })
+    await readBodyChunks(response.body, controller.signal, feed, {
+      flushDecoder: true,
+      fatalUtf8: true,
+      maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
+      initialChunks: probe.chunks
+    })
     throwIfAborted()
     if (!decoder.stopped) {
       let parseFailure: unknown
@@ -479,6 +554,7 @@ async function request(
         parseFailure = error instanceof LlmRequestError ? error : new LlmRequestError('response')
       }
       const queued = deltas.splice(0)
+      if (terminalFailure) queued.length = 0
       for (const delta of queued) {
         if (abortKind) throw new LlmRequestError(abortKind)
         try { if (onDelta) await awaitCallback(onDelta(delta), controller.signal) }
@@ -489,10 +565,13 @@ async function request(
     throwIfAborted()
     if (profile.protocol === 'anthropic' && anthropicState.completed) completed = true
     if (sawStop) completed = true // EOF is also a valid terminator after finish_reason: stop.
+    if (lastUsageReceipt) pendingUsageReceipt = lastUsageReceipt
+    if (terminalFailure) throw terminalFailure
     if (!completed || full.trim().length === 0) throw new LlmRequestError('response')
-    if (lastUsageReceipt) { try { opts.onUsage?.(lastUsageReceipt) } catch { /* diagnostics cannot affect generation */ } }
+    reportUsage()
     return full
   } catch (error) {
+    if (pendingUsageReceipt) reportUsage()
     if (abortKind) throw new LlmRequestError(abortKind)
     if (callbackFailed) throw callbackFailure
     if (error instanceof LlmRequestError) throw error
@@ -511,7 +590,9 @@ async function request(
 function extractOpenAiContent(value: unknown): string {
   if (!isRecord(value) || !Array.isArray(value.choices)) throw new LlmRequestError('response')
   const first = value.choices[0]
-  if (isRecord(first) && first.finish_reason !== undefined && first.finish_reason !== null && first.finish_reason !== 'stop') throw new LlmRequestError('response')
+  if (isRecord(first) && first.finish_reason !== undefined && first.finish_reason !== null && first.finish_reason !== 'stop') {
+    throw new LlmRequestError('response', undefined, { finishReason: typeof first.finish_reason === 'string' ? first.finish_reason : undefined })
+  }
   const message = isRecord(first) ? first.message : undefined
   const content = isRecord(message) ? message.content : undefined
   if (typeof content !== 'string') throw new LlmRequestError('response')

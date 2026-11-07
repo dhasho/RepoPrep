@@ -1,0 +1,10 @@
+{
+  "observedAt": "2026-11-06",
+  "observationMethod": "git ls-remote only; source was not fetched or read",
+  "repositories": [
+    {"id": "encode/httpx", "language": "Python", "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254"},
+    {"id": "pallets/itsdangerous", "language": "Python", "commit": "672971d66a2ef9f85151e53283113f33d642dabd"},
+    {"id": "caolan/async", "language": "JavaScript", "commit": "3921e54bd0704157dbea238fdfcc0c3619abde1a"},
+    {"id": "colinhacks/zod", "language": "TypeScript", "commit": "8651451b82b454847ef9d6d8cc533496853a10d8"}
+  ]
+}

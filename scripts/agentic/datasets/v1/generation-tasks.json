@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "tasks": [
+    {
+      "id": "generation-01",
+      "projectId": "py-cache",
+      "objective": "Explain the cache expiration and capacity eviction mechanisms.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "cache lifecycle"
+    },
+    {
+      "id": "generation-02",
+      "projectId": "py-cache",
+      "objective": "Trace how a cache miss invokes fetch and stores its result.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "topic": "cache miss flow"
+    },
+    {
+      "id": "generation-03",
+      "projectId": "py-retry",
+      "objective": "Explain retry eligibility, attempt count, and exponential delay.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "retry policy"
+    },
+    {
+      "id": "generation-04",
+      "projectId": "py-retry",
+      "objective": "Compare permanent and temporary transport failures.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "failure classification"
+    },
+    {
+      "id": "generation-05",
+      "projectId": "js-queue",
+      "objective": "Explain queue capacity and draining behavior when job callbacks fail.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "topic": "async queue"
+    },
+    {
+      "id": "generation-06",
+      "projectId": "js-queue",
+      "objective": "Trace the submit return value and completion callback path.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "submit contract"
+    },
+    {
+      "id": "generation-07",
+      "projectId": "js-pricing",
+      "objective": "Explain discount eligibility, cap, tax order, and rounding.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "topic": "checkout calculation"
+    },
+    {
+      "id": "generation-08",
+      "projectId": "js-router",
+      "objective": "Explain route selection and response behavior for missing routes and thrown errors.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "router behavior"
+    },
+    {
+      "id": "generation-09",
+      "projectId": "ts-events",
+      "objective": "Explain listener registration, unsubscribe, and exception handling during emit.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "topic": "event emitter"
+    },
+    {
+      "id": "generation-10",
+      "projectId": "ts-events",
+      "objective": "Explain the return value from event delivery and its meaning.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "event failures"
+    },
+    {
+      "id": "generation-11",
+      "projectId": "ts-inventory",
+      "objective": "Explain the stock reservation invariant and restock threshold behavior.",
+      "roleFocus": "backend",
+      "granularity": "fine",
+      "topic": "inventory"
+    },
+    {
+      "id": "generation-12",
+      "projectId": "ts-inventory",
+      "objective": "Trace inherited stock state into reservation validation and mutation.",
+      "roleFocus": "backend",
+      "granularity": "medium",
+      "topic": "inheritance"
+    }
+  ]
+}

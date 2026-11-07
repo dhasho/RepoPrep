@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "requiredCheckIds": [
+    "m03:forged-id",
+    "m03:stale-snapshot",
+    "m03:path-escape",
+    "m03:overlapping-ranges",
+    "m03:same-text-distinct-source",
+    "m03:redaction-location",
+    "m03:capacity-exhaustion"
+  ]
+}

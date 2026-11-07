@@ -18,7 +18,9 @@ import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncati
 import { contentReadWarning } from '@shared/content-read'
 import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
 import { InterviewJsonStream, type InterviewJsonPreview, type StreamedInterviewQuestion } from './interview-json-stream'
-import { buildContext, renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
+import { renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
+import { staticContextProvider, type ContextProvider } from './workflow/context-provider'
+import type { WorkflowTrace, WorkflowTraceInput } from './workflow/trace'
 import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
 import { buildCompensationInstruction, normalizeQuestionKey, selectUniqueQuestions } from './question-dedupe'
 import type { ScanResult } from './scanner'
@@ -37,6 +39,10 @@ export interface GenerateParams {
   onDiagnostics?: (diagnostics: GenerationDiagnostics) => void
   /** Optional metadata-only observation of the final source spans sent in each request. */
   onContextDispatch?: (selection: RenderedSelection) => void
+  /** Main-process strategy boundary; omitted keeps the existing static behavior. */
+  contextProvider?: ContextProvider
+  /** Opt-in, metadata-only observation. Does not change persisted result formats. */
+  workflowTrace?: WorkflowTrace
   checkpoint?: { state?: GenerationCheckpoint | null; save: (state: GenerationCheckpoint) => void | Promise<void> }
 }
 
@@ -66,6 +72,14 @@ function cloneRenderedSelection(selection: RenderedSelection): RenderedSelection
 }
 
 const CHECKPOINT_PROMPT_VERSION = 'generation-prompt-stream-v3'
+function observeTrace(trace: WorkflowTrace | undefined, input: WorkflowTraceInput): void {
+  try { trace?.emit(input) } catch { /* Diagnostics must not affect generation or task cleanup. */ }
+}
+
+function finishTrace(trace: WorkflowTrace | undefined, status: 'succeeded' | 'failed' | 'cancelled'): void {
+  try { trace?.finish(status) } catch { /* The generation lifecycle owns its outcome. */ }
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   if (value && typeof value === 'object') {
@@ -421,6 +435,7 @@ async function callForJson(
   onRequestTruncation: () => void,
   inputTokenBudget: number,
   onContextDispatch: GenerateParams['onContextDispatch'],
+  trace: GenerateParams['workflowTrace'],
   counters: {
     estimated: number; requests: number; repairs: number; compensationRequests: number; compensationPending: number
     usage: LlmUsage | null; usageCount: number; modelMs: number
@@ -473,6 +488,9 @@ async function callForJson(
       if (!signal.aborted) streaming.activity(receivedChars, Date.now() - requestStarted)
     }, 5000)
     let reply: string
+    let requestSpanId: string | undefined
+    let requestCompleted = false
+    let requestUsage: LlmUsage | undefined
     try {
       reply = await chatCompletionStream(profile, fitted.messages, async (delta) => {
         if (signal.aborted) throw new LlmRequestError('cancelled')
@@ -491,16 +509,37 @@ async function callForJson(
         includeUsage: true,
         onRequest: () => {
           counters.estimated += estimated; counters.requests++
+          if (trace) {
+            requestSpanId = `model-${counters.requests}`
+            observeTrace(trace, {
+              span: 'model', spanId: requestSpanId, parentSpanId: 'run-1',
+              component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started',
+              inputHashes: [sha256(fitted.messages)], budget: { inputTokens: estimated, requestNumber: counters.requests }
+            })
+          }
           if (attempt) counters.repairs++
           else if (counters.compensationPending > 0) { counters.compensationRequests++; counters.compensationPending-- }
           const selection = counters.pendingSelection
           if (selection) {
+            if (trace) {
+              observeTrace(trace, {
+                span: 'dispatch', spanId: `dispatch-${counters.requests}`, parentSpanId: requestSpanId,
+                component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started'
+              })
+              observeTrace(trace, {
+                span: 'dispatch', spanId: `dispatch-${counters.requests}`, parentSpanId: requestSpanId,
+                component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'succeeded',
+                inputHashes: [sha256(fitted.messages)], outputHashes: [sha256(selection)],
+                budget: { inputTokens: estimated, requestNumber: counters.requests }
+              })
+            }
             for (const filePath of selection.filePaths) counters.dispatchedFiles.add(filePath)
             counters.dispatchedRegions += selection.selectedRegions
             try { onContextDispatch?.(cloneRenderedSelection(selection)) } catch { /* Context observation cannot affect generation. */ }
           }
         },
         onUsage: (usage) => {
+          requestUsage = { ...usage }
           counters.usage = {
             inputTokens: (counters.usage?.inputTokens ?? 0) + usage.inputTokens,
             outputTokens: (counters.usage?.outputTokens ?? 0) + usage.outputTokens,
@@ -509,12 +548,21 @@ async function callForJson(
           counters.usageCount++
         }
       })
+      requestCompleted = true
     } catch (error) {
       streaming.preview(undefined)
       throw error
     } finally {
       clearInterval(timer)
       counters.modelMs += Date.now() - requestStarted
+      if (requestSpanId) observeTrace(trace, {
+        span: 'model', spanId: requestSpanId, parentSpanId: 'run-1',
+        component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION,
+        status: requestCompleted ? 'succeeded' : signal.aborted ? 'cancelled' : 'interrupted',
+        usage: requestUsage ? { ...requestUsage, complete: true } : {
+          complete: false, reason: requestCompleted ? 'provider-omitted' : 'stream-interrupted'
+        }
+      })
     }
     let parsed: ParsedBatch
     try {
@@ -622,6 +670,9 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   let contextBuildMs = 0
 
   try {
+  observeTrace(params.workflowTrace, {
+    span: 'run', spanId: 'run-1', component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started'
+  })
   try {
     assertProjectIdentityContract(scan.name, scan.root)
   } catch {
@@ -631,10 +682,25 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   reportProgress('构建项目上下文', `颗粒度：${GRANULARITY_META[granularity].label}`, 8)
   failedStage = 'context'
   const contextStarted = Date.now()
+  const contextProvider = params.contextProvider ?? staticContextProvider
+  observeTrace(params.workflowTrace, {
+    span: 'context', spanId: 'context-1', parentSpanId: 'run-1',
+    component: 'context-provider', componentVersion: contextProvider.id, status: 'started'
+  })
   const contextMaxChars = Math.min(CONTEXT_CHAR_BUDGETS[granularity], tokenBudget.inputTokens * 4)
-  let built: Awaited<ReturnType<typeof buildContext>>
+  let built: Awaited<ReturnType<ContextProvider['build']>>
   try {
-    built = await buildContext(scan, granularity, { maxChars: contextMaxChars, roleFocus, signal })
+    built = await contextProvider.build(scan, granularity, { maxChars: contextMaxChars, roleFocus, signal })
+    observeTrace(params.workflowTrace, {
+      span: 'context', spanId: 'context-1', parentSpanId: 'run-1',
+      component: 'context-provider', componentVersion: contextProvider.id, status: 'succeeded'
+    })
+  } catch (error) {
+    observeTrace(params.workflowTrace, {
+      span: 'context', spanId: 'context-1', parentSpanId: 'run-1',
+      component: 'context-provider', componentVersion: contextProvider.id, status: signal.aborted ? 'cancelled' : 'failed'
+    })
+    throw error
   } finally { contextBuildMs = Date.now() - contextStarted }
   if (signal.aborted) throw new Error('生成已取消。')
   for (const filePath of built.eligibleFilePaths ?? []) counters.eligibleFiles.add(filePath)
@@ -798,7 +864,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           built.batches[index],
           contextLimit,
           REQUEST_TRUNCATION_MARKER,
-          Boolean(params.onContextDispatch)
+          Boolean(params.onContextDispatch || params.workflowTrace)
         )
         counters.pendingSelection = bounded.selection ?? {
           filePaths: built.batches[index].files.map((file) => file.relPath),
@@ -916,6 +982,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           markRequestTruncation,
           tokenBudget.inputTokens,
           params.onContextDispatch,
+          params.workflowTrace,
           counters,
           streaming
         )
@@ -984,16 +1051,32 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   if (signal.aborted) throw new Error('生成已取消。')
   const diagnostics = makeDiagnostics('succeeded', undefined, contextBuildMs)
   result.generationDiagnostics = diagnostics
-  try { assertInterviewResultContract(result) } catch { throw new Error(RESULT_CONTRACT_MESSAGES.generated) }
+  observeTrace(params.workflowTrace, {
+    span: 'validation', spanId: 'validation-1', parentSpanId: 'run-1',
+    component: 'result-contract', componentVersion: '1', status: 'started'
+  })
+  try { assertInterviewResultContract(result) } catch {
+    observeTrace(params.workflowTrace, {
+      span: 'validation', spanId: 'validation-1', parentSpanId: 'run-1',
+      component: 'result-contract', componentVersion: '1', status: 'failed'
+    })
+    throw new Error(RESULT_CONTRACT_MESSAGES.generated)
+  }
+  observeTrace(params.workflowTrace, {
+    span: 'validation', spanId: 'validation-1', parentSpanId: 'run-1',
+    component: 'result-contract', componentVersion: '1', status: 'succeeded'
+  })
   reportProgress('完成', undefined, 100)
   if (signal.aborted) throw new Error('生成已取消。')
   notifyDiagnostics(diagnostics)
+  finishTrace(params.workflowTrace, 'succeeded')
   return result
   } catch (error) {
     const status = signal.aborted || (error instanceof Error && error.name === 'LlmRequestError' && error.message === '请求已取消。')
       ? 'cancelled'
       : 'failed'
     notifyDiagnostics(makeDiagnostics(status, failedStage, contextBuildMs))
+    finishTrace(params.workflowTrace, status)
     if (error instanceof Error && [
       '模型请求固定上下文超出支持范围。',
       '模型请求固定指令超出支持范围。',

@@ -106,6 +106,34 @@ test('Anthropic usage receipts expose only bounded numeric token counts', async 
   assert.deepEqual(receipts, [{ inputTokens: 19, outputTokens: 3, totalTokens: 22 }])
 })
 
+test('Anthropic failed streams require terminal message_delta usage, not message_start estimates', async () => {
+  const initialOnly = [
+    event('message_start', { type: 'message_start', message: { usage: { input_tokens: 12, output_tokens: 0 } } }),
+    event('message_delta', { type: 'message_delta', delta: { stop_reason: 'max_tokens' } }),
+    event('message_stop', { type: 'message_stop' })
+  ]
+  const receipts: unknown[] = []
+  const response = streamResponse(initialOnly)
+  await withFetch(async () => response.response, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => {}, { onUsage: usage => receipts.push(usage) }), error => {
+      assertSafeError(error)
+      assert.deepEqual((error as LlmRequestError).modelFailure, { kind: 'response', finishReason: 'length' })
+      return true
+    })
+  })
+  assert.deepEqual(receipts, [])
+
+  const completeReceipts: unknown[] = []
+  await withFetch(async () => streamResponse([
+    ...initialOnly.slice(0, 1),
+    event('message_delta', { type: 'message_delta', delta: { stop_reason: 'max_tokens', usage: { output_tokens: 4 } } }),
+    event('message_stop', { type: 'message_stop' })
+  ]).response, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => {}, { onUsage: usage => completeReceipts.push(usage) }), error => error instanceof LlmRequestError && error.kind === 'response')
+  })
+  assert.deepEqual(completeReceipts, [{ inputTokens: 12, outputTokens: 4, totalTokens: 16 }])
+})
+
 test('Anthropic requests normalize compatible provider base paths and honor an explicit output limit', async () => {
   const cases = [
     ['https://api.anthropic.com', 'https://api.anthropic.com/v1/messages'],

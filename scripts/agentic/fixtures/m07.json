@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "requiredCheckIds": [
+    "m07:complete-pack",
+    "m07:exact-budget",
+    "m07:over-budget-by-one",
+    "m07:overlap",
+    "m07:same-text-distinct-source",
+    "m07:required-bundle-does-not-fit",
+    "m07:unknown-id",
+    "m07:stale-snapshot",
+    "m07:unicode",
+    "m07:document-excerpt",
+    "m07:declaration-context",
+    "m07:final-fit-truncation"
+  ]
+}

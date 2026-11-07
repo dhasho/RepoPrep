@@ -1,0 +1,1161 @@
+{
+  "schemaVersion": 1,
+  "split": "holdout",
+  "provenance": {
+    "kind": "agent-annotated",
+    "model": "gpt-6-luna",
+    "taskName": "/root/holdout_annotator",
+    "implementationContextProvided": false
+  },
+  "repositories": [
+    {
+      "id": "encode/httpx",
+      "directory": "httpx",
+      "language": "Python",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "files": [
+        {
+          "path": "httpx/_client.py",
+          "sha256": "ed717b3ac00debb48d089daeb4dd7fbaf47cb5642ebc4a6e76f3a2fc6cfc0f70"
+        },
+        {
+          "path": "httpx/_config.py",
+          "sha256": "a4fa7653ec2271f70ab05f8a6111352d876dddee84446788a1767c1a3a372d67"
+        },
+        {
+          "path": "httpx/_transports/asgi.py",
+          "sha256": "1d17e20d830fb78c101f6805807660e1cfa2dec6e5a3a6cbe464ea7044fec73f"
+        }
+      ],
+      "facts": [
+        {
+          "id": "httpx.client-state",
+          "claim": "The sync and async client state enum distinguishes never-used, open, and closed clients; sending a request or entering a context opens it, while explicit close or context exit closes it.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 125,
+              "endLine": 136,
+              "sha256": "f5a99a827436d7d490839ad520b80f6f01b66a41fb0aa035fdde5a4f6c6e869c"
+            },
+            {
+              "path": "httpx/_client.py",
+              "startLine": 1263,
+              "endLine": 1295,
+              "sha256": "25c0dae8bdc3acf79cf6945298dd9491d9cc61f2072fea7a7ff7ffec8de0219c"
+            }
+          ],
+          "pitfalls": [
+            "Do not collapse unopened and closed into one state.",
+            "Context entry and request use both affect the open state."
+          ]
+        },
+        {
+          "id": "httpx.bound-stream-elapsed",
+          "claim": "A response-bound sync or async byte stream records elapsed time and closes its underlying stream when the consumer closes the response stream.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 139,
+              "endLine": 182,
+              "sha256": "090bac134e8d31458641af055cf6d8ef66b960d933e5c4850d0435cbb9848eff"
+            }
+          ],
+          "pitfalls": [
+            "Elapsed time is set at close, not when response headers arrive.",
+            "Async and sync close paths await/use different underlying methods."
+          ]
+        },
+        {
+          "id": "httpx.request-default-merge",
+          "claim": "Client request construction merges URL, headers, cookies, and query parameters with client defaults, and uses the client timeout only when the per-request timeout selects the client-default sentinel and no timeout extension is already present.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 340,
+              "endLine": 389,
+              "sha256": "aff57216ca2e6c693f08fa76debd2a8878781ae7d78bc4b5b566a3cbdfa3808c"
+            }
+          ],
+          "pitfalls": [
+            "An existing timeout extension bypasses default timeout insertion.",
+            "Per-request fields are merged rather than replacing every client default."
+          ]
+        },
+        {
+          "id": "httpx.base-url-append",
+          "claim": "Relative request URLs are appended to a normalized base URL path after stripping a leading slash; absolute URLs pass through without that relative-path merge.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 391,
+              "endLine": 411,
+              "sha256": "7110fd60c19b5cc1a8aa3bb10374b0f6ce618a3a52a9efb8c83c32796a7d8c8d"
+            }
+          ],
+          "pitfalls": [
+            "This is path append behavior, not ordinary root-relative URL resolution.",
+            "The base URL is normalized to end with a slash elsewhere in client setup."
+          ]
+        },
+        {
+          "id": "httpx.event-hooks-redirect-loop",
+          "claim": "Redirect handling checks the redirect-count limit, invokes request hooks before each network send, and invokes response hooks after each response, including responses that may lead to another redirect.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 964,
+              "endLine": 1005,
+              "sha256": "246d0a7dac7e21005473a9f85bd321332edbe0cfe4647d8e235c9568a6faa912"
+            }
+          ],
+          "pitfalls": [
+            "Hooks apply within redirect handling, not only once around the initial request.",
+            "The limit is checked for the current redirect history before sending."
+          ]
+        },
+        {
+          "id": "httpx.redirect-sensitive-headers",
+          "claim": "Redirect request construction can rewrite the method and selectively adjust headers based on the destination, including removing authorization when the redirect changes host or scheme.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 475,
+              "endLine": 574,
+              "sha256": "4da61ea0975514ca14d4e8be2ab2ed5ca6c17ed7b81e082b0629e464a9813ca3"
+            }
+          ],
+          "pitfalls": [
+            "Redirects do not blindly reuse every original header.",
+            "Method rewriting depends on response status rules."
+          ]
+        },
+        {
+          "id": "httpx.client-open-guard",
+          "claim": "The base client maintains transport and client state, and rejects operations that require an open client after it has been closed.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 188,
+              "endLine": 259,
+              "sha256": "b139d90b4a342ba6d59bd573debbda59c09d859da7d2580ee9d44aea2382b230"
+            }
+          ],
+          "pitfalls": [
+            "State is distinct from whether the instance has merely been constructed.",
+            "Do not infer thread-safety from the state field."
+          ]
+        },
+        {
+          "id": "httpx.sync-send-transport",
+          "claim": "The synchronous send path builds request/response handling around an injected transport and wraps the returned byte stream so response lifecycle metadata follows stream closure.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 879,
+              "endLine": 963,
+              "sha256": "528717051fc074b1cb48f72b274cb62005c90917e3e913fe0a3a6204c8cfb32c"
+            }
+          ],
+          "pitfalls": [
+            "The send path is not equivalent to buffered get content handling.",
+            "The transport is called through the client lifecycle logic."
+          ]
+        },
+        {
+          "id": "httpx.async-send-transport",
+          "claim": "The asynchronous client has a separate async send and redirect path that awaits transport and hook operations rather than reusing the synchronous execution path.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_client.py",
+              "startLine": 1594,
+              "endLine": 1693,
+              "sha256": "7d941c3ff919d943bf1229c9025f4c2778748674f87e50cea05d12a85b5e1bc9"
+            }
+          ],
+          "pitfalls": [
+            "AsyncClient behavior is not implemented by simply calling Client.send.",
+            "Hooks and stream closure have asynchronous counterparts."
+          ]
+        },
+        {
+          "id": "httpx.timeout-components",
+          "claim": "Timeout configuration models connect, read, write, and pool phases, with a default timeout value that can be supplied as one number or component-specific values.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_config.py",
+              "startLine": 72,
+              "endLine": 130,
+              "sha256": "a397209d3096a76aadb0b4dec8df0cd5c60c4234f37a5009e12e0abdde1ceb02"
+            }
+          ],
+          "pitfalls": [
+            "A timeout is not a single end-to-end wall-clock deadline.",
+            "Pool timeout is a separate phase from network connect/read/write."
+          ]
+        },
+        {
+          "id": "httpx.asgi-transport-scope",
+          "claim": "ASGITransport adapts an async HTTP request into an ASGI HTTP scope and runs the application in-process, with request and response messages exchanged through the ASGI callable.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_transports/asgi.py",
+              "startLine": 63,
+              "endLine": 151,
+              "sha256": "e4899d65f0c7972c02f19623b26b87fb8297e0e103b38b71f4a00b47fe127c5e"
+            }
+          ],
+          "pitfalls": [
+            "It is an in-process ASGI adapter, not a socket transport.",
+            "The scope and message exchange determine the request/response boundary."
+          ]
+        },
+        {
+          "id": "httpx.asgi-response-stream",
+          "claim": "The ASGI transport response stream yields the response body captured from ASGI send messages and terminates after the application reports completion.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "httpx/_transports/asgi.py",
+              "startLine": 102,
+              "endLine": 180,
+              "sha256": "cf55cc3ef1ea0afe2402906815d68d770bc474e8973b2b3416584f7866b6afd9"
+            }
+          ],
+          "pitfalls": [
+            "Response body messages are distinct from response start metadata.",
+            "An application completion signal controls stream termination."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pallets/itsdangerous",
+      "directory": "itsdangerous",
+      "language": "Python",
+      "commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "files": [
+        {
+          "path": "src/itsdangerous/signer.py",
+          "sha256": "60ed0257b341bc703a8f9e3d4441c91548d4a23c36a47ab0714a509d4ef23584"
+        },
+        {
+          "path": "src/itsdangerous/serializer.py",
+          "sha256": "6d6f1687897c7e3ac6eeff5bfd6794df90e299feedcc6aae3faa0e53ffe925e8"
+        },
+        {
+          "path": "src/itsdangerous/timed.py",
+          "sha256": "3afbf6050e8b73605931d1e516f374835456979e4319c098bfe5f284f120c6c5"
+        },
+        {
+          "path": "src/itsdangerous/url_safe.py",
+          "sha256": "6b3e1ee5f5e2fefb3e61b5a3f186709f8c2254a7de0fef8610a453e547aee0fe"
+        }
+      ],
+      "facts": [
+        {
+          "id": "itsdangerous.key-rotation",
+          "claim": "Signer accepts one or multiple secret keys ordered oldest to newest, signs with the newest key, and checks signatures against configured keys in reverse order to support rotation.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 129,
+              "endLine": 143,
+              "sha256": "b58eb35d934cbd0c9f25848d68358f4976303521a750436e1077581d90caf28c"
+            },
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 227,
+              "endLine": 242,
+              "sha256": "d8ac3f1ef926570ed474c24a09ea469661c30ce2a839742e2db26656b59c6bb7"
+            }
+          ],
+          "pitfalls": [
+            "Verification order is newest-first even though storage order is oldest-first.",
+            "Old keys remain accepted until removed from configuration."
+          ]
+        },
+        {
+          "id": "itsdangerous-separator-boundary",
+          "claim": "Signer rejects separators that overlap the base64 signature alphabet, then separates a signed value at its final separator occurrence so payloads may contain earlier separators.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 146,
+              "endLine": 151,
+              "sha256": "00bb91caa0006dd79ce2bab2c6dd53b264f274db7706929fc05c796d781e03c6"
+            },
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 244,
+              "endLine": 256,
+              "sha256": "846548279a0057eef7f3109beb0e5f499c587494710d6a24cf7337dc84059971"
+            }
+          ],
+          "pitfalls": [
+            "The final separator is used when parsing.",
+            "Alphabet overlap is rejected at signer construction."
+          ]
+        },
+        {
+          "id": "itsdangerous-domain-separated-key",
+          "claim": "Signer derives a signing key from the secret and salt using a selected derivation scheme; supported branches include concat, django-concat, HMAC, and no derivation, and unknown schemes raise TypeError.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 182,
+              "endLine": 213,
+              "sha256": "9745d7cf75f5ef146521f10c705678def85940036777dbc536ad5afeb53f8205"
+            }
+          ],
+          "pitfalls": [
+            "Key derivation is separate from the message signature algorithm.",
+            "The docs warn derivation is not a way to turn a short password into a strong secret."
+          ]
+        },
+        {
+          "id": "itsdangerous-constant-time-compare",
+          "claim": "The default HMAC signing algorithm verifies signatures with hmac.compare_digest against a freshly computed signature.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 20,
+              "endLine": 29,
+              "sha256": "d560da4deab62dffda59ecfca3f773c3b2519798423fc4c5095d22be9e93af44"
+            }
+          ],
+          "pitfalls": [
+            "The compared bytes are the decoded signature and computed signature.",
+            "This mechanism does not make an insecure secret key strong."
+          ]
+        },
+        {
+          "id": "itsdangerous-invalid-signature",
+          "claim": "Unsigning requires the configured separator, decodes and verifies the signature, returns the payload on success, and raises BadSignature when parsing or verification fails.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/signer.py",
+              "startLine": 227,
+              "endLine": 256,
+              "sha256": "dfae199158352a0b0932747da71e1fd3afea627a7976df86d9b4554629121c4c"
+            }
+          ],
+          "pitfalls": [
+            "Missing separator and mismatched signature are distinct failure paths.",
+            "The error may retain the rejected payload as diagnostic data."
+          ]
+        },
+        {
+          "id": "itsdangerous-serializer-signs-payload",
+          "claim": "Serializer serializes an object to bytes, signs that payload, and on load verifies the signature before deserializing the payload back into an object.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/serializer.py",
+              "startLine": 309,
+              "endLine": 365,
+              "sha256": "1c1950b053ec83067b0d5b23d59941c68e2cdf0c06729a454934da2da93f7c68"
+            }
+          ],
+          "pitfalls": [
+            "A valid signature provides integrity/authenticity but does not encrypt the payload.",
+            "Deserialization follows signature verification."
+          ]
+        },
+        {
+          "id": "itsdangerous-salt-isolation",
+          "claim": "Serializer passes its configured salt and signer configuration into the signer so tokens from separate signing contexts can be separated even when they share a secret key.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/serializer.py",
+              "startLine": 40,
+              "endLine": 106,
+              "sha256": "753a0b1268191e79deb80c7b339bed1b3a72b484b675d29184cbaa7cffd4a1d8"
+            }
+          ],
+          "pitfalls": [
+            "Salt is a context separation input, not a replacement for a secret key.",
+            "Changing salt makes existing signatures fail verification."
+          ]
+        },
+        {
+          "id": "itsdangerous-timed-signatures",
+          "claim": "TimestampSigner appends a timestamp to signed data and validates it during unsign, raising a time-signature error when the timestamp is missing, malformed, future-dated, or older than the allowed age.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/timed.py",
+              "startLine": 22,
+              "endLine": 121,
+              "sha256": "ff5bcbc68c38bd4d6db29364e9c1d8ae29d5210ab50a99e68336b266b11bab24"
+            }
+          ],
+          "pitfalls": [
+            "Timestamp verification is additional to signature verification.",
+            "An allowed max age is evaluated relative to current time."
+          ]
+        },
+        {
+          "id": "itsdangerous-timed-serializer",
+          "claim": "TimedSerializer wraps serialized payloads in timestamped signatures and applies max_age during load while preserving the underlying serializer's payload conversion behavior.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/timed.py",
+              "startLine": 170,
+              "endLine": 228,
+              "sha256": "e68877dfaf7c1db7e2cf1e869553709169077c60c472994f88372523d361cb9d"
+            }
+          ],
+          "pitfalls": [
+            "Expiration is enforced on load, not by changing the encoded payload format into encryption.",
+            "The timestamped signer remains configurable."
+          ]
+        },
+        {
+          "id": "itsdangerous-url-safe-bytes",
+          "claim": "URLSafeSerializer encodes serialized bytes into URL-safe base64 text before signing and reverses that encoding after successful load.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/url_safe.py",
+              "startLine": 15,
+              "endLine": 70,
+              "sha256": "fedb028668f4f7908f8908b469cc19159ebe4f2fcb9e68ee2b9dd601f848cafe"
+            }
+          ],
+          "pitfalls": [
+            "URL-safe encoding changes representation, not confidentiality.",
+            "Signing/verification remains part of the serializer flow."
+          ]
+        },
+        {
+          "id": "itsdangerous-url-safe-timed",
+          "claim": "The timed URL-safe serializer combines URL-safe payload representation with timestamp-based expiry checks through the timed serializer class hierarchy.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/url_safe.py",
+              "startLine": 72,
+              "endLine": 83,
+              "sha256": "ff2c894cd1275747ea59599c71a03a454beaf0bb65e191f13eb3271c4155cf3f"
+            }
+          ],
+          "pitfalls": [
+            "URL-safe and timed behaviors are composed through class inheritance.",
+            "Expiry still depends on max_age at load time."
+          ]
+        },
+        {
+          "id": "itsdangerous-fallback-signers",
+          "claim": "Serializer loading may try configured fallback signer definitions after its primary signer fails, allowing explicit legacy signer settings during key or algorithm transitions.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "src/itsdangerous/serializer.py",
+              "startLine": 328,
+              "endLine": 404,
+              "sha256": "b3bc4b603a65d5ef0978dfc95ca053cfa55e74a746a36c6a836647f574e96ace"
+            }
+          ],
+          "pitfalls": [
+            "Fallback acceptance is an explicit configuration decision.",
+            "Successful fallback verification does not rewrite or migrate the stored token."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "caolan/async",
+      "directory": "async",
+      "language": "JavaScript",
+      "commit": "3921e54bd0704157dbea238fdfcc0c3619abde1a",
+      "files": [
+        {
+          "path": "lib/parallel.js",
+          "sha256": "37afa15aaec4c339ff4461cdec44dee791427cc88670b542d725eb7a736cb4bd"
+        },
+        {
+          "path": "lib/waterfall.js",
+          "sha256": "c63f66eddbd528c14efbd21036a33df433f2bbeec99bc022f26035b056f6893c"
+        },
+        {
+          "path": "lib/ensureAsync.js",
+          "sha256": "768dfde49c5fc1bb2def795d9af54e6c92179c1f490176dd0c743378fdfc4301"
+        },
+        {
+          "path": "lib/memoize.js",
+          "sha256": "2bba539028ed0c034e2983443015a5db72166f3c4cbc1a2e5d4077a6fc5ad736"
+        },
+        {
+          "path": "lib/timeout.js",
+          "sha256": "7dd73d6fa60ac3345a79803f54b6818e84eabdc68062df383451eee95a124ca7"
+        },
+        {
+          "path": "lib/internal/queue.js",
+          "sha256": "ff9e57740d86fa778014ff6bc3c4830f69e08a2118c4797a1b05d41e0a02beb7"
+        },
+        {
+          "path": "lib/auto.js",
+          "sha256": "32969526e8083c9c40cf4dbb94219e82127c98cec5838821e1cdf4602fa1d34c"
+        },
+        {
+          "path": "lib/retry.js",
+          "sha256": "a30f77f917ae3227962dc8a69e7eb5282d28396242ab5e8d5ed2c356ee45bbdc"
+        },
+        {
+          "path": "lib/reflect.js",
+          "sha256": "588f3d21e3700e3a6f5b45af43cb517fd45304220d6f32113a26384100abf86c"
+        },
+        {
+          "path": "lib/eachOf.js",
+          "sha256": "528ce14b3f38fbe4d75fadee5d3df6f871fb8ef498c691e864e11d117d485ccd"
+        },
+        {
+          "path": "lib/cargo.js",
+          "sha256": "fb7c4e48e29f4f989ccf749cf77c4d66116819a5449e4600d69f8d0069b1c3e2"
+        },
+        {
+          "path": "lib/asyncify.js",
+          "sha256": "c9fe9d461f634a5cb0f242124d6cc356dc3692bbc38c52f6535ee5b525cfb9df"
+        }
+      ],
+      "facts": [
+        {
+          "id": "async.parallel-order-errors",
+          "claim": "parallel starts collection tasks without waiting for prior completion, but results retain collection order; a task error reaches the final callback immediately and tasks are not JavaScript CPU-parallel.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/parallel.js",
+              "startLine": 4,
+              "endLine": 18,
+              "sha256": "719d1a9383205bc61bfe307b0b4282113e882273ba2270722793b6431c508164"
+            },
+            {
+              "path": "lib/parallel.js",
+              "startLine": 163,
+              "endLine": 165,
+              "sha256": "69d57324a4802bf22f1385843ff861c43140fc6a50acfcf1b68036eee1bc79e6"
+            }
+          ],
+          "pitfalls": [
+            "Parallel means overlapping asynchronous work rather than multiple JavaScript threads.",
+            "Result order follows input order rather than completion order."
+          ]
+        },
+        {
+          "id": "async.waterfall-arguments",
+          "claim": "waterfall requires an array, passes successful callback result arguments into the next task, and completes once a task errors or the final task finishes.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/waterfall.js",
+              "startLine": 63,
+              "endLine": 83,
+              "sha256": "eaca98760b7f6a9b6875eae6f43fd0d33d29baace24492df2d1da789b1afef1c"
+            }
+          ],
+          "pitfalls": [
+            "Only the first task begins without arguments.",
+            "The callback is guarded against multiple completion."
+          ]
+        },
+        {
+          "id": "async.ensure-async-deferral",
+          "claim": "ensureAsync wraps callback-style functions so a synchronous callback is deferred to a later event-loop tick, while already-async functions are returned without an extra wrapper.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "lib/ensureAsync.js",
+              "startLine": 4,
+              "endLine": 11,
+              "sha256": "c044fb7f117a3d9aad150d17c5f408af68a8e84b819b24edaa3cb6d61b428712"
+            },
+            {
+              "path": "lib/ensureAsync.js",
+              "startLine": 39,
+              "endLine": 55,
+              "sha256": "3fcec2afbb03fb83f8f809355508354cfd4520647d465973649815504f0787c4"
+            }
+          ],
+          "pitfalls": [
+            "It does not force every callback to be deferred when already asynchronous.",
+            "The wrapper is intended to avoid recursive stack growth from synchronous callbacks."
+          ]
+        },
+        {
+          "id": "async.memoize-inflight",
+          "claim": "memoize keys calls with a configurable hasher, coalesces concurrent calls for a missing key into a callback queue, and caches successful results but not errors.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/memoize.js",
+              "startLine": 45,
+              "endLine": 72,
+              "sha256": "98ce72b12b988adceb61693faad5c7db6ff0964ca70ea7326a99f54c8bec5b37"
+            }
+          ],
+          "pitfalls": [
+            "Errors are deliberately not memoized.",
+            "Concurrent identical inputs share the active execution."
+          ]
+        },
+        {
+          "id": "async.timeout-single-callback",
+          "claim": "timeout reports an ETIMEDOUT error with optional info after its timer expires and ignores a later completion callback from the wrapped function.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/timeout.js",
+              "startLine": 45,
+              "endLine": 73,
+              "sha256": "d86e8c5cf1269cf2abbb3c04764affc5bafa1fc3e331f8f2b055b5afa4386f71"
+            }
+          ],
+          "pitfalls": [
+            "The timeout wrapper does not cancel the underlying operation.",
+            "A late completion after timeout is suppressed."
+          ]
+        },
+        {
+          "id": "async.queue-concurrency",
+          "claim": "queue defaults concurrency to one, rejects zero concurrency, and schedules queued work through a deferred process call while tracking active workers and queue lifecycle events.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/internal/queue.js",
+              "startLine": 6,
+              "endLine": 23,
+              "sha256": "d27b9cb4b9c571a218eb8f3d415f5da87f53c13865917a011544be7e12f86559"
+            },
+            {
+              "path": "lib/internal/queue.js",
+              "startLine": 47,
+              "endLine": 89,
+              "sha256": "5a9e396bba389b9a98c91ddc79204c100e404d07d1f2afab219fbd4608952db9"
+            }
+          ],
+          "pitfalls": [
+            "Zero is rejected rather than treated as unlimited.",
+            "Task insertion schedules processing instead of running the worker inline."
+          ]
+        },
+        {
+          "id": "async.queue-batch-payload",
+          "claim": "The queue worker can receive batches controlled by payload, and task callbacks are removed from active-worker tracking when a batch completes.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/internal/queue.js",
+              "startLine": 91,
+              "endLine": 115,
+              "sha256": "44fd9ba637b84d6947c27ef0df046ad934f4a93f76e18e3d1536e4ca9e3359e9"
+            },
+            {
+              "path": "lib/cargo.js",
+              "startLine": 49,
+              "endLine": 51,
+              "sha256": "9fadcd5582f7a5bc268eff2162f3d418fb669af50b3c009cb2b63a2a55e21184"
+            }
+          ],
+          "pitfalls": [
+            "Batch sizing and concurrency are separate controls.",
+            "A batch callback accounts for each task represented in the completed batch."
+          ]
+        },
+        {
+          "id": "async.auto-dependencies",
+          "claim": "auto models named tasks and their dependencies, runs a task when its dependencies are satisfied subject to a concurrency bound, and returns keyed results.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/auto.js",
+              "startLine": 151,
+              "endLine": 235,
+              "sha256": "fc53715343b137606a61952f8f76a6b385d03e1428eba129f5741d56f85775a8"
+            }
+          ],
+          "pitfalls": [
+            "Tasks with unresolved dependencies cannot start.",
+            "Dependency cycles are not valid execution plans."
+          ]
+        },
+        {
+          "id": "async.retry-attempts",
+          "claim": "retry controls the number and timing of task attempts, stops after success or exhaustion, and reports the final task result through its callback or promise interface.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/retry.js",
+              "startLine": 98,
+              "endLine": 150,
+              "sha256": "d161fe61e39ea49eddf9287e7c34fe63ebf46b76dc892456132d3e15d112c604"
+            }
+          ],
+          "pitfalls": [
+            "The attempt limit includes the initial execution.",
+            "Retry behavior does not guarantee that the task is safe to repeat."
+          ]
+        },
+        {
+          "id": "async.reflect-error-as-value",
+          "claim": "reflect converts a task completion into a result object containing either its error or successful result arguments, allowing aggregate flows to continue after individual failures.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "lib/reflect.js",
+              "startLine": 1,
+              "endLine": 60,
+              "sha256": "b38a73e017f681faa79ad833ace43dac3ba3afb4e1ff987abf6fa3058a630596"
+            }
+          ],
+          "pitfalls": [
+            "The reflected task does not swallow the failure without recording it.",
+            "This permits a surrounding parallel collection to wait for other tasks."
+          ]
+        },
+        {
+          "id": "async.eachof-keyed-collections",
+          "claim": "eachOf iterates collection entries with their keys or indexes and provides the key to each iteratee, allowing object collections as well as indexed collections.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/eachOf.js",
+              "startLine": 1,
+              "endLine": 85,
+              "sha256": "9fff258744c369223cd35be592df8de3969b9ff356629f3eac82882334f0ed61"
+            }
+          ],
+          "pitfalls": [
+            "Iteration key is distinct from the item value.",
+            "Completion order does not imply iteration key order."
+          ]
+        },
+        {
+          "id": "async.callback-style-asyncify",
+          "claim": "asyncify adapts a promise-returning or synchronous function to the library's callback convention, forwarding promise rejection or thrown errors as callback errors.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "lib/asyncify.js",
+              "startLine": 1,
+              "endLine": 70,
+              "sha256": "3d898e2c21e13826d69379f1afa4339ef3d4800fda2a94f29872d3b42aae39e1"
+            }
+          ],
+          "pitfalls": [
+            "A returned promise rejection becomes an error-first callback result.",
+            "The adapter does not make a synchronous CPU function run in another thread."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "colinhacks/zod",
+      "directory": "zod",
+      "language": "TypeScript",
+      "commit": "8651451b82b454847ef9d6d8cc533496853a10d8",
+      "files": [
+        {
+          "path": "packages/zod/src/v3/types.ts",
+          "sha256": "a9a31eb1b05884f51b8926d10624f8241dc90165ba4fc74ec46e76f06ba105ce"
+        }
+      ],
+      "facts": [
+        {
+          "id": "zod-parse-safeparse",
+          "claim": "ZodType.parse delegates to safeParse and throws its ZodError on failure, while safeParse returns a discriminated success/data or failure/error result after synchronous parsing.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 210,
+              "endLine": 245,
+              "sha256": "93d9c6486a75bab8181983c8f884dcd0b4a511b0e550fbe82cd7cb56dc6218fd"
+            }
+          ],
+          "pitfalls": [
+            "safeParse does not throw validation failures as its normal result.",
+            "The synchronous path rejects a promise-returning parse operation."
+          ]
+        },
+        {
+          "id": "zod-async-parse",
+          "claim": "safeParseAsync always establishes async parsing context and awaits either a synchronous parse result or a promise, while parseAsync throws the returned validation error on failure.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 292,
+              "endLine": 321,
+              "sha256": "f73bf268905998c3aecc4c0362f53c8c459b70045c88cf18a588ea4ee0584468"
+            }
+          ],
+          "pitfalls": [
+            "Async parsing supports schemas that contain async effects.",
+            "The async API does not change the success/error result shape."
+          ]
+        },
+        {
+          "id": "zod-input-output-types",
+          "claim": "ZodType tracks input and output types separately, allowing parsing transforms to accept one type and produce another type.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 49,
+              "endLine": 55,
+              "sha256": "07a5ffda8fa9272f302034c0a0e33ad9f5746cd57c720a48e9cf6374e610fa3d"
+            },
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 158,
+              "endLine": 170,
+              "sha256": "c23ce9e0ff360f79f4e1c3c26743c61dcaa39bfbc28b721886458c8228740b82"
+            }
+          ],
+          "pitfalls": [
+            "The inferred output type is not always the accepted input type.",
+            "Type tracking is separate from runtime validation behavior."
+          ]
+        },
+        {
+          "id": "zod-object-unknown-keys",
+          "claim": "ZodObject parses declared keys and handles extra keys according to its unknown-key policy: strip omits them, passthrough retains them, and strict records an unrecognized-keys issue.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 2477,
+              "endLine": 2548,
+              "sha256": "50b7e76e2f1bd0d2f7e63d4c420384881981b2e62d7b030d706610a53786fd8b"
+            }
+          ],
+          "pitfalls": [
+            "The default object mode is stripping, not strict rejection.",
+            "A catchall schema changes how extra keys are parsed."
+          ]
+        },
+        {
+          "id": "zod-object-shape-merge",
+          "claim": "Object shape composition preserves or explicitly carries unknown-key and catchall configuration when object schemas are extended or merged.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 2685,
+              "endLine": 2710,
+              "sha256": "114b6daed6d8f8d37aa773fce6481583ab920eed3b188d6f51fa9bfb0cb623f4"
+            }
+          ],
+          "pitfalls": [
+            "Shape extension is not simply a replacement of all object policy metadata.",
+            "Catchall behavior is independent of declared shape keys."
+          ]
+        },
+        {
+          "id": "zod-array-cardinality",
+          "claim": "Array schemas encode ordinary arrays or non-empty tuple-like arrays in their output and input types, and validate exact, minimum, and maximum lengths before parsing elements.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 2230,
+              "endLine": 2298,
+              "sha256": "041e3e10064e38890a9f3a7ac68078dd0c90923d1f1a8311b8ce18fa4f7f9eb7"
+            }
+          ],
+          "pitfalls": [
+            "Length constraints can make parsing fail before item checks.",
+            "At-least-one output has tuple shape rather than an unconstrained array type."
+          ]
+        },
+        {
+          "id": "zod-union-first-valid",
+          "claim": "ZodUnion returns the first fully valid branch; if none is valid it prefers a dirty branch's issues, otherwise it constructs an invalid-union issue containing branch errors.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 2950,
+              "endLine": 3008,
+              "sha256": "e16ea27816cf0df9d62cc1e8d93825a28b6415764c83c368bfb2edcd707daa58"
+            }
+          ],
+          "pitfalls": [
+            "A dirty branch is not treated the same as a fully valid branch.",
+            "Union diagnostics retain per-branch validation errors when all branches are invalid."
+          ]
+        },
+        {
+          "id": "zod-discriminated-union-map",
+          "claim": "Discriminated unions select an object branch by looking up its discriminator value in a precomputed option map and report a dedicated issue at the discriminator path when no option matches.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 3114,
+              "endLine": 3159,
+              "sha256": "6c3a57302424d99ed9608fcb2df008a0539656dc199e51126a3cdaca1425c766"
+            }
+          ],
+          "pitfalls": [
+            "The discriminator must select a configured option.",
+            "This avoids reporting a generic union failure for an unmatched discriminator."
+          ]
+        },
+        {
+          "id": "zod-effect-transform",
+          "claim": "Effect schemas can preprocess input, refine parsed values, or transform values while carrying distinct input and output types through the type system.",
+          "granularities": [
+            "coarse",
+            "medium"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 4318,
+              "endLine": 4400,
+              "sha256": "d8beb576fd1ca5b637b96e7bf77c9dc540b0834a40db3d80a91357520bed17ac"
+            }
+          ],
+          "pitfalls": [
+            "Refinement checks validity while transform may change output value.",
+            "Async effects require async parsing APIs."
+          ]
+        },
+        {
+          "id": "zod-default-undefined",
+          "claim": "Default schemas substitute a configured default when the incoming value is undefined, then parse that substituted value through the wrapped schema.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 4575,
+              "endLine": 4624,
+              "sha256": "6cc539111f0d32acca1daf5a911f715661f341bb82ace80a0cfeb5f820a1d3fc"
+            }
+          ],
+          "pitfalls": [
+            "Default is triggered by undefined rather than every falsy value.",
+            "The default value is still validated by the inner schema."
+          ]
+        },
+        {
+          "id": "zod-lazy-recursion",
+          "claim": "Lazy schemas defer retrieving their wrapped schema until parse time, allowing recursive schema definitions to refer to themselves.",
+          "granularities": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 3985,
+              "endLine": 4030,
+              "sha256": "175bce7be585dd477e061dcd6538183274b52db47ac1d2e5733728f5b6844e43"
+            }
+          ],
+          "pitfalls": [
+            "The getter is evaluated through the lazy wrapper rather than at initial declaration.",
+            "Recursive schema construction does not itself validate recursive data."
+          ]
+        },
+        {
+          "id": "zod-refinement-issues",
+          "claim": "Refinement APIs add custom validation issues to the shared parse context and can use a predicate or richer issue-producing callback to express constraints beyond built-in type checks.",
+          "granularities": [
+            "medium",
+            "fine"
+          ],
+          "evidence": [
+            {
+              "path": "packages/zod/src/v3/types.ts",
+              "startLine": 323,
+              "endLine": 414,
+              "sha256": "7d11f41d26b7ddbea284b04f764a61835d0e38ebd6f2e20ab22872ed801f8e69"
+            }
+          ],
+          "pitfalls": [
+            "A refinement failure is represented as a validation issue.",
+            "Async refinement logic requires asynchronous parsing."
+          ]
+        }
+      ]
+    }
+  ]
+}

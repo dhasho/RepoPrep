@@ -1,0 +1,576 @@
+{
+  "schemaVersion": 1,
+  "labels": [
+    {
+      "taskId": "retrieval-01",
+      "requiredEvidenceGroups": [
+        {
+          "id": "expiry",
+          "allOf": [
+            {
+              "path": "cache.py",
+              "startLine": 14,
+              "endLine": 22,
+              "sha256": "f600f9ca0241003eaea035eda96ec072db743339e536f65343e678b70eed8d20"
+            }
+          ]
+        },
+        {
+          "id": "capacity",
+          "allOf": [
+            {
+              "path": "cache.py",
+              "startLine": 8,
+              "endLine": 12,
+              "sha256": "c0492881ebb3ee75c3f2e88ce1424a3ba4942f304f952907de7e5e94451884cf"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-02",
+      "requiredEvidenceGroups": [
+        {
+          "id": "miss",
+          "allOf": [
+            {
+              "path": "service.py",
+              "startLine": 5,
+              "endLine": 10,
+              "sha256": "2ca412fd1a79ca00d9abcea466fd96a4f3cbdd137748d362211102ae7438ef7d"
+            }
+          ]
+        },
+        {
+          "id": "store",
+          "allOf": [
+            {
+              "path": "cache.py",
+              "startLine": 8,
+              "endLine": 12,
+              "sha256": "c0492881ebb3ee75c3f2e88ce1424a3ba4942f304f952907de7e5e94451884cf"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-03",
+      "requiredEvidenceGroups": [
+        {
+          "id": "policy",
+          "allOf": [
+            {
+              "path": "config.py",
+              "startLine": 1,
+              "endLine": 2,
+              "sha256": "baff6cada537b8429914cb262876c6ef47742736b000357e70136e6b5abef143"
+            }
+          ]
+        },
+        {
+          "id": "retry",
+          "allOf": [
+            {
+              "path": "client.py",
+              "startLine": 5,
+              "endLine": 13,
+              "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-04",
+      "requiredEvidenceGroups": [
+        {
+          "id": "errors",
+          "allOf": [
+            {
+              "path": "transport.py",
+              "startLine": 1,
+              "endLine": 13,
+              "sha256": "3ac6cf144f2913e19689ad36da772b7b82cd9be35035c31eb364a01b2c0e2775"
+            }
+          ]
+        },
+        {
+          "id": "handler",
+          "allOf": [
+            {
+              "path": "client.py",
+              "startLine": 8,
+              "endLine": 13,
+              "sha256": "7b1a95d10f019261ad5932ef8dd76e1a7539088bdb28bcfab261e3387e359e89"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-05",
+      "requiredEvidenceGroups": [
+        {
+          "id": "write",
+          "allOf": [
+            {
+              "path": "access.py",
+              "startLine": 3,
+              "endLine": 6,
+              "sha256": "02ca6f49a70d8e38a88870482d999c94dfbe4fb24dc3ee4f81fc367d1b923acc"
+            }
+          ]
+        },
+        {
+          "id": "admin",
+          "allOf": [
+            {
+              "path": "roles.py",
+              "startLine": 9,
+              "endLine": 11,
+              "sha256": "9a57c3ac449d7fb257f2b14f2b17efc8a688679324c6aa6bf3e569e22eec84f1"
+            }
+          ]
+        },
+        {
+          "id": "readme-claim",
+          "allOf": [
+            {
+              "path": "README.md",
+              "startLine": 1,
+              "endLine": 2,
+              "sha256": "9a1c6f95dc20d370cec2ba22ca044ac4bbcd2f08c6b0c81b868d3c625c71fb89"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-06",
+      "requiredEvidenceGroups": [
+        {
+          "id": "inherit",
+          "allOf": [
+            {
+              "path": "roles.py",
+              "startLine": 4,
+              "endLine": 11,
+              "sha256": "9bb9dbff611b2aed1da03a4c9009dad52d915d7b8a4d0287ea012ddb6da428cb"
+            }
+          ]
+        },
+        {
+          "id": "check",
+          "allOf": [
+            {
+              "path": "access.py",
+              "startLine": 3,
+              "endLine": 6,
+              "sha256": "02ca6f49a70d8e38a88870482d999c94dfbe4fb24dc3ee4f81fc367d1b923acc"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-07",
+      "requiredEvidenceGroups": [
+        {
+          "id": "parse",
+          "allOf": [
+            {
+              "path": "parser.py",
+              "startLine": 1,
+              "endLine": 3,
+              "sha256": "3b0025067409fb0bde00ce8eaa058a3a1d76d160b6a9aba301bdc5e2e1783838"
+            }
+          ]
+        },
+        {
+          "id": "loop",
+          "allOf": [
+            {
+              "path": "worker.py",
+              "startLine": 4,
+              "endLine": 13,
+              "sha256": "c2fbe8f10595d6061f567f48e755adea910b08f3b6a12a48a2f1023d0bf898bb"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-08",
+      "requiredEvidenceGroups": [
+        {
+          "id": "callback",
+          "allOf": [
+            {
+              "path": "worker.py",
+              "startLine": 2,
+              "endLine": 14,
+              "sha256": "cf5b622448c639d383ba6805ed2db5e2f00673793123a3be91fd6003235d11c6"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-09",
+      "requiredEvidenceGroups": [
+        {
+          "id": "drain",
+          "allOf": [
+            {
+              "path": "queue.js",
+              "startLine": 10,
+              "endLine": 19,
+              "sha256": "762eedd082c6a56e4d07caca5d7dc4e1e50cae305aa67bd36d9026ff9571158e"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-10",
+      "requiredEvidenceGroups": [
+        {
+          "id": "limit",
+          "allOf": [
+            {
+              "path": "config.js",
+              "startLine": 1,
+              "endLine": 1,
+              "sha256": "d3a3cc2d5f6bf9074af2738d065f6fb3254293a4f8dc66c731b793db4be83612"
+            }
+          ]
+        },
+        {
+          "id": "add",
+          "allOf": [
+            {
+              "path": "queue.js",
+              "startLine": 4,
+              "endLine": 9,
+              "sha256": "2fc7535b259dfb0736dc56a6326152213812f08c39f7f90d22b29e9261a14200"
+            }
+          ]
+        },
+        {
+          "id": "submit",
+          "allOf": [
+            {
+              "path": "service.js",
+              "startLine": 3,
+              "endLine": 6,
+              "sha256": "93d53966106a8acf612d2e4f1a43dec41032814b8a0e66a958ecd58c43216883"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-11",
+      "requiredEvidenceGroups": [
+        {
+          "id": "discount",
+          "allOf": [
+            {
+              "path": "discount.js",
+              "startLine": 1,
+              "endLine": 4,
+              "sha256": "18e43fc30019fedba53bbfc36403bb23493d8b042a0a0efe930a06b93740dbc4"
+            }
+          ]
+        },
+        {
+          "id": "total",
+          "allOf": [
+            {
+              "path": "checkout.js",
+              "startLine": 3,
+              "endLine": 7,
+              "sha256": "96438295befc2e5aa115b99d81d7ca52edf9c5b11f9ad2acaca12909a68121d1"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-12",
+      "requiredEvidenceGroups": [
+        {
+          "id": "config",
+          "allOf": [
+            {
+              "path": "config.js",
+              "startLine": 1,
+              "endLine": 2,
+              "sha256": "326199b9729690cf2e198eb441bf00f7c89d7c48446061510d13c7fb72c4884b"
+            }
+          ]
+        },
+        {
+          "id": "behavior",
+          "allOf": [
+            {
+              "path": "discount.js",
+              "startLine": 1,
+              "endLine": 4,
+              "sha256": "18e43fc30019fedba53bbfc36403bb23493d8b042a0a0efe930a06b93740dbc4"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-13",
+      "requiredEvidenceGroups": [
+        {
+          "id": "dispatch",
+          "allOf": [
+            {
+              "path": "router.js",
+              "startLine": 2,
+              "endLine": 8,
+              "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-14",
+      "requiredEvidenceGroups": [
+        {
+          "id": "entry",
+          "allOf": [
+            {
+              "path": "server.js",
+              "startLine": 1,
+              "endLine": 2,
+              "sha256": "099fefaba175325aa49ba445d04a52367defc99cc830f2d847e35df77071f0dc"
+            }
+          ]
+        },
+        {
+          "id": "route",
+          "allOf": [
+            {
+              "path": "routes.js",
+              "startLine": 1,
+              "endLine": 4,
+              "sha256": "026fcf6f50c6a35d6150635ee7e0615792852d81248c410fc1620864a8511aab"
+            }
+          ]
+        },
+        {
+          "id": "dispatch",
+          "allOf": [
+            {
+              "path": "router.js",
+              "startLine": 2,
+              "endLine": 8,
+              "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-15",
+      "requiredEvidenceGroups": [
+        {
+          "id": "flag",
+          "allOf": [
+            {
+              "path": "settings.json",
+              "startLine": 1,
+              "endLine": 1,
+              "sha256": "43ee841cdac479dde4172db2a773667808096db8db8071fe0f5ad6f9589f1749"
+            }
+          ]
+        },
+        {
+          "id": "logic",
+          "allOf": [
+            {
+              "path": "feature.js",
+              "startLine": 1,
+              "endLine": 8,
+              "sha256": "3ad43b2d452976839a285c0bb57aa42f4e59ddb423471a5b2f45bdc12578cd86"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-16",
+      "requiredEvidenceGroups": [
+        {
+          "id": "decision",
+          "allOf": [
+            {
+              "path": "feature.js",
+              "startLine": 1,
+              "endLine": 8,
+              "sha256": "3ad43b2d452976839a285c0bb57aa42f4e59ddb423471a5b2f45bdc12578cd86"
+            }
+          ]
+        },
+        {
+          "id": "consumer",
+          "allOf": [
+            {
+              "path": "controller.js",
+              "startLine": 1,
+              "endLine": 4,
+              "sha256": "6f714c53583aac733a14e997c203ed29716eb2e1f1d9e420c8b96e0e07302ab7"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-17",
+      "requiredEvidenceGroups": [
+        {
+          "id": "emit",
+          "allOf": [
+            {
+              "path": "emitter.ts",
+              "startLine": 8,
+              "endLine": 16,
+              "sha256": "5c8f95b829c8059e6a88755bea5f1d593ce7944923c13977ea7bad99ed3c7d5f"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-18",
+      "requiredEvidenceGroups": [
+        {
+          "id": "api",
+          "allOf": [
+            {
+              "path": "emitter.ts",
+              "startLine": 3,
+              "endLine": 16,
+              "sha256": "a4e541f94f0f3bd71e85b8b58d9dc29fc48955b9c928848e9481c61fa819f4cd"
+            }
+          ]
+        },
+        {
+          "id": "use",
+          "allOf": [
+            {
+              "path": "app.ts",
+              "startLine": 1,
+              "endLine": 2,
+              "sha256": "d26b7016e140004b5bc7a6b78815a9b22757b4834c62e932a80e2da3008b72fb"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-19",
+      "requiredEvidenceGroups": [
+        {
+          "id": "base",
+          "allOf": [
+            {
+              "path": "base.ts",
+              "startLine": 1,
+              "endLine": 4,
+              "sha256": "87abc15683cafeae446a8dbba526a706373257c86dbdaca2afaa23546367b367"
+            }
+          ]
+        },
+        {
+          "id": "behavior",
+          "allOf": [
+            {
+              "path": "warehouse.ts",
+              "startLine": 3,
+              "endLine": 10,
+              "sha256": "cab71254e413aa4c5ef584d7283682b8a53f66ca3fdef1cd7119a360d4827a6d"
+            }
+          ]
+        },
+        {
+          "id": "threshold",
+          "allOf": [
+            {
+              "path": "config.ts",
+              "startLine": 1,
+              "endLine": 1,
+              "sha256": "932acd98a7a20b4162f68dbaf511eaf70c7aaa9f4f8f17d4fd5587e90215c74c"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    },
+    {
+      "taskId": "retrieval-20",
+      "requiredEvidenceGroups": [
+        {
+          "id": "validity",
+          "allOf": [
+            {
+              "path": "session.ts",
+              "startLine": 3,
+              "endLine": 8,
+              "sha256": "7d294d63e3d951ce2cb932d07e510ba3157a2f663ccaad08ab3dd861c5565c9f"
+            }
+          ]
+        },
+        {
+          "id": "guard",
+          "allOf": [
+            {
+              "path": "guard.ts",
+              "startLine": 2,
+              "endLine": 6,
+              "sha256": "d9b755835f786ece1efc9fbec735bef24377de5160247891bbd52dd02d25a74b"
+            }
+          ]
+        },
+        {
+          "id": "setting",
+          "allOf": [
+            {
+              "path": "config.ts",
+              "startLine": 1,
+              "endLine": 1,
+              "sha256": "dae66d0dfbd1126281a6733068b8b0d7783fa50bee38911bcc3ac607f63f2f45"
+            }
+          ]
+        }
+      ],
+      "notes": "Agent-authored label based on the complete fixture source; synthetic development data only."
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 
 状态：2026-11-06讨论稿，未实施。建议将语义性的调查与证据选择交给一个有界LLM控制器，保留程序对授权读取、证据完整性、预算、生命周期和结果协议的控制。逻辑模块不等于模型调用次数；规划与检索可以共用一个控制器。
 
+详细工作包、依赖、阶段门禁、兼容迁移和防漂移规则以仓库根目录的[重构PLAN](../PLAN.md)为主入口；本文保留设计动机。
+
 吴恩达的[Agentic AI课程](https://www.deeplearning.ai/courses/agentic-ai)列出了自治程度、任务分解，以及reflection、tool use、planning、multi-agent四类模式；其第四模块专门讨论组件级评测、错误分析与延迟/成本优化。这支持按能力和证据逐步增加动态决策，而无需先给产品贴Agent标签。
 
 他在[2024年5月8日公开信](https://www.deeplearning.ai/the-batch/issue-248/)介绍Agentic RAG时，明确讨论让模型通过检索工具决定需要获取哪些信息。相关课程[Building Agentic RAG with LlamaIndex](https://www.deeplearning.ai/alpha/short-courses/building-agentic-rag-with-llamaindex)由Jerry Liu授课，涵盖路由、工具调用及多步检索。以下方案是结合这些课程介绍与RepoPrep现状提出的工程判断，不是课程或本项目已经证明的效果。
