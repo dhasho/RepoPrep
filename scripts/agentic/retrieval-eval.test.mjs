@@ -191,11 +191,49 @@ test('real runner blocks missing authorization before reading or invoking a prof
 test('profile binding uses synthetic metadata and limits only an in-memory clone', () => {
   const profile = { id: 'synthetic-profile', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152 }
   const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
-  const auth = { endpointFingerprint, model: profile.model, protocol: profile.protocol, temperature: 0.4, reasoningEffort: null, contextWindowTokens: profile.contextWindowTokens }
+  const auth = { endpointFingerprint, model: profile.model, protocol: profile.protocol, temperature: 0.4, reasoningEffort: null, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: 2000 }
   const clone = verifyProfileBinding(profile, auth)
   assert.equal(clone.maxOutputTokens, RETRIEVAL_LIMITS.perRequestOutputTokens)
   assert.equal(profile.maxOutputTokens, undefined)
   assert.throws(() => verifyProfileBinding({ ...profile, baseUrl: 'https://other.invalid/v1' }, auth), /profile-binding-mismatch/)
+  assert.equal(verifyProfileBinding(profile, { ...auth, maxOutputTokens: 6000 }).maxOutputTokens, 6000)
+  assert.throws(() => verifyProfileBinding(profile, { ...auth, maxOutputTokens: 3000 }), /authorization-invalid/)
+})
+
+test('authorized per-request cap binds run specs and report verification without changing defaults', () => {
+  const task = bundle.retrievalTasks.tasks[0]
+  const profile = { id: 'synthetic-profile', baseUrl: 'https://provider.invalid/v1', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152 }
+  const snapshot = { projectId: task.projectId, snapshotId: 'synthetic-snapshot' }
+  const defaultSpec = createRetrievalRunSpec(task, profile, snapshot, 'default-cap')
+  const authorizedSpec = createRetrievalRunSpec(task, profile, snapshot, 'authorized-cap', 6000)
+  assert.equal(defaultSpec.model.maxOutputTokens, 2000)
+  assert.equal(authorizedSpec.model.maxOutputTokens, 6000)
+  assert.throws(() => createRetrievalRunSpec(task, profile, snapshot, 'invalid-cap', 3000), /authorization-invalid/)
+
+  const report = syntheticReport()
+  const priorDefaultFingerprint = evaluationConfigFingerprint(report.provider)
+  assert.equal(priorDefaultFingerprint, '20311e23167f5aef96b02eb8c4f8ab9f7a7f29d0bb0b332718dfca39205009b8')
+  report.provider = { ...report.provider, maxOutputTokensPerRequest: 6000 }
+  report.configurationFingerprint = evaluationConfigFingerprint(report.provider)
+  report.runs = report.runs.map(cell => ({ ...cell, runConfigFingerprint: evaluationRunConfigFingerprint(bundle.retrievalTasks.tasks.find(item => item.id === cell.taskId), report.provider) }))
+  assert.notEqual(report.configurationFingerprint, priorDefaultFingerprint)
+  assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
+  assert.ok(verifyRetrievalReport(report, bundle, { provider: { maxOutputTokens: 2000 } }).issues.includes('provider-authorization-mismatch'))
+
+  const receipt = report.runs[0].receipt
+  receipt.providerUsage = { inputTokens: 10, outputTokens: 2501, totalTokens: 2511 }
+  receipt.knownProviderUsage = { ...receipt.providerUsage }
+  receipt.chargedTokens = { inputTokens: 10, outputTokens: 2501 }
+  receipt.reservations[0].reservedOutputTokens = 3000
+  receipt.reservations[0].usage = { inputTokens: 10, outputTokens: 2501, totalTokens: 2511 }
+  assert.equal(recomputeRetrievalMetrics(report, bundle).limitViolations, 0)
+
+  report.provider = { ...report.provider, maxOutputTokensPerRequest: 3000 }
+  assert.ok(verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
+  report.provider = { ...report.provider, maxOutputTokensPerRequest: 2000 }
+  report.configurationFingerprint = evaluationConfigFingerprint(report.provider)
+  report.runs = report.runs.map(cell => ({ ...cell, runConfigFingerprint: evaluationRunConfigFingerprint(bundle.retrievalTasks.tasks.find(item => item.id === cell.taskId), report.provider) }))
+  assert.ok(recomputeRetrievalMetrics(report, bundle).limitViolations > 0)
 })
 
 test('guarded default transport calls the M05 guard once and makes one mocked .invalid fetch', async () => {
@@ -245,6 +283,9 @@ test('actual retrieval RunSpec admits the first investigation request in every g
       const task = { id: `budget-${granularity}`, projectId: 'budget-project', objective: 'synthetic test objective', roleFocus: 'backend', granularity, indexMode: 'normal' }
       const snapshot = { projectId: task.projectId, snapshotId: `snapshot-${granularity}` }
       const spec = createRetrievalRunSpec(task, profile, snapshot, `run-${granularity}`)
+      const sixKSpec = createRetrievalRunSpec(task, profile, snapshot, `run-${granularity}-six-k`, 6000)
+      assert.equal(spec.model.maxOutputTokens, 2000)
+      assert.equal(sixKSpec.model.maxOutputTokens, 6000)
       assert.equal(spec.budget.total.inputTokens, 128_000)
       assert.equal(spec.budget.total.outputTokens, 65_536)
       assert.equal(spec.budget.total.wallClockMs, 600_000)

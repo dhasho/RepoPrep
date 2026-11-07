@@ -18,6 +18,7 @@ import { normalizeBaseUrl } from '../../electron/services/llm.ts'
 
 export const RETRIEVAL_PURPOSE = 'm06-retrieval-v1'
 export const RETRIEVAL_LIMITS = Object.freeze({ runs: 40, requests: 120, inputTokens: 720_000, outputTokens: 240_000, perRequestOutputTokens: 2000, repeats: 0.2, completeRate: 0.9 })
+const AUTHORIZED_PER_REQUEST_OUTPUT_CAPS = new Set([2000, 6000])
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(HERE, 'datasets', 'v1')
 const DATA_NAMES = ['projects.json', 'retrieval-tasks.json', 'retrieval-labels.json']
@@ -126,7 +127,7 @@ function validateAuthorization(auth, { sourceCommit, dataHash }) {
   safe(['openai', 'anthropic'].includes(auth.protocol), 'authorization-invalid')
   safe(auth.temperature === 0.4 && (auth.reasoningEffort === null || ['low', 'high'].includes(auth.reasoningEffort)), 'authorization-invalid')
   safe(Number.isSafeInteger(auth.contextWindowTokens) && auth.contextWindowTokens >= 4096, 'authorization-invalid')
-  safe(auth.maxOutputTokens === RETRIEVAL_LIMITS.perRequestOutputTokens, 'authorization-invalid')
+  safe(AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(auth.maxOutputTokens), 'authorization-invalid')
   safe(auth.maxRuns === RETRIEVAL_LIMITS.runs && Number.isSafeInteger(auth.maxRequests) && auth.maxRequests > 0 && auth.maxRequests <= RETRIEVAL_LIMITS.requests, 'authorization-invalid')
   safe(Number.isSafeInteger(auth.maxInputTokens) && auth.maxInputTokens > 0 && auth.maxInputTokens <= RETRIEVAL_LIMITS.inputTokens, 'authorization-invalid')
   safe(Number.isSafeInteger(auth.maxOutputTokensTotal) && auth.maxOutputTokensTotal > 0 && auth.maxOutputTokensTotal <= RETRIEVAL_LIMITS.outputTokens, 'authorization-invalid')
@@ -218,7 +219,8 @@ export function verifyPublicProfileBinding(profileMetadata, auth) {
 
 export function verifyProfileBinding(profile, auth) {
   safe(profile && typeof profile === 'object' && typeof profile.apiKey === 'string' && profile.apiKey.length > 0, 'profile-unavailable')
-  const clone = { ...profile, maxOutputTokens: RETRIEVAL_LIMITS.perRequestOutputTokens }
+  safe(AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(auth?.maxOutputTokens), 'authorization-invalid')
+  const clone = { ...profile, maxOutputTokens: auth.maxOutputTokens }
   safe(endpointHash(clone.baseUrl) === auth.endpointFingerprint && clone.model === auth.model, 'profile-binding-mismatch')
   safe((clone.protocol ?? 'openai') === auth.protocol && (clone.temperature ?? 0.4) === auth.temperature, 'profile-binding-mismatch')
   safe((clone.reasoningEffort ?? null) === auth.reasoningEffort && clone.contextWindowTokens === auth.contextWindowTokens, 'profile-binding-mismatch')
@@ -245,7 +247,8 @@ async function materializeProject(project, parent) {
   return root
 }
 
-export function createRetrievalRunSpec(task, profile, snapshot, runId) {
+export function createRetrievalRunSpec(task, profile, snapshot, runId, maxOutputTokens = RETRIEVAL_LIMITS.perRequestOutputTokens) {
+  safe(AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(maxOutputTokens), 'authorization-invalid')
   const model = {
     profileId: profile.id,
     endpointFingerprint: endpointHash(profile.baseUrl),
@@ -253,7 +256,7 @@ export function createRetrievalRunSpec(task, profile, snapshot, runId) {
     protocol: profile.protocol ?? 'openai',
     temperature: profile.temperature ?? 0.4,
     contextWindowTokens: profile.contextWindowTokens,
-    maxOutputTokens: RETRIEVAL_LIMITS.perRequestOutputTokens,
+    maxOutputTokens,
     ...(profile.reasoningEffort ? { reasoningEffort: profile.reasoningEffort } : {})
   }
   return createRunSpec({
@@ -360,7 +363,7 @@ export function recomputeRetrievalMetrics(report, bundle) {
       chargedInputTokens += charged.inputTokens
       chargedOutputTokens += charged.outputTokens
     } else chargedUsageComplete = false
-    if (!Number.isSafeInteger(requestCount) || requestCount < 1 || requestCount > 3 || (receipt.usageComplete && (!validUsage(receipt.providerUsage) || receipt.providerUsage.inputTokens > 18_000 || receipt.providerUsage.outputTokens > 6_000)) || (Number.isFinite(receipt.readBytes) && (receipt.readBytes > 2 * 1024 * 1024)) || (Number.isFinite(receipt.elapsedMs) && receipt.elapsedMs > 180_000) || (readStatsAvailable && receipt.repeatedReads > receipt.readRequests) || reservations.some(item => validUsage(item?.usage) && (item.usage.outputTokens > RETRIEVAL_LIMITS.perRequestOutputTokens || item.usage.inputTokens > item.reservedInputTokens || item.usage.outputTokens > item.reservedOutputTokens)) || overspend?.some(value => Number.isSafeInteger(value) && value > 0) || receipt.blocked === true) limitViolations++
+    if (!Number.isSafeInteger(requestCount) || requestCount < 1 || requestCount > 3 || (receipt.usageComplete && (!validUsage(receipt.providerUsage) || receipt.providerUsage.inputTokens > 18_000 || receipt.providerUsage.outputTokens > 6_000)) || (Number.isFinite(receipt.readBytes) && (receipt.readBytes > 2 * 1024 * 1024)) || (Number.isFinite(receipt.elapsedMs) && receipt.elapsedMs > 180_000) || (readStatsAvailable && receipt.repeatedReads > receipt.readRequests) || reservations.some(item => validUsage(item?.usage) && (item.usage.outputTokens > (AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(report?.provider?.maxOutputTokensPerRequest) ? report.provider.maxOutputTokensPerRequest : RETRIEVAL_LIMITS.perRequestOutputTokens) || item.usage.inputTokens > item.reservedInputTokens || item.usage.outputTokens > item.reservedOutputTokens)) || overspend?.some(value => Number.isSafeInteger(value) && value > 0) || receipt.blocked === true) limitViolations++
     const completeTask = label.requiredEvidenceGroups.every(group => group.allOf.every(ref => coversRequirement(ref, selectedEvidence, project)))
     if (allSelectedValid && cell.status === 'completed' && cell.stopReason === 'finished' && completeTask) complete++
   }
@@ -390,9 +393,9 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
   if (metrics && !metrics.runConfigurationComplete) issues.push('run-configuration-invalid')
   if (metrics && metrics.repeatedReadRate !== null && metrics.repeatedReadRate > RETRIEVAL_LIMITS.repeats) issues.push('repeated-read-rate-above-threshold')
   if (metrics && (!metrics.limitsComplete || metrics.limitViolations !== 0 || !metrics.usageComplete)) issues.push('receipt-or-limit-invalid')
-  if (!report?.provider || !HASH.test(report.provider.endpointFingerprint ?? '') || typeof report.provider.model !== 'string' || report.provider.protocol !== 'openai' || report.provider.temperature !== 0.4 || ![null, 'low', 'high'].includes(report.provider.reasoningEffort) || !Number.isSafeInteger(report.provider.contextWindowTokens) || report.provider.contextWindowTokens < 4096 || report.provider.maxOutputTokensPerRequest !== RETRIEVAL_LIMITS.perRequestOutputTokens) issues.push('provider-binding-invalid')
+  if (!report?.provider || !HASH.test(report.provider.endpointFingerprint ?? '') || typeof report.provider.model !== 'string' || report.provider.protocol !== 'openai' || report.provider.temperature !== 0.4 || ![null, 'low', 'high'].includes(report.provider.reasoningEffort) || !Number.isSafeInteger(report.provider.contextWindowTokens) || report.provider.contextWindowTokens < 4096 || !AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(report.provider.maxOutputTokensPerRequest)) issues.push('provider-binding-invalid')
   else if (report.configurationFingerprint !== evaluationConfigFingerprint(report.provider)) issues.push('configuration-binding-invalid')
-  if (expected.provider && report?.provider && ['endpointFingerprint', 'model', 'protocol', 'temperature', 'reasoningEffort', 'contextWindowTokens'].some(key => report.provider[key] !== expected.provider[key])) issues.push('provider-authorization-mismatch')
+  if (expected.provider && report?.provider && (['endpointFingerprint', 'model', 'protocol', 'temperature', 'reasoningEffort', 'contextWindowTokens'].some(key => report.provider[key] !== expected.provider[key]) || (expected.provider.maxOutputTokens !== undefined && report.provider.maxOutputTokensPerRequest !== expected.provider.maxOutputTokens))) issues.push('provider-authorization-mismatch')
   if (expected.sourceCommit && report?.sourceCommit !== expected.sourceCommit) issues.push('source-binding-mismatch')
   if (expected.retrievalDataHash && report?.retrievalDataHash !== expected.retrievalDataHash) issues.push('dataset-binding-mismatch')
   if (expected.configurationFingerprint && report?.configurationFingerprint !== expected.configurationFingerprint) issues.push('configuration-binding-mismatch')
@@ -403,16 +406,18 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
 }
 
 export function evaluationConfigFingerprint(provider) {
-  return sha256(Buffer.from(canonicalJson({ purpose: RETRIEVAL_PURPOSE, provider: { endpointFingerprint: provider.endpointFingerprint, model: provider.model, protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, contextWindowTokens: provider.contextWindowTokens, maxOutputTokensPerRequest: provider.maxOutputTokensPerRequest }, limits: RETRIEVAL_LIMITS, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })))
+  const limits = { ...RETRIEVAL_LIMITS, perRequestOutputTokens: provider.maxOutputTokensPerRequest ?? RETRIEVAL_LIMITS.perRequestOutputTokens }
+  return sha256(Buffer.from(canonicalJson({ purpose: RETRIEVAL_PURPOSE, provider: { endpointFingerprint: provider.endpointFingerprint, model: provider.model, protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, contextWindowTokens: provider.contextWindowTokens, maxOutputTokensPerRequest: provider.maxOutputTokensPerRequest }, limits, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })))
 }
 
 export function evaluationRunConfigFingerprint(task, provider) {
+  if (!AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(provider?.maxOutputTokensPerRequest)) return null
   const spec = createRetrievalRunSpec(task, {
     id: 'evaluation-profile', model: provider.model, baseUrl: 'https://fingerprint.invalid/v1',
     protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort ?? undefined,
-    contextWindowTokens: provider.contextWindowTokens, maxOutputTokens: RETRIEVAL_LIMITS.perRequestOutputTokens,
+    contextWindowTokens: provider.contextWindowTokens, maxOutputTokens: provider.maxOutputTokensPerRequest,
     endpointFingerprint: provider.endpointFingerprint
-  }, { projectId: task.projectId, snapshotId: 'evaluation-snapshot' }, 'evaluation-run')
+  }, { projectId: task.projectId, snapshotId: 'evaluation-snapshot' }, 'evaluation-run', provider.maxOutputTokensPerRequest)
   return sha256(Buffer.from(canonicalJson({
     globalConfiguration: evaluationConfigFingerprint(provider), task: { id: task.id, projectId: task.projectId, objective: task.objective, roleFocus: task.roleFocus, granularity: task.granularity, indexMode: task.indexMode },
     budget: { global: spec.budget.total, investigation: spec.budget.investigation, generationReserve: spec.budget.generationReserve, generationInputTokens: spec.generationInputTokens, generationOutputTokens: spec.generationOutputTokens }
@@ -559,7 +564,7 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
   safe(validateRetrievalBundle(bundle).valid, 'dataset-invalid')
   const projectById = new Map(bundle.projects.projects.map(project => [project.id, project]))
   const labels = new Map(bundle.retrievalLabels.labels.map(label => [label.taskId, label]))
-  const provider = { endpointFingerprint: auth.endpointFingerprint, model: auth.model, protocol: auth.protocol, temperature: auth.temperature, reasoningEffort: auth.reasoningEffort, contextWindowTokens: auth.contextWindowTokens, maxOutputTokensPerRequest: RETRIEVAL_LIMITS.perRequestOutputTokens }
+  const provider = { endpointFingerprint: auth.endpointFingerprint, model: auth.model, protocol: auth.protocol, temperature: auth.temperature, reasoningEffort: auth.reasoningEffort, contextWindowTokens: auth.contextWindowTokens, maxOutputTokensPerRequest: auth.maxOutputTokens }
   const outputRoot = path.resolve(outputDir)
   const localOutputRoot = path.resolve(root, '.validation', 'agentic')
   const relativeOutput = path.relative(localOutputRoot, outputRoot)
@@ -599,7 +604,7 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
           const scan = await scanProject(projectRoot)
           snapshot = await createWorkflowSnapshot(scan, { projectId: task.projectId, ...(task.indexMode === 'unavailable' ? { analyzer: () => null, parserVersion: 'm06-index-disabled-v1' } : {}) })
           store = createEvidenceStore(snapshot)
-          const spec = createRetrievalRunSpec(task, boundProfile, snapshot, `${task.id}-r${repeat}`)
+          const spec = createRetrievalRunSpec(task, boundProfile, snapshot, `${task.id}-r${repeat}`, auth.maxOutputTokens)
           ledger = createBudgetLedger(spec)
           const guardedTransport = createGuardedTransport({
             collector: globalCollector,
@@ -609,7 +614,7 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
           })
           const gateway = createModelGateway(spec, boundProfile, ledger, { transport: guardedTransport })
           const toolGateway = createToolGateway(snapshot, store, ledger)
-          result = await runInvestigation({ spec, snapshot, store, tools: toolGateway, ledger, model: gateway, objective: task.objective, onEvent: event => events.push({ type: event.type, ...(event.hash ? { hash: event.hash } : {}), ...(event.reason ? { reason: event.reason } : {}) }) })
+          result = await runInvestigation({ spec, snapshot, store, tools: toolGateway, ledger, model: gateway, objective: task.objective, maxOutputTokensPerDecision: auth.maxOutputTokens, onEvent: event => events.push({ type: event.type, ...(event.hash ? { hash: event.hash } : {}), ...(event.reason ? { reason: event.reason } : {}) }) })
         } catch (error) {
           errorCode = nonSecretError(error).code
           failure = { code: errorCode }
