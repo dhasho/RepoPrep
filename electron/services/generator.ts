@@ -511,6 +511,7 @@ async function callForJson(
       try { validateCheckpointBatch(candidate) } catch { throw new Error(RESULT_CONTRACT_MESSAGES.generated) }
       if (requestAdapter && requestId) {
         await requestAdapter.acceptQuestion({ requestId, rawQuestion: fragment.question, question })
+        if (signal.aborted) throw new LlmRequestError('cancelled')
       }
       await streaming.save(candidate)
       if (signal.aborted) throw new LlmRequestError('cancelled')
