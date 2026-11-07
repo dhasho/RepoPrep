@@ -27,6 +27,7 @@ import type { ScanResult } from './scanner'
 import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
 import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
+import { WorkflowError } from './workflow/project-contract'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
@@ -165,6 +166,8 @@ export function buildUserPrompt(opts: {
   moduleLabel?: string
   /** 本批次被分配的题量（由 question-budget.ts 统一规划），提示词与后置裁剪都以此为准 */
   quota: number
+  /** Evidence groups can cover implementation directly, without legacy module batches. */
+  evidenceAware?: boolean
   /** 补偿轮追加的说明（要求模型补充此前未覆盖的考察点、不要重复） */
   extraInstruction?: string
 }): string {
@@ -172,9 +175,11 @@ export function buildUserPrompt(opts: {
   const g = GRANULARITY_META[granularity]
   const questionCount = isModuleBatch
     ? `严格 ${quota} 题（只针对本模块，不要多出）`
-    : granularity === 'fine'
+    : granularity === 'fine' && !opts.evidenceAware
       ? `严格 ${quota} 题（全局架构层面，实现细节由其他批次负责，不要多出）`
-      : `约 ${quota} 题`
+      : granularity === 'fine'
+        ? `严格 ${quota} 题（围绕当前提供的机制与实现证据，不要多出）`
+        : `约 ${quota} 题`
 
   const taskLine = isModuleBatch
     ? `本次只分析项目的单个模块「${moduleLabel}」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。`
@@ -937,6 +942,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
               ? built.batches[index].label.replace(/^模块「|」$/g, '')
               : undefined,
           quota: remaining,
+          evidenceAware: Boolean(params.requestAdapter),
           extraInstruction: [extraInstruction, continuation].filter(Boolean).join('\n') || undefined
         })
         const messages: ChatMessage[] = [
@@ -1281,7 +1287,7 @@ export async function mergeWithCompensation(
       if (input.checkpointResume) throw error
       // Timeouts need to reach the main IPC layer so it can surface the explicit
       // timeout state; ordinary compensation failures remain best-effort.
-      if (isLlmTimeoutError(error)) throw error
+      if (isLlmTimeoutError(error) || error instanceof WorkflowError && error.code === 'timeout') throw error
       // 补偿属于尽力而为：失败不应让整个生成流程失败，已有结果照常返回
       break
     }

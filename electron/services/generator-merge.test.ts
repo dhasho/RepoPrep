@@ -10,9 +10,11 @@ import assert from 'node:assert/strict'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { GRANULARITY_QUESTION_BUDGET, type Section } from '../../shared/types.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
-import { mergeWithCompensation, type MergeInput } from './generator.ts'
+import { buildUserPrompt, mergeWithCompensation, type MergeInput } from './generator.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { LlmRequestError } from './llm.ts'
+// @ts-ignore TS5097 -- direct Node tests need the explicit TypeScript extension.
+import { WorkflowError } from './workflow/project-contract.ts'
 // @ts-ignore Node 24 direct TypeScript tests require runtime .ts suffixes.
 import { selectUniqueQuestions } from './question-dedupe.ts'
 
@@ -63,6 +65,16 @@ function makeInput(
 // 测不出"无补偿"的分支。32/30 是细粒度真实规划出来的量级。
 const FULL_QUOTAS = [12, 10, 10] // 合计 32（= target）
 const FULL_TOTAL = 32
+
+test('证据分组的细粒度提示保留实现深度，默认静态提示保持原义', () => {
+  const options = { contextText: 'provided source', granularity: 'fine' as const, roleFocus: 'backend' as const, isModuleBatch: false, quota: 8 }
+  const legacy = buildUserPrompt(options)
+  const evidence = buildUserPrompt({ ...options, evidenceAware: true })
+  assert.match(legacy, /全局架构层面，实现细节由其他批次负责/)
+  assert.doesNotMatch(evidence, /实现细节由其他批次负责/)
+  assert.match(evidence, /严格 8 题（围绕当前提供的机制与实现证据/)
+  assert.match(evidence, /关键函数的实现思路/)
+})
 
 test('question dedupe ignores titles: same-title questions remain and duplicate wording keeps the first title', () => {
   const questions = [
@@ -152,6 +164,15 @@ test('补偿请求超时必须向上传递，不能静默返回部分结果', as
     assert.equal(error.kind, 'timeout')
     return true
   })
+})
+
+test('模型网关包装的补偿超时保留超时类型且不重复请求', async () => {
+  const { input, calls } = makeInput(FULL_QUOTAS, ({ isCompensation }) => {
+    if (isCompensation) throw new WorkflowError('timeout')
+    return 1
+  })
+  await assert.rejects(mergeWithCompensation(input, 2), (error: unknown) => error instanceof WorkflowError && error.code === 'timeout')
+  assert.equal(calls.filter(call => call.isCompensation).length, 1)
 })
 
 test('补偿请求期间取消必须传播，不能返回部分成功结果', async () => {
