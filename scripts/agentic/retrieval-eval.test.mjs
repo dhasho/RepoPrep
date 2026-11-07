@@ -145,6 +145,27 @@ test('complete synthetic matrix has independent receipt, diagnostic, and cap val
   assert.equal(metrics.limitViolations, 0)
 })
 
+test('one fully receipted budget-exhausted cell stays failed without inventing evidence or invalid-tool counts', () => {
+  const report = syntheticReport()
+  report.runs[0] = {
+    ...report.runs[0],
+    status: 'limit-reached',
+    stopReason: 'budget-exhausted',
+    failure: { code: 'budget-exhausted', modelFailure: { kind: 'response', finishReason: 'length' } }
+  }
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.matrixComplete, true)
+  assert.equal(metrics.completeEvidenceTaskRate, 39 / 40)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.diagnosticsComplete, true)
+  assert.equal(metrics.invalidToolExecution, 0)
+  assert.equal(metrics.invalidEvidence, 0)
+  assert.equal(metrics.limitViolations, 0)
+  assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('evidence-coverage-below-threshold'))
+  assert.equal(report.runs[0].status, 'limit-reached')
+  assert.deepEqual(report.runs[0].failure, { code: 'budget-exhausted', modelFailure: { kind: 'response', finishReason: 'length' } })
+})
+
 test('incomplete matrix reports missing cells without labeling them duplicate', () => {
   const report = syntheticReport()
   report.runs.pop()
@@ -208,7 +229,10 @@ test('authorized per-request cap binds run specs and report verification without
   const authorizedSpec = createRetrievalRunSpec(task, profile, snapshot, 'authorized-cap', 6000)
   assert.equal(defaultSpec.model.maxOutputTokens, 2000)
   assert.equal(authorizedSpec.model.maxOutputTokens, 6000)
+  assert.equal(defaultSpec.promptVersion, 'workflow-prompt-v2')
+  assert.equal(createRetrievalRunSpec(task, profile, snapshot, 'historical-prompt', 6000, 'workflow-prompt-v1').promptVersion, 'workflow-prompt-v1')
   assert.throws(() => createRetrievalRunSpec(task, profile, snapshot, 'invalid-cap', 3000), /authorization-invalid/)
+  assert.throws(() => createRetrievalRunSpec(task, profile, snapshot, 'invalid-prompt', 6000, 'workflow-prompt-v9'), /authorization-invalid/)
 
   const report = syntheticReport()
   const priorDefaultFingerprint = evaluationConfigFingerprint(report.provider)
@@ -219,6 +243,18 @@ test('authorized per-request cap binds run specs and report verification without
   assert.notEqual(report.configurationFingerprint, priorDefaultFingerprint)
   assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
   assert.ok(verifyRetrievalReport(report, bundle, { provider: { maxOutputTokens: 2000 } }).issues.includes('provider-authorization-mismatch'))
+  const legacySixKProvider = { ...report.provider }
+  const sixKLegacyFingerprint = evaluationConfigFingerprint(legacySixKProvider)
+  report.provider = { ...report.provider, investigationPromptVersion: 'workflow-prompt-v2' }
+  report.configurationFingerprint = evaluationConfigFingerprint(report.provider)
+  report.runs = report.runs.map(cell => ({ ...cell, runConfigFingerprint: evaluationRunConfigFingerprint(bundle.retrievalTasks.tasks.find(item => item.id === cell.taskId), report.provider) }))
+  assert.notEqual(report.configurationFingerprint, sixKLegacyFingerprint)
+  assert.notEqual(report.runs[0].runConfigFingerprint, evaluationRunConfigFingerprint(task, legacySixKProvider))
+  assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
+
+  const unknownPromptReport = { ...report, provider: { ...report.provider, investigationPromptVersion: 'workflow-prompt-v9' } }
+  unknownPromptReport.configurationFingerprint = evaluationConfigFingerprint(unknownPromptReport.provider)
+  assert.ok(verifyRetrievalReport(unknownPromptReport, bundle).issues.includes('provider-binding-invalid'))
 
   const receipt = report.runs[0].receipt
   receipt.providerUsage = { inputTokens: 10, outputTokens: 2501, totalTokens: 2511 }

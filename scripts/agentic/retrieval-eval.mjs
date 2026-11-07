@@ -13,12 +13,14 @@ import { createToolGateway } from '../../electron/services/workflow/tool-gateway
 import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
 import { createModelGateway } from '../../electron/services/workflow/model-gateway.ts'
 import { createRunSpec } from '../../electron/services/workflow/run-spec.ts'
-import { runInvestigation } from '../../electron/services/workflow/investigation-controller.ts'
+import { INVESTIGATION_PROMPT_VERSION, runInvestigation } from '../../electron/services/workflow/investigation-controller.ts'
 import { normalizeBaseUrl } from '../../electron/services/llm.ts'
 
 export const RETRIEVAL_PURPOSE = 'm06-retrieval-v1'
 export const RETRIEVAL_LIMITS = Object.freeze({ runs: 40, requests: 120, inputTokens: 720_000, outputTokens: 240_000, perRequestOutputTokens: 2000, repeats: 0.2, completeRate: 0.9 })
 const AUTHORIZED_PER_REQUEST_OUTPUT_CAPS = new Set([2000, 6000])
+const HISTORICAL_INVESTIGATION_PROMPT_VERSION = 'workflow-prompt-v1'
+const SUPPORTED_INVESTIGATION_PROMPT_VERSIONS = new Set([HISTORICAL_INVESTIGATION_PROMPT_VERSION, INVESTIGATION_PROMPT_VERSION])
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(HERE, 'datasets', 'v1')
 const DATA_NAMES = ['projects.json', 'retrieval-tasks.json', 'retrieval-labels.json']
@@ -247,8 +249,9 @@ async function materializeProject(project, parent) {
   return root
 }
 
-export function createRetrievalRunSpec(task, profile, snapshot, runId, maxOutputTokens = RETRIEVAL_LIMITS.perRequestOutputTokens) {
+export function createRetrievalRunSpec(task, profile, snapshot, runId, maxOutputTokens = RETRIEVAL_LIMITS.perRequestOutputTokens, promptVersion = INVESTIGATION_PROMPT_VERSION) {
   safe(AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(maxOutputTokens), 'authorization-invalid')
+  safe(SUPPORTED_INVESTIGATION_PROMPT_VERSIONS.has(promptVersion), 'authorization-invalid')
   const model = {
     profileId: profile.id,
     endpointFingerprint: endpointHash(profile.baseUrl),
@@ -262,7 +265,7 @@ export function createRetrievalRunSpec(task, profile, snapshot, runId, maxOutput
   return createRunSpec({
     version: 1, runId, projectId: snapshot.projectId, snapshotId: snapshot.snapshotId,
     strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: task.roleFocus, granularity: task.granularity,
-    model, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1',
+    model, promptVersion, toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1',
   })
 }
 
@@ -393,9 +396,9 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
   if (metrics && !metrics.runConfigurationComplete) issues.push('run-configuration-invalid')
   if (metrics && metrics.repeatedReadRate !== null && metrics.repeatedReadRate > RETRIEVAL_LIMITS.repeats) issues.push('repeated-read-rate-above-threshold')
   if (metrics && (!metrics.limitsComplete || metrics.limitViolations !== 0 || !metrics.usageComplete)) issues.push('receipt-or-limit-invalid')
-  if (!report?.provider || !HASH.test(report.provider.endpointFingerprint ?? '') || typeof report.provider.model !== 'string' || report.provider.protocol !== 'openai' || report.provider.temperature !== 0.4 || ![null, 'low', 'high'].includes(report.provider.reasoningEffort) || !Number.isSafeInteger(report.provider.contextWindowTokens) || report.provider.contextWindowTokens < 4096 || !AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(report.provider.maxOutputTokensPerRequest)) issues.push('provider-binding-invalid')
+  if (!report?.provider || !HASH.test(report.provider.endpointFingerprint ?? '') || typeof report.provider.model !== 'string' || report.provider.protocol !== 'openai' || report.provider.temperature !== 0.4 || ![null, 'low', 'high'].includes(report.provider.reasoningEffort) || !Number.isSafeInteger(report.provider.contextWindowTokens) || report.provider.contextWindowTokens < 4096 || !AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(report.provider.maxOutputTokensPerRequest) || !SUPPORTED_INVESTIGATION_PROMPT_VERSIONS.has(report.provider.investigationPromptVersion ?? HISTORICAL_INVESTIGATION_PROMPT_VERSION)) issues.push('provider-binding-invalid')
   else if (report.configurationFingerprint !== evaluationConfigFingerprint(report.provider)) issues.push('configuration-binding-invalid')
-  if (expected.provider && report?.provider && (['endpointFingerprint', 'model', 'protocol', 'temperature', 'reasoningEffort', 'contextWindowTokens'].some(key => report.provider[key] !== expected.provider[key]) || (expected.provider.maxOutputTokens !== undefined && report.provider.maxOutputTokensPerRequest !== expected.provider.maxOutputTokens))) issues.push('provider-authorization-mismatch')
+  if (expected.provider && report?.provider && (['endpointFingerprint', 'model', 'protocol', 'temperature', 'reasoningEffort', 'contextWindowTokens'].some(key => report.provider[key] !== expected.provider[key]) || (expected.provider.maxOutputTokens !== undefined && report.provider.maxOutputTokensPerRequest !== expected.provider.maxOutputTokens) || (expected.provider.investigationPromptVersion !== undefined && report.provider.investigationPromptVersion !== expected.provider.investigationPromptVersion))) issues.push('provider-authorization-mismatch')
   if (expected.sourceCommit && report?.sourceCommit !== expected.sourceCommit) issues.push('source-binding-mismatch')
   if (expected.retrievalDataHash && report?.retrievalDataHash !== expected.retrievalDataHash) issues.push('dataset-binding-mismatch')
   if (expected.configurationFingerprint && report?.configurationFingerprint !== expected.configurationFingerprint) issues.push('configuration-binding-mismatch')
@@ -406,18 +409,20 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
 }
 
 export function evaluationConfigFingerprint(provider) {
+  const promptVersion = provider.investigationPromptVersion ?? HISTORICAL_INVESTIGATION_PROMPT_VERSION
   const limits = { ...RETRIEVAL_LIMITS, perRequestOutputTokens: provider.maxOutputTokensPerRequest ?? RETRIEVAL_LIMITS.perRequestOutputTokens }
-  return sha256(Buffer.from(canonicalJson({ purpose: RETRIEVAL_PURPOSE, provider: { endpointFingerprint: provider.endpointFingerprint, model: provider.model, protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, contextWindowTokens: provider.contextWindowTokens, maxOutputTokensPerRequest: provider.maxOutputTokensPerRequest }, limits, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })))
+  return sha256(Buffer.from(canonicalJson({ purpose: RETRIEVAL_PURPOSE, provider: { endpointFingerprint: provider.endpointFingerprint, model: provider.model, protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort, contextWindowTokens: provider.contextWindowTokens, maxOutputTokensPerRequest: provider.maxOutputTokensPerRequest, ...(provider.investigationPromptVersion ? { investigationPromptVersion: provider.investigationPromptVersion } : {}) }, limits, promptVersion, toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })))
 }
 
 export function evaluationRunConfigFingerprint(task, provider) {
-  if (!AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(provider?.maxOutputTokensPerRequest)) return null
+  const promptVersion = provider?.investigationPromptVersion ?? HISTORICAL_INVESTIGATION_PROMPT_VERSION
+  if (!AUTHORIZED_PER_REQUEST_OUTPUT_CAPS.has(provider?.maxOutputTokensPerRequest) || !SUPPORTED_INVESTIGATION_PROMPT_VERSIONS.has(promptVersion)) return null
   const spec = createRetrievalRunSpec(task, {
     id: 'evaluation-profile', model: provider.model, baseUrl: 'https://fingerprint.invalid/v1',
     protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort ?? undefined,
     contextWindowTokens: provider.contextWindowTokens, maxOutputTokens: provider.maxOutputTokensPerRequest,
     endpointFingerprint: provider.endpointFingerprint
-  }, { projectId: task.projectId, snapshotId: 'evaluation-snapshot' }, 'evaluation-run', provider.maxOutputTokensPerRequest)
+  }, { projectId: task.projectId, snapshotId: 'evaluation-snapshot' }, 'evaluation-run', provider.maxOutputTokensPerRequest, promptVersion)
   return sha256(Buffer.from(canonicalJson({
     globalConfiguration: evaluationConfigFingerprint(provider), task: { id: task.id, projectId: task.projectId, objective: task.objective, roleFocus: task.roleFocus, granularity: task.granularity, indexMode: task.indexMode },
     budget: { global: spec.budget.total, investigation: spec.budget.investigation, generationReserve: spec.budget.generationReserve, generationInputTokens: spec.generationInputTokens, generationOutputTokens: spec.generationOutputTokens }
@@ -564,7 +569,7 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
   safe(validateRetrievalBundle(bundle).valid, 'dataset-invalid')
   const projectById = new Map(bundle.projects.projects.map(project => [project.id, project]))
   const labels = new Map(bundle.retrievalLabels.labels.map(label => [label.taskId, label]))
-  const provider = { endpointFingerprint: auth.endpointFingerprint, model: auth.model, protocol: auth.protocol, temperature: auth.temperature, reasoningEffort: auth.reasoningEffort, contextWindowTokens: auth.contextWindowTokens, maxOutputTokensPerRequest: auth.maxOutputTokens }
+  const provider = { endpointFingerprint: auth.endpointFingerprint, model: auth.model, protocol: auth.protocol, temperature: auth.temperature, reasoningEffort: auth.reasoningEffort, contextWindowTokens: auth.contextWindowTokens, maxOutputTokensPerRequest: auth.maxOutputTokens, investigationPromptVersion: INVESTIGATION_PROMPT_VERSION }
   const outputRoot = path.resolve(outputDir)
   const localOutputRoot = path.resolve(root, '.validation', 'agentic')
   const relativeOutput = path.relative(localOutputRoot, outputRoot)
@@ -633,6 +638,8 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
             selectedEvidence.push(...resolved.map(rangeMetadata))
           } catch { errorCode = errorCode || 'evidence-resolution-failed' }
         }
+        const resultModelFailure = sanitizeModelFailure(result?.modelFailure)
+        if (!failure && result?.status !== 'completed' && resultModelFailure) failure = { code: result.stopReason, modelFailure: resultModelFailure }
         const state = ledger?.snapshot()
         const callReceipts = globalCollector.runEntries(`${task.id}-r${repeat}`)
         const knownCalls = callReceipts.filter(item => item.state === 'settled' && item.usage)
