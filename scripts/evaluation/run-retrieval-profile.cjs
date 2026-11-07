@@ -9,9 +9,10 @@ const CHECKOUT_ROOT = path.resolve(__dirname, '../..')
 const DEFAULT_SETTINGS_DIR = process.platform === 'win32' ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData/Roaming'), 'ProjectLens') : ''
 
 function parseArgs(argv) {
-  const options = { repoRoot: CHECKOUT_ROOT, settingsDir: DEFAULT_SETTINGS_DIR, profileId: '', authorizationPath: '', outputDir: '' }
+  const options = { repoRoot: CHECKOUT_ROOT, settingsDir: DEFAULT_SETTINGS_DIR, profileId: '', authorizationPath: '', outputDir: '', credentialPreflight: false }
   const map = new Map([['--repo-root', 'repoRoot'], ['--settings-dir', 'settingsDir'], ['--profile-id', 'profileId'], ['--authorization', 'authorizationPath'], ['--output', 'outputDir']])
   for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--credential-preflight') { options.credentialPreflight = true; continue }
     const key = map.get(argv[i]); if (!key) throw new Error('invalid-arguments')
     const value = argv[++i]; if (!value || value.startsWith('--')) throw new Error('invalid-arguments')
     options[key] = value
@@ -72,19 +73,23 @@ function secureTemporaryDirectory(directory) {
 }
 
 async function launch(options) {
-  await preflight(options)
+  let stage = 'authorization'
+  try { await preflight(options) } catch (error) { throw Object.assign(new Error(safeLauncherCode(error)), { startupStage: stage }) }
   const parent = path.dirname(options.outputDir)
-  ensureSafeOutputParent(options.repoRoot, parent)
+  if (!options.credentialPreflight) ensureSafeOutputParent(options.repoRoot, parent)
   const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'repoprep-m06-retrieval-'))
   let child, timeout
   const maxDurationMs = 40 * 180_000 + 120_000
   try {
+    stage = 'private-runtime'
     secureTemporaryDirectory(runtimeRoot)
+    stage = 'bundle'
     const esbuild = require('esbuild')
     const outfile = path.join(runtimeRoot, 'entry.cjs')
     await esbuild.build({ entryPoints: [path.join(__dirname, 'run-retrieval-profile-entry.cjs')], bundle: true, platform: 'node', format: 'cjs', target: 'node22', tsconfig: path.join(options.repoRoot, 'tsconfig.node.json'), external: ['electron'], outfile, logLevel: 'silent' })
     const electron = require('electron')
-    const args = ['--runtime-root', runtimeRoot, '--repo-root', options.repoRoot, '--settings-dir', options.settingsDir, '--authorization', options.authorizationPath, '--output', options.outputDir, ...(options.profileId ? ['--profile-id', options.profileId] : [])]
+    stage = 'electron-spawn'
+    const args = ['--runtime-root', runtimeRoot, '--repo-root', options.repoRoot, '--settings-dir', options.settingsDir, '--authorization', options.authorizationPath, '--output', options.outputDir, ...(options.profileId ? ['--profile-id', options.profileId] : []), ...(options.credentialPreflight ? ['--credential-preflight'] : [])]
     child = require('node:child_process').spawn(electron, [outfile, ...args], { cwd: options.repoRoot, windowsHide: true, stdio: ['ignore', 'inherit', 'inherit'], env: { ...safeEnv(), NODE_OPTIONS: '--experimental-strip-types' } })
     const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (code, signal) => resolve(code ?? (signal ? 1 : 0))) })
     timeout = setTimeout(() => { child?.kill() }, maxDurationMs)
@@ -106,7 +111,13 @@ async function launch(options) {
 if (require.main === module) {
   let options
   try { options = parseArgs(process.argv.slice(2)) } catch { process.stderr.write('Invalid retrieval evaluation arguments.\n'); process.exitCode = 2 }
-  if (options) launch(options).catch(() => { process.stderr.write('Retrieval evaluation blocked before credential access or failed safely.\n'); process.exitCode = 1 })
+  if (options) launch(options).catch(error => { const stage = ['authorization', 'private-runtime', 'bundle', 'electron-spawn'].includes(error?.startupStage) ? error.startupStage : 'launcher'; process.stderr.write(`${JSON.stringify({ type: 'retrieval-startup', stage, code: safeLauncherCode(error) })}\n`); process.exitCode = 1 })
 }
 
-module.exports = { parseArgs, preflight, secureTemporaryDirectory, safeEnv }
+function safeLauncherCode(error) {
+  const code = error instanceof Error ? error.message : ''
+  const allowed = new Set(['authorization-required', 'authorization-invalid', 'authorization-binding-mismatch', 'private-runtime-unavailable', 'output-path-invalid', 'path-overlap', 'settings-directory-unavailable'])
+  return allowed.has(code) ? code : 'startup-failed'
+}
+
+module.exports = { parseArgs, preflight, secureTemporaryDirectory, safeEnv, safeLauncherCode }

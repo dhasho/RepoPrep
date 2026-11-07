@@ -28,6 +28,19 @@ The authorization document is created outside tracked source after explicit user
 }
 ```
 
+The Electron child revalidates the authorization and one-shot claim synchronously, then stages only the encrypted settings and OSCrypt `Local State` and sets all isolated Electron paths before its first asynchronous yield. A static startup diagnostic is written to stderr and, after a claim exists, to `.validation/agentic/claims/<claim-id>.startup-status.json`. It records only a fixed stage and allowlisted error code; it never records exception messages, stacks, profile data, or credentials.
+
+For an existing claim that has no `.started` marker, an operator can run a credential-only preflight with the same approved artifact and selected settings directory:
+
+```powershell
+node scripts/evaluation/run-retrieval-profile.cjs `
+  --authorization C:\path\to\approved-m06-authorization.json `
+  --settings-dir C:\Users\<user>\AppData\Roaming\ProjectLens `
+  --credential-preflight
+```
+
+This mode refuses a missing or already-started claim, verifies the saved profile binding, and exits after native credential decryption. It does not create a claim, write user settings, create an evaluation output directory, or invoke a provider.
+
 The `contextWindowTokens`, `endpointFingerprint`, and `model` values must match the selected saved profile. The authorization artifact carries no API key or encrypted profile data. Keep it outside the repository and provide its path explicitly:
 
 ```powershell
