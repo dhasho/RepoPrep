@@ -35,6 +35,7 @@ test('startup diagnostics expose only allowlisted static codes', () => {
   assert.equal(staticErrorCode(new Error('os-crypt-app-bound-unsupported')), 'os-crypt-app-bound-unsupported')
   assert.equal(staticErrorCode(new Error('secret ciphertext or credential data')), 'startup-failed')
   assert.equal(staticErrorCode(new Error('profile-binding-mismatch')), 'profile-binding-mismatch')
+  assert.equal(staticErrorCode(new Error('retrieval-evaluation-incomplete')), 'retrieval-evaluation-incomplete')
 })
 
 test('credential preflight is an explicit option and keeps authorization mandatory', () => {

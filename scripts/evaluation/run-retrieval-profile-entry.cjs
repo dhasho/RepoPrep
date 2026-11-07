@@ -12,7 +12,7 @@ const SAFE_ERRORS = new Set([
   'settings-plaintext-credential-refused', 'settings-default-profile-missing', 'settings-profile-missing', 'settings-encrypted-credential-missing',
   'settings-profile-invalid', 'os-crypt-state-unavailable', 'os-crypt-state-invalid', 'os-crypt-app-bound-unsupported',
   'profile-binding-mismatch', 'credential-store-unavailable', 'saved-profile-unavailable', 'profile-unavailable', 'profile-decrypt-failed',
-  'unsafe-directory', 'unsafe-runtime-path', 'claim-path-invalid', 'evaluation-startup-failed'
+  'unsafe-directory', 'unsafe-runtime-path', 'claim-path-invalid', 'evaluation-startup-failed', 'retrieval-evaluation-incomplete'
 ])
 
 function staticErrorCode(error) {
