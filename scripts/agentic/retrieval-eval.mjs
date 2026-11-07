@@ -296,34 +296,43 @@ export function recomputeRetrievalMetrics(report, bundle) {
   const unique = new Set(cells.filter(Boolean).map(cell => `${cell.taskId}:${cell.repeat}`))
   const taskList = bundle?.retrievalTasks?.tasks ?? []
   const expectedCells = new Set(taskList.flatMap(task => [1, 2].map(repeat => `${task.id}:${repeat}`)))
-  let complete = 0, readRequests = 0, repeatedReads = 0, invalid = 0, limitViolations = 0, totalRequests = 0, totalInputTokens = 0, totalOutputTokens = 0
+  let complete = 0, readRequests = 0, repeatedReads = 0, invalid = 0, limitViolations = 0, totalRequests = 0, knownInputTokens = 0, knownOutputTokens = 0, chargedInputTokens = 0, chargedOutputTokens = 0, unknownRequests = 0
+  let chargedUsageComplete = true
   let usageComplete = true
-  if (cells.length !== expectedCells.size || unique.size !== expectedCells.size || [...expectedCells].some(key => !unique.has(key)) || [...unique].some(key => !expectedCells.has(key))) limitViolations++
+  if (cells.length !== expectedCells.size || unique.size !== expectedCells.size || [...expectedCells].some(key => !unique.has(key)) || [...unique].some(key => !expectedCells.has(key))) {
+    limitViolations++
+  }
   for (const cell of cells) {
-    if (!cell || typeof cell !== 'object') { usageComplete = false; limitViolations++; continue }
+    if (!cell || typeof cell !== 'object') { usageComplete = false; chargedUsageComplete = false; limitViolations++; continue }
     const task = tasks.get(cell.taskId), project = task && projects.get(task.projectId), label = labels.get(cell.taskId)
     const receipt = cell.receipt && typeof cell.receipt === 'object' ? cell.receipt : null
-    if (!task || !project || !label || !Array.isArray(cell.selectedEvidence) || !Array.isArray(cell.retrievedEvidence) || !receipt || typeof receipt.usageComplete !== 'boolean') { usageComplete = false; limitViolations++; continue }
+    if (!task || !project || !label || !receipt || typeof receipt.usageComplete !== 'boolean') { usageComplete = false; chargedUsageComplete = false; limitViolations++; continue }
     if (!receipt.usageComplete) usageComplete = false
     if (!report?.provider || typeof report.provider !== 'object' || cell.runConfigFingerprint !== evaluationRunConfigFingerprint(task, report.provider)) limitViolations++
     const reservations = Array.isArray(receipt.reservations) ? receipt.reservations : []
     const reservationIds = new Set(reservations.map(item => item?.id))
     const validReceipts = reservationIds.size === reservations.length && reservations.length === receipt.requests && reservations.every(item => item && /^inv-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(item.id) && item.stage === 'investigation' && item.state === 'settled' && validUsage(item.usage) && Number.isSafeInteger(item.reservedInputTokens) && item.reservedInputTokens >= 0 && Number.isSafeInteger(item.reservedOutputTokens) && item.reservedOutputTokens >= 0 && Number.isSafeInteger(item.contextChars) && item.contextChars >= 0 && item.usage.inputTokens <= item.reservedInputTokens && item.usage.outputTokens <= item.reservedOutputTokens)
-    const receiptInput = reservations.reduce((sum, item) => sum + (validUsage(item?.usage) ? item.usage.inputTokens : 0), 0)
-    const receiptOutput = reservations.reduce((sum, item) => sum + (validUsage(item?.usage) ? item.usage.outputTokens : 0), 0)
+    const receiptInput = reservations.reduce((sum, item) => sum + (item?.state === 'settled' && validUsage(item.usage) ? item.usage.inputTokens : 0), 0)
+    const receiptOutput = reservations.reduce((sum, item) => sum + (item?.state === 'settled' && validUsage(item.usage) ? item.usage.outputTokens : 0), 0)
+    knownInputTokens += receiptInput
+    knownOutputTokens += receiptOutput
+    unknownRequests += reservations.filter(item => item?.state !== 'settled' || !validUsage(item.usage)).length + Math.max(0, (Number.isSafeInteger(receipt.requests) ? receipt.requests : reservations.length) - reservations.length)
     const known = receipt.knownProviderUsage
     const charged = receipt.chargedTokens
     if (!validReceipts || !known || known.inputTokens !== receiptInput || known.outputTokens !== receiptOutput || known.totalTokens !== receiptInput + receiptOutput || !charged || !Number.isSafeInteger(charged.inputTokens) || !Number.isSafeInteger(charged.outputTokens) || charged.inputTokens < receiptInput || charged.outputTokens < receiptOutput) usageComplete = false
     if ((receipt.usageComplete && (!validUsage(receipt.providerUsage) || receipt.providerUsage.inputTokens !== receiptInput || receipt.providerUsage.outputTokens !== receiptOutput)) || (!receipt.usageComplete && receipt.providerUsage !== null)) usageComplete = false
     const overspend = receipt.overspend && typeof receipt.overspend === 'object' && !Array.isArray(receipt.overspend) ? Object.values(receipt.overspend) : null
     if (!Number.isSafeInteger(receipt.readRequests) || receipt.readRequests < 0 || !Number.isSafeInteger(receipt.repeatedReads) || receipt.repeatedReads < 0 || !receipt.overspend || Array.isArray(receipt.overspend) || Object.keys(receipt.overspend).sort().join(',') !== 'inputTokens,outputTokens,readBytes' || !overspend || overspend.some(value => !Number.isSafeInteger(value) || value < 0 || value !== 0) || typeof receipt.blocked !== 'boolean' || receipt.blocked) usageComplete = false
-    const selectedIds = new Set(cell.selectedEvidence.map(item => item?.id))
-    const retrievedIds = new Set(cell.retrievedEvidence.map(item => item?.id))
-    const metadataById = new Map(cell.retrievedEvidence.filter(item => item && typeof item.id === 'string').map(item => [item.id, item]))
-    const observedIndexStatus = cell.retrievedEvidence.some(item => item?.parseStatus === 'parsed') ? 'available' : 'unavailable'
+    if (!Array.isArray(cell.selectedEvidence) || !Array.isArray(cell.retrievedEvidence)) { invalid++; limitViolations++ }
+    const selectedEvidence = Array.isArray(cell.selectedEvidence) ? cell.selectedEvidence : []
+    const retrievedEvidence = Array.isArray(cell.retrievedEvidence) ? cell.retrievedEvidence : []
+    const selectedIds = new Set(selectedEvidence.map(item => item?.id))
+    const retrievedIds = new Set(retrievedEvidence.map(item => item?.id))
+    const metadataById = new Map(retrievedEvidence.filter(item => item && typeof item.id === 'string').map(item => [item.id, item]))
+    const observedIndexStatus = retrievedEvidence.some(item => item?.parseStatus === 'parsed') ? 'available' : 'unavailable'
     const conditionValid = cell.condition && cell.condition.indexMode === task.indexMode && cell.condition.indexStatus === observedIndexStatus && (task.indexMode !== 'unavailable' || cell.condition.indexStatus === 'unavailable')
-    const allRetrievedValid = conditionValid && retrievedIds.size === cell.retrievedEvidence.length && cell.retrievedEvidence.every(item => validEvidenceMetadata(item, project) && (task.indexMode !== 'unavailable' || item.parseStatus === 'unavailable'))
-    const allSelectedValid = conditionValid && selectedIds.size === cell.selectedEvidence.length && cell.selectedEvidence.every(item => validEvidenceMetadata(item, project) && metadataById.has(item.id) && canonicalJson(item) === canonicalJson(metadataById.get(item.id)))
+    const allRetrievedValid = Array.isArray(cell.retrievedEvidence) && conditionValid && retrievedIds.size === retrievedEvidence.length && retrievedEvidence.every(item => validEvidenceMetadata(item, project) && (task.indexMode !== 'unavailable' || item.parseStatus === 'unavailable'))
+    const allSelectedValid = Array.isArray(cell.selectedEvidence) && conditionValid && selectedIds.size === selectedEvidence.length && selectedEvidence.every(item => validEvidenceMetadata(item, project) && metadataById.has(item.id) && canonicalJson(item) === canonicalJson(metadataById.get(item.id)))
     if (!allRetrievedValid || !allSelectedValid) invalid++
     if (!Number.isSafeInteger(receipt.invalidToolExecutions) || receipt.invalidToolExecutions < 0) invalid++
     else invalid += receipt.invalidToolExecutions
@@ -331,16 +340,23 @@ export function recomputeRetrievalMetrics(report, bundle) {
     repeatedReads += Number.isSafeInteger(receipt.repeatedReads) && receipt.repeatedReads >= 0 ? receipt.repeatedReads : 0
     const requestCount = receipt.requests
     totalRequests += Number.isSafeInteger(requestCount) ? requestCount : 0
-    totalInputTokens += receipt.usageComplete && validUsage(receipt.providerUsage) ? receipt.providerUsage.inputTokens : 0
-    totalOutputTokens += receipt.usageComplete && validUsage(receipt.providerUsage) ? receipt.providerUsage.outputTokens : 0
+    if (charged && Number.isSafeInteger(charged.inputTokens) && charged.inputTokens >= 0 && Number.isSafeInteger(charged.outputTokens) && charged.outputTokens >= 0) {
+      chargedInputTokens += charged.inputTokens
+      chargedOutputTokens += charged.outputTokens
+    } else chargedUsageComplete = false
     if (!Number.isSafeInteger(requestCount) || requestCount < 1 || requestCount > 3 || !Number.isSafeInteger(receipt.providerUsage?.inputTokens) && receipt.usageComplete || !Number.isSafeInteger(receipt.providerUsage?.outputTokens) && receipt.usageComplete || receipt.providerUsage?.inputTokens > 18_000 || receipt.providerUsage?.outputTokens > 6_000 || !Number.isFinite(receipt.readBytes) || receipt.readBytes < 0 || receipt.readBytes > 2 * 1024 * 1024 || !Number.isFinite(receipt.elapsedMs) || receipt.elapsedMs < 0 || receipt.elapsedMs > 180_000 || !Number.isSafeInteger(receipt.repeatedReads) || receipt.repeatedReads > receipt.readRequests || reservations.some(item => validUsage(item?.usage) && item.usage.outputTokens > RETRIEVAL_LIMITS.perRequestOutputTokens)) limitViolations++
-    const completeTask = label.requiredEvidenceGroups.every(group => group.allOf.every(ref => coversRequirement(ref, cell.selectedEvidence, project)))
+    const completeTask = label.requiredEvidenceGroups.every(group => group.allOf.every(ref => coversRequirement(ref, selectedEvidence, project)))
     if (allSelectedValid && cell.status === 'completed' && cell.stopReason === 'finished' && completeTask) complete++
   }
   const completeRate = complete / RETRIEVAL_LIMITS.runs
   const repeatedReadRate = readRequests ? repeatedReads / readRequests : (repeatedReads ? 1 : 0)
-  if (totalRequests > RETRIEVAL_LIMITS.requests || totalInputTokens > RETRIEVAL_LIMITS.inputTokens || totalOutputTokens > RETRIEVAL_LIMITS.outputTokens) limitViolations++
-  return { runCount: cells.length, uniqueCells: unique.size, completeEvidenceTaskRate: completeRate, invalidToolExecution: invalid, repeatedReadRate, limitViolations, usageComplete, requests: totalRequests, inputTokens: totalInputTokens, outputTokens: totalOutputTokens }
+  if ((chargedUsageComplete && (chargedInputTokens > RETRIEVAL_LIMITS.inputTokens || chargedOutputTokens > RETRIEVAL_LIMITS.outputTokens)) || knownInputTokens > RETRIEVAL_LIMITS.inputTokens || knownOutputTokens > RETRIEVAL_LIMITS.outputTokens) limitViolations++
+  return {
+    runCount: cells.length, uniqueCells: unique.size, completeEvidenceTaskRate: completeRate, invalidToolExecution: invalid, repeatedReadRate, limitViolations, usageComplete,
+    requests: totalRequests, unknownRequests, inputTokens: usageComplete ? knownInputTokens : null, outputTokens: usageComplete ? knownOutputTokens : null,
+    knownInputTokens, knownOutputTokens,
+    chargedInputTokens: chargedUsageComplete ? chargedInputTokens : null, chargedOutputTokens: chargedUsageComplete ? chargedOutputTokens : null
+  }
 }
 
 export function verifyRetrievalReport(report, bundle, expected = {}) {
@@ -349,7 +365,8 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
   if (!bundle || validateRetrievalBundle(bundle).valid !== true) issues.push('dataset-invalid')
   if (!Array.isArray(report?.runs) || report.runs.length !== 40) issues.push('run-matrix-incomplete')
   const metrics = bundle ? recomputeRetrievalMetrics(report, bundle) : null
-  if (metrics && (metrics.uniqueCells !== 40 || metrics.runCount !== 40)) issues.push('run-matrix-duplicate')
+  if (metrics && metrics.uniqueCells !== 40 && !issues.includes('run-matrix-incomplete')) issues.push('run-matrix-incomplete')
+  if (metrics && metrics.uniqueCells < metrics.runCount) issues.push('run-matrix-duplicate')
   if (metrics && metrics.completeEvidenceTaskRate < RETRIEVAL_LIMITS.completeRate) issues.push('evidence-coverage-below-threshold')
   if (metrics && metrics.invalidToolExecution !== 0) issues.push('invalid-tool-execution')
   if (metrics && metrics.repeatedReadRate > RETRIEVAL_LIMITS.repeats) issues.push('repeated-read-rate-above-threshold')
@@ -361,7 +378,7 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
   if (expected.retrievalDataHash && report?.retrievalDataHash !== expected.retrievalDataHash) issues.push('dataset-binding-mismatch')
   if (expected.configurationFingerprint && report?.configurationFingerprint !== expected.configurationFingerprint) issues.push('configuration-binding-mismatch')
   if (report?.sourceCommit && report?.authorizationReference && report.authorizationClaimId !== sha256(Buffer.from(`${report.sourceCommit}\0${RETRIEVAL_PURPOSE}\0${report.authorizationReference}`))) issues.push('authorization-claim-mismatch')
-  if (metrics && (metrics.requests > (expected.maxRequests ?? RETRIEVAL_LIMITS.requests) || metrics.inputTokens > (expected.maxInputTokens ?? RETRIEVAL_LIMITS.inputTokens) || metrics.outputTokens > (expected.maxOutputTokens ?? RETRIEVAL_LIMITS.outputTokens))) issues.push('authorization-budget-exceeded')
+  if (metrics && (metrics.requests > (expected.maxRequests ?? RETRIEVAL_LIMITS.requests) || metrics.knownInputTokens > (expected.maxInputTokens ?? RETRIEVAL_LIMITS.inputTokens) || metrics.knownOutputTokens > (expected.maxOutputTokens ?? RETRIEVAL_LIMITS.outputTokens) || (metrics.chargedInputTokens !== null && metrics.chargedInputTokens > (expected.maxInputTokens ?? RETRIEVAL_LIMITS.inputTokens)) || (metrics.chargedOutputTokens !== null && metrics.chargedOutputTokens > (expected.maxOutputTokens ?? RETRIEVAL_LIMITS.outputTokens)))) issues.push('authorization-budget-exceeded')
   if (report?.sourceStable !== true) issues.push('source-changed-during-run')
   return { valid: issues.length === 0, issues, metrics }
 }
@@ -386,6 +403,17 @@ export function evaluationRunConfigFingerprint(task, provider) {
 function nonSecretError(error) {
   const code = typeof error?.code === 'string' && /^[a-z-]{1,48}$/u.test(error.code) ? error.code : 'run-failed'
   return { code }
+}
+
+export function sanitizeModelFailure(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const kinds = new Set(['timeout', 'cancelled', 'network', 'http', 'response'])
+  const finishReasons = new Set(['length', 'content_filter', 'tool_calls', 'function_call', 'stop', 'other'])
+  if (!kinds.has(value.kind)) return null
+  const result = { kind: value.kind }
+  if (Number.isInteger(value.httpStatus) && value.httpStatus >= 100 && value.httpStatus <= 599) result.httpStatus = value.httpStatus
+  if (finishReasons.has(value.finishReason)) result.finishReason = value.finishReason
+  return result
 }
 
 function validUsage(value) {
@@ -546,7 +574,7 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
         if (stopped) break
         const project = projectById.get(task.projectId)
         const projectRoot = projectRoots.get(task.projectId)
-        let ledger, snapshot, store, result, errorCode = null
+        let ledger, snapshot, store, result, errorCode = null, failure = null
         const events = []
         try {
           const scan = await scanProject(projectRoot)
@@ -563,10 +591,17 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
           const gateway = createModelGateway(spec, boundProfile, ledger, { transport: guardedTransport })
           const toolGateway = createToolGateway(snapshot, store, ledger)
           result = await runInvestigation({ spec, snapshot, store, tools: toolGateway, ledger, model: gateway, objective: task.objective, onEvent: event => events.push({ type: event.type, ...(event.hash ? { hash: event.hash } : {}), ...(event.reason ? { reason: event.reason } : {}) }) })
-        } catch (error) { errorCode = nonSecretError(error).code }
-        const selectedEvidence = []
-        const retrievedEvidence = []
+        } catch (error) {
+          errorCode = nonSecretError(error).code
+          failure = { code: errorCode }
+          const modelFailure = sanitizeModelFailure(error?.modelFailure)
+          if (modelFailure) failure.modelFailure = modelFailure
+        }
+        let selectedEvidence = null
+        let retrievedEvidence = null
         if (result && store && snapshot) {
+          selectedEvidence = []
+          retrievedEvidence = []
           try {
             const retrieved = await store.resolve(store.metadata().ids, snapshot.snapshotId)
             retrievedEvidence.push(...retrieved.map(rangeMetadata))
@@ -594,16 +629,17 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
           overspend: state.overspend,
           blocked: state.blocked,
           reservations: callReceipts.map(({ requestId, estimatedInputTokens, estimatedOutputTokens, contextChars, state: entryState, usage }) => ({ id: requestId, stage: 'investigation', state: entryState, reservedInputTokens: estimatedInputTokens, reservedOutputTokens: estimatedOutputTokens, contextChars, usage }))
-        } : { requests: callReceipts.length, providerUsage: null, knownProviderUsage: { inputTokens: knownInput, outputTokens: knownOutput, totalTokens: knownInput + knownOutput }, chargedTokens: null, usageComplete: false, readBytes: 0, elapsedMs: 0, readRequests: result?.statistics?.readRequests ?? null, repeatedReads: result?.statistics?.repeatedReads ?? 0, invalidToolExecutions: result?.statistics?.invalidToolExecutions ?? 0, overspend: null, blocked: true, reservations: callReceipts.map(({ requestId, estimatedInputTokens, estimatedOutputTokens, contextChars, state: entryState, usage }) => ({ id: requestId, stage: 'investigation', state: entryState, reservedInputTokens: estimatedInputTokens, reservedOutputTokens: estimatedOutputTokens, contextChars, usage })) }
-        const selectionComplete = result?.status === 'completed' && labels.get(task.id).requiredEvidenceGroups.every(group => group.allOf.every(ref => coversRequirement(ref, selectedEvidence, project)))
+        } : { requests: callReceipts.length, providerUsage: null, knownProviderUsage: { inputTokens: knownInput, outputTokens: knownOutput, totalTokens: knownInput + knownOutput }, chargedTokens: null, usageComplete: false, readBytes: null, elapsedMs: null, readRequests: result?.statistics?.readRequests ?? null, repeatedReads: result?.statistics?.repeatedReads ?? null, invalidToolExecutions: result?.statistics?.invalidToolExecutions ?? null, overspend: null, blocked: true, reservations: callReceipts.map(({ requestId, estimatedInputTokens, estimatedOutputTokens, contextChars, state: entryState, usage }) => ({ id: requestId, stage: 'investigation', state: entryState, reservedInputTokens: estimatedInputTokens, reservedOutputTokens: estimatedOutputTokens, contextChars, usage })) }
+        const selectionComplete = result?.status === 'completed' && Array.isArray(selectedEvidence) && labels.get(task.id).requiredEvidenceGroups.every(group => group.allOf.every(ref => coversRequirement(ref, selectedEvidence, project)))
         const runRecord = {
           taskId: task.id, repeat, status: errorCode ? 'failed' : (result?.status ?? 'failed'),
           stopReason: result?.stopReason ?? errorCode ?? 'run-incomplete',
-          condition: { indexMode: task.indexMode, indexStatus: task.indexMode === 'unavailable' ? 'unavailable' : retrievedEvidence.some(item => item.parseStatus === 'parsed') ? 'available' : 'unavailable' },
+          condition: { indexMode: task.indexMode, indexStatus: task.indexMode === 'unavailable' ? 'unavailable' : retrievedEvidence?.some(item => item.parseStatus === 'parsed') ? 'available' : 'unavailable' },
           events,
-          retrievedEvidence, retrievedCount: retrievedEvidence.length,
-          selectedEvidence, selectedCount: selectedEvidence.length, completeEvidenceTask: selectionComplete,
+          retrievedEvidence, retrievedCount: retrievedEvidence?.length ?? null,
+          selectedEvidence, selectedCount: selectedEvidence?.length ?? null, completeEvidenceTask: selectionComplete,
           runConfigFingerprint: evaluationRunConfigFingerprint(task, provider),
+          ...(failure ? { failure } : {}),
           receipt
         }
         runs.push(runRecord)

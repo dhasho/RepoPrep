@@ -7,7 +7,7 @@ import test from 'node:test'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
-import { recomputeRetrievalMetrics, verifyRetrievalReport, runRetrievalEvaluation, verifyProfileBinding, evaluationConfigFingerprint, evaluationRunConfigFingerprint, createGlobalBudgetCollector, createGuardedTransport, createOneShotAuthorizationClaim, createRetrievalRunSpec, loadRetrievalBundle, validateRetrievalBundle, RETRIEVAL_LIMITS } from './retrieval-eval.mjs'
+import { recomputeRetrievalMetrics, verifyRetrievalReport, runRetrievalEvaluation, verifyProfileBinding, evaluationConfigFingerprint, evaluationRunConfigFingerprint, createGlobalBudgetCollector, createGuardedTransport, createOneShotAuthorizationClaim, createRetrievalRunSpec, loadRetrievalBundle, validateRetrievalBundle, sanitizeModelFailure, RETRIEVAL_LIMITS } from './retrieval-eval.mjs'
 import { normalizeBaseUrl } from '../../electron/services/llm.ts'
 import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
 import { createModelGateway } from '../../electron/services/workflow/model-gateway.ts'
@@ -69,6 +69,53 @@ test('partial, duplicated, malformed, or over-budget receipts cannot pass the fr
   const truncated = syntheticReport()
   truncated.runs.pop()
   assert.equal(recomputeRetrievalMetrics(truncated, bundle).completeEvidenceTaskRate, 39 / 40)
+})
+
+test('incomplete usage keeps exact totals unknown and reports settled usage plus conservative charges', () => {
+  const report = syntheticReport()
+  const receipt = completeReceipt()
+  receipt.requests = 2
+  receipt.providerUsage = null
+  receipt.usageComplete = false
+  receipt.knownProviderUsage = { inputTokens: 846, outputTokens: 401, totalTokens: 1247 }
+  receipt.chargedTokens = { inputTokens: 18000, outputTokens: 4000 }
+  receipt.reservations[0] = { ...receipt.reservations[0], reservedInputTokens: 1000, usage: { inputTokens: 846, outputTokens: 401, totalTokens: 1247 } }
+  receipt.reservations.push({ id: 'inv-00000000-0000-4000-8000-000000000001', stage: 'investigation', state: 'unknown', reservedInputTokens: 9000, reservedOutputTokens: 2000, contextChars: 120, usage: null })
+  report.runs[0].receipt = receipt
+
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.usageComplete, false)
+  assert.equal(metrics.inputTokens, null)
+  assert.equal(metrics.outputTokens, null)
+  assert.equal(metrics.knownInputTokens, 1236)
+  assert.equal(metrics.knownOutputTokens, 791)
+  assert.equal(metrics.unknownRequests, 1)
+  assert.equal(metrics.chargedInputTokens, 18390)
+  assert.equal(metrics.chargedOutputTokens, 4390)
+  assert.ok(verifyRetrievalReport(report, bundle).issues.includes('receipt-or-limit-invalid'))
+})
+
+test('incomplete matrix reports missing cells without labeling them duplicate', () => {
+  const report = syntheticReport()
+  report.runs.pop()
+  const verified = verifyRetrievalReport(report, bundle)
+  assert.ok(verified.issues.includes('run-matrix-incomplete'))
+  assert.ok(!verified.issues.includes('run-matrix-duplicate'))
+})
+
+test('unavailable failed-run evidence stays null and does not break aggregate accounting', () => {
+  const report = syntheticReport()
+  report.runs[0] = { ...report.runs[0], retrievedEvidence: null, retrievedCount: null, selectedEvidence: null, selectedCount: null }
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.inputTokens, 400)
+  assert.ok(metrics.invalidToolExecution > 0)
+})
+
+test('model failure diagnostics retain only allowlisted scalar metadata', () => {
+  assert.deepEqual(sanitizeModelFailure({ kind: 'http', httpStatus: 429, finishReason: 'length', message: 'secret', body: 'private' }), { kind: 'http', httpStatus: 429, finishReason: 'length' })
+  assert.equal(sanitizeModelFailure({ kind: 'unknown', httpStatus: 429 }), null)
+  assert.deepEqual(sanitizeModelFailure({ kind: 'network', httpStatus: 999, finishReason: 'secret' }), { kind: 'network' })
 })
 
 test('verifier binds selected metadata to retrieved metadata and enforces unavailable index conditions', () => {
