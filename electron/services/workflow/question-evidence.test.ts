@@ -51,6 +51,11 @@ function result(questions: QuestionItem[]): InterviewResult {
 function expectCode(fn: () => unknown, code: string): void {
   assert.throws(fn, (error: unknown) => error instanceof WorkflowError && error.code === code && error.message === 'Workflow operation rejected.')
 }
+function resignManifest(manifest: Awaited<ReturnType<typeof packedFixture>>['context']['manifest'], overrides: Record<string, unknown>) {
+  const unsigned = { ...manifest, ...overrides } as typeof manifest
+  const { manifestHash: _ignored, ...payload } = unsigned
+  return { ...unsigned, manifestHash: createHash('sha256').update(JSON.stringify(payload)).digest('hex') }
+}
 
 test('registry binds exact packed IDs and emits only immutable source-bound metadata', async () => {
   const { context, evidenceId } = await packedFixture()
@@ -82,6 +87,15 @@ test('rejects unregistered requests, wrong snapshot manifests, forged, stale and
 
   const other = await packedFixture('snapshot-other')
   expectCode(() => createQuestionEvidenceRegistry(makeSpec()).registerRequest('request-1', other.context), 'unknown-evidence')
+})
+
+test('rejects consistently hashed manifests with non-evidence IDs or packed IDs outside selection', async () => {
+  const { context } = await packedFixture()
+  const fabricatedId = resignManifest(context.manifest, { selectedIds: ['fabricated'], packedIds: ['fabricated'], requiredIds: [] })
+  expectCode(() => createQuestionEvidenceRegistry(makeSpec()).registerRequest('request-1', fabricatedId), 'unknown-evidence')
+
+  const unselectedPackedId = resignManifest(context.manifest, { selectedIds: [], requiredIds: [] })
+  expectCode(() => createQuestionEvidenceRegistry(makeSpec()).registerRequest('request-1', unselectedPackedId), 'unknown-evidence')
 })
 
 function awaitableManifest(context: Awaited<ReturnType<typeof packedFixture>>['context']) {

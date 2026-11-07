@@ -36,6 +36,7 @@ interface CapturedBinding { readonly requestId: string; readonly manifestHash: s
 
 const HASH = /^[a-f0-9]{64}$/
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const EVIDENCE_ID = /^ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const MAX_EVIDENCE_IDS = 16
 const MAX_ID_LENGTH = 128
 
@@ -70,9 +71,12 @@ function validateManifest(value: unknown, spec: RunSpec): PackedManifest {
     if (!Number.isSafeInteger(value[key]) || Number(value[key]) < 0) reject()
   }
   const ids = [...value.packedIds]
-  if (ids.some(id => typeof id !== 'string' || id.length < 1 || id.length > MAX_ID_LENGTH) || new Set(ids).size !== ids.length) reject()
-  if (value.selectedIds.some((id: unknown) => typeof id !== 'string' || id.length < 1 || id.length > MAX_ID_LENGTH) || new Set(value.selectedIds).size !== value.selectedIds.length) reject()
-  if (value.requiredIds.some((id: unknown) => typeof id !== 'string' || !ids.includes(id))) reject()
+  const selectedIds = [...value.selectedIds]
+  const requiredIds = [...value.requiredIds]
+  if (ids.some(id => typeof id !== 'string' || !EVIDENCE_ID.test(id)) || new Set(ids).size !== ids.length) reject('unknown-evidence')
+  if (selectedIds.some((id: unknown) => typeof id !== 'string' || !EVIDENCE_ID.test(id)) || new Set(selectedIds).size !== selectedIds.length) reject('unknown-evidence')
+  if (requiredIds.some((id: unknown) => typeof id !== 'string' || !ids.includes(id)) || new Set(requiredIds).size !== requiredIds.length) reject('unknown-evidence')
+  if (ids.some(id => !selectedIds.includes(id))) reject('unknown-evidence')
 
   // Match the M07 manifest's declared payload fields and recompute its commitment.
   const payload = {
