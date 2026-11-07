@@ -68,6 +68,10 @@ async function fixture(granularity: Granularity = 'coarse', maxModelRequests = 5
   return { root, scan, snapshot, store, ids, spec, profile, signal: controller.signal, abort() { controller.abort() }, async cleanup() { await fs.rm(root, { recursive: true, force: true }) } }
 }
 
+function specFor(f: Fixture, granularity: Granularity, maxModelRequests?: number) {
+  return createRunSpec({ version: 1, runId: `run-${granularity}-${maxModelRequests ?? 'default'}`, projectId: f.spec.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: f.spec.roleFocus, granularity, model: { profileId: f.profile.id, model: f.profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(f.profile.baseUrl)).digest('hex'), protocol: f.profile.protocol, contextWindowTokens: f.profile.contextWindowTokens, maxOutputTokens: f.profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', ...(maxModelRequests !== undefined ? { budget: { maxModelRequests } } : {}) })
+}
+
 function topicsFor(ids: readonly string[]) {
   return ids.map((id, index) => ({ id: `topic-${index}`, title: `Topic ${index}`, mechanism: 'Inspect a concrete implementation detail.', valueRationale: 'Represents one selected source excerpt.', difficulty: 'intermediate' as const, evidenceIds: [id], evidenceNeeds: ['Check an adjacent call site.'], unconfirmed: ['Cross-module behavior is not established.'] }))
 }
@@ -103,20 +107,21 @@ test('uses genuine scanner, snapshot, store and packer; builds 1/2/4 bounded gro
   }
 
   for (const [granularity, wanted] of [['coarse', 1], ['medium', 2], ['fine', 4]] as const) {
-    const spec = granularity === f.spec.granularity ? f.spec : createRunSpec({ version: 1, runId: `run-${granularity}`, projectId: f.spec.projectId, snapshotId: f.spec.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: f.spec.roleFocus, granularity, model: { profileId: f.profile.id, model: f.profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(f.profile.baseUrl)).digest('hex'), protocol: f.profile.protocol, contextWindowTokens: f.profile.contextWindowTokens, maxOutputTokens: f.profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
+    const spec = granularity === f.spec.granularity ? f.spec : specFor(f, granularity)
     const ledger = createBudgetLedger(spec)
     const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, syntheticTransport), spec, ledger })
     const built = await adapter.contextProvider.build(f.scan, granularity, { maxChars: 40_000, roleFocus: spec.roleFocus, signal: f.signal })
     assert.equal(built.batches.length, wanted)
     const plan = planQuestionQuotas(granularity, built.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight })))
-    assert.ok(plan.total >= spec.questionBudget.min && plan.total <= spec.questionBudget.max)
+    assert.equal(plan.total, spec.questionBudget.target)
     const topicEvidenceIds = new Set<string>()
     for (let index = 0; index < built.batches.length; index++) {
       const prepared = await adapter.requestAdapter.prepare(request(f, `prepare-${granularity}-${index}`, index))
       const prompt = prepared.messages.find(message => message.role === 'user')!.content
       const marker = '## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n'
       const markerIndex = prompt.lastIndexOf(marker)
-      const cards = JSON.parse(prompt.slice(markerIndex + marker.length)) as Array<{ evidenceIds: string[] }>
+      const cardsJson = prompt.slice(markerIndex + marker.length).split('\n\n## 批次提示')[0]
+      const cards = JSON.parse(cardsJson) as Array<{ evidenceIds: string[] }>
       const evidencePrompt = prompt.slice(0, markerIndex)
       const packetIndex = index
       const completion = await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
@@ -131,6 +136,51 @@ test('uses genuine scanner, snapshot, store and packer; builds 1/2/4 bounded gro
     }
     assert.equal(topicEvidenceIds.size, f.ids.length)
   }
+})
+
+test('a fine atomic topic component repeats across four groups while coarse one-request planning stays at ten', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  const fineSpec = specFor(f, 'fine')
+  const ledger = createBudgetLedger(fineSpec)
+  const atomicTopic = { id: 'atomic-component', title: 'Complete relationship bundle', mechanism: 'Trace the complete selected source relation.', valueRationale: 'The topic depends on all members together.', difficulty: 'intermediate' as const, evidenceIds: f.ids, evidenceNeeds: ['Check the calling boundary.'], unconfirmed: ['The runtime result remains unmeasured.'] }
+  const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+    options.beforeRequest?.()
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  }
+  const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec: fineSpec, ledger, selection: { selectedIds: f.ids, requiredBundles: [{ id: 'atomic-bundle', evidenceIds: f.ids }], unresolved: [] }, topics: [atomicTopic] })
+  const built = await adapter.contextProvider.build(f.scan, 'fine', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+  assert.equal(built.batches.length, 4)
+  assert.equal(planQuestionQuotas('fine', built.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight }))).total, 32)
+  for (let index = 0; index < 4; index++) {
+    const requestId = `fine-repeat-${index}`
+    const prepared = await adapter.requestAdapter.prepare({ ...request(f, requestId, index), quota: 8 })
+    const prompt = prepared.messages.find(message => message.role === 'user')!.content
+    assert.ok(prompt.includes(`本次证据批次为 ${index + 1}/4`))
+    await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+    const dispatched = adapter.metadata().find(row => row.requestId === requestId)!
+    assert.equal(dispatched.manifest.requiredIds.length, f.ids.length)
+    assert.ok(f.ids.every(id => dispatched.manifest.packedIds.includes(id)))
+    assert.ok(f.ids.every(id => dispatched.manifest.requiredIds.includes(id)))
+  }
+  const firstManifest = adapter.metadata()[0].manifest.manifestHash
+  adapter.requestAdapter.acceptQuestion({ requestId: 'fine-repeat-0', rawQuestion: { evidenceIds: [f.ids[0]] }, question: { id: 'prior-question', question: 'How does the selected component behave?', answer: 'PRIOR_ANSWER_MUST_NEVER_BE_COPIED', followUps: [] } })
+  const secondPrepared = await adapter.requestAdapter.prepare({ ...request(f, 'fine-repeat-prior', 1), quota: 8 })
+  const secondPrompt = secondPrepared.messages.find(message => message.role === 'user')!.content
+  assert.ok(secondPrompt.includes('How does the selected component behave?'))
+  assert.ok(!secondPrompt.includes('PRIOR_ANSWER_MUST_NEVER_BE_COPIED'))
+  const metadataJson = JSON.stringify(adapter.metadata())
+  assert.ok(!metadataJson.includes('How does the selected component behave?') && !metadataJson.includes('PRIOR_ANSWER_MUST_NEVER_BE_COPIED'))
+  await adapter.requestAdapter.complete(secondPrepared, () => undefined, { signal: f.signal })
+  assert.notEqual(adapter.metadata().at(-1)?.manifest.manifestHash, firstManifest)
+
+  const coarseSpec = specFor(f, 'coarse', 1)
+  const coarse = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec: coarseSpec, ledger: createBudgetLedger(coarseSpec) })
+  const coarseBuilt = await coarse.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+  assert.equal(coarseBuilt.batches.length, 1)
+  assert.equal(planQuestionQuotas('coarse', coarseBuilt.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight }))).total, 10)
 })
 
 test('dispatch uses captured profile, settles a repair against the same ledger and finalizes a secret-free sidecar', async t => {

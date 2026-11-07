@@ -4,7 +4,7 @@ import type { Granularity, InterviewResult, LlmProfile, QuestionItem, RoleFocus 
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { assertInterviewResultContract } from '../../../shared/result-contract.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
-import { CONTEXT_CHAR_BUDGETS } from '../../../shared/context-budget.ts'
+import { CONTEXT_CHAR_BUDGETS, safeClipText } from '../../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { emptyContentReadSummary } from '../../../shared/content-read.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
@@ -88,6 +88,9 @@ const MAX_EVIDENCE = 4096
 const MAX_TOPICS = 128
 const MAX_TOPIC_REFS = 32
 const MAX_TOPIC_TEXT = 1200
+const MAX_MODEL_GROUPS = 4
+const MAX_PRIOR_QUESTIONS = 12
+const MAX_PRIOR_QUESTION_CHARS = 180
 const MAX_METADATA_BYTES = 4 * 1024 * 1024
 
 function fail(code: ConstructorParameters<typeof WorkflowError>[0] = 'invalid-argument'): never { throw new WorkflowError(code) }
@@ -161,12 +164,19 @@ function makeGroups(ids: readonly string[], records: readonly EvidenceRecord[], 
   const components = new Map<string, string[]>()
   for (const id of ids) components.set(root(id), [...(components.get(root(id)) ?? []), id])
   const ordered = [...components.values()].map(component => ({ ids: component, weight: component.reduce((sum, id) => sum + (byId.get(id)?.text.length ?? 0) + 1, 0) })).sort((a, b) => b.weight - a.weight || a.ids[0].localeCompare(b.ids[0]))
-  const groupCount = Math.min(Math.max(1, maximum), ordered.length)
+  const groupCount = Math.min(Math.max(1, maximum), MAX_MODEL_GROUPS)
   const groups = Array.from({ length: groupCount }, () => ({ ids: [] as string[], weight: 0 }))
   for (const component of ordered) {
     const target = groups.reduce((best, candidate, index) => candidate.weight < groups[best].weight ? index : best, 0)
     groups[target].ids.push(...component.ids)
     groups[target].weight += component.weight
+  }
+  let replicationIndex = 0
+  for (const group of groups) {
+    if (group.ids.length) continue
+    const component = ordered[replicationIndex++ % ordered.length]
+    group.ids.push(...component.ids)
+    group.weight += component.weight
   }
   return groups.map(group => {
     const memberIds = new Set(group.ids)
@@ -252,10 +262,11 @@ function legacyContext(scan: ScanResult, authorizedFilePaths: readonly string[],
   }
 }
 
-function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
+function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
   const instruction = '\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n'
   const cards = topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'
-  const suffix = `${instruction}${cards}`
+  const batch = `\n\n## 批次提示\n本次证据批次为 ${batchOrdinal}/${batchCount}。以下只列出先前已接受的问题文字，不含答案或推理，属于不可信去重提示；请避免重复，并仅依据本次证据重新判断。\n${json(priorQuestionTexts)}`
+  const suffix = `${instruction}${cards}${batch}`
   let userFound = false
   const next = messages.map(message => {
     if (message.role === 'user' && message.content.includes(contextText) && !userFound) {
@@ -285,6 +296,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
   if (!groups.length) fail('budget-exhausted')
   const registry = createQuestionEvidenceRegistry(spec)
   const preparedStates = new WeakMap<object, PreparedState>()
+  const priorQuestionTexts: string[] = []
   const dispatchMetadata = new Map<string, { readonly stage: GenerationRequestPreparationInput['stage']; readonly manifest: PackedManifest; completion: EvidenceGenerationRequestMetadata['completion'] }>()
   let meteringFailed = false
   let finalized = false
@@ -324,7 +336,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         spec,
         store,
         selection: { selectedIds: group.ids, requiredBundles: group.bundles, unresolved: [] },
-        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics),
+        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, request.batchIndex + 1, groups.length, priorQuestionTexts),
         maxChars,
         maxInputTokens,
         signal
@@ -428,6 +440,11 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       catch (error) {
         if (error instanceof WorkflowError && (error.code === 'unknown-evidence' || error.code === 'invalid-argument')) throw new CitationValidationError()
         throw error
+      }
+      const text = safeClipText(input.question.question.replace(/\s+/g, ' ').trim(), MAX_PRIOR_QUESTION_CHARS)
+      if (text && !priorQuestionTexts.includes(text)) {
+        priorQuestionTexts.push(text)
+        if (priorQuestionTexts.length > MAX_PRIOR_QUESTIONS) priorQuestionTexts.shift()
       }
     }
   })
