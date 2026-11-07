@@ -1,6 +1,6 @@
 # M06 investigation output reservation
 
-Status: offline candidate; a live 6,000-token per-request ceiling requires explicit user approval. The existing approved/default ceiling remains 2,000 until then.
+Status: implemented; the user explicitly approved the 6,000-token-cap measurement at `b2f347a`. That measurement stopped after two cells; the default remains 2,000 and the approval does not reset earlier costs.
 
 ## Evidence
 
@@ -18,6 +18,6 @@ The PLAN's per-run limits remain unchanged: at most three decisions, eight tools
 
 ## Approval and rollback
 
-The user approved a cumulative 120-request ceiling and later a new 118-request measurement after the first two calls. Four calls have now been dispatched in total, with one historical usage still unknown. Before any measurement with the proposed larger per-request ceiling, request explicit approval and deduct all known usage plus retained unknown reservations from the original budgets. Preparing this offline candidate does not authorize further calls or reset that ceiling.
+The user approved a cumulative 120-request ceiling, then a new 118-request measurement after the first two calls, then the 6,000-token-cap candidate with at most 116 further requests. Ten calls have now been dispatched in total, with one historical usage still unknown. The latest six calls have complete usage: 6,632 input and 8,948 output tokens; one cell succeeded and one exhausted its 6,000-token stage allowance. Subsequent measurements must deduct all known usage and retained unknown reservations; this ADR does not authorize additional calls or reset the ceiling.
 
 Rollback selects the default 2,000-token cap or removes the experimental evaluator. Production static generation and stored profiles retain their current behavior.
