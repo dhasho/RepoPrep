@@ -37,8 +37,8 @@ function strings(value: unknown, max: number, itemMax = 128): value is string[] 
 function digest(value: string): string { return createHash('sha256').update(value).digest('hex') }
 function notify(observer: ((event: Event) => void) | undefined, event: Event): void { try { observer?.(Object.freeze(event)) } catch { /* observational only */ } }
 function checkAbort(signal?: AbortSignal): void { if (signal?.aborted) fail('cancelled') }
-function result(status: InvestigationResult['status'], stopReason: InvestigationResult['stopReason'], topics: TopicCard[], selection: SelectionPlan, stats: InvestigationResult['statistics'], usageComplete: boolean, strategy: InvestigationResult['strategy'] = 'bounded-agentic-v1'): InvestigationResult {
-  return Object.freeze({ strategy, status, stopReason, topics: Object.freeze(topics), selection, statistics: Object.freeze(stats), usageComplete })
+function result(status: InvestigationResult['status'], stopReason: InvestigationResult['stopReason'], topics: TopicCard[], selection: SelectionPlan, stats: InvestigationResult['statistics'], usageComplete: boolean, strategy: InvestigationResult['strategy'] = 'bounded-agentic-v1', modelFailure?: InvestigationResult['modelFailure']): InvestigationResult {
+  return Object.freeze({ strategy, status, stopReason, topics: Object.freeze(topics), selection, statistics: Object.freeze(stats), usageComplete, ...(modelFailure ? { modelFailure: Object.freeze({ ...modelFailure }) } : {}) })
 }
 function emptySelection(unresolved: readonly string[] = []): SelectionPlan { return Object.freeze({ selectedIds: Object.freeze([]), requiredBundles: Object.freeze([]), unresolved: Object.freeze([...unresolved]) }) }
 function validTool(value: unknown): value is ToolAction {
@@ -129,6 +129,7 @@ export async function runInvestigation(input: { spec: RunSpec; snapshot: Workflo
   const history: string[] = []
   let status: InvestigationResult['status'] = 'limit-reached'
   let stopReason: InvestigationResult['stopReason'] = 'decision-limit'
+  let terminalModelFailure: InvestigationResult['modelFailure']
   const system = INVESTIGATION_SYSTEM_PROMPT
   for (let round = 0; round < 3; round++) {
     checkAbort(signal)
@@ -152,6 +153,7 @@ export async function runInvestigation(input: { spec: RunSpec; snapshot: Workflo
       const noOverspend = afterFailure.overspend.inputTokens === 0 && afterFailure.overspend.outputTokens === 0 && afterFailure.overspend.readBytes === 0
       if (!signal?.aborted && error instanceof WorkflowFailure && error.code === 'model-failed' && failure?.kind === 'response' && failure.finishReason === 'length' && afterFailure.usageComplete && !afterFailure.blocked && noOverspend && afterFailure.remaining.investigationOutputTokens === 0) {
         stopReason = 'budget-exhausted'
+        terminalModelFailure = Object.freeze({ kind: 'response', finishReason: 'length' })
         break
       }
       throw error
@@ -255,7 +257,7 @@ export async function runInvestigation(input: { spec: RunSpec; snapshot: Workflo
   const usageComplete = ledger.snapshot().usageComplete
   notify(input.onEvent, { type: 'stop', reason: stopReason })
   checkAbort(signal)
-  return result(status, stopReason, topics, selection, stats, usageComplete)
+  return result(status, stopReason, topics, selection, stats, usageComplete, 'bounded-agentic-v1', terminalModelFailure)
 }
 
 export async function runStaticInvestigation(input: { spec: RunSpec; snapshot: WorkflowProjectSnapshot; store: WorkflowEvidenceStore; tools: ToolGateway; ledger: BudgetLedger; objective?: string; signal?: AbortSignal; onEvent?: (event: Event) => void }): Promise<InvestigationResult> {

@@ -320,6 +320,8 @@ test('fully metered length truncation returns a limited result with partial evid
   assert.equal(outcome.statistics.readRequests, 1)
   assert.ok(f.store.metadata().ids.length > 0)
   assert.equal(outcome.usageComplete, true)
+  assert.deepEqual(outcome.modelFailure, { kind: 'response', finishReason: 'length' })
+  assert.equal(Object.isFrozen(outcome.modelFailure), true)
   assert.deepEqual(stopEvents, ['budget-exhausted'])
   assert.equal(f.ledger.snapshot().total.dispatchedRequests, 2)
   assert.equal(f.ledger.snapshot().blocked, false)

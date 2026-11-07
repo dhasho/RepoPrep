@@ -30,4 +30,6 @@ export interface InvestigationResult {
     invalidToolExecutions: number
   }>
   readonly usageComplete: boolean
+  /** Safe terminal metadata for a fully metered response truncated at its authorized output cap. */
+  readonly modelFailure?: Readonly<{ kind: 'response'; finishReason: 'length' }>
 }
