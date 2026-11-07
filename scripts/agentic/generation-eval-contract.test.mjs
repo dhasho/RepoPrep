@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRunSpec } from '../../electron/services/workflow/run-spec.ts'
+import { packEvidence } from '../../electron/services/workflow/evidence-packer.ts'
 import {
   GENERATION_PER_RUN,
   GENERATION_OUTPUT_CAPS,
@@ -13,6 +15,8 @@ import {
   loadGenerationEvaluationBundle,
   projectGenerationData,
   validateGenerationAuthorization,
+  GENERATION_REQUESTS_PER_RUN,
+  validateGenerationExecutionReport,
   validateGenerationProjection
 } from './generation-eval-contract.mjs'
 import { canonicalJson, sha256 } from './dataset-contract.mjs'
@@ -155,4 +159,97 @@ test('authorization validation is strict, source-bound, and capped by the derive
   assert.throws(() => validateGenerationAuthorization({ ...authorization, maxOutputTokensTotal: 3_145_729 }, expected), { message: 'authorization-invalid' })
   assert.throws(() => validateGenerationAuthorization({ ...authorization, maxOutputTokens: 16_383 }, expected), { message: 'authorization-invalid' })
   assert.throws(() => validateGenerationAuthorization({ ...authorization, contextWindowTokens: 32_768 }, expected), { message: 'authorization-invalid' })
+})
+
+async function makeExecutionManifest(task, cell, index) {
+  const caseNumber = index + 1
+  const evidenceId = `ev_${caseNumber.toString(16).padStart(8, '0')}-1234-4123-8123-123456789abc`
+  const text = `export const fixedEvidence${caseNumber} = true`
+  const snapshotId = `snapshot-${String(caseNumber).padStart(4, '0')}`
+  const spec = createRunSpec({
+    version: 1,
+    runId: `m08-case-${String(caseNumber).padStart(4, '0')}`,
+    projectId: task.projectId,
+    snapshotId,
+    strategy: cell.strategy === 'static-control' ? 'static' : 'agentic',
+    strategyVersion: cell.strategy === 'static-control' ? 'static-v1' : 'agentic-v1',
+    roleFocus: task.roleFocus,
+    granularity: task.granularity,
+    model: { profileId: 'synthetic-contract', endpointFingerprint: hash('b'), model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 131_072, maxOutputTokens: 32_768 },
+    promptVersion: 'm08-contract-prompt-v1',
+    toolVersion: 'm08-contract-tools-v1',
+    policyVersion: 'm08-contract-policy-v1',
+    budget: { maxModelRequests: GENERATION_REQUESTS_PER_RUN[task.granularity], inputTokens: 128_000, outputTokens: 65_536, wallClockMs: 600_000 }
+  })
+  const record = {
+    id: evidenceId, snapshotId, fileId: `file-${caseNumber}`, relPath: `src/fixed-${caseNumber}.ts`,
+    originalRange: { startLine: 1, endLine: 1 }, displayRange: { startLine: 1, endLine: 1 },
+    contentHash: sha256(Buffer.from(text, 'utf8')), text, sourceKind: 'code', readStatus: 'complete',
+    parseStatus: 'parsed', omission: 'none', transformationVersion: 'fixture-v1'
+  }
+  const store = { async resolve(ids, requestedSnapshot) { assert.equal(requestedSnapshot, snapshotId); assert.deepEqual(ids, [evidenceId]); return [record] } }
+  const packed = await packEvidence({
+    spec, store, selection: { selectedIds: [evidenceId], requiredBundles: [], unresolved: [] },
+    buildMessages: (contextText) => [{ role: 'system', content: 'Fixed system.' }, { role: 'user', content: `Fixed data:\n${contextText}` }],
+    maxChars: 24_000, maxInputTokens: 20_000
+  })
+  assert.equal(packed.status, 'packed')
+  return packed.context.manifest
+}
+
+test('execution report validator accepts an actual packer manifest and rejects altered commitments, lineage, and costs', async () => {
+  const bundle = await loadBundle()
+  const matrix = createGenerationMatrix(bundle)
+  const cells = []
+  const sourceBindings = {}
+  for (let index = 0; index < matrix.length; index++) {
+    const cell = matrix[index]
+    const task = bundle.tasks.find((item) => item.id === cell.taskId)
+    const manifest = await makeExecutionManifest(task, cell, index)
+    const requestId = `request-${String(index + 1).padStart(4, '0')}`
+    for (const source of manifest.sources) {
+      for (const id of source.ids) sourceBindings[id] = { path: source.relPath, displayRange: source.displayRange, originalRange: source.originalRange, hash: source.hash, sourceKind: source.sourceKind }
+    }
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+    cells.push({
+      ...cell,
+      actualOrder: index + 1,
+      execution: { status: 'succeeded', acceptedQuestionCount: 1, usageComplete: true, lineageValid: true, knownActual: { requests: 1, inputTokens: 1, outputTokens: 1 }, unknownReservations: [], conservativeCharged: { requests: 1, inputTokens: 1, outputTokens: 1 } },
+      requests: [{ requestId, stage: 'generation', completion: 'completed', usage, reservation: { state: 'settled', inputTokens: 20_000, outputTokens: 32_768 }, manifest }],
+      resultFile: `case-${String(index + 1).padStart(4, '0')}.result.json`,
+      sidecarFile: `case-${String(index + 1).padStart(4, '0')}.sidecar.json`,
+      metadataFile: `case-${String(index + 1).padStart(4, '0')}.metadata.json`,
+      artifactHashes: { result: hash('c'), sidecar: hash('d'), metadata: hash('e') }
+    })
+  }
+  const usage = {
+    knownActual: { requests: 48, inputTokens: 48, outputTokens: 48 },
+    unknownReservations: [],
+    conservativeCharged: { requests: 48, inputTokens: 48, outputTokens: 48 }
+  }
+  const report = { purpose: GENERATION_PURPOSE, qualityGate: 'not-evaluated', sourceStable: true, executionComplete: true, status: 'awaiting-review', matrix: cells, sourceBindings, usage }
+  const accepted = validateGenerationExecutionReport(report, bundle)
+  assert.equal(accepted.valid, true, accepted.issues.join(','))
+  assert.equal(accepted.executionComplete, true)
+
+  const tamperedManifest = structuredClone(report)
+  tamperedManifest.matrix[0].requests[0].manifest.manifestHash = hash('f')
+  const manifestCheck = validateGenerationExecutionReport(tamperedManifest, bundle)
+  assert.ok(manifestCheck.issues.includes('execution-manifest-hash-invalid'))
+
+  const tamperedLineage = structuredClone(report)
+  tamperedLineage.sourceBindings[Object.keys(tamperedLineage.sourceBindings)[0]].hash = hash('f')
+  const lineageCheck = validateGenerationExecutionReport(tamperedLineage, bundle)
+  assert.ok(lineageCheck.issues.includes('execution-source-bindings-mismatch'))
+
+  const tamperedCost = structuredClone(report)
+  tamperedCost.matrix[0].requests[0].usage.outputTokens = -1
+  tamperedCost.matrix[0].requests[0].usage.totalTokens = 0
+  const negativeCheck = validateGenerationExecutionReport(tamperedCost, bundle)
+  assert.ok(negativeCheck.issues.includes('execution-usage-state-invalid'))
+  const overrun = structuredClone(report)
+  overrun.matrix[0].requests[0].usage.outputTokens = 32_769
+  overrun.matrix[0].requests[0].usage.totalTokens = 32_770
+  const overrunCheck = validateGenerationExecutionReport(overrun, bundle)
+  assert.ok(overrunCheck.issues.includes('execution-usage-over-reservation'))
 })

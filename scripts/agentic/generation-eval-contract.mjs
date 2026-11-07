@@ -322,8 +322,11 @@ export function validateGenerationExecutionReport(report, bundle) {
       requestIds.add(request.requestId)
       const reservation = request.reservation
       if (!Number.isSafeInteger(reservation.inputTokens) || reservation.inputTokens < 0 || !Number.isSafeInteger(reservation.outputTokens) || reservation.outputTokens < 0 || !['settled', 'unknown', 'unknown-unsent', 'dispatched', 'reserved'].includes(reservation.state)) { issues.push('execution-reservation-invalid'); continue }
-      const hasUsage = isObject(request.usage) && Number.isSafeInteger(request.usage.inputTokens) && Number.isSafeInteger(request.usage.outputTokens) && Number.isSafeInteger(request.usage.totalTokens) && request.usage.totalTokens === request.usage.inputTokens + request.usage.outputTokens
+      const hasUsage = isObject(request.usage) && Number.isSafeInteger(request.usage.inputTokens) && request.usage.inputTokens >= 0 &&
+        Number.isSafeInteger(request.usage.outputTokens) && request.usage.outputTokens >= 0 && Number.isSafeInteger(request.usage.totalTokens) &&
+        request.usage.totalTokens >= 0 && request.usage.totalTokens === request.usage.inputTokens + request.usage.outputTokens
       if (hasUsage && reservation.state !== 'settled' || !hasUsage && reservation.state === 'settled') issues.push('execution-usage-state-invalid')
+      if (hasUsage) add(issues, request.usage.inputTokens > reservation.inputTokens || request.usage.outputTokens > reservation.outputTokens, 'execution-usage-over-reservation')
       if (hasUsage) {
         known.requests++
         known.inputTokens += request.usage.inputTokens
@@ -341,7 +344,7 @@ export function validateGenerationExecutionReport(report, bundle) {
       const requiredArrays = ['selectedIds', 'requiredIds', 'packedIds', 'omitted', 'sources']
       if (manifest.version !== 1 || !HASH.test(manifest.manifestHash ?? '') || requiredArrays.some((key) => !Array.isArray(manifest[key]))) { issues.push('execution-manifest-invalid'); continue }
       const payload = { version: manifest.version, runId: manifest.runId, projectId: manifest.projectId, snapshotId: manifest.snapshotId, selectedIds: manifest.selectedIds, requiredIds: manifest.requiredIds, packedIds: manifest.packedIds, omitted: manifest.omitted, sources: manifest.sources, requestHash: manifest.requestHash, estimatedInputTokens: manifest.estimatedInputTokens, serializedChars: manifest.serializedChars, contextChars: manifest.contextChars, serializationOverheadTokens: manifest.serializationOverheadTokens, maxInputTokens: manifest.maxInputTokens, maxChars: manifest.maxChars }
-      add(issues, sha256(Buffer.from(canonicalJson(payload), 'utf8')) !== manifest.manifestHash, 'execution-manifest-hash-invalid')
+      add(issues, sha256(Buffer.from(JSON.stringify(payload), 'utf8')) !== manifest.manifestHash, 'execution-manifest-hash-invalid')
       add(issues, manifest.packedIds.some((id) => !manifest.selectedIds.includes(id)) || manifest.requiredIds.some((id) => !manifest.packedIds.includes(id)), 'execution-manifest-membership-invalid')
       const sourceIds = new Set()
       for (const source of manifest.sources) {
