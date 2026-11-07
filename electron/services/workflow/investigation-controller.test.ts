@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createHash } from 'node:crypto'
+// @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
+import { LlmRequestError } from '../llm.ts'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -21,7 +23,7 @@ import { createModelGateway } from './model-gateway.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
 import { normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
-import { runInvestigation, runStaticInvestigation } from './investigation-controller.ts'
+import { INVESTIGATION_PROMPT_VERSION, runInvestigation, runStaticInvestigation } from './investigation-controller.ts'
 
 const source = 'export function calculate(value: number) {\n  if (value < 0) throw new Error("negative")\n  return value * 2\n}\n'
 const profile = { id: 'm06-synthetic', name: 'Synthetic', model: 'synthetic', baseUrl: 'https://m06.invalid/v1', apiKey: 'M06_SYNTHETIC_KEY', protocol: 'openai' as const, contextWindowTokens: 49152, maxOutputTokens: 8192 }
@@ -31,7 +33,7 @@ async function fixture(t: { after(fn: () => unknown): void }, text = source) {
   t.after(() => rm(root, { recursive: true, force: true }))
   const snapshot = await createWorkflowSnapshot(await scanProject(root), { projectId: 'm06-project' })
   const store = createEvidenceStore(snapshot)
-  const spec = createRunSpec({ version: 1, runId: `m06-${Date.now()}`, projectId: snapshot.projectId, snapshotId: snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
+  const spec = createRunSpec({ version: 1, runId: `m06-${Date.now()}`, projectId: snapshot.projectId, snapshotId: snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: INVESTIGATION_PROMPT_VERSION, toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
   const ledger = createBudgetLedger(spec)
   const tools = createToolGateway(snapshot, store, ledger)
   return { root, snapshot, store, spec, ledger, tools, fileId: snapshot.files.find(file => file.relPath.endsWith('sample.ts'))!.fileId }
@@ -251,7 +253,7 @@ test('unknown usage stays unknown and static policy does not call a model', asyn
 
 test('zero investigation output quota stops without calling the model', async t => {
   const f = await fixture(t)
-  const zeroSpec = createRunSpec({ version: 1, runId: 'm06-zero-output', projectId: f.snapshot.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { outputTokens: 8192 } })
+  const zeroSpec = createRunSpec({ version: 1, runId: 'm06-zero-output', projectId: f.snapshot.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: INVESTIGATION_PROMPT_VERSION, toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { outputTokens: 8192 } })
   const ledger = createBudgetLedger(zeroSpec)
   const mock = createModelGateway(zeroSpec, profile, ledger, { transport: async () => { throw Error('must not call') } })
   const outcome = await runInvestigation({ spec: zeroSpec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger, model: mock })
@@ -292,6 +294,71 @@ test('invalid explicit output cap is rejected before dispatch', async t => {
     await assert.rejects(runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: mock.gateway, maxOutputTokensPerDecision: cap }), error => (error as { code?: string }).code === 'invalid-argument')
   }
   assert.equal(mock.calls(), 0)
+})
+
+test('fully metered length truncation returns a limited result with partial evidence metadata', async t => {
+  const f = await fixture(t)
+  let calls = 0
+  const gateway = createModelGateway(f.spec, profile, f.ledger, { transport: async (_profile, messages, _delta, transport) => {
+    calls++
+    transport.beforeRequest!()
+    const outputTokens = calls === 1 ? 0 : 6000
+    transport.onUsage!({ inputTokens: 15, outputTokens, totalTokens: 15 + outputTokens })
+    if (calls === 1) {
+      const fileId = JSON.parse(messages.at(-1)!.content).files[0].fileId as string
+      return JSON.stringify(actions([{ type: 'request_tools', tools: [{ actionId: 'retain-partial-read', tool: 'read_region', args: { fileId, startLine: 1, endLine: 3 } }] }]))
+    }
+    throw new LlmRequestError('response', undefined, { finishReason: 'length' })
+  } })
+  const stopEvents: string[] = []
+  const outcome = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: gateway, maxOutputTokensPerDecision: 6000, onEvent: event => { if (event.type === 'stop') stopEvents.push(event.reason ?? '') } })
+  assert.equal(calls, 2)
+  assert.equal(outcome.status, 'limit-reached')
+  assert.equal(outcome.stopReason, 'budget-exhausted')
+  assert.equal(outcome.statistics.decisions, 2)
+  assert.equal(outcome.statistics.toolRequests, 1)
+  assert.equal(outcome.statistics.readRequests, 1)
+  assert.ok(f.store.metadata().ids.length > 0)
+  assert.equal(outcome.usageComplete, true)
+  assert.deepEqual(stopEvents, ['budget-exhausted'])
+  assert.equal(f.ledger.snapshot().total.dispatchedRequests, 2)
+  assert.equal(f.ledger.snapshot().blocked, false)
+})
+
+test('length truncation with unknown usage remains a model failure', async t => {
+  const f = await fixture(t)
+  const gateway = createModelGateway(f.spec, profile, f.ledger, { transport: async (_profile, _messages, _delta, transport) => {
+    transport.beforeRequest!()
+    throw new LlmRequestError('response', undefined, { finishReason: 'length' })
+  } })
+  await assert.rejects(runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: gateway, maxOutputTokensPerDecision: 6000 }), error => {
+    const failure = error as { code?: string; modelFailure?: { kind?: string; finishReason?: string } }
+    return failure.code === 'model-failed' && failure.modelFailure?.kind === 'response' && failure.modelFailure.finishReason === 'length'
+  })
+  assert.equal(f.ledger.snapshot().usageComplete, false)
+  assert.equal(f.ledger.snapshot().remaining.investigationOutputTokens, 0)
+})
+
+test('cancellation during a fully metered length failure still cancels the investigation', async t => {
+  const f = await fixture(t)
+  const controller = new AbortController()
+  const gateway = createModelGateway(f.spec, profile, f.ledger, { transport: async (_profile, _messages, _delta, transport) => {
+    transport.beforeRequest!()
+    transport.onUsage!({ inputTokens: 15, outputTokens: 6000, totalTokens: 6015 })
+    controller.abort()
+    throw new LlmRequestError('response', undefined, { finishReason: 'length' })
+  } })
+  await assert.rejects(runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: gateway, maxOutputTokensPerDecision: 6000, signal: controller.signal }), error => (error as { code?: string }).code === 'cancelled')
+  assert.equal(f.ledger.snapshot().usageComplete, true)
+  assert.equal(f.ledger.snapshot().remaining.investigationOutputTokens, 0)
+})
+
+test('investigation dispatch requires the prompt version carried in RunSpec', async t => {
+  const f = await fixture(t)
+  const model = modelFor(f, () => actions([{ type: 'finish_investigation', unresolved: [] }]))
+  const legacySpec = Object.freeze({ ...f.spec, promptVersion: 'workflow-prompt-v1' }) as typeof f.spec
+  await assert.rejects(runInvestigation({ spec: legacySpec, snapshot: f.snapshot, store: f.store, tools: f.tools, ledger: f.ledger, model: model.gateway }), error => (error as { code?: string }).code === 'configuration-changed')
+  assert.equal(model.calls(), 0)
 })
 
 test('observer abort during terminal notification cancels both investigators before return', async t => {
