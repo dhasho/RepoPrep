@@ -6,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   GENERATION_PER_RUN,
+  GENERATION_OUTPUT_CAPS,
   GENERATION_PURPOSE,
   createGenerationMatrix,
   deriveGenerationBudgets,
@@ -92,8 +93,10 @@ test('fixed evaluation matrix has exactly 48 unique stable cells and no quality 
   assert.deepEqual(new Set(first.map((cell) => cell.strategy)), new Set(['static-control', 'agentic']))
   assert.deepEqual(new Set(first.map((cell) => cell.repeat)), new Set([1, 2]))
   for (const task of bundle.tasks) {
+    const taskCells = first.filter((cell) => cell.taskId === task.id)
+    assert.deepEqual(taskCells.map(({ strategy, repeat }) => `${repeat}:${strategy}`), ['1:static-control', '1:agentic', '2:agentic', '2:static-control'])
     for (const strategy of ['static-control', 'agentic']) {
-      for (const repeat of [1, 2]) assert.ok(first.some((cell) => cell.taskId === task.id && cell.strategy === strategy && cell.repeat === repeat))
+      for (const repeat of [1, 2]) assert.ok(taskCells.some((cell) => cell.strategy === strategy && cell.repeat === repeat))
     }
   }
   assert.doesNotMatch(JSON.stringify(first), /expectedFacts|pitfalls|PRIVATE_ORACLE_SENTINEL/iu)
@@ -110,7 +113,8 @@ test('real corpus granularity derives the planned request and token ceilings', a
     maxOutputTokensTotal: 3_145_728,
     maxWallClockMsTotal: 28_800_000
   })
-  assert.equal(budgets.perRun.maxOutputTokensPerRequest, 16_384)
+  assert.equal(budgets.perRun.maxOutputTokensPerRequest, 32_768)
+  assert.deepEqual(GENERATION_OUTPUT_CAPS, [16_384, 32_768])
   assert.deepEqual(budgets.perRun.maxRequestsByGranularity, { medium: 5, fine: 14 })
 })
 
@@ -140,6 +144,7 @@ test('authorization validation is strict, source-bound, and capped by the derive
   const expected = { bundle, sourceCommit: commit, generationDataHash: bundle.generationDataHash }
   const authorization = validAuthorization(bundle)
   assert.equal(validateGenerationAuthorization(authorization, expected), authorization)
+  assert.equal(validateGenerationAuthorization({ ...authorization, maxOutputTokens: 16_384 }, expected).maxOutputTokens, 16_384)
 
   assert.throws(() => validateGenerationAuthorization(null, expected), { message: 'authorization-invalid' })
   assert.throws(() => validateGenerationAuthorization({ ...authorization, unexpected: 'field' }, expected), { message: 'authorization-invalid' })
@@ -149,4 +154,5 @@ test('authorization validation is strict, source-bound, and capped by the derive
   assert.throws(() => validateGenerationAuthorization({ ...authorization, maxInputTokens: 6_144_001 }, expected), { message: 'authorization-invalid' })
   assert.throws(() => validateGenerationAuthorization({ ...authorization, maxOutputTokensTotal: 3_145_729 }, expected), { message: 'authorization-invalid' })
   assert.throws(() => validateGenerationAuthorization({ ...authorization, maxOutputTokens: 16_383 }, expected), { message: 'authorization-invalid' })
+  assert.throws(() => validateGenerationAuthorization({ ...authorization, contextWindowTokens: 32_768 }, expected), { message: 'authorization-invalid' })
 })

@@ -6,11 +6,12 @@ import { canonicalJson, hashEvidenceRange, sha256 } from './dataset-contract.mjs
 export const GENERATION_PURPOSE = 'm08-generation-v1'
 export const GENERATION_STRATEGIES = Object.freeze(['static-control', 'agentic'])
 export const GENERATION_REPEATS = Object.freeze([1, 2])
+export const GENERATION_OUTPUT_CAPS = Object.freeze([16_384, 32_768])
 export const GENERATION_PER_RUN = Object.freeze({
   inputTokens: 128_000,
   outputTokens: 65_536,
   wallClockMs: 600_000,
-  maxOutputTokensPerRequest: 16_384
+  maxOutputTokensPerRequest: 32_768
 })
 export const GENERATION_REQUESTS_PER_RUN = Object.freeze({ medium: 5, fine: 14 })
 
@@ -236,11 +237,15 @@ export function createGenerationMatrix(bundle) {
   const validation = validateGenerationProjection(bundle)
   if (!validation.valid) fail('dataset-invalid')
   const cells = []
+  const schedule = [
+    { repeat: 1, strategy: 'static-control' },
+    { repeat: 1, strategy: 'agentic' },
+    { repeat: 2, strategy: 'agentic' },
+    { repeat: 2, strategy: 'static-control' }
+  ]
   for (const task of bundle.tasks) {
-    for (const strategy of GENERATION_STRATEGIES) {
-      for (const repeat of GENERATION_REPEATS) {
-        cells.push({ id: `${task.id}:${strategy}:repeat-${repeat}`, taskId: task.id, strategy, repeat, granularity: task.granularity })
-      }
+    for (const { strategy, repeat } of schedule) {
+      cells.push({ id: `${task.id}:${strategy}:repeat-${repeat}`, taskId: task.id, strategy, repeat, granularity: task.granularity })
     }
   }
   return cells
@@ -279,11 +284,108 @@ export function validateGenerationAuthorization(authorization, expected) {
   if (!HASH.test(authorization.endpointFingerprint ?? '') || typeof authorization.model !== 'string' || !authorization.model || authorization.model.length > 160 ||
     !['openai', 'anthropic'].includes(authorization.protocol) || authorization.temperature !== 0.4 ||
     !(authorization.reasoningEffort === null || ['low', 'high'].includes(authorization.reasoningEffort)) ||
-    !Number.isSafeInteger(authorization.contextWindowTokens) || authorization.contextWindowTokens < 4096) codes.push('authorization-invalid')
-  if (authorization.maxOutputTokens !== GENERATION_PER_RUN.maxOutputTokensPerRequest || authorization.maxRuns !== budgets.matrix.runs ||
+    !Number.isSafeInteger(authorization.contextWindowTokens) || authorization.contextWindowTokens <= authorization.maxOutputTokens) codes.push('authorization-invalid')
+  if (!GENERATION_OUTPUT_CAPS.includes(authorization.maxOutputTokens) || authorization.maxRuns !== budgets.matrix.runs ||
     !Number.isSafeInteger(authorization.maxRequests) || authorization.maxRequests < 1 || authorization.maxRequests > budgets.matrix.maxRequests ||
     !Number.isSafeInteger(authorization.maxInputTokens) || authorization.maxInputTokens < 1 || authorization.maxInputTokens > budgets.matrix.maxInputTokens ||
     !Number.isSafeInteger(authorization.maxOutputTokensTotal) || authorization.maxOutputTokensTotal < 1 || authorization.maxOutputTokensTotal > budgets.matrix.maxOutputTokensTotal) codes.push('authorization-invalid')
   if (codes.length) fail([...new Set(codes)].includes('authorization-binding-mismatch') ? 'authorization-binding-mismatch' : 'authorization-invalid')
   return authorization
+}
+
+export function validateGenerationExecutionReport(report, bundle) {
+  const issues = []
+  const matrix = createGenerationMatrix(bundle)
+  if (!isObject(report) || !Array.isArray(report.matrix) || report.purpose !== GENERATION_PURPOSE || report.qualityGate !== 'not-evaluated') {
+    return { valid: false, executionComplete: false, issues: ['execution-report-invalid'] }
+  }
+  add(issues, report.matrix.length > matrix.length, 'execution-matrix-oversized')
+  const expected = new Map(matrix.map((cell) => [cell.id, cell]))
+  const seen = new Set()
+  const sourceBindings = Object.create(null)
+  const aggregate = { knownActual: { requests: 0, inputTokens: 0, outputTokens: 0 }, unknownReservations: [], conservativeCharged: { requests: 0, inputTokens: 0, outputTokens: 0 } }
+  for (const cell of report.matrix) {
+    const wanted = expected.get(cell?.id)
+    if (!wanted || seen.has(cell.id)) { issues.push('execution-cell-invalid'); continue }
+    seen.add(cell.id)
+    add(issues, cell.taskId !== wanted.taskId || cell.strategy !== wanted.strategy || cell.repeat !== wanted.repeat || cell.granularity !== wanted.granularity, 'execution-cell-binding-invalid')
+    const execution = cell.execution
+    if (!isObject(execution) || !Array.isArray(cell.requests)) { issues.push('execution-cell-invalid'); continue }
+    add(issues, !['succeeded', 'failed'].includes(execution.status) || !Number.isSafeInteger(execution.acceptedQuestionCount) || execution.acceptedQuestionCount < 0, 'execution-cell-status-invalid')
+    const known = { requests: 0, inputTokens: 0, outputTokens: 0 }
+    const unknown = []
+    const charged = { requests: 0, inputTokens: 0, outputTokens: 0 }
+    const requestIds = new Set()
+    const manifested = new Map()
+    for (const request of cell.requests) {
+      if (!isObject(request) || typeof request.requestId !== 'string' || requestIds.has(request.requestId) || !isObject(request.reservation) || !isObject(request.manifest)) { issues.push('execution-request-invalid'); continue }
+      requestIds.add(request.requestId)
+      const reservation = request.reservation
+      if (!Number.isSafeInteger(reservation.inputTokens) || reservation.inputTokens < 0 || !Number.isSafeInteger(reservation.outputTokens) || reservation.outputTokens < 0 || !['settled', 'unknown', 'unknown-unsent', 'dispatched', 'reserved'].includes(reservation.state)) { issues.push('execution-reservation-invalid'); continue }
+      const hasUsage = isObject(request.usage) && Number.isSafeInteger(request.usage.inputTokens) && Number.isSafeInteger(request.usage.outputTokens) && Number.isSafeInteger(request.usage.totalTokens) && request.usage.totalTokens === request.usage.inputTokens + request.usage.outputTokens
+      if (hasUsage && reservation.state !== 'settled' || !hasUsage && reservation.state === 'settled') issues.push('execution-usage-state-invalid')
+      if (hasUsage) {
+        known.requests++
+        known.inputTokens += request.usage.inputTokens
+        known.outputTokens += request.usage.outputTokens
+        charged.inputTokens += request.usage.inputTokens
+        charged.outputTokens += request.usage.outputTokens
+      } else if (['unknown', 'unknown-unsent', 'dispatched', 'reserved'].includes(reservation.state)) {
+        unknown.push({ requestId: request.requestId, stage: request.stage, inputTokens: reservation.inputTokens, outputTokens: reservation.outputTokens })
+        charged.inputTokens += reservation.inputTokens
+        charged.outputTokens += reservation.outputTokens
+      }
+      charged.requests++
+
+      const manifest = request.manifest
+      const requiredArrays = ['selectedIds', 'requiredIds', 'packedIds', 'omitted', 'sources']
+      if (manifest.version !== 1 || !HASH.test(manifest.manifestHash ?? '') || requiredArrays.some((key) => !Array.isArray(manifest[key]))) { issues.push('execution-manifest-invalid'); continue }
+      const payload = { version: manifest.version, runId: manifest.runId, projectId: manifest.projectId, snapshotId: manifest.snapshotId, selectedIds: manifest.selectedIds, requiredIds: manifest.requiredIds, packedIds: manifest.packedIds, omitted: manifest.omitted, sources: manifest.sources, requestHash: manifest.requestHash, estimatedInputTokens: manifest.estimatedInputTokens, serializedChars: manifest.serializedChars, contextChars: manifest.contextChars, serializationOverheadTokens: manifest.serializationOverheadTokens, maxInputTokens: manifest.maxInputTokens, maxChars: manifest.maxChars }
+      add(issues, sha256(Buffer.from(canonicalJson(payload), 'utf8')) !== manifest.manifestHash, 'execution-manifest-hash-invalid')
+      add(issues, manifest.packedIds.some((id) => !manifest.selectedIds.includes(id)) || manifest.requiredIds.some((id) => !manifest.packedIds.includes(id)), 'execution-manifest-membership-invalid')
+      const sourceIds = new Set()
+      for (const source of manifest.sources) {
+        if (!isObject(source) || !Array.isArray(source.ids) || !safePath(source.relPath) || !isObject(source.displayRange) || !HASH.test(source.hash ?? '')) { issues.push('execution-source-invalid'); continue }
+        for (const id of source.ids) {
+          sourceIds.add(id)
+          const binding = { path: source.relPath, displayRange: source.displayRange, originalRange: source.originalRange, hash: source.hash, sourceKind: source.sourceKind }
+          const prior = sourceBindings[id]
+          add(issues, prior && canonicalJson(prior) !== canonicalJson(binding), 'execution-source-binding-conflict')
+          sourceBindings[id] = binding
+        }
+      }
+      add(issues, manifest.packedIds.some((id) => !sourceIds.has(id)), 'execution-source-missing')
+      manifested.set(request.requestId, manifest)
+    }
+    unknown.sort((a, b) => a.requestId.localeCompare(b.requestId))
+    const usageComplete = cell.requests.length > 0 && cell.requests.every((request) => request.reservation?.state === 'settled' && request.usage)
+    add(issues, execution.usageComplete !== usageComplete, 'execution-usage-complete-mismatch')
+    for (const key of ['knownActual', 'conservativeCharged']) {
+      const actual = execution[key]
+      const expectedUsage = key === 'knownActual' ? known : charged
+      add(issues, !isObject(actual) || ['requests', 'inputTokens', 'outputTokens'].some((name) => actual[name] !== expectedUsage[name]), 'execution-cost-mismatch')
+    }
+    add(issues, !Array.isArray(execution.unknownReservations) || canonicalJson(execution.unknownReservations) !== canonicalJson(unknown), 'execution-unknown-cost-mismatch')
+    if (execution.status === 'succeeded') {
+      add(issues, !execution.usageComplete || execution.lineageValid !== true || execution.acceptedQuestionCount < 1, 'execution-success-invalid')
+      add(issues, typeof cell.resultFile !== 'string' || !/^case-\d{4}\.result\.json$/u.test(cell.resultFile) || typeof cell.sidecarFile !== 'string' || !/^case-\d{4}\.sidecar\.json$/u.test(cell.sidecarFile) || typeof cell.metadataFile !== 'string' || !/^case-\d{4}\.metadata\.json$/u.test(cell.metadataFile), 'execution-artifact-path-invalid')
+      add(issues, !isObject(cell.artifactHashes) || ['result', 'sidecar', 'metadata'].some((key) => !HASH.test(cell.artifactHashes?.[key] ?? '')), 'execution-artifact-hash-invalid')
+    }
+    aggregate.knownActual.requests += known.requests
+    aggregate.knownActual.inputTokens += known.inputTokens
+    aggregate.knownActual.outputTokens += known.outputTokens
+    aggregate.conservativeCharged.requests += charged.requests
+    aggregate.conservativeCharged.inputTokens += charged.inputTokens
+    aggregate.conservativeCharged.outputTokens += charged.outputTokens
+    aggregate.unknownReservations.push(...unknown.map((item) => ({ cellId: cell.id, ...item })))
+  }
+  const expectedIds = new Set(matrix.map((cell) => cell.id))
+  add(issues, seen.size !== expectedIds.size || [...expectedIds].some((id) => !seen.has(id)), 'execution-matrix-incomplete')
+  add(issues, canonicalJson(report.sourceBindings) !== canonicalJson(sourceBindings), 'execution-source-bindings-mismatch')
+  add(issues, !isObject(report.usage) || canonicalJson(report.usage) !== canonicalJson(aggregate), 'execution-total-cost-mismatch')
+  add(issues, report.sourceStable !== true, 'execution-source-unstable')
+  const complete = issues.length === 0 && report.matrix.length === matrix.length && report.matrix.every((cell) => cell.execution.status === 'succeeded') && aggregate.unknownReservations.length === 0
+  add(issues, report.executionComplete !== complete, 'execution-complete-mismatch')
+  add(issues, report.status !== (complete ? 'awaiting-review' : 'incomplete'), 'execution-status-mismatch')
+  return { valid: issues.length === 0, executionComplete: complete && report.executionComplete === true, issues: [...new Set(issues)] }
 }
