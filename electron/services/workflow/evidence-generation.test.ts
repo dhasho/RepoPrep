@@ -95,6 +95,12 @@ function specFor(f: Fixture, granularity: Granularity, maxModelRequests?: number
   return createRunSpec({ version: 1, runId: `run-${granularity}-${maxModelRequests ?? 'default'}`, projectId: f.spec.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: f.spec.roleFocus, granularity, model: { profileId: f.profile.id, model: f.profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(f.profile.baseUrl)).digest('hex'), protocol: f.profile.protocol, contextWindowTokens: f.profile.contextWindowTokens, maxOutputTokens: f.profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', ...(maxModelRequests !== undefined ? { budget: { maxModelRequests } } : {}) })
 }
 
+function specForOutput(f: Fixture, maxOutputTokens: number) {
+  const profile: LlmProfile = { ...f.profile, maxOutputTokens }
+  const spec = createRunSpec({ version: 1, runId: `run-output-${maxOutputTokens}`, projectId: f.spec.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: f.spec.roleFocus, granularity: 'coarse', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
+  return { profile, spec }
+}
+
 function topicsFor(ids: readonly string[]) {
   return ids.map((id, index) => ({ id: `topic-${index}`, title: `Topic ${index}`, mechanism: 'Inspect a concrete implementation detail.', valueRationale: 'Represents one selected source excerpt.', difficulty: 'intermediate' as const, evidenceIds: [id], evidenceNeeds: ['Check an adjacent call site.'], unconfirmed: ['Cross-module behavior is not established.'] }))
 }
@@ -359,6 +365,59 @@ test('keeps all 40 M06 unresolved strings at 240 characters in topic-card and st
     await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
     assert.ok(!JSON.stringify(adapter.metadata()).includes(unresolved[0]))
   }
+})
+
+test('caps effective output reservation and wire limit by remaining global ledger output', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  for (const configuredMax of [32_768, 16_384]) {
+    const { profile, spec } = specForOutput(f, configuredMax)
+    const ledger = createBudgetLedger(spec)
+    for (let index = 0; index < 4; index++) {
+      const id = `prior-${configuredMax}-${index}`
+      ledger.reserveModel({ id, stage: 'generation', inputTokens: 1, outputTokens: 10_000 })
+      ledger.markDispatched(id)
+      ledger.settleModel(id, { inputTokens: 1, outputTokens: 10_000, totalTokens: 10_001 })
+    }
+    assert.equal(ledger.snapshot().total.outputTokens, 40_000)
+    const wireLimits: number[] = []
+    const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+      wireLimits.push(options.maxOutputTokens!)
+      options.beforeRequest?.()
+      const inputTokens = estimateMessageTokens(messages)
+      options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+      return '{}'
+    }
+    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), profile, spec, ledger })
+    await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+    const prepared = await adapter.requestAdapter.prepare(request(f, `remaining-output-${configuredMax}`))
+    await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal, maxOutputTokens: configuredMax })
+    const expected = Math.min(configuredMax, spec.generationOutputTokens, profile.maxOutputTokens!, 65_536 - 40_000)
+    assert.equal(wireLimits[0], expected)
+    assert.equal(ledger.snapshot().reservations.find(item => item.id === prepared.requestId)?.outputTokens, expected)
+  }
+})
+
+test('zero remaining output tokens reject before fetch without inventing a reservation', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  const { profile, spec } = specForOutput(f, 32_768)
+  const ledger = createBudgetLedger(spec)
+  for (let index = 0; index < 4; index++) {
+    const id = `exhaust-${index}`
+    ledger.reserveModel({ id, stage: 'generation', inputTokens: 1, outputTokens: 16_384 })
+    ledger.markDispatched(id)
+    ledger.settleModel(id, { inputTokens: 1, outputTokens: 16_384, totalTokens: 16_385 })
+  }
+  assert.equal(ledger.snapshot().remaining.outputTokens, 0)
+  let fetches = 0
+  const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, _messages, _onDelta, options) => { fetches++; options.beforeRequest?.(); return '{}' }
+  const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), profile, spec, ledger })
+  await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+  const prepared = await adapter.requestAdapter.prepare(request(f, 'empty-output-budget'))
+  await assert.rejects(adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal, maxOutputTokens: profile.maxOutputTokens }), (error: unknown) => error instanceof WorkflowError && error.code === 'budget-exhausted')
+  assert.equal(fetches, 0)
+  assert.deepEqual(adapter.metadata(), [])
 })
 
 test('dispatch uses captured profile, settles a repair against the same ledger and finalizes a secret-free sidecar', async t => {

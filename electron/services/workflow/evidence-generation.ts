@@ -394,6 +394,14 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       await snapshot.assertCurrent(signal)
       ledger.assertCanContinue(state.stage)
       assertHealthyLedger(ledger)
+      const remainingOutputTokens = ledger.snapshot().remaining.outputTokens
+      const effectiveOutputTokens = Math.min(
+        options.maxOutputTokens ?? spec.generationOutputTokens,
+        spec.generationOutputTokens,
+        privateProfile.maxOutputTokens ?? spec.generationOutputTokens,
+        remainingOutputTokens
+      )
+      if (!Number.isSafeInteger(effectiveOutputTokens) || effectiveOutputTokens < 1) fail('budget-exhausted')
       const guard = makeDispatchGuard(state.packet)
       const dispatchGuard = (messages: readonly import('../llm.ts').ChatMessage[]): void => {
         if (state.registered) fail()
@@ -432,7 +440,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       }
       let completion: ModelCompletion
       try {
-        completion = await gateway.complete({ id: state.requestId, stage: state.stage as ModelStage, messages: state.packet.messages, signal: state.signal, onDelta, dispatchGuard, ...(options.maxOutputTokens !== undefined ? { maxOutputTokens: options.maxOutputTokens } : {}) })
+        completion = await gateway.complete({ id: state.requestId, stage: state.stage as ModelStage, messages: state.packet.messages, signal: state.signal, onDelta, dispatchGuard, maxOutputTokens: effectiveOutputTokens })
       } catch (error) {
         const meta = dispatchMetadata.get(state.requestId)
         if (meta) meta.completion = 'failed'
