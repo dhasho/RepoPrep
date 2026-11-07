@@ -24,6 +24,7 @@ export interface RunStageContext {
   readonly snapshotId: string
   readonly signal: AbortSignal
   assertActive(): void
+  /** Guard a synchronous in-memory mutation; await asynchronous work before calling this. */
   commit<T>(effect: () => T): T
 }
 
@@ -83,7 +84,7 @@ const transitions: Readonly<Record<RunStage, ReadonlySet<RunStage>>> = Object.fr
 })
 
 class RunLifecycleError extends Error {
-  readonly code: 'run-cancelled' | 'run-deadline-exceeded' | 'run-terminal'
+  readonly code: 'run-cancelled' | 'run-deadline-exceeded' | 'run-terminal' | 'run-clock-invalid'
 
   constructor(code: RunLifecycleError['code']) {
     super(code)
@@ -93,8 +94,9 @@ class RunLifecycleError extends Error {
 }
 
 function finiteNow(clock: () => number): number {
-  const value = clock()
-  if (!Number.isFinite(value)) throw new TypeError('Run coordinator clock must be finite')
+  let value: number
+  try { value = clock() } catch { throw new RunLifecycleError('run-clock-invalid') }
+  if (!Number.isFinite(value)) throw new RunLifecycleError('run-clock-invalid')
   return value
 }
 
@@ -135,6 +137,7 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
       let operationInFlight = false
       let sequence = 0
       let publishedResult: unknown = null
+      let terminalElapsedMs: number | null = null
       let deadlineTimer: ReturnType<typeof setTimeout> | null = null
       let externalAbort: (() => void) | null = null
       const observers = [options.onEvent, beginOptions.onEvent]
@@ -151,9 +154,18 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
       }
 
       let session!: RunSession
+      const sampleTerminalElapsed = (): number => {
+        try {
+          const now = finiteNow(clock)
+          if (now >= lastClockValue) lastClockValue = now
+        } catch { /* keep the last known monotonic time for terminal diagnostics */ }
+        return Math.max(0, lastClockValue - startedAt)
+      }
+
       const finish = (status: RunTerminalStatus, result?: unknown): boolean => {
         if (terminalStatus) return false
         terminalStatus = status
+        terminalElapsedMs = sampleTerminalElapsed()
         publishedResult = status === 'succeeded' ? result : null
         if (!controller.signal.aborted) controller.abort()
         if (deadlineTimer !== null) clearTimeout(deadlineTimer)
@@ -166,17 +178,19 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
 
       const monotonicNow = (): number => {
         const now = finiteNow(clock)
-        if (now < lastClockValue) {
-          finish('failed')
-          throw new TypeError('Run coordinator clock must be monotonic')
-        }
+        if (now < lastClockValue) throw new RunLifecycleError('run-clock-invalid')
         lastClockValue = now
         return now
       }
 
       const assertActive = (): void => {
         if (terminalStatus) throw new RunLifecycleError(terminalStatus === 'cancelled' ? 'run-cancelled' : 'run-terminal')
-        if (monotonicNow() >= deadlineAt) {
+        let now: number
+        try { now = monotonicNow() } catch (error) {
+          finish('failed')
+          throw error
+        }
+        if (now >= deadlineAt) {
           finish('failed')
           throw new RunLifecycleError('run-deadline-exceeded')
         }
@@ -232,7 +246,14 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
         fail() { return finish('failed') },
         cancel() { return finish('cancelled') },
         snapshot(): RunSessionSnapshot {
-          return Object.freeze({ ...identity, stage: currentStage, terminalStatus, sequence, elapsedMs: Math.max(0, monotonicNow() - startedAt) })
+          let elapsedMs = terminalElapsedMs
+          if (elapsedMs === null) {
+            try { elapsedMs = Math.max(0, monotonicNow() - startedAt) } catch (error) {
+              finish('failed')
+              throw error
+            }
+          }
+          return Object.freeze({ ...identity, stage: currentStage, terminalStatus, sequence, elapsedMs })
         }
       }
 
@@ -244,9 +265,14 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
       if (!terminalStatus && beginOptions.signal?.aborted) session.cancel()
       else if (!terminalStatus) beginOptions.signal?.addEventListener('abort', externalAbort, { once: true })
       if (!terminalStatus) {
-        deadlineTimer = setTimeout(() => {
-          if (!terminalStatus) finish('failed')
-        }, Math.max(0, deadlineAt - monotonicNow()))
+        try {
+          deadlineTimer = setTimeout(() => {
+            if (!terminalStatus) finish('failed')
+          }, Math.max(0, deadlineAt - monotonicNow()))
+        } catch (error) {
+          finish('failed')
+          throw error
+        }
       }
       return session
     },

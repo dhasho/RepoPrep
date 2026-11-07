@@ -172,6 +172,60 @@ test('deadline is enforced by monotonic checks and terminal precedence is stable
   assert.throws(() => cancelled.assertActive(), /run-cancelled/u)
 })
 
+test('terminal elapsed time is captured once and remains frozen in later snapshots', async () => {
+  let now = 100
+  const coordinator = createRunCoordinator({ clock: () => now })
+  const session = coordinator.begin(spec('frozen-duration'))!
+  await advance(session, ['scanning', 'investigating', 'packing', 'generating'])
+  now = 475
+  await session.execute('validating', () => undefined)
+  assert.equal(session.succeed({ ok: true }), true)
+  const terminalElapsedMs = session.snapshot().elapsedMs
+  now = 5_000
+  assert.equal(session.snapshot().elapsedMs, terminalElapsedMs)
+})
+
+test('clock failure during created notification fails once and releases the project lease', () => {
+  let now = 10
+  const events: Array<Record<string, unknown>> = []
+  let poisonClock = true
+  const coordinator = createRunCoordinator({
+    clock: () => now,
+    onEvent: event => {
+      events.push(event)
+      if (poisonClock && event.type === 'stage-started' && event.stage === 'created') {
+        poisonClock = false
+        now = Number.NaN
+      }
+    }
+  })
+  assert.throws(() => coordinator.begin(spec('created-clock-fault')), /run-clock-invalid/u)
+  assert.equal(coordinator.getActiveProjectRun('project-01'), null)
+  assert.equal(events.filter(event => event.type === 'terminal').length, 1)
+  assert.equal(events.at(-1)?.status, 'failed')
+  now = 20
+  const next = coordinator.begin(spec('after-created-clock-fault'))!
+  next.cancel()
+})
+
+test('clock failure before a stage rejects with a static error and releases the project lease', async () => {
+  let shouldThrow = false
+  const events: Array<Record<string, unknown>> = []
+  const coordinator = createRunCoordinator({
+    clock: () => { if (shouldThrow) throw new Error('private clock failure'); return 10 },
+    onEvent: event => events.push(event)
+  })
+  const session = coordinator.begin(spec('execute-clock-fault'))!
+  shouldThrow = true
+  await assert.rejects(session.execute('scanning', () => { throw new Error('must-not-run') }), { message: 'run-clock-invalid' })
+  assert.equal(session.terminalStatus, 'failed')
+  assert.equal(events.filter(event => event.type === 'terminal').length, 1)
+  assert.equal(coordinator.getActiveProjectRun('project-01'), null)
+  shouldThrow = false
+  const next = coordinator.begin(spec('after-execute-clock-fault'))!
+  next.cancel()
+})
+
 test('wall-clock deadline aborts an unresolved stage operation', async () => {
   const coordinator = createRunCoordinator()
   const session = coordinator.begin(spec('timer-deadline', 'timer-project', 80))!
