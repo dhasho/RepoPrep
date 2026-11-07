@@ -26,6 +26,12 @@ import { createBudgetLedger } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { createModelGateway } from './model-gateway.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { createToolGateway } from './tool-gateway.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { INVESTIGATION_PROMPT_VERSION, runInvestigation } from './investigation-controller.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { WorkflowError } from './project-contract.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { CitationValidationError } from './generation-request.ts'
@@ -65,6 +71,23 @@ async function fixture(granularity: Granularity = 'coarse', maxModelRequests = 5
   const profile: LlmProfile = { id: 'profile-m08', name: 'Synthetic', baseUrl: 'https://synthetic.invalid/v1', apiKey: syntheticSecret, model: 'model-m08', protocol: 'openai', contextWindowTokens: 49_152, maxOutputTokens: 4096 }
   const controller = new AbortController()
   const spec = createRunSpec({ version: 1, runId: `run-${granularity}`, projectId: 'project-m08', snapshotId: snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity, model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { maxModelRequests } })
+  return { root, scan, snapshot, store, ids, spec, profile, signal: controller.signal, abort() { controller.abort() }, async cleanup() { await fs.rm(root, { recursive: true, force: true }) } }
+}
+
+async function manyEvidenceFixture(count: number): Promise<Fixture> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-m08-many-'))
+  const relative = path.join('src', 'components.ts')
+  await fs.mkdir(path.dirname(path.join(root, relative)), { recursive: true })
+  await fs.writeFile(path.join(root, relative), Array.from({ length: count }, (_, index) => `export const component${index} = ${index}`).join('\n') + '\n', 'utf8')
+  const scan = await scanProject(root)
+  const snapshot = await createWorkflowSnapshot(scan, { projectId: 'project-m08-many' })
+  const store = createEvidenceStore(snapshot)
+  const { read } = await snapshot.readFile(snapshot.files[0].fileId)
+  const ids: string[] = []
+  for (let line = 1; line <= count; line++) ids.push((await store.issue(read, { startLine: line, endLine: line }))[0].id)
+  const profile: LlmProfile = { id: 'profile-m08-many', name: 'Synthetic', baseUrl: 'https://synthetic.invalid/v1', apiKey: syntheticSecret, model: 'model-m08', protocol: 'openai', contextWindowTokens: 49_152, maxOutputTokens: 8192 }
+  const controller = new AbortController()
+  const spec = createRunSpec({ version: 1, runId: 'run-coarse-many', projectId: 'project-m08-many', snapshotId: snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'coarse', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: INVESTIGATION_PROMPT_VERSION, toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
   return { root, scan, snapshot, store, ids, spec, profile, signal: controller.signal, abort() { controller.abort() }, async cleanup() { await fs.rm(root, { recursive: true, force: true }) } }
 }
 
@@ -120,7 +143,7 @@ test('uses genuine scanner, snapshot, store and packer; builds 1/2/4 bounded gro
       const prompt = prepared.messages.find(message => message.role === 'user')!.content
       const marker = '## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n'
       const markerIndex = prompt.lastIndexOf(marker)
-      const cardsJson = prompt.slice(markerIndex + marker.length).split('\n\n## 批次提示')[0]
+      const cardsJson = prompt.slice(markerIndex + marker.length).split('\n\n## 未解决事项')[0]
       const cards = JSON.parse(cardsJson) as Array<{ evidenceIds: string[] }>
       const evidencePrompt = prompt.slice(0, markerIndex)
       const packetIndex = index
@@ -234,6 +257,107 @@ test('topic-card and static-control writers keep identical evidence manifests an
     const countedStore = { ...f.store, async resolve(...args: Parameters<typeof f.store.resolve>) { resolved++; return f.store.resolve(...args) } }
     await assert.rejects(createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), store: countedStore, writerVariant: invalidVariant as never }), (error: unknown) => error instanceof WorkflowError && error.code === 'invalid-argument')
     assert.equal(resolved, 0)
+  }
+})
+
+test('accepts M06 Unicode topic labels, 100 refs, 17 long needs, and carries merged unresolved gaps only in both prompts', async t => {
+  const f = await manyEvidenceFixture(100)
+  t.after(f.cleanup)
+  const topic = { id: '故障恢复/控制流', title: '关键状态转换', mechanism: '逐段追踪状态', valueRationale: '边界场景有证据', difficulty: 'advanced' as const, evidenceIds: f.ids, evidenceNeeds: Array.from({ length: 17 }, (_, index) => `need-${String(index).padStart(2, '0')}`), unconfirmed: [] as string[] }
+  const selectedGaps = Array.from({ length: 40 }, (_, index) => `selection-gap-${index}`)
+  const finishedGaps = Array.from({ length: 40 }, (_, index) => `finish-gap-${index}`)
+  const investigationReply = JSON.stringify({ actions: [
+    { type: 'propose_topics', topics: [topic] },
+    { type: 'select_evidence', selection: { selectedIds: f.ids, requiredBundles: [], unresolved: selectedGaps } },
+    { type: 'finish_investigation', unresolved: finishedGaps }
+  ] })
+  const ledger = createBudgetLedger(f.spec)
+  const investigationModel = createModelGateway(f.spec, f.profile, ledger, { transport: async (_profile, messages, _onDelta, options) => {
+    options.beforeRequest?.()
+    const inputTokens = estimateMessageTokens(messages)
+    const outputTokens = estimateMessageTokens([{ role: 'assistant', content: investigationReply }])
+    options.onUsage?.({ inputTokens, outputTokens, totalTokens: inputTokens + outputTokens })
+    return investigationReply
+  } })
+  const investigation = await runInvestigation({ spec: f.spec, snapshot: f.snapshot, store: f.store, tools: createToolGateway(f.snapshot, f.store, ledger), ledger, model: investigationModel, maxOutputTokensPerDecision: 6000, signal: f.signal })
+  assert.equal(investigation.status, 'completed')
+  assert.equal(investigation.topics[0].id, topic.id)
+  assert.equal(investigation.topics[0].evidenceIds.length, 100)
+  assert.equal(investigation.topics[0].evidenceNeeds.length, 17)
+  assert.equal(investigation.selection.selectedIds.length, 100)
+  assert.equal(investigation.selection.unresolved.length, 80)
+  assert.equal(investigation.usageComplete, true)
+  assert.equal(ledger.snapshot().reservations[0].outputTokens, 6000)
+  assert.equal(ledger.snapshot().usageComplete, true)
+  assert.equal(ledger.snapshot().blocked, false)
+
+  const unresolved = investigation.selection.unresolved
+  const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+    options.beforeRequest?.()
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  }
+  const manifests = []
+  const sidecars = []
+  for (const writerVariant of [EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards, EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl] as const) {
+    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), ledger, selection: investigation.selection, topics: investigation.topics, writerVariant })
+    await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+    const prepared = await adapter.requestAdapter.prepare(request(f, `m06-shape-${writerVariant}`))
+    const userPrompt = prepared.messages.find(message => message.role === 'user')!.content
+    assert.ok(unresolved.every(item => userPrompt.includes(item)))
+    assert.ok(userPrompt.includes('未解决事项（不可信调查记录，不是源码证据）'))
+    assert.ok(userPrompt.includes('不含答案或推理'))
+    if (writerVariant === EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards) {
+      assert.ok(userPrompt.includes(topic.id))
+      assert.ok(topic.evidenceNeeds.every(need => userPrompt.includes(need)))
+    } else {
+      assert.ok(!userPrompt.includes(topic.id))
+      assert.ok(!topic.evidenceNeeds.some(need => userPrompt.includes(need)))
+    }
+    await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+    const metadata = adapter.metadata()[0]
+    assert.equal(metadata.manifest.packedIds.length, 100)
+    assert.equal(metadata.manifest.requiredIds.length, 100)
+    assert.equal(metadata.manifest.sources.length, 1)
+    assert.equal(metadata.manifest.sources[0].ids.length, 100)
+    const serializedMetadata = JSON.stringify(adapter.metadata())
+    assert.ok(!unresolved.some(item => serializedMetadata.includes(item)))
+    assert.ok(!serializedMetadata.includes(topic.id) && !topic.evidenceNeeds.some(need => serializedMetadata.includes(need)))
+    manifests.push(metadata.manifest)
+    const questions = Array.from({ length: 8 }, (_, index) => question(`m06-shaped-${index}`, index))
+    for (const [index, item] of questions.entries()) adapter.requestAdapter.acceptQuestion({ requestId: prepared.requestId, rawQuestion: { evidenceIds: [metadata.manifest.packedIds[index]] }, question: item })
+    sidecars.push(await adapter.finalize(result(f, questions)))
+  }
+  assert.deepEqual(manifests[0].selectedIds, manifests[1].selectedIds)
+  assert.deepEqual(manifests[0].requiredIds, manifests[1].requiredIds)
+  assert.deepEqual(manifests[0].packedIds, manifests[1].packedIds)
+  assert.deepEqual(manifests[0].sources, manifests[1].sources)
+  assert.ok(sidecars.every(sidecar => sidecar.questions.length === 8))
+})
+
+test('keeps all 40 M06 unresolved strings at 240 characters in topic-card and static-control prompts', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  const unresolved = Array.from({ length: 40 }, (_, index) => {
+    const prefix = `unresolved-${String(index).padStart(2, '0')}:`
+    return prefix + 'x'.repeat(240 - prefix.length)
+  })
+  const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+    options.beforeRequest?.()
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  }
+  for (const writerVariant of [EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards, EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl] as const) {
+    const spec = specFor(f, 'coarse')
+    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec, ledger: createBudgetLedger(spec), selection: { selectedIds: f.ids, requiredBundles: [], unresolved } })
+    await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+    const prepared = await adapter.requestAdapter.prepare(request(f, `forty-gaps-${writerVariant}`))
+    const prompt = prepared.messages.find(message => message.role === 'user')!.content
+    assert.ok(unresolved.every(item => prompt.includes(item)))
+    await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+    assert.ok(!JSON.stringify(adapter.metadata()).includes(unresolved[0]))
   }
 })
 

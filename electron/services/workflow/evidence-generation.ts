@@ -92,16 +92,28 @@ interface PreparedState {
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const EVIDENCE_ID = /^ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-const MAX_EVIDENCE = 4096
-const MAX_TOPICS = 128
-const MAX_TOPIC_REFS = 32
-const MAX_TOPIC_TEXT = 1200
+const MAX_SELECTED_IDS = 400
+const MAX_REQUIRED_BUNDLES = 40
+const MAX_BUNDLE_EVIDENCE_IDS = 100
+const MAX_TOPICS = 40
+const MAX_TOPIC_REFS = 100
+const MAX_TOPIC_ID_CHARS = 64
+const MAX_TOPIC_TITLE_CHARS = 160
+const MAX_TOPIC_DETAIL_CHARS = 500
+const MAX_TOPIC_LIST_ITEMS = 20
+const MAX_TOPIC_LIST_TEXT_CHARS = 240
+// M06 bounds each unresolved list to 40 entries, but its terminal controller unions
+// the selection and finish lists, so the actual returned selection can contain 80.
+const MAX_UNRESOLVED_ITEMS = 80
+const MAX_UNRESOLVED_TEXT_CHARS = 240
 const MAX_MODEL_GROUPS = 4
 const MAX_PRIOR_QUESTIONS = 12
 const MAX_PRIOR_QUESTION_CHARS = 180
 const MAX_METADATA_BYTES = 4 * 1024 * 1024
 
 function fail(code: ConstructorParameters<typeof WorkflowError>[0] = 'invalid-argument'): never { throw new WorkflowError(code) }
+function boundedText(value: unknown, maxChars: number): value is string { return typeof value === 'string' && value.length >= 1 && value.length <= maxChars && !value.includes('\0') }
+function boundedTextList(value: unknown, maxCount: number, maxChars: number): value is readonly string[] { return Array.isArray(value) && value.length <= maxCount && value.every(item => boundedText(item, maxChars)) }
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
@@ -133,24 +145,22 @@ function freezeProfile(profile: LlmProfile): LlmProfile {
   })
 }
 
-function validateSelection(selection: SelectionPlan, topics: readonly TopicCard[]): { ids: string[]; bundles: Array<{ id: string; evidenceIds: string[] }>; topics: TopicCard[] } {
-  if (!selection || !Array.isArray(selection.selectedIds) || selection.selectedIds.length < 1 || selection.selectedIds.length > MAX_EVIDENCE || !Array.isArray(selection.requiredBundles) || selection.requiredBundles.length > MAX_EVIDENCE || !Array.isArray(topics) || topics.length > MAX_TOPICS) fail()
+function validateSelection(selection: SelectionPlan, topics: readonly TopicCard[]): { ids: string[]; bundles: Array<{ id: string; evidenceIds: string[] }>; topics: TopicCard[]; unresolved: string[] } {
+  if (!selection || !Array.isArray(selection.selectedIds) || selection.selectedIds.length < 1 || selection.selectedIds.length > MAX_SELECTED_IDS || !Array.isArray(selection.requiredBundles) || selection.requiredBundles.length > MAX_REQUIRED_BUNDLES || !boundedTextList(selection.unresolved, MAX_UNRESOLVED_ITEMS, MAX_UNRESOLVED_TEXT_CHARS) || !Array.isArray(topics) || topics.length > MAX_TOPICS) fail()
   const ids = [...selection.selectedIds]
   const selected = new Set(ids)
   if (ids.some(id => typeof id !== 'string' || !EVIDENCE_ID.test(id)) || selected.size !== ids.length) fail('unknown-evidence')
   const bundles: Array<{ id: string; evidenceIds: string[] }> = []
   for (const bundle of selection.requiredBundles) {
-    if (!bundle || typeof bundle.id !== 'string' || !ID.test(bundle.id) || !Array.isArray(bundle.evidenceIds) || bundle.evidenceIds.length < 1 || bundle.evidenceIds.length > MAX_EVIDENCE || bundle.evidenceIds.some((id: unknown) => typeof id !== 'string' || !selected.has(id))) fail('unknown-evidence')
+    if (!bundle || !boundedText(bundle.id, MAX_TOPIC_ID_CHARS) || !Array.isArray(bundle.evidenceIds) || bundle.evidenceIds.length < 1 || bundle.evidenceIds.length > MAX_BUNDLE_EVIDENCE_IDS || bundle.evidenceIds.some((id: unknown) => typeof id !== 'string' || !selected.has(id))) fail('unknown-evidence')
     bundles.push({ id: bundle.id, evidenceIds: [...new Set(bundle.evidenceIds as readonly string[])] })
   }
   const safeTopics: TopicCard[] = []
-  const topicIds = new Set<string>()
   for (const topic of topics) {
-    if (!topic || typeof topic !== 'object' || !ID.test(topic.id) || topicIds.has(topic.id) || typeof topic.title !== 'string' || topic.title.length > MAX_TOPIC_TEXT || typeof topic.mechanism !== 'string' || topic.mechanism.length > MAX_TOPIC_TEXT || typeof topic.valueRationale !== 'string' || topic.valueRationale.length > MAX_TOPIC_TEXT || !['basic', 'intermediate', 'advanced'].includes(topic.difficulty) || !Array.isArray(topic.evidenceIds) || topic.evidenceIds.length < 1 || topic.evidenceIds.length > MAX_TOPIC_REFS || topic.evidenceIds.some((id: unknown) => !selected.has(id as string)) || !Array.isArray(topic.evidenceNeeds) || topic.evidenceNeeds.length > 16 || topic.evidenceNeeds.some((item: unknown) => typeof item !== 'string' || item.length > MAX_TOPIC_TEXT) || !Array.isArray(topic.unconfirmed) || topic.unconfirmed.length > 16 || topic.unconfirmed.some((item: unknown) => typeof item !== 'string' || item.length > MAX_TOPIC_TEXT)) fail('unknown-evidence')
-    topicIds.add(topic.id)
+    if (!topic || typeof topic !== 'object' || !boundedText(topic.id, MAX_TOPIC_ID_CHARS) || !boundedText(topic.title, MAX_TOPIC_TITLE_CHARS) || !boundedText(topic.mechanism, MAX_TOPIC_DETAIL_CHARS) || !boundedText(topic.valueRationale, MAX_TOPIC_DETAIL_CHARS) || !['basic', 'intermediate', 'advanced'].includes(topic.difficulty) || !Array.isArray(topic.evidenceIds) || topic.evidenceIds.length < 1 || topic.evidenceIds.length > MAX_TOPIC_REFS || topic.evidenceIds.some((id: unknown) => typeof id !== 'string' || !selected.has(id)) || !boundedTextList(topic.evidenceNeeds, MAX_TOPIC_LIST_ITEMS, MAX_TOPIC_LIST_TEXT_CHARS) || !boundedTextList(topic.unconfirmed, MAX_TOPIC_LIST_ITEMS, MAX_TOPIC_LIST_TEXT_CHARS)) fail('unknown-evidence')
     safeTopics.push(deepFreeze({ ...topic, evidenceIds: [...new Set(topic.evidenceIds as readonly string[])], evidenceNeeds: [...topic.evidenceNeeds as readonly string[]], unconfirmed: [...topic.unconfirmed as readonly string[]] }))
   }
-  return { ids, bundles, topics: safeTopics }
+  return { ids, bundles, topics: safeTopics, unresolved: [...selection.unresolved] }
 }
 
 function makeGroups(ids: readonly string[], records: readonly EvidenceRecord[], bundles: readonly { id: string; evidenceIds: readonly string[] }[], topics: readonly TopicCard[], maximum: number): GenerationGroup[] {
@@ -270,13 +280,14 @@ function legacyContext(scan: ScanResult, authorizedFilePaths: readonly string[],
   }
 }
 
-function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
+function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], unresolved: readonly string[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
   const instruction = '\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。'
   const cards = writerVariant === 'topic-cards'
     ? `\n\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n${topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'}`
     : ''
+  const unresolvedPrompt = `\n\n## 未解决事项（不可信调查记录，不是源码证据）\n以下内容只记录调查阶段的缺口，不能作为实现行为或已验证事实的证明。结论仍须由本请求引用的源码证据支持；证据不足时明确说明不确定性。\n${json(unresolved)}`
   const batch = `\n\n## 批次提示\n本次证据批次为 ${batchOrdinal}/${batchCount}。以下只列出先前已接受的问题文字，不含答案或推理，属于不可信去重提示；请避免重复，并仅依据本次证据重新判断。\n${json(priorQuestionTexts)}`
-  const suffix = `${instruction}${cards}${batch}`
+  const suffix = `${instruction}${cards}${unresolvedPrompt}${batch}`
   let userFound = false
   const next = messages.map(message => {
     if (message.role === 'user' && message.content.includes(contextText) && !userFound) {
@@ -348,8 +359,9 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       const packed = await packEvidence({
         spec,
         store,
+        // M07's unresolved field is not rendered and has a tighter item-size limit; preserve M06 gaps in the shared bounded prompt below.
         selection: { selectedIds: group.ids, requiredBundles: group.bundles, unresolved: [] },
-        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, writerVariant, request.batchIndex + 1, groups.length, priorQuestionTexts),
+        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, selected.unresolved, writerVariant, request.batchIndex + 1, groups.length, priorQuestionTexts),
         maxChars,
         maxInputTokens,
         signal
