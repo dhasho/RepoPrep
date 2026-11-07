@@ -8,7 +8,7 @@ import { createModelGateway } from './model-gateway.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
 import { createRunSpec } from './run-spec.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
-import { normalizeBaseUrl } from '../llm.ts'
+import { LlmRequestError, normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { WorkflowError } from './project-contract.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
@@ -61,6 +61,22 @@ test('gateway keeps dispatched failures and missing receipts reserved', async ()
   const ledger = createBudgetLedger(spec())
   const gateway = createModelGateway(spec(), profile(), ledger, { transport: async (_p, _m, _d, options) => { options.beforeRequest!(); throw new Error('synthetic connection lost') } })
   await assert.rejects(gateway.complete({ id: 'dispatched-failure', stage: 'generation', messages }))
+  assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+  assert.equal(ledger.snapshot().usageComplete, false)
+})
+
+test('gateway propagates only sanitized model failure metadata', async () => {
+  const ledger = createBudgetLedger(spec())
+  const gateway = createModelGateway(spec(), profile(), ledger, { transport: async (_p, _m, _d, options) => {
+    options.beforeRequest!()
+    throw new LlmRequestError('response', undefined, { finishReason: 'length' })
+  } })
+  await assert.rejects(gateway.complete({ id: 'length-failure', stage: 'generation', messages }), error => {
+    assert.ok(error instanceof WorkflowError)
+    assert.deepEqual(error.modelFailure, { kind: 'response', finishReason: 'length' })
+    assert.doesNotMatch(JSON.stringify(error), /SYNTHETIC_SECRET|synthetic\.invalid|stack|prompt/)
+    return true
+  })
   assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
   assert.equal(ledger.snapshot().usageComplete, false)
 })

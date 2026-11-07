@@ -58,9 +58,10 @@ function normalizeUsage(value: unknown): LlmUsage | null {
 }
 function mapFailure(error: unknown, signal?: AbortSignal): WorkflowError {
   if (error instanceof WorkflowError) return error
-  if (signal?.aborted || error instanceof LlmRequestError && error.kind === 'cancelled') return new WorkflowError('cancelled')
-  if (isLlmTimeoutError(error)) return new WorkflowError('timeout')
-  return new WorkflowError('model-failed')
+  const modelFailure = error instanceof LlmRequestError ? error.modelFailure : undefined
+  if (signal?.aborted || error instanceof LlmRequestError && error.kind === 'cancelled') return new WorkflowError('cancelled', modelFailure)
+  if (isLlmTimeoutError(error)) return new WorkflowError('timeout', modelFailure)
+  return new WorkflowError('model-failed', modelFailure)
 }
 
 export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, ledger: BudgetLedger, options: ModelGatewayOptions = {}) {

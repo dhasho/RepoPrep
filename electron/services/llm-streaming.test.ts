@@ -374,6 +374,45 @@ test('malformed, empty, truncated, error, and unsupported finish events reject s
   }
 })
 
+test('length failure drains a bounded usage tail once and ignores subsequent content', async () => {
+  const stream = [
+    sseData(chatChunk({ content: 'partial' }, 'length', 0)),
+    sseData(chatChunk({ content: 'must not escape' }, null, 0)),
+    sseData({ choices: [], usage: { prompt_tokens: 17, completion_tokens: 9 } }),
+    'data: [DONE]\r\n\r\n'
+  ].join('')
+  const tail = openResponse(stream)
+  const { response } = tail
+  const deltas: string[] = []
+  const receipts: unknown[] = []
+  await withFetch(async () => response, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, delta => deltas.push(delta), { includeUsage: true, onUsage: usage => receipts.push(usage) }), (error: unknown) => {
+      assert.ok(error instanceof LlmRequestError)
+      assert.equal(error.kind, 'response')
+      assert.deepEqual(error.modelFailure, { kind: 'response', finishReason: 'length' })
+      assert.doesNotMatch(JSON.stringify(error), /private\.example|secret-key|must not escape/)
+      return true
+    })
+  })
+  assert.deepEqual(deltas, [], 'content from a frame containing a terminal failure is suppressed')
+  assert.deepEqual(receipts, [{ inputTokens: 17, outputTokens: 9, totalTokens: 26 }])
+  assert.equal(tail.cancelCalls, 1, '[DONE] ends the tail without waiting for an open connection')
+  assert.equal(response.body?.locked, false)
+})
+
+test('length failure without complete usage leaves the receipt unknown', async () => {
+  const { response } = createResponse([bytes(sseData(chatChunk({ content: 'partial' }, 'length', 0)))])
+  let receiptCount = 0
+  await withFetch(async () => response, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => {}, { onUsage: () => { receiptCount++ } }), error => {
+      assert.ok(error instanceof LlmRequestError)
+      assert.deepEqual(error.modelFailure, { kind: 'response', finishReason: 'length' })
+      return true
+    })
+  })
+  assert.equal(receiptCount, 0)
+})
+
 test('invalid UTF-8, lone JSON surrogates, and oversized event/output buffers reject', async () => {
   const badUnicode = [bytes('data: {"choices":[{"index":0,"delta":{"content":"'), Uint8Array.of(0xff), bytes('"},"finish_reason":"stop"}]}\n\n')]
   const loneSurrogate = [bytes('data: {"choices":[{"index":0,"delta":{"content":"\\ud800"},"finish_reason":"stop"}]}\n\n')]
