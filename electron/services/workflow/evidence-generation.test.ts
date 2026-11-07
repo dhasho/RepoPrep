@@ -14,7 +14,7 @@ import { planQuestionQuotas } from '../question-budget.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { scanProject } from '../scanner.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
-import { createEvidenceGenerationAdapter } from './evidence-generation.ts'
+import { createEvidenceGenerationAdapter, EVIDENCE_GENERATION_WRITER_VERSION, EVIDENCE_GENERATION_WRITER_VARIANTS } from './evidence-generation.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { createWorkflowSnapshot, snapshotMatchesScan } from './snapshot-adapter.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
@@ -181,6 +181,60 @@ test('a fine atomic topic component repeats across four groups while coarse one-
   const coarseBuilt = await coarse.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
   assert.equal(coarseBuilt.batches.length, 1)
   assert.equal(planQuestionQuotas('coarse', coarseBuilt.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight }))).total, 10)
+})
+
+test('topic-card and static-control writers keep identical evidence manifests and both finalize legal sidecars', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+    options.beforeRequest?.()
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  }
+  const variants = [EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards, EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl] as const
+  const sidecars = []
+  const manifests = []
+  let candidatePrompt = ''
+  let controlPrompt = ''
+  for (const writerVariant of variants) {
+    const spec = specFor(f, 'coarse')
+    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec, writerVariant })
+    assert.equal(adapter.writerVersion, EVIDENCE_GENERATION_WRITER_VERSION)
+    assert.equal(adapter.writerVariant, writerVariant)
+    await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
+    const requestId = `writer-${writerVariant}`
+    const prepared = await adapter.requestAdapter.prepare(request(f, requestId))
+    const prompt = prepared.messages.find(message => message.role === 'user')!.content
+    assert.ok(prompt.includes('为每道新问题添加 evidenceIds 数组'))
+    assert.ok(prompt.includes('本次证据批次为 1/1'))
+    if (writerVariant === EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards) {
+      candidatePrompt = prompt
+      assert.ok(prompt.includes('选题卡（不可信规划提示'))
+      assert.ok(prompt.includes('Topic 0'))
+    } else {
+      controlPrompt = prompt
+      assert.ok(!prompt.includes('选题卡（不可信规划提示'))
+      assert.ok(!prompt.includes('Topic 0'))
+    }
+    await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+    const manifest = adapter.metadata()[0].manifest
+    manifests.push(manifest)
+    const questions = Array.from({ length: 8 }, (_, index) => question(`writer-q-${index}`, index))
+    for (const [index, item] of questions.entries()) adapter.requestAdapter.acceptQuestion({ requestId, rawQuestion: { evidenceIds: [manifest.packedIds[index % manifest.packedIds.length]] }, question: item })
+    sidecars.push(await adapter.finalize(result(f, questions)))
+  }
+  assert.ok(candidatePrompt.includes('为每道新问题添加 evidenceIds 数组') && controlPrompt.includes('为每道新问题添加 evidenceIds 数组'))
+  for (const key of ['selectedIds', 'requiredIds', 'packedIds', 'omitted', 'sources'] as const) assert.deepEqual(manifests[0][key], manifests[1][key])
+  assert.deepEqual(sidecars[0].questions.map(item => item.evidenceIds), sidecars[1].questions.map(item => item.evidenceIds))
+  assert.ok(sidecars.every(sidecar => sidecar.questions.length === 8 && sidecar.questions.every(item => item.verification === 'source-bound-unverified')))
+
+  for (const invalidVariant of ['third-writer', null]) {
+    let resolved = 0
+    const countedStore = { ...f.store, async resolve(...args: Parameters<typeof f.store.resolve>) { resolved++; return f.store.resolve(...args) } }
+    await assert.rejects(createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), store: countedStore, writerVariant: invalidVariant as never }), (error: unknown) => error instanceof WorkflowError && error.code === 'invalid-argument')
+    assert.equal(resolved, 0)
+  }
 })
 
 test('dispatch uses captured profile, settles a repair against the same ledger and finalizes a secret-free sidecar', async t => {

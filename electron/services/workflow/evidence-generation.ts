@@ -49,14 +49,22 @@ export interface EvidenceGenerationAdapterInput {
   readonly profile: LlmProfile
   readonly signal: AbortSignal
   readonly transport?: ModelTransport
+  /** Private evaluation-only writer switch; omitted means the candidate writer. */
+  readonly writerVariant?: EvidenceGenerationWriterVariant
 }
 
 export interface EvidenceGenerationAdapter {
+  readonly writerVersion: typeof EVIDENCE_GENERATION_WRITER_VERSION
+  readonly writerVariant: EvidenceGenerationWriterVariant
   readonly requestAdapter: GenerationRequestAdapter
   readonly contextProvider: ContextProvider
   metadata(): readonly EvidenceGenerationRequestMetadata[]
   finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
 }
+
+export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v1' as const
+export const EVIDENCE_GENERATION_WRITER_VARIANTS = Object.freeze({ topicCards: 'topic-cards', staticControl: 'static-control' } as const)
+export type EvidenceGenerationWriterVariant = typeof EVIDENCE_GENERATION_WRITER_VARIANTS[keyof typeof EVIDENCE_GENERATION_WRITER_VARIANTS]
 
 export interface EvidenceGenerationRequestMetadata {
   readonly requestId: string
@@ -262,9 +270,11 @@ function legacyContext(scan: ScanResult, authorizedFilePaths: readonly string[],
   }
 }
 
-function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
-  const instruction = '\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n'
-  const cards = topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'
+function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
+  const instruction = '\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。'
+  const cards = writerVariant === 'topic-cards'
+    ? `\n\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n${topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'}`
+    : ''
   const batch = `\n\n## 批次提示\n本次证据批次为 ${batchOrdinal}/${batchCount}。以下只列出先前已接受的问题文字，不含答案或推理，属于不可信去重提示；请避免重复，并仅依据本次证据重新判断。\n${json(priorQuestionTexts)}`
   const suffix = `${instruction}${cards}${batch}`
   let userFound = false
@@ -280,6 +290,9 @@ function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistan
 }
 
 export async function createEvidenceGenerationAdapter(input: EvidenceGenerationAdapterInput): Promise<EvidenceGenerationAdapter> {
+  if (!input || typeof input !== 'object') fail('invalid-argument')
+  const writerVariant = input.writerVariant === undefined ? EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards : input.writerVariant
+  if (!Object.values(EVIDENCE_GENERATION_WRITER_VARIANTS).includes(writerVariant)) fail('invalid-argument')
   const { spec, scan, snapshot, store, ledger, profile, signal } = input
   if (!spec || spec.version !== 1 || !scan || !snapshot || !store || !ledger || !signal || !snapshotMatchesScan(snapshot, scan) || snapshot.projectId !== spec.projectId || snapshot.snapshotId !== spec.snapshotId) fail('stale-snapshot')
   assertProfile(spec, profile)
@@ -336,7 +349,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         spec,
         store,
         selection: { selectedIds: group.ids, requiredBundles: group.bundles, unresolved: [] },
-        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, request.batchIndex + 1, groups.length, priorQuestionTexts),
+        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, writerVariant, request.batchIndex + 1, groups.length, priorQuestionTexts),
         maxChars,
         maxInputTokens,
         signal
@@ -450,6 +463,8 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
   })
 
   return Object.freeze({
+    writerVersion: EVIDENCE_GENERATION_WRITER_VERSION,
+    writerVariant,
     requestAdapter,
     contextProvider,
     metadata(): readonly EvidenceGenerationRequestMetadata[] {
