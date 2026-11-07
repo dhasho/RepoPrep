@@ -76,7 +76,13 @@ export function createEvidenceStore(snapshot: WorkflowProjectSnapshot, options?:
           readStatus: 'complete',
           parseStatus: read.indexStatus === 'available' ? 'parsed' : 'unavailable',
           omission: 'none',
-          transformationVersion: read.redactionVersion
+          transformationVersion: read.redactionVersion,
+          ...(read.redactionSummary ? {
+            redactionSummary: Object.freeze({
+              totalMatches: read.redactionSummary.totalMatches,
+              matchesByCategory: Object.freeze({ ...read.redactionSummary.matchesByCategory })
+            })
+          } : {})
         }))
         records.push(...created)
         bytes += addedBytes

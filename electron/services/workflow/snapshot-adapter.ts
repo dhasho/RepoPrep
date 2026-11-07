@@ -18,6 +18,7 @@ const DEFAULT_POLICY = 'scanner-policy-v1'
 const DEFAULT_REDACTION = 'sensitive-content-v1'
 const DEFAULT_PARSER = 'source-analysis-v1'
 const ownedReads = new WeakMap<object, SnapshotState>()
+const snapshotScanBindings = new WeakMap<object, { readonly scan: ScanResult; readonly root: string; readonly name: string }>()
 
 type StateFile = { scanFile: ScannedFile; file: WorkflowFile }
 type SnapshotState = { invalid: boolean; cache: Map<string, ApprovedProjectRead>; cacheBytes: number; readonly fileMap: Map<string, StateFile> }
@@ -73,6 +74,8 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
   analyzer?: Analyzer
 }): Promise<WorkflowProjectSnapshot> {
   if (!scan || typeof scan !== 'object' || !Array.isArray(scan.files) || !options || !validIdentity(options.projectId)) fail('invalid-argument')
+  const capturedRoot = scan.root
+  const capturedName = scan.name
   const policyVersion = options.policyVersion ?? DEFAULT_POLICY
   const redactionVersion = options.redactionVersion ?? DEFAULT_REDACTION
   const parserVersion = options.parserVersion ?? DEFAULT_PARSER
@@ -126,6 +129,8 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
       const normalized = raw.replace(/\r\n?/g, '\n')
       const redaction = redactSensitiveContent(normalized)
       const content = redaction.content
+      const matchesByCategory: Record<string, number> = Object.create(null) as Record<string, number>
+      for (const match of redaction.matches) matchesByCategory[match.category] = (matchesByCategory[match.category] ?? 0) + match.count
       const beforeLines = (normalized.match(/\n/g) ?? []).length
       const afterLines = (content.match(/\n/g) ?? []).length
       let analysis = null
@@ -133,6 +138,7 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
       if (analysis && !analysis.parseable) analysis = null
       const read = freezeDeep({ snapshotId, fileId, relPath: entry.file.relPath, sourceKind: entry.file.sourceKind, text: content,
         contentHash: digest(content), readBytes: entry.scanFile.size, lineMapping: redaction.totalMatches === 0 && beforeLines === afterLines ? 'preserved' as const : 'unknown' as const,
+        redactionSummary: { totalMatches: redaction.totalMatches, matchesByCategory },
         redactionVersion, parserVersion, analysis, indexStatus: analysis ? 'available' as const : 'unavailable' as const })
       checkAbort(signal)
       if (state.cacheBytes + Buffer.byteLength(content, 'utf8') <= maxCacheBytes) { state.cache.set(fileId, read); state.cacheBytes += Buffer.byteLength(content, 'utf8') }
@@ -143,5 +149,15 @@ export async function createWorkflowSnapshot(scan: ScanResult, options: {
       return !!value && typeof value === 'object' && ownedReads.get(value as object) === state && !state.invalid
     }
   }
-  return freezeDeep(result)
+  const issued = freezeDeep(result)
+  if (scan.root !== capturedRoot || scan.name !== capturedName) fail('permission-denied')
+  snapshotScanBindings.set(issued, Object.freeze({ scan, root: capturedRoot, name: capturedName }))
+  return issued
+}
+
+/** True only for the exact scan object from which an issued snapshot was captured. */
+export function snapshotMatchesScan(snapshot: WorkflowProjectSnapshot, scan: ScanResult): boolean {
+  if (!snapshot || typeof snapshot !== 'object' || !scan || typeof scan !== 'object') return false
+  const binding = snapshotScanBindings.get(snapshot as object)
+  return Boolean(binding && binding.scan === scan && scan.root === binding.root && scan.name === binding.name)
 }

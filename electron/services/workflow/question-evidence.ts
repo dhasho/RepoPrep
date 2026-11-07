@@ -142,7 +142,7 @@ function survivingQuestions(result: InterviewResult, maxQuestions: number): Ques
 export function createQuestionEvidenceRegistry(spec: RunSpec): QuestionEvidenceRegistry {
   if (!spec || spec.version !== 1 || !Number.isSafeInteger(spec.budget.total.maxModelRequests) || spec.budget.total.maxModelRequests < 1) reject()
   const maxRequests = spec.budget.total.maxModelRequests
-  const maxCandidates = Math.min(128, maxRequests * 8)
+  const maxCandidates = Math.min(1024, maxRequests * spec.questionBudget.max)
   const requests = new Map<string, RegisteredRequest>()
   const bindings = new Map<string, CapturedBinding>()
   let candidateCount = 0

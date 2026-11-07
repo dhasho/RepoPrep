@@ -19,7 +19,7 @@ import { WorkflowError } from './project-contract.ts'
 
 const sourceText = 'export const answer = 42\n'
 const profile = { id: 'profile-01', name: 'Synthetic', baseUrl: 'https://synthetic.invalid/v1', apiKey: 'DO_NOT_COPY_SECRET', model: 'synthetic', protocol: 'openai' as const, contextWindowTokens: 49152, maxOutputTokens: 4096 }
-const makeSpec = (snapshotId = 'snapshot-01') => createRunSpec({ version: 1, runId: 'run-01', projectId: 'project-01', snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
+const makeSpec = (snapshotId = 'snapshot-01', granularity: 'coarse' | 'medium' | 'fine' = 'fine', maxModelRequests?: number) => createRunSpec({ version: 1, runId: 'run-01', projectId: 'project-01', snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity, model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', ...(maxModelRequests !== undefined ? { budget: { maxModelRequests } } : {}) })
 const buildMessages = (contextText: string) => [{ role: 'system' as const, content: 'System.' }, { role: 'user' as const, content: `Quoted source:\n${contextText}` }]
 
 async function packedFixture(snapshotId = 'snapshot-01') {
@@ -138,4 +138,13 @@ test('request registrations are bounded by the immutable RunSpec budget', async 
   const registry = createQuestionEvidenceRegistry(tinySpec)
   registry.registerRequest('request-1', context)
   expectCode(() => registry.registerRequest('request-2', context), 'invalid-argument')
+})
+
+test('one coarse model request can bind ten accepted questions within its question budget', async () => {
+  const { context, evidenceId } = await packedFixture()
+  const registry = createQuestionEvidenceRegistry(makeSpec('snapshot-01', 'coarse', 1))
+  registry.registerRequest('request-1', context)
+  const questions = Array.from({ length: 10 }, (_, index) => question(`coarse-${index + 1}`, { question: `Question number ${index + 1}?` }))
+  for (const item of questions) registry.capture({ requestId: 'request-1', rawQuestion: { evidenceIds: [evidenceId] }, question: item })
+  assert.equal(registry.finalize(result(questions)).questions.length, 10)
 })

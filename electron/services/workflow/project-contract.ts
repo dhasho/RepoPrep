@@ -47,6 +47,8 @@ export interface ApprovedProjectRead {
   readonly contentHash: string
   readonly readBytes: number
   readonly lineMapping: 'preserved' | 'unknown'
+  /** Counts produced while redacting the source; absent only for legacy/synthetic fixtures. */
+  readonly redactionSummary?: Readonly<{ totalMatches: number; matchesByCategory: Readonly<Record<string, number>> }>
   readonly redactionVersion: string
   readonly parserVersion: string
   readonly analysis: SourceAnalysis | null
@@ -85,6 +87,7 @@ export interface EvidenceRecord {
   readonly parseStatus: 'parsed' | 'unavailable'
   readonly omission: 'none'
   readonly transformationVersion: string
+  readonly redactionSummary?: Readonly<{ totalMatches: number; matchesByCategory: Readonly<Record<string, number>> }>
 }
 
 export interface WorkflowEvidenceStore {
