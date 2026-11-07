@@ -88,6 +88,9 @@ test('synchronous startup stages encrypted state and Electron paths before readi
     assert.deepEqual(stages, ['authorization', 'claim', 'private-runtime', 'saved-public-profile', 'settings-staging', 'electron-paths'])
     assert.equal(fs.existsSync(path.join(claimsDir, `${canonicalClaim.claimId}.started`)), false)
   } finally {
+    assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()))
+    assert.match(path.basename(root), /^m06-startup-order-/u)
+    assert.equal(fs.lstatSync(root).isSymbolicLink(), false)
     fs.rmSync(root, { recursive: true, force: true })
   }
 })

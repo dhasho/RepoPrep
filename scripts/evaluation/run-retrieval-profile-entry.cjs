@@ -71,10 +71,9 @@ async function main(options) {
   // Validate authorization and claim synchronously; stage OSCrypt state and set all Electron paths before yielding.
   let claim, currentStage = 'authorization'
   try {
-    const prepared = prepareStartupSynchronously(options, { setStage: stage => { currentStage = stage } })
+    const prepared = prepareStartupSynchronously(options, { setStage: stage => { currentStage = stage }, onClaim: value => { claim = value } })
     claim = prepared.claim
     const { binding, profileId } = prepared
-    currentStage = 'app-ready'
     currentStage = 'app-ready'
     const runnerPath = path.join(options.repoRoot, 'scripts/agentic/retrieval-eval.mjs')
     const runner = await import(require('node:url').pathToFileURL(runnerPath).href)
@@ -122,6 +121,7 @@ function prepareStartupSynchronously(options, dependencies = {}) {
   const binding = checkAuthorization(options.repoRoot, options.authorizationPath)
   setStage('claim')
   const claim = options.credentialPreflight ? existingUnstartedClaimSync(options, binding) : createClaimSync(options.repoRoot, binding)
+  dependencies.onClaim?.(claim)
   setStage('private-runtime')
   plainDir(options.runtimeRoot)
   secureRuntime()
