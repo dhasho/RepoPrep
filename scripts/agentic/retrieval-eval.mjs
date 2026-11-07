@@ -245,7 +245,7 @@ async function materializeProject(project, parent) {
   return root
 }
 
-function runSpec(task, profile, snapshot, runId) {
+export function createRetrievalRunSpec(task, profile, snapshot, runId) {
   const model = {
     profileId: profile.id,
     endpointFingerprint: endpointHash(profile.baseUrl),
@@ -260,7 +260,6 @@ function runSpec(task, profile, snapshot, runId) {
     version: 1, runId, projectId: snapshot.projectId, snapshotId: snapshot.snapshotId,
     strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: task.roleFocus, granularity: task.granularity,
     model, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1',
-    budget: { maxModelRequests: task.granularity === 'fine' ? 14 : 5, inputTokens: 18_000, outputTokens: 6_000, readBytes: 2 * 1024 * 1024, wallClockMs: 180_000 }
   })
 }
 
@@ -372,9 +371,15 @@ export function evaluationConfigFingerprint(provider) {
 }
 
 export function evaluationRunConfigFingerprint(task, provider) {
+  const spec = createRetrievalRunSpec(task, {
+    id: 'evaluation-profile', model: provider.model, baseUrl: 'https://fingerprint.invalid/v1',
+    protocol: provider.protocol, temperature: provider.temperature, reasoningEffort: provider.reasoningEffort ?? undefined,
+    contextWindowTokens: provider.contextWindowTokens, maxOutputTokens: RETRIEVAL_LIMITS.perRequestOutputTokens,
+    endpointFingerprint: provider.endpointFingerprint
+  }, { projectId: task.projectId, snapshotId: 'evaluation-snapshot' }, 'evaluation-run')
   return sha256(Buffer.from(canonicalJson({
     globalConfiguration: evaluationConfigFingerprint(provider), task: { id: task.id, projectId: task.projectId, objective: task.objective, roleFocus: task.roleFocus, granularity: task.granularity, indexMode: task.indexMode },
-    budget: { maxModelRequests: task.granularity === 'fine' ? 14 : 5, inputTokens: 18_000, outputTokens: 6_000, readBytes: 2 * 1024 * 1024, wallClockMs: 180_000 }
+    budget: { global: spec.budget.total, investigation: spec.budget.investigation, generationReserve: spec.budget.generationReserve, generationInputTokens: spec.generationInputTokens, generationOutputTokens: spec.generationOutputTokens }
   })))
 }
 
@@ -547,7 +552,7 @@ export async function runRetrievalEvaluation({ repoRoot = path.resolve(HERE, '..
           const scan = await scanProject(projectRoot)
           snapshot = await createWorkflowSnapshot(scan, { projectId: task.projectId, ...(task.indexMode === 'unavailable' ? { analyzer: () => null, parserVersion: 'm06-index-disabled-v1' } : {}) })
           store = createEvidenceStore(snapshot)
-          const spec = runSpec(task, boundProfile, snapshot, `${task.id}-r${repeat}`)
+          const spec = createRetrievalRunSpec(task, boundProfile, snapshot, `${task.id}-r${repeat}`)
           ledger = createBudgetLedger(spec)
           const guardedTransport = createGuardedTransport({
             collector: globalCollector,

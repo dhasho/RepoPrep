@@ -7,7 +7,7 @@ import test from 'node:test'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
-import { recomputeRetrievalMetrics, verifyRetrievalReport, runRetrievalEvaluation, verifyProfileBinding, evaluationConfigFingerprint, evaluationRunConfigFingerprint, createGlobalBudgetCollector, createGuardedTransport, createOneShotAuthorizationClaim, loadRetrievalBundle, validateRetrievalBundle, RETRIEVAL_LIMITS } from './retrieval-eval.mjs'
+import { recomputeRetrievalMetrics, verifyRetrievalReport, runRetrievalEvaluation, verifyProfileBinding, evaluationConfigFingerprint, evaluationRunConfigFingerprint, createGlobalBudgetCollector, createGuardedTransport, createOneShotAuthorizationClaim, createRetrievalRunSpec, loadRetrievalBundle, validateRetrievalBundle, RETRIEVAL_LIMITS } from './retrieval-eval.mjs'
 import { normalizeBaseUrl } from '../../electron/services/llm.ts'
 import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
 import { createModelGateway } from '../../electron/services/workflow/model-gateway.ts'
@@ -128,6 +128,44 @@ test('guarded default transport calls the M05 guard once and makes one mocked .i
     assert.equal(collector.snapshot().reservedInputTokens, 0)
     assert.equal(collector.snapshot().actualInputTokens, 7)
     assert.deepEqual(journal.map(event => event.type), ['request-admitted', 'provider-usage'])
+  } finally { globalThis.fetch = priorFetch }
+})
+
+test('actual retrieval RunSpec admits the first investigation request in every granularity', async () => {
+  const profile = { id: 'synthetic-profile', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152, maxOutputTokens: 2000 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const priorFetch = globalThis.fetch
+  let fetchCount = 0
+  globalThis.fetch = async (input, init) => {
+    fetchCount++
+    assert.match(String(input), /^https:\/\/provider\.invalid\//u)
+    assert.equal(init.method, 'POST')
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"actions":[]}' } }], usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  try {
+    for (const granularity of ['coarse', 'medium', 'fine']) {
+      const task = { id: `budget-${granularity}`, projectId: 'budget-project', objective: 'synthetic test objective', roleFocus: 'backend', granularity, indexMode: 'normal' }
+      const snapshot = { projectId: task.projectId, snapshotId: `snapshot-${granularity}` }
+      const spec = createRetrievalRunSpec(task, profile, snapshot, `run-${granularity}`)
+      assert.equal(spec.budget.total.inputTokens, 128_000)
+      assert.equal(spec.budget.total.outputTokens, 65_536)
+      assert.equal(spec.budget.total.wallClockMs, 600_000)
+      assert.equal(spec.budget.investigation.maxModelRequests, 3)
+      assert.equal(spec.budget.investigation.maxToolCalls, 8)
+      assert.equal(spec.budget.investigation.inputTokens, 18_000)
+      assert.equal(spec.budget.investigation.outputTokens, 6_000)
+      assert.equal(spec.budget.investigation.readBytes, 2 * 1024 * 1024)
+      assert.equal(spec.budget.investigation.wallClockMs, 180_000)
+      const ledger = createBudgetLedger(spec)
+      const collector = createGlobalBudgetCollector({ maxRequests: 120, maxInputTokens: 720_000, maxOutputTokens: 240_000 })
+      const guarded = createGuardedTransport({ collector, runId: spec.runId, getReservation: () => ledger.snapshot().reservations.find(item => item.state === 'reserved' && item.stage === 'investigation'), appendJournal: () => {} })
+      const gateway = createModelGateway(spec, profile, ledger, { transport: guarded })
+      const completion = await gateway.complete({ id: `decision-${granularity}`, stage: 'investigation', messages: [{ role: 'user', content: 'synthetic only' }] })
+      assert.equal(completion.content, '{"actions":[]}')
+      assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+      assert.equal(collector.snapshot().admittedRequests, 1)
+    }
+    assert.equal(fetchCount, 3)
   } finally { globalThis.fetch = priorFetch }
 })
 

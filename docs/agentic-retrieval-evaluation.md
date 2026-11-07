@@ -1,6 +1,6 @@
 # M06 retrieval evaluation runner
 
-The runner evaluates the M06 investigation controller on the 20 frozen development retrieval tasks, twice per task (40 cells). It materializes only the authored `projects.json` source files into temporary project roots. Task objectives and role/granularity are passed to the controller; retrieval labels remain in the evaluator for scoring and are never included in controller inputs.
+The runner evaluates the M06 investigation controller on the 20 frozen development retrieval tasks, twice per task (40 cells). It materializes only the authored `projects.json` source files into temporary project roots. Task objectives and role/granularity are passed to the controller; retrieval labels remain in the evaluator for scoring and are never included in controller inputs. Each cell uses the actual `RunSpec` defaults for global input/output/read/time capacity, preserving the generator reserve; its investigation allowance remains the existing 3 requests, 8 tools, 18,000 input tokens, 6,000 output tokens, 2 MiB reads, and 180 seconds.
 
 ## Authorization and execution
 
