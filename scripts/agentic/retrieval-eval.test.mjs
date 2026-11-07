@@ -95,6 +95,56 @@ test('incomplete usage keeps exact totals unknown and reports settled usage plus
   assert.ok(verifyRetrievalReport(report, bundle).issues.includes('receipt-or-limit-invalid'))
 })
 
+test('settled usage survives failed output when retrieval diagnostics are unavailable', () => {
+  const report = syntheticReport()
+  for (const cell of report.runs.slice(1)) {
+    cell.receipt.providerUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+    cell.receipt.knownProviderUsage = { ...cell.receipt.providerUsage }
+    cell.receipt.chargedTokens = { inputTokens: 0, outputTokens: 0 }
+    cell.receipt.reservations[0].reservedInputTokens = 0
+    cell.receipt.reservations[0].reservedOutputTokens = 0
+    cell.receipt.reservations[0].usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+  }
+  const receipt = completeReceipt()
+  receipt.requests = 2
+  receipt.providerUsage = { inputTokens: 2184, outputTokens: 2452, totalTokens: 4636 }
+  receipt.knownProviderUsage = { ...receipt.providerUsage }
+  receipt.chargedTokens = { inputTokens: 2184, outputTokens: 2452 }
+  receipt.reservations = [
+    { ...receipt.reservations[0], id: 'inv-00000000-0000-4000-8000-000000000010', reservedInputTokens: 1000, usage: { inputTokens: 839, outputTokens: 452, totalTokens: 1291 } },
+    { ...receipt.reservations[0], id: 'inv-00000000-0000-4000-8000-000000000011', reservedInputTokens: 1500, usage: { inputTokens: 1345, outputTokens: 2000, totalTokens: 3345 } }
+  ]
+  receipt.readRequests = null
+  receipt.repeatedReads = null
+  receipt.invalidToolExecutions = null
+  report.runs[0] = { ...report.runs[0], status: 'failed', stopReason: 'error', receipt }
+
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.matrixComplete, true)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.inputTokens, 2184)
+  assert.equal(metrics.outputTokens, 2452)
+  assert.equal(metrics.diagnosticsComplete, false)
+  assert.equal(metrics.invalidToolExecution, null)
+  assert.equal(metrics.repeatedReadRate, null)
+  assert.equal(metrics.invalidEvidence, 0)
+  assert.equal(metrics.limitViolations, 0)
+  assert.equal(metrics.limitsComplete, true)
+  assert.ok(verifyRetrievalReport(report, bundle).issues.includes('diagnostics-incomplete-or-evidence-invalid'))
+})
+
+test('complete synthetic matrix has independent receipt, diagnostic, and cap validation', () => {
+  const report = syntheticReport()
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.matrixComplete, true)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.diagnosticsComplete, true)
+  assert.equal(metrics.limitsComplete, true)
+  assert.equal(metrics.invalidToolExecution, 0)
+  assert.equal(metrics.invalidEvidence, 0)
+  assert.equal(metrics.limitViolations, 0)
+})
+
 test('incomplete matrix reports missing cells without labeling them duplicate', () => {
   const report = syntheticReport()
   report.runs.pop()
@@ -109,7 +159,8 @@ test('unavailable failed-run evidence stays null and does not break aggregate ac
   const metrics = recomputeRetrievalMetrics(report, bundle)
   assert.equal(metrics.usageComplete, true)
   assert.equal(metrics.inputTokens, 400)
-  assert.ok(metrics.invalidToolExecution > 0)
+  assert.equal(metrics.invalidEvidence, null)
+  assert.equal(metrics.diagnosticsComplete, false)
 })
 
 test('model failure diagnostics retain only allowlisted scalar metadata', () => {
@@ -126,7 +177,7 @@ test('verifier binds selected metadata to retrieved metadata and enforces unavai
   indexFailure.condition.indexStatus = 'available'
   indexFailure.retrievedEvidence.forEach(item => { item.parseStatus = 'parsed' })
   const metrics = recomputeRetrievalMetrics(report, bundle)
-  assert.ok(metrics.invalidToolExecution > 0)
+  assert.ok(metrics.invalidEvidence > 0)
   assert.ok(metrics.completeEvidenceTaskRate < 1)
 })
 

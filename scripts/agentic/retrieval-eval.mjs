@@ -296,22 +296,25 @@ export function recomputeRetrievalMetrics(report, bundle) {
   const unique = new Set(cells.filter(Boolean).map(cell => `${cell.taskId}:${cell.repeat}`))
   const taskList = bundle?.retrievalTasks?.tasks ?? []
   const expectedCells = new Set(taskList.flatMap(task => [1, 2].map(repeat => `${task.id}:${repeat}`)))
-  let complete = 0, readRequests = 0, repeatedReads = 0, invalid = 0, limitViolations = 0, totalRequests = 0, knownInputTokens = 0, knownOutputTokens = 0, chargedInputTokens = 0, chargedOutputTokens = 0, unknownRequests = 0
+  let complete = 0, readRequests = 0, repeatedReads = 0, invalidEvidence = 0, invalidToolExecutions = 0, limitViolations = 0, totalRequests = 0, knownInputTokens = 0, knownOutputTokens = 0, chargedInputTokens = 0, chargedOutputTokens = 0, unknownRequests = 0
   let chargedUsageComplete = true
   let usageComplete = true
-  if (cells.length !== expectedCells.size || unique.size !== expectedCells.size || [...expectedCells].some(key => !unique.has(key)) || [...unique].some(key => !expectedCells.has(key))) {
-    limitViolations++
-  }
+  let diagnosticsComplete = true
+  let readStatsComplete = true
+  let limitsComplete = true
+  let runConfigurationComplete = true
+  let invalidEvidenceComplete = true
+  const matrixComplete = cells.length === expectedCells.size && unique.size === expectedCells.size && ![...expectedCells].some(key => !unique.has(key)) && ![...unique].some(key => !expectedCells.has(key))
   for (const cell of cells) {
-    if (!cell || typeof cell !== 'object') { usageComplete = false; chargedUsageComplete = false; limitViolations++; continue }
+    if (!cell || typeof cell !== 'object') { usageComplete = false; chargedUsageComplete = false; diagnosticsComplete = false; limitsComplete = false; continue }
     const task = tasks.get(cell.taskId), project = task && projects.get(task.projectId), label = labels.get(cell.taskId)
     const receipt = cell.receipt && typeof cell.receipt === 'object' ? cell.receipt : null
-    if (!task || !project || !label || !receipt || typeof receipt.usageComplete !== 'boolean') { usageComplete = false; chargedUsageComplete = false; limitViolations++; continue }
+    if (!task || !project || !label || !receipt || typeof receipt.usageComplete !== 'boolean') { usageComplete = false; chargedUsageComplete = false; diagnosticsComplete = false; limitsComplete = false; continue }
     if (!receipt.usageComplete) usageComplete = false
-    if (!report?.provider || typeof report.provider !== 'object' || cell.runConfigFingerprint !== evaluationRunConfigFingerprint(task, report.provider)) limitViolations++
+    if (!report?.provider || typeof report.provider !== 'object' || cell.runConfigFingerprint !== evaluationRunConfigFingerprint(task, report.provider)) runConfigurationComplete = false
     const reservations = Array.isArray(receipt.reservations) ? receipt.reservations : []
     const reservationIds = new Set(reservations.map(item => item?.id))
-    const validReceipts = reservationIds.size === reservations.length && reservations.length === receipt.requests && reservations.every(item => item && /^inv-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(item.id) && item.stage === 'investigation' && item.state === 'settled' && validUsage(item.usage) && Number.isSafeInteger(item.reservedInputTokens) && item.reservedInputTokens >= 0 && Number.isSafeInteger(item.reservedOutputTokens) && item.reservedOutputTokens >= 0 && Number.isSafeInteger(item.contextChars) && item.contextChars >= 0 && item.usage.inputTokens <= item.reservedInputTokens && item.usage.outputTokens <= item.reservedOutputTokens)
+    const validReceipts = reservationIds.size === reservations.length && reservations.length === receipt.requests && reservations.every(item => item && /^inv-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(item.id) && item.stage === 'investigation' && item.state === 'settled' && validUsage(item.usage) && Number.isSafeInteger(item.reservedInputTokens) && item.reservedInputTokens >= 0 && Number.isSafeInteger(item.reservedOutputTokens) && item.reservedOutputTokens >= 0 && Number.isSafeInteger(item.contextChars) && item.contextChars >= 0)
     const receiptInput = reservations.reduce((sum, item) => sum + (item?.state === 'settled' && validUsage(item.usage) ? item.usage.inputTokens : 0), 0)
     const receiptOutput = reservations.reduce((sum, item) => sum + (item?.state === 'settled' && validUsage(item.usage) ? item.usage.outputTokens : 0), 0)
     knownInputTokens += receiptInput
@@ -322,10 +325,23 @@ export function recomputeRetrievalMetrics(report, bundle) {
     if (!validReceipts || !known || known.inputTokens !== receiptInput || known.outputTokens !== receiptOutput || known.totalTokens !== receiptInput + receiptOutput || !charged || !Number.isSafeInteger(charged.inputTokens) || !Number.isSafeInteger(charged.outputTokens) || charged.inputTokens < receiptInput || charged.outputTokens < receiptOutput) usageComplete = false
     if ((receipt.usageComplete && (!validUsage(receipt.providerUsage) || receipt.providerUsage.inputTokens !== receiptInput || receipt.providerUsage.outputTokens !== receiptOutput)) || (!receipt.usageComplete && receipt.providerUsage !== null)) usageComplete = false
     const overspend = receipt.overspend && typeof receipt.overspend === 'object' && !Array.isArray(receipt.overspend) ? Object.values(receipt.overspend) : null
-    if (!Number.isSafeInteger(receipt.readRequests) || receipt.readRequests < 0 || !Number.isSafeInteger(receipt.repeatedReads) || receipt.repeatedReads < 0 || !receipt.overspend || Array.isArray(receipt.overspend) || Object.keys(receipt.overspend).sort().join(',') !== 'inputTokens,outputTokens,readBytes' || !overspend || overspend.some(value => !Number.isSafeInteger(value) || value < 0 || value !== 0) || typeof receipt.blocked !== 'boolean' || receipt.blocked) usageComplete = false
-    if (!Array.isArray(cell.selectedEvidence) || !Array.isArray(cell.retrievedEvidence)) { invalid++; limitViolations++ }
+    const readStatsAvailable = Number.isSafeInteger(receipt.readRequests) && receipt.readRequests >= 0 && Number.isSafeInteger(receipt.repeatedReads) && receipt.repeatedReads >= 0
+    const readStatsValid = readStatsAvailable && receipt.repeatedReads <= receipt.readRequests
+    const executionStatsValid = Number.isSafeInteger(receipt.invalidToolExecutions) && receipt.invalidToolExecutions >= 0
+    const overspendValid = receipt.overspend && typeof receipt.overspend === 'object' && !Array.isArray(receipt.overspend) && Object.keys(receipt.overspend).sort().join(',') === 'inputTokens,outputTokens,readBytes' && overspend?.every(value => Number.isSafeInteger(value) && value >= 0)
+    const capDiagnosticsValid = Number.isFinite(receipt.readBytes) && receipt.readBytes >= 0 && Number.isFinite(receipt.elapsedMs) && receipt.elapsedMs >= 0 && overspendValid && typeof receipt.blocked === 'boolean'
+    if (!readStatsValid || !executionStatsValid || !capDiagnosticsValid) diagnosticsComplete = false
+    if (!readStatsAvailable) readStatsComplete = false
+    if (!executionStatsValid) invalidToolExecutions = null
+    else if (invalidToolExecutions !== null) invalidToolExecutions += receipt.invalidToolExecutions
+    if (!capDiagnosticsValid) limitsComplete = false
     const selectedEvidence = Array.isArray(cell.selectedEvidence) ? cell.selectedEvidence : []
     const retrievedEvidence = Array.isArray(cell.retrievedEvidence) ? cell.retrievedEvidence : []
+    const evidenceAvailable = Array.isArray(cell.selectedEvidence) && Array.isArray(cell.retrievedEvidence)
+    if (!evidenceAvailable) {
+      invalidEvidenceComplete = false
+      diagnosticsComplete = false
+    }
     const selectedIds = new Set(selectedEvidence.map(item => item?.id))
     const retrievedIds = new Set(retrievedEvidence.map(item => item?.id))
     const metadataById = new Map(retrievedEvidence.filter(item => item && typeof item.id === 'string').map(item => [item.id, item]))
@@ -333,26 +349,27 @@ export function recomputeRetrievalMetrics(report, bundle) {
     const conditionValid = cell.condition && cell.condition.indexMode === task.indexMode && cell.condition.indexStatus === observedIndexStatus && (task.indexMode !== 'unavailable' || cell.condition.indexStatus === 'unavailable')
     const allRetrievedValid = Array.isArray(cell.retrievedEvidence) && conditionValid && retrievedIds.size === retrievedEvidence.length && retrievedEvidence.every(item => validEvidenceMetadata(item, project) && (task.indexMode !== 'unavailable' || item.parseStatus === 'unavailable'))
     const allSelectedValid = Array.isArray(cell.selectedEvidence) && conditionValid && selectedIds.size === selectedEvidence.length && selectedEvidence.every(item => validEvidenceMetadata(item, project) && metadataById.has(item.id) && canonicalJson(item) === canonicalJson(metadataById.get(item.id)))
-    if (!allRetrievedValid || !allSelectedValid) invalid++
-    if (!Number.isSafeInteger(receipt.invalidToolExecutions) || receipt.invalidToolExecutions < 0) invalid++
-    else invalid += receipt.invalidToolExecutions
-    readRequests += Number.isSafeInteger(receipt.readRequests) && receipt.readRequests >= 0 ? receipt.readRequests : 0
-    repeatedReads += Number.isSafeInteger(receipt.repeatedReads) && receipt.repeatedReads >= 0 ? receipt.repeatedReads : 0
+    if (evidenceAvailable && (!allRetrievedValid || !allSelectedValid)) invalidEvidence++
+    if (readStatsAvailable) {
+      readRequests += receipt.readRequests
+      repeatedReads += receipt.repeatedReads
+    }
     const requestCount = receipt.requests
     totalRequests += Number.isSafeInteger(requestCount) ? requestCount : 0
     if (charged && Number.isSafeInteger(charged.inputTokens) && charged.inputTokens >= 0 && Number.isSafeInteger(charged.outputTokens) && charged.outputTokens >= 0) {
       chargedInputTokens += charged.inputTokens
       chargedOutputTokens += charged.outputTokens
     } else chargedUsageComplete = false
-    if (!Number.isSafeInteger(requestCount) || requestCount < 1 || requestCount > 3 || !Number.isSafeInteger(receipt.providerUsage?.inputTokens) && receipt.usageComplete || !Number.isSafeInteger(receipt.providerUsage?.outputTokens) && receipt.usageComplete || receipt.providerUsage?.inputTokens > 18_000 || receipt.providerUsage?.outputTokens > 6_000 || !Number.isFinite(receipt.readBytes) || receipt.readBytes < 0 || receipt.readBytes > 2 * 1024 * 1024 || !Number.isFinite(receipt.elapsedMs) || receipt.elapsedMs < 0 || receipt.elapsedMs > 180_000 || !Number.isSafeInteger(receipt.repeatedReads) || receipt.repeatedReads > receipt.readRequests || reservations.some(item => validUsage(item?.usage) && item.usage.outputTokens > RETRIEVAL_LIMITS.perRequestOutputTokens)) limitViolations++
+    if (!Number.isSafeInteger(requestCount) || requestCount < 1 || requestCount > 3 || (receipt.usageComplete && (!validUsage(receipt.providerUsage) || receipt.providerUsage.inputTokens > 18_000 || receipt.providerUsage.outputTokens > 6_000)) || (Number.isFinite(receipt.readBytes) && (receipt.readBytes > 2 * 1024 * 1024)) || (Number.isFinite(receipt.elapsedMs) && receipt.elapsedMs > 180_000) || (readStatsAvailable && receipt.repeatedReads > receipt.readRequests) || reservations.some(item => validUsage(item?.usage) && (item.usage.outputTokens > RETRIEVAL_LIMITS.perRequestOutputTokens || item.usage.inputTokens > item.reservedInputTokens || item.usage.outputTokens > item.reservedOutputTokens)) || overspend?.some(value => Number.isSafeInteger(value) && value > 0) || receipt.blocked === true) limitViolations++
     const completeTask = label.requiredEvidenceGroups.every(group => group.allOf.every(ref => coversRequirement(ref, selectedEvidence, project)))
     if (allSelectedValid && cell.status === 'completed' && cell.stopReason === 'finished' && completeTask) complete++
   }
   const completeRate = complete / RETRIEVAL_LIMITS.runs
-  const repeatedReadRate = readRequests ? repeatedReads / readRequests : (repeatedReads ? 1 : 0)
-  if ((chargedUsageComplete && (chargedInputTokens > RETRIEVAL_LIMITS.inputTokens || chargedOutputTokens > RETRIEVAL_LIMITS.outputTokens)) || knownInputTokens > RETRIEVAL_LIMITS.inputTokens || knownOutputTokens > RETRIEVAL_LIMITS.outputTokens) limitViolations++
+  const repeatedReadRate = readStatsComplete ? (readRequests ? repeatedReads / readRequests : (repeatedReads ? 1 : 0)) : null
+  if (!chargedUsageComplete) limitsComplete = false
+  if (chargedUsageComplete && (chargedInputTokens > RETRIEVAL_LIMITS.inputTokens || chargedOutputTokens > RETRIEVAL_LIMITS.outputTokens) || knownInputTokens > RETRIEVAL_LIMITS.inputTokens || knownOutputTokens > RETRIEVAL_LIMITS.outputTokens) limitViolations++
   return {
-    runCount: cells.length, uniqueCells: unique.size, completeEvidenceTaskRate: completeRate, invalidToolExecution: invalid, repeatedReadRate, limitViolations, usageComplete,
+    runCount: cells.length, uniqueCells: unique.size, matrixComplete, completeEvidenceTaskRate: completeRate, invalidToolExecution: invalidToolExecutions, invalidEvidence: invalidEvidenceComplete ? invalidEvidence : null, repeatedReadRate, diagnosticsComplete, limitViolations, limitsComplete, runConfigurationComplete, usageComplete,
     requests: totalRequests, unknownRequests, inputTokens: usageComplete ? knownInputTokens : null, outputTokens: usageComplete ? knownOutputTokens : null,
     knownInputTokens, knownOutputTokens,
     chargedInputTokens: chargedUsageComplete ? chargedInputTokens : null, chargedOutputTokens: chargedUsageComplete ? chargedOutputTokens : null
@@ -365,12 +382,14 @@ export function verifyRetrievalReport(report, bundle, expected = {}) {
   if (!bundle || validateRetrievalBundle(bundle).valid !== true) issues.push('dataset-invalid')
   if (!Array.isArray(report?.runs) || report.runs.length !== 40) issues.push('run-matrix-incomplete')
   const metrics = bundle ? recomputeRetrievalMetrics(report, bundle) : null
-  if (metrics && metrics.uniqueCells !== 40 && !issues.includes('run-matrix-incomplete')) issues.push('run-matrix-incomplete')
+  if (metrics && !metrics.matrixComplete && !issues.includes('run-matrix-incomplete')) issues.push('run-matrix-incomplete')
   if (metrics && metrics.uniqueCells < metrics.runCount) issues.push('run-matrix-duplicate')
   if (metrics && metrics.completeEvidenceTaskRate < RETRIEVAL_LIMITS.completeRate) issues.push('evidence-coverage-below-threshold')
-  if (metrics && metrics.invalidToolExecution !== 0) issues.push('invalid-tool-execution')
-  if (metrics && metrics.repeatedReadRate > RETRIEVAL_LIMITS.repeats) issues.push('repeated-read-rate-above-threshold')
-  if (metrics && (metrics.limitViolations !== 0 || !metrics.usageComplete)) issues.push('receipt-or-limit-invalid')
+  if (metrics && metrics.invalidToolExecution !== null && metrics.invalidToolExecution !== 0) issues.push('invalid-tool-execution')
+  if (metrics && (metrics.invalidEvidence !== null && metrics.invalidEvidence !== 0 || !metrics.diagnosticsComplete)) issues.push('diagnostics-incomplete-or-evidence-invalid')
+  if (metrics && !metrics.runConfigurationComplete) issues.push('run-configuration-invalid')
+  if (metrics && metrics.repeatedReadRate !== null && metrics.repeatedReadRate > RETRIEVAL_LIMITS.repeats) issues.push('repeated-read-rate-above-threshold')
+  if (metrics && (!metrics.limitsComplete || metrics.limitViolations !== 0 || !metrics.usageComplete)) issues.push('receipt-or-limit-invalid')
   if (!report?.provider || !HASH.test(report.provider.endpointFingerprint ?? '') || typeof report.provider.model !== 'string' || report.provider.protocol !== 'openai' || report.provider.temperature !== 0.4 || ![null, 'low', 'high'].includes(report.provider.reasoningEffort) || !Number.isSafeInteger(report.provider.contextWindowTokens) || report.provider.contextWindowTokens < 4096 || report.provider.maxOutputTokensPerRequest !== RETRIEVAL_LIMITS.perRequestOutputTokens) issues.push('provider-binding-invalid')
   else if (report.configurationFingerprint !== evaluationConfigFingerprint(report.provider)) issues.push('configuration-binding-invalid')
   if (expected.provider && report?.provider && ['endpointFingerprint', 'model', 'protocol', 'temperature', 'reasoningEffort', 'contextWindowTokens'].some(key => report.provider[key] !== expected.provider[key])) issues.push('provider-authorization-mismatch')
