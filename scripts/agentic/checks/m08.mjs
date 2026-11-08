@@ -90,9 +90,11 @@ function safeOutputRoot(reportPath, report) {
 async function readCell(outputRoot, cell, task, authorization, complete, bundle) {
   const prefix = `case-${String(cell.actualOrder).padStart(4, '0')}`
   const identity = cellIdentity(cell)
-  const metadataBytes = await safeRead(outputRoot, `${prefix}.metadata.json`, LIMIT.metadata)
+  const metadataFile = cell.metadataFile
+  if (metadataFile !== `${prefix}.metadata.json` && metadataFile !== `${prefix}.failure.json`) fail('M08_METADATA_PATH_INVALID')
+  const metadataBytes = await safeRead(outputRoot, metadataFile, LIMIT.metadata)
   const metadata = parse(metadataBytes)
-  if (cell.metadataFile !== `${prefix}.metadata.json` || !isRecord(cell.artifactHashes) || digest(metadataBytes) !== cell.artifactHashes.metadata) fail('M08_METADATA_HASH_INVALID')
+  if (!isRecord(cell.artifactHashes) || digest(metadataBytes) !== cell.artifactHashes.metadata) fail('M08_METADATA_HASH_INVALID')
   if (!complete && cell.execution?.status === 'failed') {
     if (cell.resultFile !== null || cell.sidecarFile !== null || Object.keys(cell.artifactHashes).join(',') !== 'metadata') fail('M08_PARTIAL_ARTIFACT_INVALID')
     if (!isRecord(metadata) || metadata.schemaVersion !== 1 || !same(metadata.cell, identity) || !same(metadata.execution, cell.execution) || !same(metadata.requests, cell.requests)) fail('M08_PARTIAL_METADATA_INVALID')
@@ -102,6 +104,7 @@ async function readCell(outputRoot, cell, task, authorization, complete, bundle)
     return { cell, requests: cell.requests }
   }
   if (cell.execution?.status !== 'succeeded' || cell.resultFile !== `${prefix}.result.json` || cell.sidecarFile !== `${prefix}.sidecar.json` ||
+    metadataFile !== `${prefix}.metadata.json` ||
     Object.keys(cell.artifactHashes).sort().join(',') !== 'metadata,result,sidecar') fail('M08_CELL_ARTIFACT_INVALID')
   const [resultBytes, sidecarBytes] = await Promise.all([
     safeRead(outputRoot, cell.resultFile, LIMIT.result), safeRead(outputRoot, cell.sidecarFile, LIMIT.sidecar)
@@ -186,10 +189,10 @@ async function verifyJournal(outputRoot, report, cells) {
       if (Object.keys(event).sort().join(',') !== ['atCell','reason','requestId','runId','type'].sort().join(',') || unknown.has(event.requestId) || !requests.has(event.requestId)) fail('M08_JOURNAL_UNKNOWN_INVALID')
       unknown.set(event.requestId, event)
     } else if (event.type === 'cell-started') {
-      const expected = cellByOrder.get(event.atCell)
-      if (!expected || starts.has(event.atCell) || Object.keys(event).sort().join(',') !== ['atCell','cell','evidenceCount','type'].sort().join(',') ||
+      const order = event.cell?.actualOrder, expected = cellByOrder.get(order)
+      if (!expected || starts.has(order) || Object.keys(event).sort().join(',') !== ['cell','evidenceCount','type'].sort().join(',') ||
         !same(event.cell, cellIdentity(expected)) || !Number.isSafeInteger(event.evidenceCount) || event.evidenceCount < 1) fail('M08_JOURNAL_CELL_INVALID')
-      starts.set(event.atCell, event)
+      starts.set(order, event)
     } else if (event.type === 'cell-completed' || event.type === 'cell-failed') {
       const order = event.case, expected = cellByOrder.get(order), prior = terminals.get(order)
       const success = event.type === 'cell-completed'
@@ -251,6 +254,20 @@ function validateGlobalCollector(report, cells, authorization) {
   const reportUsage = report.usage
   const expected = { knownActual: { requests: requests.length, inputTokens: input, outputTokens: output }, unknownReservations: [], conservativeCharged: { requests: requests.length, inputTokens: input, outputTokens: output } }
   if (!same(reportUsage, expected)) fail('M08_AGGREGATE_USAGE_INVALID')
+}
+
+/** Test-only raw-artifact path; refuses real reports and never changes production gate authorization. */
+export async function validateM08SyntheticRawArtifactsForTest({ report, outputRoot, bundle, authorization }) {
+  if (!isRecord(report) || report.mode !== 'synthetic' || report.executionComplete !== true ||
+    !isRecord(authorization) || authorization.maxRequests !== 419 || authorization.maxOutputTokens !== 32_768) fail('M08_TEST_FIXTURE_INVALID')
+  const structural = validateGenerationExecutionReport(report, bundle)
+  if (!structural.valid || !structural.executionComplete || report.matrix.length !== 48) fail('M08_TEST_FIXTURE_INVALID')
+  const tasks = new Map(bundle.tasks.map(task => [task.id, task]))
+  const cells = []
+  for (const cell of report.matrix) cells.push(await readCell(outputRoot, cell, tasks.get(cell.taskId), authorization, true, bundle))
+  await verifyJournal(outputRoot, report, cells)
+  validateGlobalCollector(report, cells, authorization)
+  return Object.freeze({ cells: cells.length, requests: cells.reduce((sum, row) => add(sum, row.requests.length), 0) })
 }
 
 function validateRubric(bytes) {
