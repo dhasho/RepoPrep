@@ -24,7 +24,7 @@ const expectedLocalState = Buffer.from(JSON.stringify({ os_crypt: { encrypted_ke
 function sha256(value) { return crypto.createHash('sha256').update(value).digest('hex') }
 
 function syntheticRepo() {
-  const tempBase = path.resolve(__dirname, '..', '..', '.tmp')
+  const tempBase = path.resolve(__dirname, '..', '..', '.validation', 'agentic', 'test-fixtures')
   fs.mkdirSync(tempBase, { recursive: true })
   const parent = fs.mkdtempSync(path.join(tempBase, 'repoprep-generation-host-'))
   const root = path.join(parent, 'repo')
@@ -38,8 +38,8 @@ function syntheticRepo() {
     'generation-labels.json': '{"synthetic":"labels-with-no-gold-data"}'
   })) fs.writeFileSync(path.join(data, name), value, 'utf8')
   execFileSync('git', ['init', '--quiet'], { cwd: root })
-  execFileSync('git', ['config', '--local', 'user.name', 'Native Synthetic Test'], { cwd: root })
-  execFileSync('git', ['config', '--local', 'user.email', 'native-synthetic@example.invalid'], { cwd: root })
+  execFileSync('git', ['config', '--local', 'user.name', 'dhasho'], { cwd: root })
+  execFileSync('git', ['config', '--local', 'user.email', '269624667+dhasho@users.noreply.github.com'], { cwd: root })
   execFileSync('git', ['add', '.gitignore', 'scripts/agentic/datasets/v1'], { cwd: root })
   execFileSync('git', ['commit', '--quiet', '-m', 'synthetic generation startup fixture'], { cwd: root })
   const authDir = path.join(parent, 'authorization-fixtures')

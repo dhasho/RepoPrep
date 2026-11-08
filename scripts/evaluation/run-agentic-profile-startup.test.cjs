@@ -31,7 +31,7 @@ function hashEvidenceRange(content, startLine, endLine) {
 function sourceCommit(root) { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim() }
 
 async function syntheticRepo() {
-  const tempBase = path.resolve(__dirname, '..', '..', '.tmp')
+  const tempBase = path.resolve(__dirname, '..', '..', '.validation', 'agentic', 'test-fixtures')
   fs.mkdirSync(tempBase, { recursive: true })
   const parent = fs.mkdtempSync(path.join(tempBase, 'repoprep-agentic-startup-'))
   const root = path.join(parent, 'repo')
@@ -49,8 +49,8 @@ async function syntheticRepo() {
   }
   for (const [name, value] of Object.entries(bytes)) fs.writeFileSync(path.join(data, name), value)
   execFileSync('git', ['init', '--quiet'], { cwd: root })
-  execFileSync('git', ['config', '--local', 'user.name', 'Synthetic Startup Test'], { cwd: root })
-  execFileSync('git', ['config', '--local', 'user.email', 'synthetic-startup@example.invalid'], { cwd: root })
+  execFileSync('git', ['config', '--local', 'user.name', 'dhasho'], { cwd: root })
+  execFileSync('git', ['config', '--local', 'user.email', '269624667+dhasho@users.noreply.github.com'], { cwd: root })
   execFileSync('git', ['add', '.gitignore', 'scripts/agentic/datasets/v1'], { cwd: root })
   execFileSync('git', ['commit', '--quiet', '-m', 'synthetic datasets'], { cwd: root })
   const authDir = path.join(parent, 'authorization-fixtures')
