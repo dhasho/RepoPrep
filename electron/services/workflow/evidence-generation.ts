@@ -62,7 +62,7 @@ export interface EvidenceGenerationAdapter {
   finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
 }
 
-export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v3' as const
+export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v4' as const
 export const EVIDENCE_GENERATION_WRITER_VARIANTS = Object.freeze({ topicCards: 'topic-cards', staticControl: 'static-control' } as const)
 export type EvidenceGenerationWriterVariant = typeof EVIDENCE_GENERATION_WRITER_VARIANTS[keyof typeof EVIDENCE_GENERATION_WRITER_VARIANTS]
 
@@ -163,7 +163,7 @@ function validateSelection(selection: SelectionPlan, topics: readonly TopicCard[
   return { ids, bundles, topics: safeTopics, unresolved: [...selection.unresolved] }
 }
 
-function makeGroups(ids: readonly string[], records: readonly EvidenceRecord[], bundles: readonly { id: string; evidenceIds: readonly string[] }[], topics: readonly TopicCard[], maximum: number): GenerationGroup[] {
+function makeGroups(ids: readonly string[], records: readonly EvidenceRecord[], bundles: readonly { id: string; evidenceIds: readonly string[] }[], topics: readonly TopicCard[], maximum: number, componentAwareFine: boolean): GenerationGroup[] {
   const parent = new Map(ids.map(id => [id, id]))
   const root = (id: string): string => {
     let current = parent.get(id)
@@ -182,7 +182,9 @@ function makeGroups(ids: readonly string[], records: readonly EvidenceRecord[], 
   const components = new Map<string, string[]>()
   for (const id of ids) components.set(root(id), [...(components.get(root(id)) ?? []), id])
   const ordered = [...components.values()].map(component => ({ ids: component, weight: component.reduce((sum, id) => sum + (byId.get(id)?.text.length ?? 0) + 1, 0) })).sort((a, b) => b.weight - a.weight || a.ids[0].localeCompare(b.ids[0]))
-  const groupCount = Math.min(Math.max(1, maximum), MAX_MODEL_GROUPS)
+  const groupCount = componentAwareFine
+    ? Math.min(Math.max(1, maximum), MAX_MODEL_GROUPS, Math.max(2, ordered.length))
+    : Math.min(Math.max(1, maximum), MAX_MODEL_GROUPS)
   const groups = Array.from({ length: groupCount }, () => ({ ids: [] as string[], weight: 0 }))
   for (const component of ordered) {
     const target = groups.reduce((best, candidate, index) => candidate.weight < groups[best].weight ? index : best, 0)
@@ -322,7 +324,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
   const desired = spec.granularity === 'coarse' ? 1 : spec.granularity === 'medium' ? 2 : 4
   const remainingCalls = ledger.snapshot().remaining.modelRequests
   if (remainingCalls < 1) fail('budget-exhausted')
-  const groups = makeGroups(selected.ids, resolved, selected.bundles, selected.topics, Math.min(desired, remainingCalls))
+  const groups = makeGroups(selected.ids, resolved, selected.bundles, selected.topics, Math.min(desired, remainingCalls), spec.granularity === 'fine')
   if (!groups.length) fail('budget-exhausted')
   const registry = createQuestionEvidenceRegistry(spec)
   const preparedStates = new WeakMap<object, PreparedState>()

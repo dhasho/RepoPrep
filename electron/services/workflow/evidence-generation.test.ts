@@ -169,7 +169,7 @@ test('uses genuine scanner, snapshot, store and packer; builds 1/2/4 bounded gro
   }
 })
 
-test('a fine atomic topic component repeats across four groups while coarse one-request planning stays at ten', async t => {
+test('a single fine atomic evidence component uses two equal-quota batches while coarse stays at ten', async t => {
   const f = await fixture('coarse')
   t.after(f.cleanup)
   const fineSpec = specFor(f, 'fine')
@@ -183,13 +183,19 @@ test('a fine atomic topic component repeats across four groups while coarse one-
   }
   const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec: fineSpec, ledger, selection: { selectedIds: f.ids, requiredBundles: [{ id: 'atomic-bundle', evidenceIds: f.ids }], unresolved: [] }, topics: [atomicTopic] })
   const built = await adapter.contextProvider.build(f.scan, 'fine', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
-  assert.equal(built.batches.length, 4)
-  assert.equal(planQuestionQuotas('fine', built.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight }))).total, 32)
-  for (let index = 0; index < 4; index++) {
+  const plan = planQuestionQuotas('fine', built.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight })))
+  assert.equal(built.batches.length, 2)
+  assert.equal(plan.total, 32)
+  assert.deepEqual(plan.quotas.map(batch => batch.quota), [16, 16])
+  const staticAdapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids), spec: fineSpec, ledger: createBudgetLedger(fineSpec), writerVariant: EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl, selection: { selectedIds: f.ids, requiredBundles: [{ id: 'atomic-bundle', evidenceIds: f.ids }], unresolved: [] }, topics: [atomicTopic] })
+  const staticBuilt = await staticAdapter.contextProvider.build(f.scan, 'fine', { maxChars: 40_000, roleFocus: fineSpec.roleFocus, signal: f.signal })
+  assert.equal(staticBuilt.batches.length, built.batches.length, 'both writer variants use the same fine grouping policy')
+  for (let index = 0; index < 2; index++) {
     const requestId = `fine-repeat-${index}`
-    const prepared = await adapter.requestAdapter.prepare({ ...request(f, requestId, index), quota: 8 })
+    const prepared = await adapter.requestAdapter.prepare({ ...request(f, requestId, index), quota: plan.quotas[index].quota })
     const prompt = prepared.messages.find(message => message.role === 'user')!.content
-    assert.ok(prompt.includes(`本次证据批次为 ${index + 1}/4`))
+    assert.ok(prompt.includes(`本次只生成 ${plan.quotas[index].quota} 道新主问题`))
+    assert.ok(prompt.includes(`本次证据批次为 ${index + 1}/2`))
     await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
     const dispatched = adapter.metadata().find(row => row.requestId === requestId)!
     assert.equal(dispatched.manifest.requiredIds.length, f.ids.length)
@@ -198,7 +204,7 @@ test('a fine atomic topic component repeats across four groups while coarse one-
   }
   const firstManifest = adapter.metadata()[0].manifest.manifestHash
   adapter.requestAdapter.acceptQuestion({ requestId: 'fine-repeat-0', rawQuestion: { evidenceIds: [f.ids[0]] }, question: { id: 'prior-question', question: 'How does the selected component behave?', answer: 'PRIOR_ANSWER_MUST_NEVER_BE_COPIED', followUps: [] } })
-  const secondPrepared = await adapter.requestAdapter.prepare({ ...request(f, 'fine-repeat-prior', 1), quota: 8 })
+  const secondPrepared = await adapter.requestAdapter.prepare({ ...request(f, 'fine-repeat-prior', 1), quota: 16 })
   const secondPrompt = secondPrepared.messages.find(message => message.role === 'user')!.content
   assert.ok(secondPrompt.includes('How does the selected component behave?'))
   assert.ok(!secondPrompt.includes('PRIOR_ANSWER_MUST_NEVER_BE_COPIED'))
@@ -212,6 +218,96 @@ test('a fine atomic topic component repeats across four groups while coarse one-
   const coarseBuilt = await coarse.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
   assert.equal(coarseBuilt.batches.length, 1)
   assert.equal(planQuestionQuotas('coarse', coarseBuilt.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight }))).total, 10)
+
+  const mediumSpec = specFor(f, 'medium')
+  const medium = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids), spec: mediumSpec, ledger: createBudgetLedger(mediumSpec), selection: { selectedIds: f.ids, requiredBundles: [{ id: 'medium-atomic-bundle', evidenceIds: f.ids }], unresolved: [] }, topics: [atomicTopic] })
+  const mediumBuilt = await medium.contextProvider.build(f.scan, 'medium', { maxChars: 40_000, roleFocus: mediumSpec.roleFocus, signal: f.signal })
+  assert.equal(mediumBuilt.batches.length, 2, 'medium retains its two-call policy for one connected component')
+})
+
+test('fine grouping uses two, three, or four whole deterministic components and respects remaining calls', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  for (const componentCount of [1, 2, 3, 4]) {
+    const spec = specFor(f, 'fine')
+    const ledger = createBudgetLedger(spec)
+    const components = Array.from({ length: componentCount }, () => [] as string[])
+    f.ids.forEach((id, index) => components[index % componentCount].push(id))
+    const requiredBundles = components.map((evidenceIds, index) => ({ id: `required-${componentCount}-${index}`, evidenceIds }))
+    const topics = components.map((evidenceIds, index) => ({ id: `component-${componentCount}-${index}`, title: `Component ${index}`, mechanism: 'Keep this evidence group atomic.', valueRationale: 'The required relationship is bounded to these IDs.', difficulty: 'intermediate' as const, evidenceIds, evidenceNeeds: ['Inspect a related boundary.'], unconfirmed: ['Runtime behavior is unmeasured.'] }))
+    const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+      options.beforeRequest?.()
+      const inputTokens = estimateMessageTokens(messages)
+      options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+      return '{}'
+    }
+    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec, ledger, selection: { selectedIds: f.ids, requiredBundles, unresolved: [] }, topics })
+    const built = await adapter.contextProvider.build(f.scan, 'fine', { maxChars: 40_000, roleFocus: spec.roleFocus, signal: f.signal })
+    const expectedGroups = Math.max(2, componentCount)
+    assert.equal(built.batches.length, expectedGroups)
+    const dispatchEvidence = new Set<string>()
+    for (let index = 0; index < built.batches.length; index++) {
+      const requestId = `fine-components-${componentCount}-${index}`
+      const prepared = await adapter.requestAdapter.prepare({ ...request(f, requestId, index), quota: 32 })
+      await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+      const manifest = adapter.metadata().find(row => row.requestId === requestId)!.manifest
+      for (const id of manifest.selectedIds) dispatchEvidence.add(id)
+      assert.ok(components.every(component => component.some(id => manifest.requiredIds.includes(id)) || !component.some(id => manifest.selectedIds.includes(id))))
+      for (const component of components) {
+        if (component.some(id => manifest.selectedIds.includes(id))) assert.ok(component.every(id => manifest.selectedIds.includes(id)), 'a required component must never be split across batches')
+      }
+    }
+    assert.deepEqual([...dispatchEvidence].sort(), [...f.ids].sort())
+  }
+
+  const limitedSpec = specFor(f, 'fine', 1)
+  const limited = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids), spec: limitedSpec, ledger: createBudgetLedger(limitedSpec), selection: { selectedIds: f.ids, requiredBundles: [{ id: 'one-request-bundle', evidenceIds: f.ids }], unresolved: [] }, topics: [] })
+  const limitedBuilt = await limited.contextProvider.build(f.scan, 'fine', { maxChars: 40_000, roleFocus: limitedSpec.roleFocus, signal: f.signal })
+  assert.equal(limitedBuilt.batches.length, 1, 'the two-group fine floor cannot exceed remaining model calls')
+})
+
+test('two fine atomic batches keep the 32-question target and finalize receipts at the unchanged 65,536 output cap', async t => {
+  const f = await fixture('coarse')
+  t.after(f.cleanup)
+  const profile: LlmProfile = { ...f.profile, maxOutputTokens: 32_768 }
+  const spec = createRunSpec({ version: 1, runId: 'fine-output-boundary', projectId: f.spec.projectId, snapshotId: f.snapshot.snapshotId, strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: f.spec.roleFocus, granularity: 'fine', model: { profileId: profile.id, model: profile.model, endpointFingerprint: createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex'), protocol: profile.protocol, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1' })
+  const ledger = createBudgetLedger(spec)
+  const atomicTopic = { id: 'output-boundary-component', title: 'Complete output-boundary component', mechanism: 'Use the full atomic evidence group in both requests.', valueRationale: 'Both requests cite the same required evidence.', difficulty: 'intermediate' as const, evidenceIds: f.ids, evidenceNeeds: ['Check one caller.'], unconfirmed: ['Model quality is unmeasured.'] }
+  const outputLimits: number[] = []
+  const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+    options.beforeRequest?.()
+    outputLimits.push(options.maxOutputTokens!)
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: options.maxOutputTokens!, totalTokens: inputTokens + options.maxOutputTokens! })
+    return '{}'
+  }
+  const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), profile, spec, ledger, selection: { selectedIds: f.ids, requiredBundles: [{ id: 'output-boundary-bundle', evidenceIds: f.ids }], unresolved: [] }, topics: [atomicTopic] })
+  const built = await adapter.contextProvider.build(f.scan, 'fine', { maxChars: 40_000, roleFocus: spec.roleFocus, signal: f.signal })
+  const plan = planQuestionQuotas('fine', built.batches.map(batch => ({ label: batch.label, kind: batch.kind, weight: batch.weight })))
+  assert.equal(plan.total, 32)
+  assert.deepEqual(plan.quotas.map(batch => batch.quota), [16, 16])
+  const questions: QuestionItem[] = []
+  for (let batchIndex = 0; batchIndex < 2; batchIndex++) {
+    const requestId = `fine-output-boundary-${batchIndex}`
+    const quota = plan.quotas[batchIndex].quota
+    const prepared = await adapter.requestAdapter.prepare({ ...request(f, requestId, batchIndex), quota })
+    assert.ok(prepared.messages.at(-1)?.content.includes(`本次只生成 ${quota} 道新主问题`))
+    await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+    const manifest = adapter.metadata().find(item => item.requestId === requestId)!.manifest
+    const citationId = manifest.packedIds[0]
+    for (let index = 0; index < quota; index++) {
+      const item = question(`output-boundary-${batchIndex}-${index}`, batchIndex * quota + index)
+      questions.push(item)
+      adapter.requestAdapter.acceptQuestion({ requestId, rawQuestion: { evidenceIds: [citationId] }, question: item })
+    }
+    assert.ok(f.ids.every(id => manifest.requiredIds.includes(id) && manifest.packedIds.includes(id)))
+  }
+  assert.deepEqual(outputLimits, [32_768, 32_768])
+  assert.equal(ledger.snapshot().total.outputTokens, 65_536)
+  const finalized = await adapter.finalize({ ...result(f, questions), granularity: 'fine' })
+  assert.equal(finalized.questions.length, 32)
+  assert.ok(finalized.questions.every(item => item.evidenceIds.length === 1 && item.verification === 'source-bound-unverified'))
+  assert.ok(adapter.metadata().every(item => item.completion === 'completed' && item.usage?.outputTokens === 32_768))
 })
 
 test('topic-card and static-control writers keep identical evidence manifests and both finalize legal sidecars', async t => {
