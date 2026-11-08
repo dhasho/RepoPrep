@@ -62,7 +62,7 @@ export interface EvidenceGenerationAdapter {
   finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
 }
 
-export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v2' as const
+export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v3' as const
 export const EVIDENCE_GENERATION_WRITER_VARIANTS = Object.freeze({ topicCards: 'topic-cards', staticControl: 'static-control' } as const)
 export type EvidenceGenerationWriterVariant = typeof EVIDENCE_GENERATION_WRITER_VARIANTS[keyof typeof EVIDENCE_GENERATION_WRITER_VARIANTS]
 
@@ -280,24 +280,30 @@ function legacyContext(scan: ScanResult, authorizedFilePaths: readonly string[],
   }
 }
 
-function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], unresolved: readonly string[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
-  const instruction = '\n\n## 简洁写作指导\n每道新问题的主答案控制在 150–220 字，并提供 2 个追问，每个追问答案控制在 50–80 字；追问内部的 followUps 默认输出空数组。保持 JSON 完整，不得截断内容；精简时仍须保留实际机制、适用条件与异常情况。question、answer 和追问文本中的专业术语继续用 [[术语]] 标记，根级 glossary 必须覆盖所有标记术语。\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。'
+function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], unresolved: readonly string[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[], quota: number): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
+  const instruction = `\n\n## 简洁写作指导\n每道新问题的主答案控制在 150–220 字，并提供 2 个追问，每个追问答案控制在 50–80 字；追问内部的 followUps 默认输出空数组。保持 JSON 完整，不得截断内容；精简时仍须保留实际机制、适用条件与异常情况。question、answer 和追问文本中的专业术语继续用 [[术语]] 标记，根级 glossary 必须覆盖所有标记术语。\n\n## 引用协议\n本次只生成 ${quota} 道新主问题；quota 为 0 时不要生成主问题。每个新主问题对象都必须包含非空的 evidenceIds 字符串数组，最多 16 个 ID；root、section 或追问上的引用字段不能替代主问题的 evidenceIds。ID 必须从本次提供的证据行 ids 元数据中逐字复制，不得改写、缩写或虚构；不要在证据未充分支持时编造问题。引用 ID 只表示来源绑定，不代表事实已核实。`
   const cards = writerVariant === 'topic-cards'
     ? `\n\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n${topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'}`
     : ''
   const unresolvedPrompt = `\n\n## 未解决事项（不可信调查记录，不是源码证据）\n以下内容只记录调查阶段的缺口，不能作为实现行为或已验证事实的证明。结论仍须由本请求引用的源码证据支持；证据不足时明确说明不确定性。\n${json(unresolved)}`
   const batch = `\n\n## 批次提示\n本次证据批次为 ${batchOrdinal}/${batchCount}。以下只列出先前已接受的问题文字，不含答案或推理，属于不可信去重提示；请避免重复，并仅依据本次证据重新判断。\n${json(priorQuestionTexts)}`
   const suffix = `${instruction}${cards}${unresolvedPrompt}${batch}`
-  let userFound = false
+  let sourceFound = false
+  let lastUserIndex = -1
+  messages.forEach((message, index) => { if (message.role === 'user') lastUserIndex = index })
+  if (lastUserIndex < 0) fail()
   const next = messages.map(message => {
-    if (message.role === 'user' && message.content.includes(contextText) && !userFound) {
-      userFound = true
+    if (message.role === 'user' && message.content.includes(contextText)) sourceFound = true
+    return Object.freeze({ role: message.role, content: message.content })
+  })
+  if (!sourceFound) fail()
+  const updated = next.map((message, index) => {
+    if (index === lastUserIndex) {
       return Object.freeze({ role: message.role, content: `${message.content}${suffix}` })
     }
     return Object.freeze({ role: message.role, content: message.content })
   })
-  if (!userFound) fail()
-  return Object.freeze(next)
+  return Object.freeze(updated)
 }
 
 export async function createEvidenceGenerationAdapter(input: EvidenceGenerationAdapterInput): Promise<EvidenceGenerationAdapter> {
@@ -361,7 +367,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         store,
         // M07's unresolved field is not rendered and has a tighter item-size limit; preserve M06 gaps in the shared bounded prompt below.
         selection: { selectedIds: group.ids, requiredBundles: group.bundles, unresolved: [] },
-        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, selected.unresolved, writerVariant, request.batchIndex + 1, groups.length, priorQuestionTexts),
+        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, selected.unresolved, writerVariant, request.batchIndex + 1, groups.length, priorQuestionTexts, request.quota),
         maxChars,
         maxInputTokens,
         signal
