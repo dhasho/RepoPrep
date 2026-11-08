@@ -21,6 +21,7 @@ import {
 } from './generation-eval-contract.mjs'
 import { scanProject } from '../../electron/services/scanner.ts'
 import { generateInterview } from '../../electron/services/generator.ts'
+import { readGenerationOutputFailure } from '../../electron/services/generation-output-error.ts'
 import { createWorkflowSnapshot } from '../../electron/services/workflow/snapshot-adapter.ts'
 import { createEvidenceStore } from '../../electron/services/workflow/evidence-store.ts'
 import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
@@ -556,7 +557,26 @@ function validateSidecarLineage(result, sidecar, requests) {
   })
 }
 
-function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, usage, modelFailure, elapsedMs, deadlineReason) {
+function safeGenerationFailure(error) {
+  const rejections = readGenerationOutputFailure(error)
+  if (!rejections?.length) return undefined
+  const allowedReasons = new Set(['json-syntax', 'citation-invalid', 'normalized-structure-invalid', 'checkpoint-invalid', 'empty-output'])
+  const allowedStages = new Set(['generation', 'repair', 'compensation'])
+  const safe = rejections.slice(0, 2).flatMap((item) => {
+    if (!allowedReasons.has(item.reason) || !allowedStages.has(item.stage) ||
+        (item.attempt !== 1 && item.attempt !== 2) || !Number.isSafeInteger(item.batchIndex) || item.batchIndex < 0) return []
+    return [{
+      reason: item.reason,
+      attempt: item.attempt,
+      stage: item.stage,
+      batchIndex: item.batchIndex,
+      ...(typeof item.requestId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(item.requestId) ? { requestId: item.requestId } : {})
+    }]
+  })
+  return safe.length ? { rejections: safe } : undefined
+}
+
+function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, usage, modelFailure, generationFailure, elapsedMs, deadlineReason) {
   return {
     ...cell,
     caseNumber,
@@ -565,6 +585,7 @@ function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, us
       status: 'failed',
       ...(errorCode ? { errorCode } : {}),
       ...(modelFailure ? { modelFailure } : {}),
+      ...(generationFailure ? { generationFailure } : {}),
       elapsedMs,
       ...(deadlineReason ? { deadlineReason } : {}),
       acceptedQuestionCount,
@@ -847,8 +868,9 @@ export async function runGenerationEvaluation({
         const errorCode = deadlineExpired ? 'timeout' : stageFailure(error)
         const deadlineReason = deadlineExpired ? 'per-run-wall-clock' : undefined
         const modelFailure = sanitizeModelFailure(error?.modelFailure) ?? undefined
+        const generationFailure = safeGenerationFailure(error)
         try { usage = ledger ? outputUsageFromLedger(ledger, adapter?.metadata?.() ?? [], cell.id) : undefined } catch { usage = undefined }
-        const failed = failedCellRecord(cell, cellOrder, errorCode, acceptedQuestionCount, usage, modelFailure, elapsedMs, deadlineReason)
+        const failed = failedCellRecord(cell, cellOrder, errorCode, acceptedQuestionCount, usage, modelFailure, generationFailure, elapsedMs, deadlineReason)
         if (usage) {
           try { addSourceBindings(sourceBindings, usage.requests) } catch { failed.execution.lineageValid = false }
         }

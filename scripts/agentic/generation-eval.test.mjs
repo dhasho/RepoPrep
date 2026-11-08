@@ -211,6 +211,47 @@ test('failed cells preserve only the sanitized model failure classification', { 
   assert.equal(publicReport.includes(syntheticProfile.apiKey), false)
 })
 
+test('failed cells serialize only typed generation rejection diagnostics and retain settled receipts', { timeout: 90_000 }, async (t) => {
+  let requestCount = 0
+  const transport = async (_profile, _messages, onDelta, options) => {
+    requestCount++
+    options.beforeRequest?.()
+    await onDelta('not-json')
+    options.onUsage?.({ inputTokens: 7, outputTokens: 3, totalTokens: 10 })
+    return 'SYNTHETIC_PRIVATE_RAW_RESPONSE'
+  }
+  const { report } = await runSynthetic(t, { transport, requestCount: () => requestCount })
+  const cell = report.matrix[0]
+  assert.equal(requestCount, 2)
+  assert.equal(cell.execution.status, 'failed')
+  assert.equal(cell.execution.usageComplete, true)
+  assert.equal(cell.execution.generationFailure.rejections.length, 2)
+  assert.deepEqual(cell.execution.generationFailure.rejections.map(({ reason, attempt, stage, batchIndex }) => ({ reason, attempt, stage, batchIndex })), [
+    { reason: 'json-syntax', attempt: 1, stage: 'generation', batchIndex: 0 },
+    { reason: 'json-syntax', attempt: 2, stage: 'repair', batchIndex: 0 }
+  ])
+  for (const rejection of cell.execution.generationFailure.rejections) assert.match(rejection.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu)
+  assert.deepEqual(cell.execution.knownActual, { requests: 2, inputTokens: 14, outputTokens: 6 })
+  assert.equal(JSON.stringify(report).includes('SYNTHETIC_PRIVATE_RAW_RESPONSE'), false)
+  assert.equal(JSON.stringify(report).includes(syntheticProfile.apiKey), false)
+})
+
+test('untyped provider error properties never become generation diagnostics', { timeout: 90_000 }, async (t) => {
+  let requestCount = 0
+  const transport = async (_profile, _messages, _onDelta, options) => {
+    requestCount++
+    options.beforeRequest?.()
+    options.onUsage?.({ inputTokens: 7, outputTokens: 3, totalTokens: 10 })
+    const error = new Error('SYNTHETIC_PRIVATE_PROVIDER_FAILURE')
+    error.generationFailure = { rejections: [{ reason: 'json-syntax', source: 'SENSITIVE_SOURCE', prompt: 'SENSITIVE_PROMPT' }] }
+    throw error
+  }
+  const { report } = await runSynthetic(t, { transport, requestCount: () => requestCount })
+  assert.equal(requestCount, 1)
+  assert.equal(report.matrix[0].execution.generationFailure, undefined)
+  assert.doesNotMatch(JSON.stringify(report), /SYNTHETIC_PRIVATE_PROVIDER_FAILURE|SENSITIVE_SOURCE|SENSITIVE_PROMPT/u)
+})
+
 function deadlineHarness(expireAtStep) {
   let now = 0
   let timerCallback

@@ -10,6 +10,8 @@ import path from 'node:path'
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { generateInterview } from './generator.ts'
+// @ts-ignore direct Node tests need explicit runtime extensions.
+import { GenerationOutputError } from './generation-output-error.ts'
 // @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
 import { chatCompletionStream } from './llm.ts'
 // @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
@@ -189,6 +191,32 @@ test('cancellation from progress after question two preserves two and cancels th
     assert.equal(savedQuestions(checkpoint).some((question) => question.question.includes('late delta')), false)
     assert.equal(wasCancelled?.(), true, 'the underlying stream reader must be canceled')
     assert.equal(response?.body?.locked, false, 'the response reader lock must be released')
+  })
+})
+
+test('two malformed JSON responses retain a finite typed diagnosis and both usage receipts', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  let diagnostics: InterviewResult['generationDiagnostics'] | undefined
+  await withFetch((_prompt, _call) => streamResponse([
+    deltaFrame('not-json'), finishFrame('stop'), usageFrame(), doneFrame()
+  ]), async (calls) => {
+    let failure: unknown
+    try {
+      await generateInterview({ ...generationParams(scan), onDiagnostics: (value) => { diagnostics = value } })
+    } catch (error) { failure = error }
+    assert.ok(failure instanceof GenerationOutputError)
+    assert.match((failure as Error).message, /^模型两次均未返回合法 JSON：/u)
+    assert.deepEqual((failure as GenerationOutputError).rejections.map(({ reason, attempt, stage, batchIndex }) => ({ reason, attempt, stage, batchIndex })), [
+      { reason: 'json-syntax', attempt: 1, stage: 'generation', batchIndex: 0 },
+      { reason: 'json-syntax', attempt: 2, stage: 'repair', batchIndex: 0 }
+    ])
+    assert.equal(calls.length, 2)
+    assert.equal(diagnostics?.requestCount, 2)
+    assert.equal(diagnostics?.usageComplete, true)
+    assert.deepEqual(diagnostics?.actualUsage, { inputTokens: 20, outputTokens: 8, totalTokens: 28 })
+    const serialized = JSON.stringify(failure)
+    assert.doesNotMatch(serialized, /not-json|SYNTHETIC_STREAM_KEY/u)
   })
 })
 
@@ -396,6 +424,35 @@ test('request adapter captures raw citation fields after normalization and repai
   assert.deepEqual(finalQuestions.map((question) => question.id), accepted.map((item) => item.id), 'program-created IDs survive normalization and final assembly')
   assert.equal(result.generationDiagnostics?.requestCount, 2)
   assert.equal(result.generationDiagnostics?.usageComplete, true, 'citation format failure drains the stream and retains its usage receipt')
+})
+
+test('two rejected citation responses are classified at the adapter boundary', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-rejecting-citation-adapter',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('PACKED_CONTEXT_SENTINEL') } },
+    complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+    acceptQuestion() { throw new CitationValidationError() }
+  }
+  const question = { ...makeQuestion(1), evidenceIds: ['unknown-id'] }
+  let diagnostics: InterviewResult['generationDiagnostics'] | undefined
+  await withFetch(() => streamResponse([
+    deltaFrame(fullRoot([question])), finishFrame('stop'), usageFrame(), doneFrame()
+  ]), async (calls) => {
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan, { onDiagnostics: (value) => { diagnostics = value } })
+    await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), (error: unknown) => {
+      assert.ok(error instanceof GenerationOutputError)
+      assert.match(error.message, /^模型两次均未返回合法 JSON：/u)
+      assert.deepEqual(error.rejections.map(({ reason, attempt }) => ({ reason, attempt })), [
+        { reason: 'citation-invalid', attempt: 1 }, { reason: 'citation-invalid', attempt: 2 }
+      ])
+      return true
+    })
+    assert.equal(calls.length, 2)
+    assert.equal(diagnostics?.usageComplete, true)
+    assert.equal(diagnostics?.requestCount, 2)
+  })
 })
 
 test('request adapter cancellation does not become a format repair', { timeout: 60_000 }, async (t) => {

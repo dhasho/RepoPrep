@@ -28,6 +28,7 @@ import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
 import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
 import { WorkflowError } from './workflow/project-contract'
+import { GenerationOutputError, type GenerationOutputFailureReason, type GenerationOutputRejection } from './generation-output-error'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
@@ -458,6 +459,7 @@ async function callForJson(
 ): Promise<ParsedBatch> {
   let lastError = ''
   let previousReply = ''
+  const rejections: GenerationOutputRejection[] = []
   for (let attempt = 0; attempt < 2; attempt++) {
     if (signal.aborted) throw new Error('生成已取消。')
     const repair = attempt ? { reply: safeClipText(previousReply, 20_000), error: lastError } : undefined
@@ -494,6 +496,7 @@ async function callForJson(
     const parser = new InterviewJsonStream()
     streaming.preview(parser.preview())
     let formatFailure: unknown
+    let formatFailureReason: GenerationOutputFailureReason | undefined
     let receivedChars = 0
     let lastPreviewSent = 0
     const emitPreview = (force = false): void => {
@@ -540,7 +543,7 @@ async function callForJson(
         let citationFailureThisChunk = false
         if (formatFailure === undefined) {
           try { fragments = parser.push(delta) }
-          catch (error) { formatFailure = error; fragments = parser.drain(); streaming.preview(undefined) }
+          catch (error) { formatFailure = error; formatFailureReason = 'json-syntax'; fragments = parser.drain(); streaming.preview(undefined) }
         }
         for (const fragment of fragments) {
           if (citationFailureThisChunk) break
@@ -548,6 +551,7 @@ async function callForJson(
           catch (error) {
             if (error instanceof CitationValidationError) {
               formatFailure = error
+              formatFailureReason = 'citation-invalid'
               citationFailureThisChunk = true
               streaming.preview(undefined)
               break
@@ -625,12 +629,21 @@ async function callForJson(
     let parsed: ParsedBatch
     try {
       if (formatFailure !== undefined) throw formatFailure
-      parsed = normalizeParsed(parser.finish(), true)
-      validateCheckpointBatch(parsed)
-      if (!batchQuestionCount(parsed) && !batchQuestionCount(streaming.current)) throw new Error('模型输出中没有有效的问题')
+      let raw: unknown
+      try { raw = parser.finish() }
+      catch (error) { formatFailureReason = 'json-syntax'; throw error }
+      try { parsed = normalizeParsed(raw, true) }
+      catch (error) { formatFailureReason = 'normalized-structure-invalid'; throw error }
+      try { validateCheckpointBatch(parsed) }
+      catch (error) { formatFailureReason = 'checkpoint-invalid'; throw error }
+      if (!batchQuestionCount(parsed) && !batchQuestionCount(streaming.current)) {
+        formatFailureReason = 'empty-output'
+        throw new Error('模型输出中没有有效的问题')
+      }
     } catch (error) {
       lastError = error instanceof Error ? error.message : '结果格式无效'
       previousReply = reply
+      rejections.push({ reason: formatFailureReason ?? 'normalized-structure-invalid', attempt: (attempt + 1) as 1 | 2, stage: attempt ? 'repair' : requestStage, batchIndex, ...(requestId ? { requestId } : {}) })
       streaming.preview(undefined)
       continue
     }
@@ -644,7 +657,7 @@ async function callForJson(
     }
     return streaming.current
   }
-  throw new Error(`模型两次均未返回合法 JSON：${lastError}`)
+  throw new GenerationOutputError(`模型两次均未返回合法 JSON：${lastError}`, rejections)
 }
 
 const REQUEST_TRUNCATION_MARKER = `\n\n⚠️ ${CONTEXT_TRUNCATION_WARNING} 请只依据实际提供的上下文作答，不要假设已看到省略内容。`
