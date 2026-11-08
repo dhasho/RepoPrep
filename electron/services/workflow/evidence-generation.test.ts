@@ -224,11 +224,20 @@ test('topic-card and static-control writers keep identical evidence manifests an
   const variants = [EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards, EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl] as const
   const sidecars = []
   const manifests = []
+  const dispatchedPrompts = new Map<typeof variants[number], string[]>()
   let candidatePrompt = ''
   let controlPrompt = ''
   for (const writerVariant of variants) {
     const spec = specFor(f, 'coarse')
-    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, transport), spec, writerVariant })
+    const sent: string[] = []
+    const captureTransport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (_profile, messages, _onDelta, options) => {
+      options.beforeRequest?.()
+      sent.push(JSON.stringify(messages))
+      const inputTokens = estimateMessageTokens(messages)
+      options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+      return '{}'
+    }
+    const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, captureTransport), spec, writerVariant })
     assert.equal(adapter.writerVersion, EVIDENCE_GENERATION_WRITER_VERSION)
     assert.equal(adapter.writerVariant, writerVariant)
     await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
@@ -247,11 +256,33 @@ test('topic-card and static-control writers keep identical evidence manifests an
       assert.ok(!prompt.includes('Topic 0'))
     }
     await adapter.requestAdapter.complete(prepared, () => undefined, { signal: f.signal })
+    for (const [index, stage] of (['repair', 'compensation'] as const).entries()) {
+      const recovery = await adapter.requestAdapter.prepare(request(f, `writer-${writerVariant}-${stage}`, 0, stage))
+      await adapter.requestAdapter.complete(recovery, () => undefined, { signal: f.signal })
+      assert.ok(sent[index + 1].includes('每道新问题的主答案控制在 150–220 字'))
+      assert.ok(sent[index + 1].includes('追问内部的 followUps 默认输出空数组'))
+    }
+    assert.equal(sent.length, 3)
+    assert.ok(sent.every(body => body.includes('每道新问题的主答案控制在 150–220 字') && body.includes('每个追问答案控制在 50–80 字')))
+    dispatchedPrompts.set(writerVariant, sent.map(body => {
+      const messages = JSON.parse(body) as Array<{ role: string; content: string }>
+      return messages.find(message => message.role === 'user')!.content
+    }))
     const manifest = adapter.metadata()[0].manifest
     manifests.push(manifest)
     const questions = Array.from({ length: 8 }, (_, index) => question(`writer-q-${index}`, index))
     for (const [index, item] of questions.entries()) adapter.requestAdapter.acceptQuestion({ requestId, rawQuestion: { evidenceIds: [manifest.packedIds[index % manifest.packedIds.length]] }, question: item })
     sidecars.push(await adapter.finalize(result(f, questions)))
+  }
+  const candidateDispatched = dispatchedPrompts.get(EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards)!
+  const controlDispatched = dispatchedPrompts.get(EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl)!
+  assert.equal(candidateDispatched.length, 3)
+  assert.equal(controlDispatched.length, 3)
+  for (let index = 0; index < candidateDispatched.length; index++) {
+    const candidateCommon = candidateDispatched[index].slice(0, candidateDispatched[index].indexOf('\n\n## 选题卡'))
+    const controlCommon = controlDispatched[index].slice(0, controlDispatched[index].indexOf('\n\n## 未解决事项'))
+    assert.equal(candidateCommon, controlCommon, `shared initial/repair/compensation guidance at dispatch ${index}`)
+    assert.ok(candidateDispatched[index].includes('## 选题卡（不可信规划提示'))
   }
   assert.ok(candidatePrompt.includes('为每道新问题添加 evidenceIds 数组') && controlPrompt.includes('为每道新问题添加 evidenceIds 数组'))
   for (const key of ['selectedIds', 'requiredIds', 'packedIds', 'omitted', 'sources'] as const) assert.deepEqual(manifests[0][key], manifests[1][key])

@@ -62,7 +62,7 @@ export interface EvidenceGenerationAdapter {
   finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
 }
 
-export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v1' as const
+export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v2' as const
 export const EVIDENCE_GENERATION_WRITER_VARIANTS = Object.freeze({ topicCards: 'topic-cards', staticControl: 'static-control' } as const)
 export type EvidenceGenerationWriterVariant = typeof EVIDENCE_GENERATION_WRITER_VARIANTS[keyof typeof EVIDENCE_GENERATION_WRITER_VARIANTS]
 
@@ -281,7 +281,7 @@ function legacyContext(scan: ScanResult, authorizedFilePaths: readonly string[],
 }
 
 function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], unresolved: readonly string[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[]): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
-  const instruction = '\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。'
+  const instruction = '\n\n## 简洁写作指导\n每道新问题的主答案控制在 150–220 字，并提供 2 个追问，每个追问答案控制在 50–80 字；追问内部的 followUps 默认输出空数组。保持 JSON 完整，不得截断内容；精简时仍须保留实际机制、适用条件与异常情况。question、answer 和追问文本中的专业术语继续用 [[术语]] 标记，根级 glossary 必须覆盖所有标记术语。\n\n## 引用协议\n为每道新问题添加 evidenceIds 数组，仅列出本次实际提供的证据 ID，最多 16 个；没有可支持的问题就不要生成。引用 ID 只表示来源绑定，不代表事实已核实。'
   const cards = writerVariant === 'topic-cards'
     ? `\n\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n${topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'}`
     : ''
