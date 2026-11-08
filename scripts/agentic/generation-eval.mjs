@@ -5,6 +5,7 @@ import { lstat, mkdir, open, readFile, realpath, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
+import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import { canonicalJson, sha256 as dataSha256 } from './dataset-contract.mjs'
 import {
@@ -34,6 +35,7 @@ const STARTUP_HELPER = path.resolve(HERE, '../evaluation/run-agentic-profile-sta
 const require = createRequire(import.meta.url)
 const HASH = /^[a-f0-9]{64}$/u
 const COMMIT = /^[a-f0-9]{40}$/u
+const MAX_CELL_WALL_CLOCK_MS = 600_000
 const FAILURE_CODES = new Set([
   'authorization-invalid', 'authorization-binding-mismatch', 'authorization-required', 'authorization-claim-required',
   'authorization-claim-invalid', 'authorization-claim-used', 'execution-root-mismatch', 'output-path-invalid',
@@ -71,6 +73,18 @@ function bindingFromAuthorization(authorization) {
 function checkMethod(api, name) {
   if (!api || typeof api[name] !== 'function') fail('authorization-invalid')
   return api[name].bind(api)
+}
+
+function getSyntheticTestHooks(mode, hooks) {
+  if (mode === 'real' && hooks !== undefined) fail('authorization-invalid')
+  if (hooks === undefined) return undefined
+  const allowed = ['clock', 'setTimeout', 'clearTimeout', 'onCellStep']
+  if (mode !== 'synthetic' || !isRecord(hooks) || Object.keys(hooks).some((key) => !allowed.includes(key)) ||
+    hooks.clock !== undefined && typeof hooks.clock !== 'function' ||
+    hooks.setTimeout !== undefined && typeof hooks.setTimeout !== 'function' ||
+    hooks.clearTimeout !== undefined && typeof hooks.clearTimeout !== 'function' ||
+    hooks.onCellStep !== undefined && typeof hooks.onCellStep !== 'function') fail('authorization-invalid')
+  return hooks
 }
 
 export async function checkGenerationAuthorizationArtifact({ repoRoot, authorizationPath } = {}) {
@@ -312,10 +326,13 @@ async function createPrivateScratch(parent) {
   return canonical
 }
 
-async function materializeProject(project, caseRoot) {
+async function materializeProject(project, caseRoot, checkDeadline = () => undefined) {
   const projectRoot = path.join(caseRoot, 'source')
+  checkDeadline()
   await mkdir(projectRoot, { mode: 0o700 })
+  checkDeadline()
   const canonicalProjectRoot = await realpath(projectRoot)
+  checkDeadline()
   if (!within(caseRoot, canonicalProjectRoot)) fail('scratch-path-invalid')
   for (const file of project.files) {
     const segments = assertSafeSourcePath(file.path)
@@ -327,18 +344,26 @@ async function materializeProject(project, caseRoot) {
         if (!stat.isDirectory() || stat.isSymbolicLink() || ((stat.attributes ?? 0) & 0x400) !== 0) fail('scratch-path-invalid')
       } catch (error) {
         if (error?.code !== 'ENOENT') throw error
+        checkDeadline()
         await mkdir(next, { mode: 0o700 })
+        checkDeadline()
       }
       parent = next
     }
     const target = path.resolve(parent, segments.at(-1))
     if (!within(canonicalProjectRoot, target)) fail('scratch-path-invalid')
+    checkDeadline()
     const handle = await open(target, 'wx', 0o600)
     try {
+      checkDeadline()
       await handle.writeFile(Buffer.from(file.content, 'utf8'))
+      checkDeadline()
       await handle.sync()
+      checkDeadline()
     } finally { await handle.close() }
+    checkDeadline()
     const stat = await lstat(target)
+    checkDeadline()
     if (!stat.isFile() || stat.isSymbolicLink() || sha(await readFile(target)) !== file.sha256) fail('dataset-invalid')
   }
   return canonicalProjectRoot
@@ -381,11 +406,12 @@ function makeTopicCard(task, evidenceIds) {
   })
 }
 
-async function issueFrozenEvidence({ project, task, evidenceInput, snapshot, store, ledger, signal, caseNumber }) {
+async function issueFrozenEvidence({ project, task, evidenceInput, snapshot, store, ledger, signal, caseNumber, checkDeadline = () => undefined }) {
   const fileByPath = new Map(snapshot.files.map((file) => [file.relPath, file]))
   const ids = []
   const readCache = new Map()
   for (let index = 0; index < evidenceInput.evidence.length; index++) {
+    checkDeadline()
     const ref = evidenceInput.evidence[index]
     const file = fileByPath.get(ref.path)
     if (!file) fail('evidence-invalid')
@@ -397,6 +423,7 @@ async function issueFrozenEvidence({ project, task, evidenceInput, snapshot, sto
       try {
         attempted = true
         const response = await snapshot.readFile(file.fileId, signal)
+        checkDeadline()
         ledger.settleRead(reservationId, response.consumedBytes)
         read = response.read
         readCache.set(file.fileId, read)
@@ -412,6 +439,7 @@ async function issueFrozenEvidence({ project, task, evidenceInput, snapshot, sto
     const sourceLines = read.text.split('\n')
     if (ref.endLine > sourceLines.length || dataSha256(Buffer.from(sourceLines.slice(ref.startLine - 1, ref.endLine).join('\n'), 'utf8')) !== ref.sha256) fail('evidence-invalid')
     const records = await store.issue(read, { startLine: ref.startLine, endLine: ref.endLine }, signal)
+    checkDeadline()
     const exact = records.filter((record) => record.originalRange?.startLine === ref.startLine && record.originalRange?.endLine === ref.endLine && record.contentHash === ref.sha256)
     if (exact.length !== 1 || exact[0].relPath !== ref.path || exact[0].snapshotId !== snapshot.snapshotId) fail('evidence-invalid')
     ids.push(exact[0].id)
@@ -528,7 +556,7 @@ function validateSidecarLineage(result, sidecar, requests) {
   })
 }
 
-function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, usage, modelFailure) {
+function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, usage, modelFailure, elapsedMs, deadlineReason) {
   return {
     ...cell,
     caseNumber,
@@ -537,6 +565,8 @@ function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, us
       status: 'failed',
       ...(errorCode ? { errorCode } : {}),
       ...(modelFailure ? { modelFailure } : {}),
+      elapsedMs,
+      ...(deadlineReason ? { deadlineReason } : {}),
       acceptedQuestionCount,
       usageComplete: usage?.usageComplete ?? false,
       lineageValid: false,
@@ -559,10 +589,12 @@ export async function runGenerationEvaluation({
   profile,
   readProfile,
   mode = 'real',
-  transport
+  transport,
+  testHooks: suppliedTestHooks
 } = {}) {
   const realMode = mode === 'real'
   if (!realMode && mode !== 'synthetic') fail('execution-failed')
+  const testHooks = getSyntheticTestHooks(mode, suppliedTestHooks)
   if (realMode && (transport !== undefined || profile !== undefined || typeof readProfile !== 'function')) fail('authorization-invalid')
   if (mode === 'synthetic' && (!transport || !isRecord(profile) || readProfile !== undefined || authorizationPath !== undefined || claimPath !== undefined)) fail('authorization-invalid')
   if (mode === 'real' && (typeof authorizationPath !== 'string' || !authorizationPath || typeof claimPath !== 'string' || !claimPath)) fail('authorization-required')
@@ -623,6 +655,15 @@ export async function runGenerationEvaluation({
   fsyncSync(journalFd); closeSync(journalFd)
   const scratchRootReal = await createPrivateScratch(scratchParent)
   const controller = new AbortController()
+  let lastClock = -Infinity
+  const monotonicNow = () => {
+    const value = testHooks?.clock ? testHooks.clock() : performance.now()
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < lastClock) fail('execution-failed')
+    lastClock = value
+    return value
+  }
+  const scheduleTimer = testHooks?.setTimeout ?? setTimeout
+  const cancelTimer = testHooks?.clearTimeout ?? clearTimeout
   const globalCollector = realMode
     ? createGlobalBudgetCollector({ maxRequests: authorization.maxRequests, maxInputTokens: authorization.maxInputTokens, maxOutputTokens: authorization.maxOutputTokensTotal })
     : createGlobalBudgetCollector({ maxRequests: budgets.matrix.maxRequests, maxInputTokens: budgets.matrix.maxInputTokens, maxOutputTokens: budgets.matrix.maxOutputTokensTotal })
@@ -643,18 +684,52 @@ export async function runGenerationEvaluation({
       const evidenceInput = evidenceMap.get(cell.taskId)
       if (!task || !project || !evidenceInput) { stopped = true; break }
       cellOrder++
+      const cellStartedAt = monotonicNow()
+      const cellDeadlineAt = cellStartedAt + MAX_CELL_WALL_CLOCK_MS
+      let deadlineExpired = false
+      const cellController = new AbortController()
+      const abortCellFromRun = () => cellController.abort()
+      controller.signal.addEventListener('abort', abortCellFromRun, { once: true })
+      const cellTimer = scheduleTimer(() => {
+        deadlineExpired = true
+        cellController.abort()
+      }, MAX_CELL_WALL_CLOCK_MS)
+      const checkCellDeadline = () => {
+        const elapsed = monotonicNow() - cellStartedAt
+        if (deadlineExpired || elapsed >= MAX_CELL_WALL_CLOCK_MS) {
+          deadlineExpired = true
+          cellController.abort()
+          throw new Error('timeout')
+        }
+        if (controller.signal.aborted) {
+          cellController.abort()
+          throw new Error('cancelled')
+        }
+        if (cellController.signal.aborted) throw new Error('cancelled')
+        return Math.max(0, Math.floor(elapsed))
+      }
+      const cellStep = async (step) => {
+        checkCellDeadline()
+        await testHooks?.onCellStep?.({ caseNumber: cellOrder, step })
+        return checkCellDeadline()
+      }
       const caseDirectory = path.join(scratchRootReal, `case-${String(cellOrder).padStart(4, '0')}`)
       let scan, snapshot, store, ledger, adapter, acceptedQuestionCount = 0, usage
       const caseMeta = { id: cell.id, taskId: cell.taskId, strategy: cell.strategy, repeat: cell.repeat, actualOrder: cellOrder, granularity: cell.granularity }
       try {
+        await cellStep('before-materialize')
         await mkdir(caseDirectory, { mode: 0o700 })
-        const projectRoot = await materializeProject(project, caseDirectory)
+        const projectRoot = await materializeProject(project, caseDirectory, checkCellDeadline)
+        await cellStep('after-materialize')
         scan = await scanProject(projectRoot)
+        await cellStep('after-scan')
         snapshot = await createWorkflowSnapshot(scan, { projectId: task.projectId })
+        await cellStep('after-snapshot')
         store = createEvidenceStore(snapshot)
         const spec = makeRunSpec(task, configuredProfile, snapshot.snapshotId, cell, GENERATION_REQUESTS_PER_RUN[task.granularity])
         ledger = createBudgetLedger(spec)
-        const ids = await issueFrozenEvidence({ project, task, evidenceInput, snapshot, store, ledger, signal: controller.signal, caseNumber: cellOrder })
+        const ids = await issueFrozenEvidence({ project, task, evidenceInput, snapshot, store, ledger, signal: cellController.signal, caseNumber: cellOrder, checkDeadline: checkCellDeadline })
+        await cellStep('after-evidence')
         if (ids.length !== evidenceInput.evidence.length) fail('evidence-invalid')
         const topics = cell.strategy === 'agentic' ? [makeTopicCard(task, ids)] : []
         const writerVariant = cell.strategy === 'static-control' ? EVIDENCE_GENERATION_WRITER_VARIANTS.staticControl : EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards
@@ -675,31 +750,51 @@ export async function runGenerationEvaluation({
           topics,
           ledger,
           profile: configuredProfile,
-          signal: controller.signal,
+          signal: cellController.signal,
           transport: guardedTransport,
           writerVariant
         })
+        await cellStep('after-adapter-prepare')
         const baseAdapter = adapter.requestAdapter
         const wrappedAdapter = Object.freeze({
           id: `${baseAdapter.id}-m08-public-goal-v1`,
-          prepare: (request) => baseAdapter.prepare({ ...request, buildMessages: (contextText) => makePublicTaskPrompt(request.buildMessages(contextText), task) }),
-          complete: (prepared, onDelta, options) => baseAdapter.complete(prepared, onDelta, options),
-          acceptQuestion: async (input) => { await baseAdapter.acceptQuestion(input); acceptedQuestionCount++ }
+          prepare: async (request) => {
+            checkCellDeadline()
+            const prepared = await baseAdapter.prepare({ ...request, buildMessages: (contextText) => makePublicTaskPrompt(request.buildMessages(contextText), task) })
+            checkCellDeadline()
+            return prepared
+          },
+          complete: async (prepared, onDelta, options) => {
+            checkCellDeadline()
+            const completion = await baseAdapter.complete(prepared, onDelta, options)
+            checkCellDeadline()
+            return completion
+          },
+          acceptQuestion: async (input) => {
+            checkCellDeadline()
+            await baseAdapter.acceptQuestion(input)
+            checkCellDeadline()
+            acceptedQuestionCount++
+          }
         })
+        await cellStep('before-generation')
         appendDurableJournal(journalPath, { type: 'cell-started', cell: caseMeta, evidenceCount: ids.length })
         const result = await generateInterview({
           scan,
           granularity: task.granularity,
           roleFocus: task.roleFocus,
           profile: configuredProfile,
-          signal: controller.signal,
+          signal: cellController.signal,
           onProgress: (_step, _detail, percent) => {
+            checkCellDeadline()
             appendDurableJournal(journalPath, { type: 'generation-progress', case: cellOrder, percent: Math.max(0, Math.min(100, Math.floor(percent))) })
           },
           contextProvider: adapter.contextProvider,
           requestAdapter: wrappedAdapter
         })
+        await cellStep('after-generation')
         const sidecar = await adapter.finalize(result)
+        await cellStep('after-finalize')
         const adapterMetadata = adapter.metadata()
         usage = outputUsageFromLedger(ledger, adapterMetadata, cell.id)
         const lineageValid = validateSidecarLineage(result, sidecar, usage.requests)
@@ -710,19 +805,32 @@ export async function runGenerationEvaluation({
         const metadataFile = `case-${String(cellOrder).padStart(4, '0')}.metadata.json`
         const sanitizedResult = { ...result, projectPath: 'source-fixture' }
         await writeExclusive(outputRoot, resultFile, { schemaVersion: 1, cell: caseMeta, result: sanitizedResult })
+        await cellStep('after-result-write')
         await writeExclusive(outputRoot, sidecarFile, sidecar)
+        await cellStep('after-sidecar-write')
         const metadata = { schemaVersion: 1, cell: caseMeta, requests: usage.requests, usage: { usageComplete: usage.usageComplete, knownActual: usage.knownActual, unknownReservations: usage.unknownReservations, conservativeCharged: usage.conservativeCharged } }
         await writeExclusive(outputRoot, metadataFile, metadata)
+        await cellStep('after-metadata-write')
+        const resultBytes = await readFile(path.join(outputRoot, resultFile))
+        await cellStep('after-result-hash-read')
+        const sidecarBytes = await readFile(path.join(outputRoot, sidecarFile))
+        await cellStep('after-sidecar-hash-read')
+        const metadataBytes = await readFile(path.join(outputRoot, metadataFile))
+        await cellStep('after-metadata-hash-read')
         const artifactHashes = {
-          result: sha(await readFile(path.join(outputRoot, resultFile))),
-          sidecar: sha(await readFile(path.join(outputRoot, sidecarFile))),
-          metadata: sha(await readFile(path.join(outputRoot, metadataFile)))
+          result: sha(resultBytes),
+          sidecar: sha(sidecarBytes),
+          metadata: sha(metadataBytes)
         }
+        await cellStep('after-artifact-hashes')
+        const elapsedMs = checkCellDeadline()
+        appendDurableJournal(journalPath, { type: 'cell-completed', case: cellOrder, requestCount: usage.requests.length, acceptedQuestionCount, elapsedMs, usageComplete: true, lineageValid: true })
+        checkCellDeadline()
         results.push({
           ...cell,
           actualOrder: cellOrder,
           execution: {
-            status: 'succeeded', acceptedQuestionCount, usageComplete: usage.usageComplete, lineageValid,
+            status: 'succeeded', acceptedQuestionCount, elapsedMs, usageComplete: usage.usageComplete, lineageValid,
             knownActual: usage.knownActual, unknownReservations: usage.unknownReservations, conservativeCharged: usage.conservativeCharged
           },
           requests: usage.requests,
@@ -731,24 +839,33 @@ export async function runGenerationEvaluation({
           metadataFile,
           artifactHashes
         })
-        appendDurableJournal(journalPath, { type: 'cell-completed', case: cellOrder, requestCount: usage.requests.length, acceptedQuestionCount, usageComplete: true, lineageValid: true })
       } catch (error) {
-        const errorCode = stageFailure(error)
+        const elapsedMs = Math.max(0, Math.floor(monotonicNow() - cellStartedAt))
+        const errorCode = deadlineExpired ? 'timeout' : stageFailure(error)
+        const deadlineReason = deadlineExpired ? 'per-run-wall-clock' : undefined
         const modelFailure = sanitizeModelFailure(error?.modelFailure) ?? undefined
         try { usage = ledger ? outputUsageFromLedger(ledger, adapter?.metadata?.() ?? [], cell.id) : undefined } catch { usage = undefined }
-        const failed = failedCellRecord(cell, cellOrder, errorCode, acceptedQuestionCount, usage, modelFailure)
+        const failed = failedCellRecord(cell, cellOrder, errorCode, acceptedQuestionCount, usage, modelFailure, elapsedMs, deadlineReason)
         if (usage) {
           try { addSourceBindings(sourceBindings, usage.requests) } catch { failed.execution.lineageValid = false }
         }
         results.push(failed)
-        appendDurableJournal(journalPath, { type: 'cell-failed', case: cellOrder, errorCode, acceptedQuestionCount, usageComplete: usage?.usageComplete ?? false })
+        appendDurableJournal(journalPath, { type: 'cell-failed', case: cellOrder, errorCode, acceptedQuestionCount, elapsedMs, ...(deadlineReason ? { deadlineReason } : {}), usageComplete: usage?.usageComplete ?? false })
         const metadataFile = `case-${String(cellOrder).padStart(4, '0')}.metadata.json`
-        await writeExclusive(outputRoot, metadataFile, { schemaVersion: 1, cell: caseMeta, execution: failed.execution, requests: failed.requests })
-        failed.metadataFile = metadataFile
-        failed.artifactHashes = { metadata: sha(await readFile(path.join(outputRoot, metadataFile))) }
+        let failureMetadataFile = metadataFile
+        try {
+          await lstat(path.join(outputRoot, metadataFile))
+          failureMetadataFile = `case-${String(cellOrder).padStart(4, '0')}.failure.json`
+        } catch (error) { if (error?.code !== 'ENOENT') throw error }
+        await writeExclusive(outputRoot, failureMetadataFile, { schemaVersion: 1, cell: caseMeta, execution: failed.execution, requests: failed.requests })
+        failed.metadataFile = failureMetadataFile
+        failed.artifactHashes = { metadata: sha(await readFile(path.join(outputRoot, failureMetadataFile))) }
         stopped = true
         controller.abort()
         break
+      } finally {
+        cancelTimer(cellTimer)
+        controller.signal.removeEventListener('abort', abortCellFromRun)
       }
     }
 

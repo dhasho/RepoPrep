@@ -313,6 +313,9 @@ export function validateGenerationExecutionReport(report, bundle) {
     const execution = cell.execution
     if (!isObject(execution) || !Array.isArray(cell.requests)) { issues.push('execution-cell-invalid'); continue }
     add(issues, !['succeeded', 'failed'].includes(execution.status) || !Number.isSafeInteger(execution.acceptedQuestionCount) || execution.acceptedQuestionCount < 0, 'execution-cell-status-invalid')
+    add(issues, !Number.isSafeInteger(execution.elapsedMs) || execution.elapsedMs < 0, 'execution-elapsed-invalid')
+    if (execution.status === 'succeeded') add(issues, execution.elapsedMs >= 600_000 || execution.deadlineReason !== undefined, 'execution-deadline-invalid')
+    if (execution.deadlineReason !== undefined) add(issues, execution.deadlineReason !== 'per-run-wall-clock' || execution.status !== 'failed' || execution.errorCode !== 'timeout', 'execution-deadline-reason-invalid')
     const known = { requests: 0, inputTokens: 0, outputTokens: 0 }
     const unknown = []
     const charged = { requests: 0, inputTokens: 0, outputTokens: 0 }

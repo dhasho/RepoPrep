@@ -215,7 +215,7 @@ test('execution report validator accepts an actual packer manifest and rejects a
     cells.push({
       ...cell,
       actualOrder: index + 1,
-      execution: { status: 'succeeded', acceptedQuestionCount: 1, usageComplete: true, lineageValid: true, knownActual: { requests: 1, inputTokens: 1, outputTokens: 1 }, unknownReservations: [], conservativeCharged: { requests: 1, inputTokens: 1, outputTokens: 1 } },
+      execution: { status: 'succeeded', acceptedQuestionCount: 1, elapsedMs: 1, usageComplete: true, lineageValid: true, knownActual: { requests: 1, inputTokens: 1, outputTokens: 1 }, unknownReservations: [], conservativeCharged: { requests: 1, inputTokens: 1, outputTokens: 1 } },
       requests: [{ requestId, stage: 'generation', completion: 'completed', usage, reservation: { state: 'settled', inputTokens: 20_000, outputTokens: 32_768 }, manifest }],
       resultFile: `case-${String(index + 1).padStart(4, '0')}.result.json`,
       sidecarFile: `case-${String(index + 1).padStart(4, '0')}.sidecar.json`,
@@ -253,4 +253,9 @@ test('execution report validator accepts an actual packer manifest and rejects a
   overrun.matrix[0].requests[0].usage.totalTokens = 32_770
   const overrunCheck = validateGenerationExecutionReport(overrun, bundle)
   assert.ok(overrunCheck.issues.includes('execution-usage-over-reservation'))
+
+  const lateCell = structuredClone(report)
+  lateCell.matrix[0].execution.elapsedMs = 600_000
+  const lateCheck = validateGenerationExecutionReport(lateCell, bundle)
+  assert.ok(lateCheck.issues.includes('execution-deadline-invalid'))
 })

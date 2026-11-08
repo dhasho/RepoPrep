@@ -84,14 +84,17 @@ async function runSynthetic(t, options = {}) {
   const { mkdir } = await import('node:fs/promises')
   await mkdir(scratchParent)
   const outputDir = path.join(temp, 'execution')
-  const fixture = syntheticTransport(options)
+  const fixture = options.transport
+    ? { transport: options.transport, requestCount: () => options.requestCount?.() ?? 0, messagesSeen: [] }
+    : syntheticTransport(options)
   const report = await runGenerationEvaluation({
     mode: 'synthetic',
     repoRoot: codeRoot,
     outputDir,
     scratchRoot: scratchParent,
     profile: syntheticProfile,
-    transport: fixture.transport
+    transport: fixture.transport,
+    ...(options.testHooks ? { testHooks: options.testHooks } : {})
   })
   return { report, fixture, outputDir }
 }
@@ -154,6 +157,7 @@ test('synthetic runtime executes all 48 balanced fixed-evidence cells and preser
   assert.ok(report.usage.conservativeCharged.inputTokens <= budget.matrix.maxInputTokens)
   assert.ok(report.usage.conservativeCharged.outputTokens <= budget.matrix.maxOutputTokensTotal)
   assert.ok(report.matrix.every((cell) => cell.execution.usageComplete && cell.execution.lineageValid && cell.artifactHashes.result && cell.artifactHashes.sidecar))
+  assert.ok(report.matrix.every((cell) => Number.isSafeInteger(cell.execution.elapsedMs) && cell.execution.elapsedMs >= 0 && cell.execution.elapsedMs < 600_000))
   for (let index = 0; index < bundle.tasks.length; index++) {
     const rows = report.matrix.filter((cell) => cell.taskId === bundle.tasks[index].id)
     assert.deepEqual(rows.map((cell) => `${cell.repeat}:${cell.strategy}`), ['1:static-control', '1:agentic', '2:agentic', '2:static-control'])
@@ -205,6 +209,72 @@ test('failed cells preserve only the sanitized model failure classification', { 
   const publicReport = JSON.stringify(report)
   assert.equal(publicReport.includes('SYNTHETIC_PRIVATE_PROVIDER_BODY'), false)
   assert.equal(publicReport.includes(syntheticProfile.apiKey), false)
+})
+
+function deadlineHarness(expireAtStep) {
+  let now = 0
+  let timerCallback
+  return {
+    hooks: {
+      clock: () => now,
+      setTimeout(callback, delay) { assert.equal(delay, 600_000); timerCallback = callback; return 'cell-timer' },
+      clearTimeout(handle) { assert.equal(handle, 'cell-timer') },
+      onCellStep({ step, caseNumber }) {
+        if (caseNumber === 1 && step === expireAtStep) now = 600_001
+      }
+    },
+    expireTimer() {
+      now = 600_001
+      timerCallback?.()
+    }
+  }
+}
+
+test('synthetic cell deadline covers setup, finalization, and final artifact writes', { timeout: 90_000 }, async (t) => {
+  for (const step of ['before-materialize', 'after-finalize', 'after-metadata-write']) {
+    const harness = deadlineHarness(step)
+    const { report, fixture, outputDir } = await runSynthetic(t, { testHooks: harness.hooks })
+    assert.equal(report.executionComplete, false, `${step} cannot publish a successful matrix cell`)
+    assert.equal(report.matrix.length, 1)
+    const cell = report.matrix[0]
+    assert.equal(cell.execution.status, 'failed')
+    assert.equal(cell.execution.errorCode, 'timeout')
+    assert.equal(cell.execution.deadlineReason, 'per-run-wall-clock')
+    assert.equal(cell.execution.elapsedMs, 600_001)
+    if (step === 'before-materialize') assert.equal(fixture.requestCount(), 0, 'expired setup stops before source reads and dispatch')
+    if (step === 'after-finalize') assert.equal(cell.resultFile, null, 'expired finalization does not write a successful result')
+    if (step === 'after-metadata-write') {
+      assert.equal(cell.resultFile, null, 'completed bytes written after the deadline are not marked as a successful cell')
+      assert.equal(cell.metadataFile, 'case-0001.failure.json', 'failure accounting never overwrites the earlier exclusive metadata artifact')
+      await readFile(path.join(outputDir, cell.metadataFile), 'utf8')
+    }
+  }
+})
+
+test('synthetic streaming deadline aborts only the active cell and retains its unknown reservation', { timeout: 90_000 }, async (t) => {
+  const harness = deadlineHarness(undefined)
+  let requestCount = 0
+  const transport = async (_profile, _messages, _onDelta, options) => {
+    requestCount++
+    options.beforeRequest?.()
+    await new Promise((resolve, reject) => {
+      const rejectCancelled = () => reject(new LlmRequestError('cancelled'))
+      if (options.signal.aborted) { rejectCancelled(); return }
+      options.signal.addEventListener('abort', rejectCancelled, { once: true })
+      harness.expireTimer()
+    })
+    return 'never-completes'
+  }
+  const { report } = await runSynthetic(t, { transport, requestCount: () => requestCount, testHooks: harness.hooks })
+  assert.equal(requestCount, 1)
+  assert.equal(report.executionComplete, false)
+  assert.equal(report.matrix.length, 1)
+  const cell = report.matrix[0]
+  assert.equal(cell.execution.errorCode, 'timeout', 'deadline cancellation is classified as the run budget, not user cancellation')
+  assert.equal(cell.execution.deadlineReason, 'per-run-wall-clock')
+  assert.equal(cell.execution.elapsedMs, 600_001)
+  assert.equal(cell.execution.unknownReservations.length, 1)
+  assert.ok(cell.execution.conservativeCharged.inputTokens > 0)
 })
 
 test('synthetic ignored reasoning can exhaust the raw SSE byte cap before the usage tail', async () => {
