@@ -1,6 +1,6 @@
 # Explicit SSE wire budget
 
-Status: bounded client repair under implementation. Historical missing usage remains unknown.
+Status: bounded client repair implemented in `92ce85f` and verified offline. Historical missing usage remains unknown.
 
 ## Evidence
 
@@ -19,3 +19,5 @@ Invalid byte-limit options fail before fetch. A response exceeding the explicit 
 ## Verification
 
 Use the same small-frame SSE fixture to demonstrate default rejection and explicitly budgeted success with one usage callback. Test the hard ceiling, malformed option, event/content limits, timeout and cancellation independently. Preserve all existing default/static tests. No actual model request is required to validate this client change, and no old receipt or quality result is rewritten.
+
+The eight synthetic wire-boundary tests pass, including explicit-cap exhaustion and unknown-content-type probing. The probe retains at most a three-byte BOM prefix rather than a second array of every response byte. Root integration checks passed typecheck, all 274 IPC tests, security (77 pass and 3 existing platform skips), and a real Electron smoke with `SMOKE-OK`, exit 0 and confirmed fixture deletion. Saved settings and original measurement artifacts were not modified.
