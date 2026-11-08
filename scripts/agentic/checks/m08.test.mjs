@@ -18,7 +18,7 @@ test('M08 verifier cannot certify synthetic runs or missing execution artifacts'
   assert.match(realWithoutArtifacts.reason, /^m08_/u)
 })
 
-test('synthetic runtime raw artifacts pass independent source, lineage, journal and 419-request-cap checks', { timeout: 180_000 }, async t => {
+test('synthetic runtime artifacts use the shared verifier for current request caps and reject below-usage caps', { timeout: 180_000 }, async t => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'm08-gate-raw-test-'))
   t.after(async () => {
     const stat = await lstat(temp)
@@ -58,11 +58,26 @@ test('synthetic runtime raw artifacts pass independent source, lineage, journal 
     mode: 'synthetic', repoRoot, outputDir: path.join(temp, 'execution'), scratchRoot, profile, transport
   })
   const bundle = await loadGenerationEvaluationBundle()
-  const verified = await validateM08SyntheticRawArtifactsForTest({
+  const baseCaps = { maxRuns: 48, maxRequests: 419, maxInputTokens: 6_144_000, maxOutputTokensTotal: 3_145_728, maxOutputTokens: 32_768 }
+  for (const maxRequests of [405, 407, 419]) {
+    const verified = await validateM08SyntheticRawArtifactsForTest({
+      report, outputRoot: path.join(temp, 'execution'), bundle, authorization: { ...baseCaps, maxRequests }
+    })
+    assert.equal(verified.cells, 48)
+    assert.equal(verified.requests, requestNumber)
+    assert.ok(verified.requests <= maxRequests)
+  }
+  const actual = report.usage.knownActual
+  await assert.rejects(validateM08SyntheticRawArtifactsForTest({
     report, outputRoot: path.join(temp, 'execution'), bundle,
-    authorization: { maxRequests: 419, maxInputTokens: 6_144_000, maxOutputTokensTotal: 3_145_728, maxOutputTokens: 32_768 }
-  })
-  assert.equal(verified.cells, 48)
-  assert.equal(verified.requests, requestNumber)
-  assert.ok(verified.requests <= 419)
+    authorization: { ...baseCaps, maxRequests: actual.requests - 1 }
+  }), /M08_GLOBAL_COLLECTOR_TOTAL_INVALID/u)
+  await assert.rejects(validateM08SyntheticRawArtifactsForTest({
+    report, outputRoot: path.join(temp, 'execution'), bundle,
+    authorization: { ...baseCaps, maxInputTokens: actual.inputTokens - 1 }
+  }), /M08_GLOBAL_COLLECTOR_TOTAL_INVALID/u)
+  await assert.rejects(validateM08SyntheticRawArtifactsForTest({
+    report, outputRoot: path.join(temp, 'execution'), bundle,
+    authorization: { ...baseCaps, maxOutputTokensTotal: actual.outputTokens - 1 }
+  }), /M08_GLOBAL_COLLECTOR_TOTAL_INVALID/u)
 })

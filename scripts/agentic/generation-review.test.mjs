@@ -352,6 +352,12 @@ test('synthetic contract fixtures bind blinded packets to raw M07 artifacts and 
   assert.equal(analysed.categoryCounts.agentic['contradicted-source'], 1)
   assert.equal(analysed.categoryCounts.agentic['unsupported-claim'], 1)
 
+  const extraAnswerResolution = structuredClone(adjudication)
+  extraAnswerResolution.resolutions[0].unexpected = 'rejected'
+  assert.throws(() => analyzeSyntheticReviewGrades({
+    packetSet: built.packetSet, privateMap: built.privateMap, reviewerA, reviewerB, adjudication: extraAnswerResolution
+  }), /adjudication-resolution-invalid/u)
+
   const incomplete = structuredClone(reviewerA)
   incomplete.packets[0].answers.pop()
   assert.throws(() => analyzeSyntheticReviewGrades({ packetSet: built.packetSet, privateMap: built.privateMap, reviewerA: incomplete, reviewerB, adjudication }), /review-answer-coverage-invalid/u)

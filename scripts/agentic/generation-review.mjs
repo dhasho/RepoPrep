@@ -761,6 +761,7 @@ function validateAdjudication({ adjudication, disagreements, packetSet }) {
     const expectedDisagreement = expected.get(key)
     if (!expectedDisagreement || resolutions.has(key) || !validateReason(resolution.reason)) fail('adjudication-resolution-invalid')
     if (resolution.kind === 'answer') {
+      if (!exact(resolution, ['kind', 'packetId', 'answerUnitId', 'materialError', 'errorCategories', 'sourceSupport', 'reason'])) fail('adjudication-resolution-invalid')
       const packet = packetSet.packets.find(value => value.packetId === resolution.packetId)
       const units = collectPublicUnits(packet.questions)
       const unit = units.get(resolution.answerUnitId)

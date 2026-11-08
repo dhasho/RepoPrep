@@ -6,8 +6,8 @@ import { assertInterviewResultContract } from '../../../shared/result-contract.t
 import { canonicalJson, sha256 } from '../dataset-contract.mjs'
 import {
   GENERATION_PER_RUN, GENERATION_PURPOSE, GENERATION_REVIEW_PENDING,
-  GENERATION_REQUESTS_PER_RUN,
-  createGenerationMatrix, loadGenerationEvaluationBundle, validateGenerationExecutionReport
+  GENERATION_REQUESTS_PER_RUN, GENERATION_OUTPUT_CAPS,
+  createGenerationMatrix, deriveGenerationBudgets, loadGenerationEvaluationBundle, validateGenerationExecutionReport
 } from '../generation-eval-contract.mjs'
 import { checkGenerationAuthorizationArtifact, verifyGenerationClaim } from '../generation-eval.mjs'
 import {
@@ -256,17 +256,42 @@ function validateGlobalCollector(report, cells, authorization) {
   if (!same(reportUsage, expected)) fail('M08_AGGREGATE_USAGE_INVALID')
 }
 
+function validateAuthorizationCaps(authorization, bundle) {
+  const maximum = deriveGenerationBudgets(bundle).matrix
+  if (!isRecord(authorization) || authorization.maxRuns !== 48 || !Number.isSafeInteger(authorization.maxRequests) ||
+    authorization.maxRequests < 1 || authorization.maxRequests > maximum.maxRequests ||
+    !Number.isSafeInteger(authorization.maxInputTokens) || authorization.maxInputTokens < 1 || authorization.maxInputTokens > maximum.maxInputTokens ||
+    !Number.isSafeInteger(authorization.maxOutputTokensTotal) || authorization.maxOutputTokensTotal < 1 || authorization.maxOutputTokensTotal > maximum.maxOutputTokensTotal ||
+    !GENERATION_OUTPUT_CAPS.includes(authorization.maxOutputTokens)) fail('M08_AUTHORIZATION_CAP_INVALID')
+  return {
+    maxRuns: authorization.maxRuns, maxRequests: authorization.maxRequests, maxInputTokens: authorization.maxInputTokens,
+    maxOutputTokensTotal: authorization.maxOutputTokensTotal, maxOutputTokensPerRequest: authorization.maxOutputTokens
+  }
+}
+
+async function verifyRawArtifacts({ report, outputRoot, bundle, authorization, complete }) {
+  const expectedBudgets = validateAuthorizationCaps(authorization, bundle)
+  if (!same(report.budgets, expectedBudgets)) fail('M08_BUDGET_BINDING_INVALID')
+  const expectedMatrix = createGenerationMatrix(bundle)
+  if (!Array.isArray(report.matrix) || report.matrix.length > expectedMatrix.length || (complete && report.matrix.length !== expectedMatrix.length)) fail('M08_MATRIX_INCOMPLETE')
+  const tasks = new Map(bundle.tasks.map(task => [task.id, task]))
+  if (report.matrix.some((cell, index) => !same(
+    { id: cell.id, taskId: cell.taskId, strategy: cell.strategy, repeat: cell.repeat, granularity: cell.granularity }, expectedMatrix[index]
+  ) || cell.actualOrder !== index + 1 || cell.caseNumber !== index + 1)) fail('M08_MATRIX_ORDER_INVALID')
+  const cells = []
+  for (const cell of report.matrix) cells.push(await readCell(outputRoot, cell, tasks.get(cell.taskId), authorization, complete, bundle))
+  await verifyJournal(outputRoot, report, cells)
+  if (complete) validateGlobalCollector(report, cells, authorization)
+  return cells
+}
+
 /** Test-only raw-artifact path; refuses real reports and never changes production gate authorization. */
 export async function validateM08SyntheticRawArtifactsForTest({ report, outputRoot, bundle, authorization }) {
-  if (!isRecord(report) || report.mode !== 'synthetic' || report.executionComplete !== true ||
-    !isRecord(authorization) || authorization.maxRequests !== 419 || authorization.maxOutputTokens !== 32_768) fail('M08_TEST_FIXTURE_INVALID')
-  const structural = validateGenerationExecutionReport(report, bundle)
-  if (!structural.valid || !structural.executionComplete || report.matrix.length !== 48) fail('M08_TEST_FIXTURE_INVALID')
-  const tasks = new Map(bundle.tasks.map(task => [task.id, task]))
-  const cells = []
-  for (const cell of report.matrix) cells.push(await readCell(outputRoot, cell, tasks.get(cell.taskId), authorization, true, bundle))
-  await verifyJournal(outputRoot, report, cells)
-  validateGlobalCollector(report, cells, authorization)
+  if (!isRecord(report) || report.mode !== 'synthetic' || report.executionComplete !== true) fail('M08_TEST_FIXTURE_INVALID')
+  const testBoundReport = { ...report, mode: 'real', budgets: validateAuthorizationCaps(authorization, bundle) }
+  const structural = validateGenerationExecutionReport(testBoundReport, bundle)
+  if (!structural.valid || !structural.executionComplete || testBoundReport.matrix.length !== 48) fail('M08_TEST_FIXTURE_INVALID')
+  const cells = await verifyRawArtifacts({ report: testBoundReport, outputRoot, bundle, authorization, complete: true })
   return Object.freeze({ cells: cells.length, requests: cells.reduce((sum, row) => add(sum, row.requests.length), 0) })
 }
 
@@ -300,12 +325,7 @@ export function createChecks(options = {}) {
       await verifyGenerationClaim({ repoRoot: sourceRoot, authorization: binding.authorization, claimPath: path.join(sourceRoot, '.validation/agentic/claims', `${claimId}.json`) })
       const marker = parse(await safeRead(sourceRoot, `.validation/agentic/claims/${claimId}.started`, 1024))
       if (marker.claimId !== claimId || marker.state !== 'started') fail('M08_CLAIM_NOT_STARTED')
-      const expectedBudgets = {
-        maxRuns: binding.authorization.maxRuns, maxRequests: binding.authorization.maxRequests,
-        maxInputTokens: binding.authorization.maxInputTokens, maxOutputTokensTotal: binding.authorization.maxOutputTokensTotal,
-        maxOutputTokensPerRequest: binding.authorization.maxOutputTokens
-      }
-      if (!same(report.budgets, expectedBudgets) || !same(report.configurationBinding, {
+      if (!same(report.configurationBinding, {
         endpointFingerprint: binding.authorization.endpointFingerprint, model: binding.authorization.model, protocol: binding.authorization.protocol,
         temperature: binding.authorization.temperature, reasoningEffort: binding.authorization.reasoningEffort,
         contextWindowTokens: binding.authorization.contextWindowTokens, maxOutputTokens: binding.authorization.maxOutputTokens
@@ -313,20 +333,10 @@ export function createChecks(options = {}) {
       const checked = validateGenerationExecutionReport(report, bundle)
       const complete = checked.executionComplete && report.executionComplete === true && report.status === 'awaiting-review' && report.reviewState === GENERATION_REVIEW_PENDING
       if (complete && !checked.valid) fail('M08_EXECUTION_REPORT_INVALID')
-      if (!Array.isArray(report.matrix) || report.matrix.length > 48 || (complete && report.matrix.length !== 48)) fail('M08_MATRIX_INCOMPLETE')
-      const expectedMatrix = createGenerationMatrix(bundle)
-      if (report.matrix.some((cell, index) => !same(
-        { id: cell.id, taskId: cell.taskId, strategy: cell.strategy, repeat: cell.repeat, granularity: cell.granularity },
-        expectedMatrix[index]
-      ) || cell.actualOrder !== index + 1 || cell.caseNumber !== index + 1)) fail('M08_MATRIX_ORDER_INVALID')
       if (!complete && (report.executionComplete !== false || report.status !== 'incomplete' || report.reviewState !== 'blocked')) fail('M08_EXECUTION_STATUS_INVALID')
-      const taskById = new Map(bundle.tasks.map(task => [task.id, task]))
       const outputRoot = safeOutputRoot(reportPath, report)
-      const cells = []
-      for (const cell of report.matrix) cells.push(await readCell(outputRoot, cell, taskById.get(cell.taskId), binding.authorization, complete, bundle))
-      await verifyJournal(outputRoot, report, cells)
+      const cells = await verifyRawArtifacts({ report, outputRoot, bundle, authorization: binding.authorization, complete })
       if (!complete) return unknownCheck('m08-execution-incomplete')
-      validateGlobalCollector(report, cells, binding.authorization)
       const rubricBytes = await safeRead(sourceRoot, 'scripts/agentic/assets/review-rubric.v2.json', 128 * 1024)
       const rubricSha256 = validateRubric(rubricBytes)
       const readReview = async name => parse(await safeRead(outputRoot, path.join('review', name), LIMIT.review))
