@@ -44,7 +44,7 @@ const hash = value => sha256(Buffer.from(value, 'utf8'))
 const hashJson = value => hash(canonicalJson(value))
 const safeId = value => typeof value === 'string' && value.length > 0 && value.length <= 160 && !value.includes(String.fromCharCode(0))
 const safeOpaqueId = value => typeof value === 'string' && /^(?:packet|src|qset|unit)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value)
-const safeText = value => typeof value === 'string' && value.length <= 256_000 && !value.includes(String.fromCharCode(0))
+const safeText = (value, max = 256_000) => typeof value === 'string' && value.length <= max && !value.includes(String.fromCharCode(0))
 const safePath = value => typeof value === 'string' && value.length > 0 && value.length <= 2048 &&
   !value.includes('\\') && !value.includes(String.fromCharCode(0)) && !value.includes(':') && !value.startsWith('/') &&
   value.split('/').every(part => part && part !== '.' && part !== '..')
@@ -782,11 +782,12 @@ function validateAdjudication({ adjudication, disagreements, packetSet }) {
   return resolutions
 }
 
-function validateInvocationBundle(invocations, packetSet, reviewerA, reviewerB, disagreements, outputHashes) {
-  if (!exact(invocations, ['schemaVersion', 'protocol', 'rubricSha256', 'packetSetSha256', 'reviewers', 'adjudicator']) ||
+function validateInvocationBundle(invocations, packetSet, privateMap, reviewerA, reviewerB, disagreements, outputHashes) {
+  if (!exact(invocations, ['schemaVersion', 'protocol', 'rubricSha256', 'packetSetSha256', 'privateMapSha256', 'reviewers', 'adjudicator']) ||
     invocations.schemaVersion !== GENERATION_REVIEW_SCHEMA_VERSION || invocations.protocol !== GENERATION_REVIEW_PROTOCOL ||
     invocations.rubricSha256 !== packetSet.rubricSha256 ||
-    invocations.packetSetSha256 !== packetSet.packetSetSha256 || !Array.isArray(invocations.reviewers) || invocations.reviewers.length !== 2 ||
+    invocations.packetSetSha256 !== packetSet.packetSetSha256 || invocations.privateMapSha256 !== privateMap.privateMapSha256 ||
+    !Array.isArray(invocations.reviewers) || invocations.reviewers.length !== 2 ||
     !isRecord(outputHashes) || !HASH.test(outputHashes.reviewerA || '') || !HASH.test(outputHashes.reviewerB || '') ||
     !HASH.test(outputHashes.adjudication || '') || invocations.reviewers.some(item => !isRecord(item))) fail('review-invocation-bundle-invalid')
   const records = new Map(invocations.reviewers.map(item => [item.role, item]))
@@ -870,7 +871,7 @@ export function validateGenerationReviewBundle({ packetSet, privateMap, reviewer
   const reviewersB = validateReviewerRecord(reviewerB, 'B', packetSet, invocations.reviewers.find(item => item?.role === 'B'), outputHashes?.reviewerB)
   const disagreements = answerDisagreements(packetSet, reviewersA, reviewersB)
   const adjudicated = validateAdjudication({ adjudication, disagreements, packetSet })
-  validateInvocationBundle(invocations, packetSet, reviewersA, reviewersB, disagreements, outputHashes)
+  validateInvocationBundle(invocations, packetSet, privateMap, reviewersA, reviewersB, disagreements, outputHashes)
   const finals = finalResults(packetSet, reviewersA, disagreements, adjudicated)
   const stats = addFinalStats(null, packetSet, privateMap, finals)
   const candidate = stats.agentic

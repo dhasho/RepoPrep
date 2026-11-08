@@ -363,6 +363,15 @@ test('synthetic contract fixtures bind blinded packets to raw M07 artifacts and 
     packetSet: built.packetSet, privateMap: built.privateMap, reviewerA, reviewerB, adjudication,
     invocations: null, outputHashes: null, usageComplete: true
   }), /review-invocation-bundle-invalid/u)
+  assert.throws(() => validateGenerationReviewBundle({
+    packetSet: built.packetSet, privateMap: built.privateMap,
+    reviewerA: { ...reviewerA, agentIdentity: 'x'.repeat(201) }, reviewerB, adjudication,
+    invocations: null, outputHashes: null, usageComplete: true
+  }), /review-invocation-bundle-invalid/u)
+  assert.throws(() => analyzeSyntheticReviewGrades({
+    packetSet: built.packetSet, privateMap: built.privateMap,
+    reviewerA: { ...reviewerA, agentIdentity: 'x'.repeat(201) }, reviewerB, adjudication
+  }), /reviewer-record-invalid/u)
 
   const badManifest = structuredClone(data)
   badManifest.cells[0].requests[0].manifest.manifestHash = '0'.repeat(64)
