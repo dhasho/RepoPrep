@@ -355,11 +355,18 @@ test('synthetic contract fixtures bind blinded packets to raw M07 artifacts and 
   const incomplete = structuredClone(reviewerA)
   incomplete.packets[0].answers.pop()
   assert.throws(() => analyzeSyntheticReviewGrades({ packetSet: built.packetSet, privateMap: built.privateMap, reviewerA: incomplete, reviewerB, adjudication }), /review-answer-coverage-invalid/u)
+  const unknown = structuredClone(reviewerA)
+  unknown.packets[0].answers[0].materialError = 'unknown'
+  assert.throws(() => analyzeSyntheticReviewGrades({ packetSet: built.packetSet, privateMap: built.privateMap, reviewerA: unknown, reviewerB, adjudication }), /review-answer-grade-invalid/u)
+  assert.throws(() => deriveReviewDisagreements({ packetSet: built.packetSet, privateMap: built.privateMap, reviewerA, reviewerB: { ...reviewerB, agentIdentity: reviewerA.agentIdentity } }), /reviewers-not-independent/u)
   assert.throws(() => validateGenerationReviewBundle({
     packetSet: built.packetSet, privateMap: built.privateMap, reviewerA, reviewerB, adjudication,
     invocations: null, outputHashes: null, usageComplete: true
   }), /review-invocation-bundle-invalid/u)
 
+  const badManifest = structuredClone(data)
+  badManifest.cells[0].requests[0].manifest.manifestHash = '0'.repeat(64)
+  assert.throws(() => buildBlindedReviewPackets(badManifest), /m07-manifest-invalid/u)
   const changedExecution = structuredClone(data)
   changedExecution.cells[0].result.sections[0].questions[0].answer += ' changed after review'
   assert.throws(() => verifyBlindedReviewPackets({ ...changedExecution, packetSet: built.packetSet, privateMap: built.privateMap }), /question-fingerprint-mismatch/u)
