@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { canonicalJson, hashEvidenceRange, sha256 } from './dataset-contract.mjs'
 
 export const GENERATION_PURPOSE = 'm08-generation-v1'
+export const GENERATION_REVIEW_PENDING = 'independent-quality-review-pending'
 export const GENERATION_STRATEGIES = Object.freeze(['static-control', 'agentic'])
 export const GENERATION_REPEATS = Object.freeze([1, 2])
 export const GENERATION_OUTPUT_CAPS = Object.freeze([16_384, 32_768])
@@ -390,5 +391,6 @@ export function validateGenerationExecutionReport(report, bundle) {
   const complete = issues.length === 0 && report.matrix.length === matrix.length && report.matrix.every((cell) => cell.execution.status === 'succeeded') && aggregate.unknownReservations.length === 0
   add(issues, report.executionComplete !== complete, 'execution-complete-mismatch')
   add(issues, report.status !== (complete ? 'awaiting-review' : 'incomplete'), 'execution-status-mismatch')
+  add(issues, report.reviewState !== (complete ? GENERATION_REVIEW_PENDING : 'blocked'), 'execution-review-state-mismatch')
   return { valid: issues.length === 0, executionComplete: complete && report.executionComplete === true, issues: [...new Set(issues)] }
 }

@@ -10,6 +10,7 @@ import {
   GENERATION_PER_RUN,
   GENERATION_OUTPUT_CAPS,
   GENERATION_PURPOSE,
+  GENERATION_REVIEW_PENDING,
   createGenerationMatrix,
   deriveGenerationBudgets,
   loadGenerationEvaluationBundle,
@@ -227,7 +228,7 @@ test('execution report validator accepts an actual packer manifest and rejects a
     unknownReservations: [],
     conservativeCharged: { requests: 48, inputTokens: 48, outputTokens: 48 }
   }
-  const report = { purpose: GENERATION_PURPOSE, qualityGate: 'not-evaluated', sourceStable: true, executionComplete: true, status: 'awaiting-review', matrix: cells, sourceBindings, usage }
+  const report = { purpose: GENERATION_PURPOSE, qualityGate: 'not-evaluated', sourceStable: true, executionComplete: true, status: 'awaiting-review', reviewState: GENERATION_REVIEW_PENDING, matrix: cells, sourceBindings, usage }
   const accepted = validateGenerationExecutionReport(report, bundle)
   assert.equal(accepted.valid, true, accepted.issues.join(','))
   assert.equal(accepted.executionComplete, true)
