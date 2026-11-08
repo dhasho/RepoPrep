@@ -8,7 +8,7 @@ import { createModelGateway } from './model-gateway.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
 import { createRunSpec } from './run-spec.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
-import { LlmRequestError, normalizeBaseUrl } from '../llm.ts'
+import { LLM_RESPONSE_LIMITS, LlmRequestError, normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { WorkflowError } from './project-contract.ts'
 // @ts-ignore TS5097 -- direct Node runner executes explicit TypeScript module paths.
@@ -35,6 +35,7 @@ test('gateway bounds output, counts dispatch, and returns receipt without exposi
   const gateway = createModelGateway(runSpec, mutableProfile, ledger, { transport: async (selected, _messages, _delta, options) => {
     capturedKey = selected.apiKey
     assert.ok(options.maxOutputTokens! <= runSpec.generationOutputTokens)
+    assert.equal(options.maxStreamBodyBytes, LLM_RESPONSE_LIMITS.chatBodyBytes)
     options.beforeRequest!()
     options.onUsage!(usage)
     return 'synthetic response'
@@ -47,6 +48,30 @@ test('gateway bounds output, counts dispatch, and returns receipt without exposi
   assert.equal(ledger.snapshot().reservations[0].contextChars, messages[0].content.length)
   assert.equal(JSON.stringify(ledger.snapshot()).includes('SYNTHETIC_SECRET'), false)
   assert.equal(capturedKey, 'SYNTHETIC_SECRET')
+})
+
+test('M05 scales only the private stream wire allowance from the reserved output cap', async () => {
+  for (const cap of [16_384, 32_768]) {
+    const privateProfile = { ...profile(), contextWindowTokens: 65_536, maxOutputTokens: cap }
+    const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(privateProfile.baseUrl)).digest('hex')
+    const runSpec = createRunSpec({
+      version: 1, runId: `stream-cap-${cap}`, projectId: 'project-01', snapshotId: 'snapshot-01', strategy: 'agentic', strategyVersion: 'agentic-v1',
+      roleFocus: 'backend', granularity: 'fine',
+      model: { profileId: privateProfile.id, model: privateProfile.model, endpointFingerprint, protocol: privateProfile.protocol, temperature: 0.4, contextWindowTokens: privateProfile.contextWindowTokens, maxOutputTokens: cap },
+      promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1'
+    })
+    const ledger = createBudgetLedger(runSpec)
+    let observed = 0
+    const gateway = createModelGateway(runSpec, privateProfile, ledger, { transport: async (_selected, _messages, _delta, options) => {
+      observed = options.maxStreamBodyBytes!
+      assert.equal(options.maxOutputTokens, cap)
+      options.beforeRequest!()
+      options.onUsage!({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+      return 'synthetic response'
+    } })
+    await gateway.complete({ id: `request-${cap}`, stage: 'generation', messages })
+    assert.equal(observed, Math.min(LLM_RESPONSE_LIMITS.maxStreamBodyBytes, Math.max(LLM_RESPONSE_LIMITS.chatBodyBytes, cap * 1024)))
+  }
 })
 
 test('gateway releases pre-request failure without counting an attempt', async () => {
@@ -74,6 +99,22 @@ test('gateway propagates only sanitized model failure metadata', async () => {
   await assert.rejects(gateway.complete({ id: 'length-failure', stage: 'generation', messages }), error => {
     assert.ok(error instanceof WorkflowError)
     assert.deepEqual(error.modelFailure, { kind: 'response', finishReason: 'length' })
+    assert.doesNotMatch(JSON.stringify(error), /SYNTHETIC_SECRET|synthetic\.invalid|stack|prompt/)
+    return true
+  })
+  assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+  assert.equal(ledger.snapshot().usageComplete, false)
+})
+
+test('gateway retains the finite stream-body response limit without exposing raw response data', async () => {
+  const ledger = createBudgetLedger(spec())
+  const gateway = createModelGateway(spec(), profile(), ledger, { transport: async (_p, _m, _d, options) => {
+    options.beforeRequest!()
+    throw new LlmRequestError('response', undefined, { responseLimit: 'stream-bytes' })
+  } })
+  await assert.rejects(gateway.complete({ id: 'stream-body-limit', stage: 'generation', messages }), error => {
+    assert.ok(error instanceof WorkflowError)
+    assert.deepEqual(error.modelFailure, { kind: 'response', responseLimit: 'stream-bytes' })
     assert.doesNotMatch(JSON.stringify(error), /SYNTHETIC_SECRET|synthetic\.invalid|stack|prompt/)
     return true
   })

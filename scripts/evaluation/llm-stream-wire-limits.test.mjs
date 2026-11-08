@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { chatCompletionStream, LlmRequestError, LLM_RESPONSE_LIMITS } from '../../electron/services/llm.ts'
+import { createHash } from 'node:crypto'
+import { chatCompletion, chatCompletionStream, LlmRequestError, LLM_RESPONSE_LIMITS } from '../../electron/services/llm.ts'
+import { estimateMessageTokens } from '../../shared/token-budget.ts'
+import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
+import { createModelGateway } from '../../electron/services/workflow/model-gateway.ts'
+import { createRunSpec } from '../../electron/services/workflow/run-spec.ts'
+import { normalizeBaseUrl } from '../../electron/services/llm.ts'
 
 const profile = Object.freeze({
   id: 'synthetic-wire-profile', name: 'Synthetic wire diagnostic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY',
@@ -27,26 +33,7 @@ function streamFromText(text, chunkBytes = 8192) {
   return { body, get producedBytes() { return producedBytes }, get cancelled() { return cancelled }, totalBytes: source.byteLength }
 }
 
-async function withSyntheticFetch(fetcher, operation) {
-  const previous = globalThis.fetch
-  globalThis.fetch = fetcher
-  try { return await operation() } finally { globalThis.fetch = previous }
-}
-
-async function observeStream(body, { timeoutMs = 5000, maxOutputTokens = 32_768 } = {}) {
-  let visible = '', usage = null, dispatched = false, failure = null, returned = null
-  try {
-    returned = await chatCompletionStream(profile, messages, delta => { visible += delta }, {
-      timeoutMs,
-      maxOutputTokens,
-      beforeRequest: () => { dispatched = true },
-      onUsage: value => { usage = value }
-    })
-  } catch (error) { failure = error }
-  return { visible, usage, dispatched, failure, returned }
-}
-
-test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide the final usage tail', async t => {
+function reasoningStreamFixture(reasoningFrames, usage = { inputTokens: 500, outputTokens: 10_000 }) {
   const visibleJson = '{"projectSummary":"synthetic","sections":[],"glossary":{}}'
   const envelope = delta => ({
     id: 'chatcmpl-synthetic-wire-frame',
@@ -57,13 +44,35 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
     choices: [{ index: 0, delta, finish_reason: null }]
   })
   const events = [frame(envelope({ content: visibleJson }))]
-  const reasoningFrames = 20_000
-  for (let index = 0; index < reasoningFrames; index++) {
-    events.push(frame(envelope({ reasoning_content: 'r' })))
-  }
+  for (let index = 0; index < reasoningFrames; index++) events.push(frame(envelope({ reasoning_content: 'r' })))
   events.push(frame({ ...envelope({}), choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }))
-  const usageTail = frame({ id: 'chatcmpl-synthetic-usage', object: 'chat.completion.chunk', created: 1_793_000_000, model: 'synthetic-32k-model', choices: [], usage: { prompt_tokens: 500, completion_tokens: 10_000, total_tokens: 10_500 } }) + 'data: [DONE]\n\n'
-  const wire = events.join('') + usageTail
+  const usageTail = frame({ id: 'chatcmpl-synthetic-usage', object: 'chat.completion.chunk', created: 1_793_000_000, model: 'synthetic-32k-model', choices: [], usage: { prompt_tokens: usage.inputTokens, completion_tokens: usage.outputTokens, total_tokens: usage.inputTokens + usage.outputTokens } }) + 'data: [DONE]\n\n'
+  return { visibleJson, events, usageTail, wire: events.join('') + usageTail }
+}
+
+async function withSyntheticFetch(fetcher, operation) {
+  const previous = globalThis.fetch
+  globalThis.fetch = fetcher
+  try { return await operation() } finally { globalThis.fetch = previous }
+}
+
+async function observeStream(body, { timeoutMs = 5000, maxOutputTokens = 32_768, maxStreamBodyBytes } = {}) {
+  let visible = '', usage = null, dispatched = false, failure = null, returned = null
+  try {
+    returned = await chatCompletionStream(profile, messages, delta => { visible += delta }, {
+      timeoutMs,
+      maxOutputTokens,
+      ...(maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes } : {}),
+      beforeRequest: () => { dispatched = true },
+      onUsage: value => { usage = value }
+    })
+  } catch (error) { failure = error }
+  return { visible, usage, dispatched, failure, returned }
+}
+
+test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide the final usage tail', async t => {
+  const reasoningFrames = 20_000
+  const { visibleJson, events, usageTail, wire } = reasoningStreamFixture(reasoningFrames)
   const body = streamFromText(wire)
   const tailStartByte = encoder.encode(events.join('')).byteLength
   const previous = globalThis.fetch
@@ -72,6 +81,7 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
   try { observed = await observeStream(body.body) } finally { globalThis.fetch = previous }
   const safeKind = observed.failure instanceof LlmRequestError ? observed.failure.kind : 'other'
   const safeFinishReason = observed.failure instanceof LlmRequestError ? observed.failure.modelFailure.finishReason ?? 'none' : 'none'
+  const safeResponseLimit = observed.failure instanceof LlmRequestError ? observed.failure.modelFailure.responseLimit ?? 'none' : 'none'
   t.diagnostic(JSON.stringify({
     wireBytes: body.totalBytes,
     bodyLimitBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
@@ -82,7 +92,8 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
     dispatchStarted: observed.dispatched,
     usageReported: observed.usage !== null,
     errorKind: safeKind,
-    finishReason: safeFinishReason
+    finishReason: safeFinishReason,
+    responseLimit: safeResponseLimit
   }))
   assert.ok(body.totalBytes > LLM_RESPONSE_LIMITS.chatBodyBytes)
   assert.ok(reasoningFrames < 32_768, 'synthetic ignored reasoning remains below the authorized output-token ceiling')
@@ -94,6 +105,7 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
   assert.ok(observed.failure instanceof LlmRequestError)
   assert.equal(observed.failure.kind, 'response')
   assert.equal(observed.failure.modelFailure.finishReason, undefined)
+  assert.equal(observed.failure.modelFailure.responseLimit, 'stream-bytes')
 
   const belowLimitEvents = [events[0], ...events.slice(1, 10_001), events.at(-1), usageTail]
   const belowLimitWire = belowLimitEvents.join('')
@@ -102,6 +114,112 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
   const belowLimit = await withSyntheticFetch(async () => new Response(belowLimitBody.body, { headers: { 'content-type': 'text/event-stream' } }), () => observeStream(belowLimitBody.body))
   assert.equal(belowLimit.returned, visibleJson)
   assert.deepEqual(belowLimit.usage, { inputTokens: 500, outputTokens: 10_000, totalTokens: 10_500 })
+})
+
+test('M05 reserved output allowance permits a 32k stream with small visible output and one complete receipt', async () => {
+  const profile = { ...({ id: 'm05-wire-profile', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4 }), contextWindowTokens: 65_536, maxOutputTokens: 32_768 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const spec = createRunSpec({
+    version: 1, runId: 'm05-wire-32k', projectId: 'synthetic-project', snapshotId: 'synthetic-snapshot', strategy: 'agentic', strategyVersion: 'agentic-v1',
+    roleFocus: 'backend', granularity: 'fine',
+    model: { profileId: profile.id, endpointFingerprint, model: profile.model, protocol: profile.protocol, temperature: 0.4, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens },
+    promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1'
+  })
+  const requestMessages = [{ role: 'user', content: 'synthetic M05 request '.repeat(100) }]
+  const inputTokens = estimateMessageTokens(requestMessages)
+  const fixture = reasoningStreamFixture(20_000, { inputTokens, outputTokens: 10_000 })
+  const body = streamFromText(fixture.wire)
+  const ledger = createBudgetLedger(spec)
+  const gateway = createModelGateway(spec, profile, ledger)
+  let requestBody
+  const completion = await withSyntheticFetch(async (_url, init) => {
+    requestBody = JSON.parse(init.body)
+    return new Response(body.body, { headers: { 'content-type': 'text/event-stream' } })
+  }, () => gateway.complete({ id: 'm05-wire-call', stage: 'generation', messages: requestMessages }))
+
+  assert.equal(completion.content, fixture.visibleJson)
+  assert.deepEqual(completion.usage, { inputTokens, outputTokens: 10_000, totalTokens: inputTokens + 10_000 })
+  assert.equal(requestBody.max_tokens, 32_768)
+  assert.equal(Object.hasOwn(requestBody, 'maxStreamBodyBytes'), false)
+  assert.ok(fixture.wire.length > LLM_RESPONSE_LIMITS.chatBodyBytes)
+  assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+  assert.equal(ledger.snapshot().usageComplete, true)
+  assert.equal(ledger.snapshot().reservations[0].state, 'settled')
+  assert.equal(ledger.snapshot().total.outputTokens, 10_000)
+  assert.deepEqual(ledger.snapshot().total.actualProviderUsage, { inputTokens, outputTokens: 10_000, totalTokens: inputTokens + 10_000 })
+  assert.equal(body.cancelled, false)
+})
+
+test('an explicitly smaller stream allowance rejects the same wire before usage and releases its reader', async () => {
+  const { wire } = reasoningStreamFixture(20_000)
+  const body = streamFromText(wire)
+  const allowance = LLM_RESPONSE_LIMITS.chatBodyBytes + 1024
+  assert.ok(body.totalBytes > allowance)
+  const result = await withSyntheticFetch(async () => new Response(body.body, { headers: { 'content-type': 'text/event-stream' } }), () => observeStream(body.body, { maxStreamBodyBytes: allowance }))
+  assert.ok(result.failure instanceof LlmRequestError)
+  assert.equal(result.failure.modelFailure.responseLimit, 'stream-bytes')
+  assert.equal(result.usage, null)
+  assert.equal(body.cancelled, true)
+  assert.equal(body.body.locked, false)
+})
+
+test('an M05 request with the 2k output reservation keeps unknown usage when its 4 MiB floor is exceeded', async () => {
+  const profile = { ...({ id: 'm05-wire-2k', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4 }), contextWindowTokens: 49_152, maxOutputTokens: 2000 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const spec = createRunSpec({
+    version: 1, runId: 'm05-wire-2k', projectId: 'synthetic-project', snapshotId: 'synthetic-snapshot', strategy: 'agentic', strategyVersion: 'agentic-v1',
+    roleFocus: 'backend', granularity: 'fine',
+    model: { profileId: profile.id, endpointFingerprint, model: profile.model, protocol: profile.protocol, temperature: 0.4, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: profile.maxOutputTokens },
+    promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1'
+  })
+  const requestMessages = [{ role: 'user', content: 'synthetic M05 request '.repeat(100) }]
+  const inputTokens = estimateMessageTokens(requestMessages)
+  const wire = reasoningStreamFixture(20_000, { inputTokens, outputTokens: 1000 }).wire
+  const body = streamFromText(wire)
+  const ledger = createBudgetLedger(spec)
+  const gateway = createModelGateway(spec, profile, ledger)
+  await withSyntheticFetch(async () => new Response(body.body, { headers: { 'content-type': 'text/event-stream' } }), async () => {
+    await assert.rejects(gateway.complete({ id: 'm05-wire-2k-call', stage: 'generation', messages: requestMessages }), error => {
+      assert.equal(error?.modelFailure?.responseLimit, 'stream-bytes')
+      return true
+    })
+  })
+  assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+  assert.equal(ledger.snapshot().usageComplete, false)
+  assert.equal(ledger.snapshot().reservations[0].state, 'unknown')
+  assert.equal(body.cancelled, true)
+  assert.equal(body.body.locked, false)
+})
+
+test('unknown content-type probing uses bounded prefix state and JSON fallback keeps its 4 MiB cap', async () => {
+  const prefix = ' '.repeat(LLM_RESPONSE_LIMITS.chatBodyBytes + 64)
+  const json = `${prefix}{"choices":[{"message":{"content":"synthetic"}}]}`
+  const body = streamFromText(json, encoder.encode(json).byteLength)
+  assert.ok(body.totalBytes < 8 * 1024 * 1024)
+  await withSyntheticFetch(async () => new Response(body.body, { headers: { 'content-type': 'application/octet-stream' } }), async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => undefined, { maxStreamBodyBytes: 8 * 1024 * 1024 }), error => error instanceof LlmRequestError && error.kind === 'response' && error.modelFailure.responseLimit === undefined)
+  })
+  assert.equal(body.body.locked, false)
+})
+
+test('M05 output reservation derives the legacy floor, invalid caps block before fetch, and JSON stays at 4 MiB', async () => {
+  let fetchCalls = 0, beforeRequestCalls = 0
+  await withSyntheticFetch(async () => { fetchCalls++; throw new Error('fetch-must-not-run') }, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => undefined, {
+      maxOutputTokens: 32_768,
+      maxStreamBodyBytes: LLM_RESPONSE_LIMITS.maxStreamBodyBytes + 1,
+      beforeRequest: () => { beforeRequestCalls++ }
+    }), error => error instanceof LlmRequestError && error.kind === 'response')
+  })
+  assert.equal(fetchCalls, 0)
+  assert.equal(beforeRequestCalls, 0)
+  assert.equal(Math.max(LLM_RESPONSE_LIMITS.chatBodyBytes, Math.min(LLM_RESPONSE_LIMITS.maxStreamBodyBytes, 2000 * 1024)), LLM_RESPONSE_LIMITS.chatBodyBytes)
+
+  const jsonBody = JSON.stringify({ choices: [{ message: { content: 'synthetic' } }], padding: 'x'.repeat(LLM_RESPONSE_LIMITS.chatBodyBytes + 16) })
+  assert.ok(encoder.encode(jsonBody).byteLength > LLM_RESPONSE_LIMITS.chatBodyBytes)
+  await withSyntheticFetch(async () => new Response(jsonBody, { headers: { 'content-type': 'application/json' } }), async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => undefined, { maxStreamBodyBytes: LLM_RESPONSE_LIMITS.maxStreamBodyBytes }), error => error instanceof LlmRequestError && error.kind === 'response' && error.modelFailure.responseLimit === undefined)
+  })
 })
 
 test('the 1 MiB SSE event buffer and 1,000,000 visible-content cap are independent limits', async () => {

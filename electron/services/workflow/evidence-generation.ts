@@ -423,6 +423,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
           signal: state.signal,
           ...(timeoutMs !== undefined ? { timeoutMs } : {}),
           ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+          ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
           includeUsage: true,
           beforeRequest: () => {
             gatewayOptions.beforeRequest?.()

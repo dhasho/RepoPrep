@@ -16,6 +16,7 @@ export interface LlmModelFailure {
   readonly kind: LlmRequestErrorKind
   readonly httpStatus?: number
   readonly finishReason?: LlmFinishReason
+  readonly responseLimit?: 'stream-bytes'
 }
 
 const ERROR_MESSAGES: Record<LlmRequestErrorKind, string> = {
@@ -34,7 +35,7 @@ export class LlmRequestError extends Error {
   readonly kind: LlmRequestErrorKind
   readonly modelFailure: LlmModelFailure
 
-  constructor(kind: LlmRequestErrorKind, message = ERROR_MESSAGES[kind], details: { httpStatus?: number; finishReason?: string } = {}) {
+  constructor(kind: LlmRequestErrorKind, message = ERROR_MESSAGES[kind], details: { httpStatus?: number; finishReason?: string; responseLimit?: 'stream-bytes' } = {}) {
     super(message)
     this.name = 'LlmRequestError'
     this.kind = kind
@@ -45,7 +46,8 @@ export class LlmRequestError extends Error {
       ...(Number.isInteger(status) && status! >= 100 && status! <= 599 ? { httpStatus: status } : {}),
       ...(finishReason === 'length' || finishReason === 'content_filter' || finishReason === 'tool_calls' || finishReason === 'function_call' || finishReason === 'stop'
         ? { finishReason }
-        : finishReason ? { finishReason: 'other' as const } : {})
+        : finishReason ? { finishReason: 'other' as const } : {}),
+      ...(details.responseLimit === 'stream-bytes' ? { responseLimit: details.responseLimit } : {})
     })
   }
 }
@@ -204,6 +206,8 @@ export interface CallOptions {
   signal?: AbortSignal
   timeoutMs?: number
   maxOutputTokens?: number
+  /** Private M05 streaming allowance; omitted callers retain the 4 MiB legacy cap. */
+  maxStreamBodyBytes?: number
   includeUsage?: boolean
   /** Main-process admission guard. Unlike observers, rejection must prevent fetch. */
   beforeRequest?: () => void
@@ -222,6 +226,7 @@ function boundedUsage(value: unknown, protocol: LlmProfile['protocol']): LlmUsag
 
 export const LLM_RESPONSE_LIMITS = Object.freeze({
   chatBodyBytes: 4 * 1024 * 1024,
+  maxStreamBodyBytes: 32 * 1024 * 1024,
   modelsBodyBytes: 1 * 1024 * 1024,
   modelCount: 2000,
   modelIdChars: LLM_PROFILE_LIMITS.model,
@@ -230,6 +235,12 @@ export const LLM_RESPONSE_LIMITS = Object.freeze({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function resolveStreamBodyLimit(value: number | undefined): number {
+  if (value === undefined) return LLM_RESPONSE_LIMITS.chatBodyBytes
+  if (!Number.isSafeInteger(value) || value < LLM_RESPONSE_LIMITS.chatBodyBytes || value > LLM_RESPONSE_LIMITS.maxStreamBodyBytes) throw new LlmRequestError('response')
+  return value
 }
 
 function hasUnpairedSurrogate(value: string): boolean {
@@ -254,6 +265,8 @@ async function request(
   onDelta: ((delta: string) => unknown) | null,
   opts: CallOptions
 ): Promise<string> {
+  const maxStreamBodyBytes = stream ? resolveStreamBodyLimit(opts.maxStreamBodyBytes) : LLM_RESPONSE_LIMITS.chatBodyBytes
+  if (!stream && opts.maxStreamBodyBytes !== undefined && (!Number.isSafeInteger(opts.maxStreamBodyBytes) || opts.maxStreamBodyBytes < LLM_RESPONSE_LIMITS.chatBodyBytes || opts.maxStreamBodyBytes > LLM_RESPONSE_LIMITS.maxStreamBodyBytes)) throw new LlmRequestError('response')
   const controller = new AbortController()
   let abortKind: 'timeout' | 'cancelled' | null = null
   let settled = false
@@ -351,7 +364,7 @@ async function request(
       ? { mode: 'sse' as const, chunks: [] as Uint8Array[] }
       : contentType.includes('application/json')
         ? { mode: 'json' as const, chunks: [] as Uint8Array[] }
-        : await probeStreamBody(response.body, controller.signal)
+        : await probeStreamBody(response.body, controller.signal, maxStreamBodyBytes)
     if (probe.mode === 'json') {
       const text = await readBodyText(response.body, controller.signal, {
         maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
@@ -542,7 +555,8 @@ async function request(
     await readBodyChunks(response.body, controller.signal, feed, {
       flushDecoder: true,
       fatalUtf8: true,
-      maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
+      maxBytes: stream ? maxStreamBodyBytes : LLM_RESPONSE_LIMITS.chatBodyBytes,
+      ...(stream ? { maxBytesResponseLimit: 'stream-bytes' as const } : {}),
       initialChunks: probe.chunks
     })
     throwIfAborted()
@@ -623,15 +637,19 @@ async function readBodyText(
   return text
 }
 
-async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<{ mode: 'json' | 'sse'; chunks: Uint8Array[] }> {
+async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSignal, maxBytes = LLM_RESPONSE_LIMITS.chatBodyBytes): Promise<{ mode: 'json' | 'sse'; chunks: Uint8Array[] }> {
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
-  const probeBytes: number[] = []
   let bytesRead = 0
   let done = false
   let classified = false
-  let scanned = 0
-  let bomResolved = false
+  let atStreamStart = true
+  const bomPrefix: number[] = []
+  const classifyByte = (byte: number): 'json' | 'sse' | null => {
+    if (byte === 0x09 || byte === 0x0a || byte === 0x0d || byte === 0x20) return null
+    classified = true
+    return byte === 0x7b || byte === 0x5b ? 'json' : 'sse'
+  }
   const cancel = (): void => { try { void reader.cancel().catch(() => undefined) } catch { /* best effort */ } }
   const onAbort = (): void => cancel()
   signal.addEventListener('abort', onAbort, { once: true })
@@ -642,18 +660,22 @@ async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSi
       if (result.done) { done = true; return { mode: 'json', chunks } }
       chunks.push(result.value)
       bytesRead += result.value.byteLength
-      if (bytesRead > LLM_RESPONSE_LIMITS.chatBodyBytes) throw new LlmRequestError('response')
-      for (const byte of result.value) probeBytes.push(byte)
-      if (!bomResolved) {
-        if (probeBytes.length < 3 && (probeBytes[0] === 0xef && (probeBytes.length === 1 || probeBytes[1] === 0xbb))) continue
-        if (probeBytes[0] === 0xef && probeBytes[1] === 0xbb && probeBytes[2] === 0xbf) scanned = 3
-        bomResolved = true
-      }
-      while (scanned < probeBytes.length) {
-        const first = probeBytes[scanned++]
-        if (first === 0x09 || first === 0x0a || first === 0x0d || first === 0x20) continue
-        classified = true
-        return { mode: first === 0x7b || first === 0x5b ? 'json' : 'sse', chunks }
+      if (bytesRead > maxBytes) throw new LlmRequestError('response', undefined, { responseLimit: 'stream-bytes' })
+      for (const byte of result.value) {
+        if (atStreamStart) {
+          bomPrefix.push(byte)
+          if (bomPrefix.length === 1 && bomPrefix[0] === 0xef || bomPrefix.length === 2 && bomPrefix[0] === 0xef && bomPrefix[1] === 0xbb) continue
+          atStreamStart = false
+          const hasBom = bomPrefix.length === 3 && bomPrefix[0] === 0xef && bomPrefix[1] === 0xbb && bomPrefix[2] === 0xbf
+          if (!hasBom) for (const prefixByte of bomPrefix) {
+            const mode = classifyByte(prefixByte)
+            if (mode) return { mode, chunks }
+          }
+          bomPrefix.length = 0
+          continue
+        }
+        const mode = classifyByte(byte)
+        if (mode) return { mode, chunks }
       }
     }
   } finally {
@@ -667,7 +689,7 @@ async function readBodyChunks(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
   onChunk: (text: string) => boolean | void | Promise<boolean | void>,
-  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number; initialChunks?: Uint8Array[] } = {}
+  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number; maxBytesResponseLimit?: 'stream-bytes'; initialChunks?: Uint8Array[] } = {}
 ): Promise<void> {
   const reader = body.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: options.fatalUtf8 ?? false })
@@ -684,7 +706,7 @@ async function readBodyChunks(
   if (signal.aborted) onAbort()
   const consumeChunk = async (value: Uint8Array): Promise<boolean> => {
     if (options.maxBytes !== undefined) {
-      if (value.byteLength > options.maxBytes - bytesRead) throw new LlmRequestError('response')
+      if (value.byteLength > options.maxBytes - bytesRead) throw new LlmRequestError('response', undefined, options.maxBytesResponseLimit ? { responseLimit: options.maxBytesResponseLimit } : {})
       bytesRead += value.byteLength
     }
     let decoded: string

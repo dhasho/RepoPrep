@@ -442,6 +442,7 @@ export function sanitizeModelFailure(value) {
   const result = { kind: value.kind }
   if (Number.isInteger(value.httpStatus) && value.httpStatus >= 100 && value.httpStatus <= 599) result.httpStatus = value.httpStatus
   if (finishReasons.has(value.finishReason)) result.finishReason = value.finishReason
+  if (value.responseLimit === 'stream-bytes') result.responseLimit = 'stream-bytes'
   return result
 }
 

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript modules with explicit extensions.
-import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, normalizeBaseUrl } from '../llm.ts'
+import { chatCompletionStream, isLlmTimeoutError, LLM_RESPONSE_LIMITS, LlmRequestError, normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 TS5097 -- direct Node tests execute TypeScript modules with explicit extensions.
 import { estimateMessageTokens } from '../../../shared/token-budget.ts'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript modules with explicit extensions.
@@ -86,6 +86,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
       const maxStageOutput = input.stage === 'investigation' ? spec.budget.investigation.outputTokens : spec.generationOutputTokens
       const outputTokens = input.maxOutputTokens ?? Math.min(maxStageOutput, profile.maxOutputTokens ?? spec.generationOutputTokens)
       if (!Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > spec.generationOutputTokens || outputTokens > maxStageOutput || (spec.model.maxOutputTokens !== undefined && outputTokens > spec.model.maxOutputTokens) || (spec.model.contextWindowTokens !== undefined && outputTokens >= spec.model.contextWindowTokens)) throw new WorkflowError('invalid-argument')
+      const maxStreamBodyBytes = Math.max(LLM_RESPONSE_LIMITS.chatBodyBytes, Math.min(LLM_RESPONSE_LIMITS.maxStreamBodyBytes, outputTokens * 1024))
       const estimatedInputTokens = estimateMessageTokens(messages)
       if (!Number.isSafeInteger(estimatedInputTokens) || (spec.model.contextWindowTokens !== undefined && estimatedInputTokens + outputTokens > spec.model.contextWindowTokens)) throw new WorkflowError('budget-exhausted')
       if (input.signal?.aborted) throw new WorkflowError('cancelled')
@@ -131,6 +132,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           signal: input.signal,
           timeoutMs: Math.max(1, Math.min(300_000, remainingMs)),
           maxOutputTokens: outputTokens,
+          maxStreamBodyBytes,
           includeUsage: true,
           beforeRequest,
           onUsage: (usage) => { receipt = normalizeUsage(usage) }

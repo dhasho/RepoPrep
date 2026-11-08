@@ -11,7 +11,8 @@ function safeModelFailure(value: LlmModelFailure | undefined): LlmModelFailure |
   return Object.freeze({
     kind: value.kind,
     ...(Number.isInteger(status) && status! >= 100 && status! <= 599 ? { httpStatus: status } : {}),
-    ...(finishReason === 'length' || finishReason === 'content_filter' || finishReason === 'tool_calls' || finishReason === 'function_call' || finishReason === 'stop' || finishReason === 'other' ? { finishReason } : {})
+    ...(finishReason === 'length' || finishReason === 'content_filter' || finishReason === 'tool_calls' || finishReason === 'function_call' || finishReason === 'stop' || finishReason === 'other' ? { finishReason } : {}),
+    ...(value.responseLimit === 'stream-bytes' ? { responseLimit: value.responseLimit } : {})
   })
 }
 

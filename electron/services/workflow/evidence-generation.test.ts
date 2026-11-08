@@ -24,7 +24,7 @@ import { createRunSpec } from './run-spec.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { createBudgetLedger } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
-import { normalizeBaseUrl } from '../llm.ts'
+import { LLM_RESPONSE_LIMITS, normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { createModelGateway } from './model-gateway.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
@@ -428,6 +428,7 @@ test('dispatch uses captured profile, settles a repair against the same ledger a
   let requestNotifications = 0
   const usageNotifications: Array<{ inputTokens: number; outputTokens: number; totalTokens: number }> = []
   const transport: NonNullable<Parameters<typeof createEvidenceGenerationAdapter>[0]['transport']> = async (profile, messages, onDelta, options) => {
+    assert.equal(options.maxStreamBodyBytes, Math.max(LLM_RESPONSE_LIMITS.chatBodyBytes, Math.min(LLM_RESPONSE_LIMITS.maxStreamBodyBytes, options.maxOutputTokens! * 1024)))
     options.beforeRequest?.()
     calls++
     sent.push(JSON.stringify(messages))

@@ -186,6 +186,7 @@ test('unavailable failed-run evidence stays null and does not break aggregate ac
 
 test('model failure diagnostics retain only allowlisted scalar metadata', () => {
   assert.deepEqual(sanitizeModelFailure({ kind: 'http', httpStatus: 429, finishReason: 'length', message: 'secret', body: 'private' }), { kind: 'http', httpStatus: 429, finishReason: 'length' })
+  assert.deepEqual(sanitizeModelFailure({ kind: 'response', responseLimit: 'stream-bytes', body: 'private' }), { kind: 'response', responseLimit: 'stream-bytes' })
   assert.equal(sanitizeModelFailure({ kind: 'unknown', httpStatus: 429 }), null)
   assert.deepEqual(sanitizeModelFailure({ kind: 'network', httpStatus: 999, finishReason: 'secret' }), { kind: 'network' })
 })
