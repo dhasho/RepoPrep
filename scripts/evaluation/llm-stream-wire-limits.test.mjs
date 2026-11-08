@@ -48,12 +48,21 @@ async function observeStream(body, { timeoutMs = 5000, maxOutputTokens = 32_768 
 
 test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide the final usage tail', async t => {
   const visibleJson = '{"projectSummary":"synthetic","sections":[],"glossary":{}}'
-  const events = [frame({ choices: [{ index: 0, delta: { content: visibleJson }, finish_reason: null }] })]
-  for (let index = 0; index < 128; index++) {
-    events.push(frame({ choices: [{ index: 0, delta: { reasoning_content: 'r'.repeat(32_768) }, finish_reason: null }] }))
+  const envelope = delta => ({
+    id: 'chatcmpl-synthetic-wire-frame',
+    object: 'chat.completion.chunk',
+    created: 1_793_000_000,
+    model: 'synthetic-32k-model',
+    system_fingerprint: 'fp_synthetic',
+    choices: [{ index: 0, delta, finish_reason: null }]
+  })
+  const events = [frame(envelope({ content: visibleJson }))]
+  const reasoningFrames = 20_000
+  for (let index = 0; index < reasoningFrames; index++) {
+    events.push(frame(envelope({ reasoning_content: 'r' })))
   }
-  events.push(frame({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }))
-  const usageTail = frame({ choices: [], usage: { prompt_tokens: 37, completion_tokens: 19, total_tokens: 56 } }) + 'data: [DONE]\n\n'
+  events.push(frame({ ...envelope({}), choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }))
+  const usageTail = frame({ id: 'chatcmpl-synthetic-usage', object: 'chat.completion.chunk', created: 1_793_000_000, model: 'synthetic-32k-model', choices: [], usage: { prompt_tokens: 500, completion_tokens: 10_000, total_tokens: 10_500 } }) + 'data: [DONE]\n\n'
   const wire = events.join('') + usageTail
   const body = streamFromText(wire)
   const tailStartByte = encoder.encode(events.join('')).byteLength
@@ -67,6 +76,7 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
     wireBytes: body.totalBytes,
     bodyLimitBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
     bytesPulledByStream: body.producedBytes,
+    ignoredReasoningChars: reasoningFrames,
     usageTailStartByte: tailStartByte,
     visibleContentChars: observed.visible.length,
     dispatchStarted: observed.dispatched,
@@ -75,6 +85,7 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
     finishReason: safeFinishReason
   }))
   assert.ok(body.totalBytes > LLM_RESPONSE_LIMITS.chatBodyBytes)
+  assert.ok(reasoningFrames < 32_768, 'synthetic ignored reasoning remains below the authorized output-token ceiling')
   assert.ok(tailStartByte >= LLM_RESPONSE_LIMITS.chatBodyBytes)
   assert.equal(observed.dispatched, true)
   assert.equal(observed.visible, visibleJson)
@@ -84,13 +95,13 @@ test('ignored reasoning frames count toward the 4 MiB SSE wire cap and can hide 
   assert.equal(observed.failure.kind, 'response')
   assert.equal(observed.failure.modelFailure.finishReason, undefined)
 
-  const belowLimitEvents = [events[0], ...events.slice(1, 101), events.at(-1), usageTail]
+  const belowLimitEvents = [events[0], ...events.slice(1, 10_001), events.at(-1), usageTail]
   const belowLimitWire = belowLimitEvents.join('')
   const belowLimitBody = streamFromText(belowLimitWire)
   assert.ok(belowLimitBody.totalBytes < LLM_RESPONSE_LIMITS.chatBodyBytes)
   const belowLimit = await withSyntheticFetch(async () => new Response(belowLimitBody.body, { headers: { 'content-type': 'text/event-stream' } }), () => observeStream(belowLimitBody.body))
   assert.equal(belowLimit.returned, visibleJson)
-  assert.deepEqual(belowLimit.usage, { inputTokens: 37, outputTokens: 19, totalTokens: 56 })
+  assert.deepEqual(belowLimit.usage, { inputTokens: 500, outputTokens: 10_000, totalTokens: 10_500 })
 })
 
 test('the 1 MiB SSE event buffer and 1,000,000 visible-content cap are independent limits', async () => {
