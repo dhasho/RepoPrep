@@ -2,8 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { app } = require('electron')
 const { stageEncryptedSettings, readEncryptedSettings, registerSharedAliasHooks } = require('./run-saved-profile.cjs')
-const { execFileSync } = require('node:child_process')
-const { createHash } = require('node:crypto')
+const startupPolicy = require('./run-agentic-profile-startup.cjs')
 
 const STARTUP_STAGES = Object.freeze(['authorization', 'claim', 'private-runtime', 'saved-public-profile', 'settings-staging', 'electron-paths', 'app-ready', 'credential-store', 'profile-decrypt', 'profile-binding', 'evaluation'])
 const SAFE_ERRORS = new Set([
@@ -145,67 +144,31 @@ function prepareStartupSynchronously(options, dependencies = {}) {
 }
 
 function checkAuthorizationSync(repoRoot, authorizationPath) {
-  const root = fs.realpathSync(repoRoot)
-  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-  const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-  if (!/^[a-f0-9]{40}$/.test(commit) || dirty) throw new Error('authorization-binding-mismatch')
-  const datasetDir = path.join(root, 'scripts/agentic/datasets/v1')
-  const hashes = {}
-  for (const name of ['projects.json', 'retrieval-tasks.json', 'retrieval-labels.json']) {
-    const filename = path.join(datasetDir, name), stat = fs.lstatSync(filename)
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16 * 1024 * 1024) throw new Error('authorization-binding-mismatch')
-    hashes[name] = createHash('sha256').update(fs.readFileSync(filename)).digest('hex')
-  }
-  const normalize = value => Array.isArray(value) ? value.map(normalize) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, normalize(value[key])])) : value
-  const dataHash = createHash('sha256').update(JSON.stringify(normalize(hashes))).digest('hex')
-  const authStat = fs.lstatSync(authorizationPath)
-  if (!authStat.isFile() || authStat.isSymbolicLink() || authStat.size > 16 * 1024) throw new Error('authorization-invalid')
-  const authorization = JSON.parse(fs.readFileSync(authorizationPath, 'utf8'))
-  const keys = ['purpose','reference','sourceCommit','retrievalDataHash','endpointFingerprint','model','protocol','temperature','reasoningEffort','contextWindowTokens','maxOutputTokens','maxRuns','maxRequests','maxInputTokens','maxOutputTokensTotal']
-  if (!authorization || typeof authorization !== 'object' || Array.isArray(authorization) || Object.keys(authorization).length !== keys.length || Object.keys(authorization).some(key => !keys.includes(key))) throw new Error('authorization-invalid')
-  if (authorization.purpose !== 'm06-retrieval-v1' || typeof authorization.reference !== 'string' || !/^[A-Za-z0-9._:/-]{1,160}$/.test(authorization.reference) || authorization.sourceCommit !== commit || authorization.retrievalDataHash !== dataHash) throw new Error('authorization-binding-mismatch')
-  if (!/^[a-f0-9]{64}$/.test(authorization.endpointFingerprint || '') || typeof authorization.model !== 'string' || !authorization.model || authorization.model.length > 160 || !['openai', 'anthropic'].includes(authorization.protocol) || authorization.temperature !== 0.4 || !(authorization.reasoningEffort === null || ['low', 'high'].includes(authorization.reasoningEffort)) || !Number.isSafeInteger(authorization.contextWindowTokens) || authorization.contextWindowTokens < 4096 || !isAllowedAuthorizationOutputCap(authorization.maxOutputTokens) || authorization.maxRuns !== 40 || !Number.isSafeInteger(authorization.maxRequests) || authorization.maxRequests < 1 || authorization.maxRequests > 120 || !Number.isSafeInteger(authorization.maxInputTokens) || authorization.maxInputTokens < 1 || authorization.maxInputTokens > 720000 || !Number.isSafeInteger(authorization.maxOutputTokensTotal) || authorization.maxOutputTokensTotal < 1 || authorization.maxOutputTokensTotal > 240000) throw new Error('authorization-invalid')
-  return { sourceCommit: commit, retrievalDataHash: dataHash, reference: authorization.reference, authorization }
+  const binding = startupPolicy.checkAuthorizationSync({ repoRoot, authorizationPath, purpose: 'm06-retrieval-v1' })
+  return { sourceCommit: binding.sourceCommit, retrievalDataHash: binding.dataHash, reference: binding.reference, authorization: binding.authorization, purpose: binding.purpose }
 }
+
+function m06Binding(binding) {
+  if (!binding || binding.purpose === undefined) return { ...binding, purpose: 'm06-retrieval-v1' }
+  if (binding.purpose !== 'm06-retrieval-v1') throw new Error('authorization-binding-mismatch')
+  return binding
+}
+
+function claimId(binding) { return startupPolicy.claimId(m06Binding(binding), 'm06-retrieval-v1') }
 
 function isAllowedAuthorizationOutputCap(value) { return value === 2000 || value === 6000 }
 
-function safeClaimsDir(repoRoot) {
-  let current = path.resolve(repoRoot)
-  for (const part of ['.validation', 'agentic', 'claims']) {
-    current = path.join(current, part)
-    try { const stat = fs.lstatSync(current); if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('claim-path-invalid') }
-    catch (error) { if (error?.code !== 'ENOENT') throw error; fs.mkdirSync(current) }
-  }
-  return current
-}
-
-function claimId(binding) { return createHash('sha256').update(`${binding.sourceCommit}\0m06-retrieval-v1\0${binding.reference}`).digest('hex') }
-
 function createClaimSync(repoRoot, binding) {
-  const id = claimId(binding), directory = safeClaimsDir(repoRoot), claimPath = path.join(directory, `${id}.json`)
-  const handle = fs.openSync(claimPath, 'wx', 0o600)
-  try { fs.writeFileSync(handle, JSON.stringify({ schemaVersion: 1, claimId: id, purpose: 'm06-retrieval-v1', reference: binding.reference, sourceCommit: binding.sourceCommit, retrievalDataHash: binding.retrievalDataHash })); fs.fsyncSync(handle) } finally { fs.closeSync(handle) }
-  return { claimId: id, claimPath }
+  return startupPolicy.createClaimSync(repoRoot, m06Binding(binding), 'm06-retrieval-v1')
 }
 
 function existingUnstartedClaimSync(options, binding) {
-  const id = claimId(binding), directory = safeClaimsDir(options.repoRoot), claimPath = path.join(directory, `${id}.json`)
-  const startedPath = path.join(directory, `${id}.started`)
-  try { fs.lstatSync(startedPath); throw new Error('authorization-claim-already-started') } catch (error) { if (error?.code !== 'ENOENT') throw error }
-  const stat = fs.lstatSync(claimPath)
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4096) throw new Error('authorization-claim-invalid')
-  const record = JSON.parse(fs.readFileSync(claimPath, 'utf8'))
-  if (record?.schemaVersion !== 1 || record.claimId !== id || record.purpose !== 'm06-retrieval-v1' || record.reference !== binding.reference || record.sourceCommit !== binding.sourceCommit || record.retrievalDataHash !== binding.retrievalDataHash) throw new Error('authorization-claim-invalid')
-  return { ...record, claimPath }
+  return startupPolicy.existingUnstartedClaimSync(options.repoRoot, m06Binding(binding), 'm06-retrieval-v1')
 }
 
 function assertPublicProfileBinding(profile, auth) {
-  if (!profile || typeof profile.baseUrl !== 'string') throw new Error('profile-binding-mismatch')
-  let base = profile.baseUrl.trim().replace(/\/+$/, '')
-  if (!/\/v\d+(\/|$)/.test(base)) base += '/v1'
-  const endpointFingerprint = createHash('sha256').update(base).digest('hex')
-  if (endpointFingerprint !== auth.endpointFingerprint || profile.model !== auth.model || (profile.protocol ?? 'openai') !== auth.protocol || (profile.temperature ?? 0.4) !== auth.temperature || (profile.reasoningEffort ?? null) !== auth.reasoningEffort || profile.contextWindowTokens !== auth.contextWindowTokens || auth.protocol !== 'openai') throw new Error('profile-binding-mismatch')
+  if (auth.protocol !== 'openai') throw new Error('profile-binding-mismatch')
+  startupPolicy.assertPublicProfileBinding(profile, auth)
   return true
 }
 
