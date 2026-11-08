@@ -737,7 +737,10 @@ export async function runGenerationEvaluation({
         const guardedTransport = createGuardedTransport({
           collector: globalCollector,
           runId: cellRunId,
-          getReservation: () => ledger.snapshot().reservations.find((item) => item.state === 'reserved'),
+          getReservation: () => {
+            checkCellDeadline()
+            return ledger.snapshot().reservations.find((item) => item.state === 'reserved')
+          },
           appendJournal: (event) => appendDurableJournal(journalPath, { atCell: cellOrder, ...event }),
           transport
         })

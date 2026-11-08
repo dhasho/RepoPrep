@@ -226,7 +226,8 @@ function deadlineHarness(expireAtStep) {
     expireTimer() {
       now = 600_001
       timerCallback?.()
-    }
+    },
+    advanceToDeadline() { now = 600_000 }
   }
 }
 
@@ -275,6 +276,31 @@ test('synthetic streaming deadline aborts only the active cell and retains its u
   assert.equal(cell.execution.elapsedMs, 600_001)
   assert.equal(cell.execution.unknownReservations.length, 1)
   assert.ok(cell.execution.conservativeCharged.inputTokens > 0)
+})
+
+test('deadline is rechecked before global admission even if the timer callback has not fired', { timeout: 90_000 }, async (t) => {
+  const harness = deadlineHarness(undefined)
+  let transportInvocations = 0, simulatedFetches = 0
+  const transport = async (_profile, _messages, _onDelta, options) => {
+    transportInvocations++
+    harness.advanceToDeadline()
+    options.beforeRequest?.()
+    simulatedFetches++
+    options.onUsage?.({ inputTokens: 1, outputTokens: 1, totalTokens: 2 })
+    return '{}'
+  }
+  const { report } = await runSynthetic(t, { transport, testHooks: harness.hooks })
+  assert.equal(transportInvocations, 1)
+  assert.equal(simulatedFetches, 0, 'guard rejects before the transport would perform HTTP')
+  assert.equal(report.globalCollector.admittedRequests, 0)
+  assert.equal(report.matrix.length, 1)
+  const cell = report.matrix[0]
+  assert.equal(cell.execution.errorCode, 'timeout')
+  assert.equal(cell.execution.deadlineReason, 'per-run-wall-clock')
+  assert.equal(cell.execution.elapsedMs, 600_000)
+  assert.equal(cell.execution.acceptedQuestionCount, 0)
+  assert.equal(cell.execution.conservativeCharged.requests, 0)
+  assert.equal(cell.execution.unknownReservations.length, 0)
 })
 
 test('synthetic ignored reasoning can exhaust the raw SSE byte cap before the usage tail', async () => {
