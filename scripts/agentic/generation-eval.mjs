@@ -26,7 +26,7 @@ import { createBudgetLedger } from '../../electron/services/workflow/budget-ledg
 import { createRunSpec } from '../../electron/services/workflow/run-spec.ts'
 import { createEvidenceGenerationAdapter, EVIDENCE_GENERATION_WRITER_VARIANTS } from '../../electron/services/workflow/evidence-generation.ts'
 import { normalizeBaseUrl } from '../../electron/services/llm.ts'
-import { createGlobalBudgetCollector, createGuardedTransport } from './retrieval-eval.mjs'
+import { createGlobalBudgetCollector, createGuardedTransport, sanitizeModelFailure } from './retrieval-eval.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CODE_ROOT = path.resolve(HERE, '../..')
@@ -528,7 +528,7 @@ function validateSidecarLineage(result, sidecar, requests) {
   })
 }
 
-function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, usage) {
+function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, usage, modelFailure) {
   return {
     ...cell,
     caseNumber,
@@ -536,6 +536,7 @@ function failedCellRecord(cell, caseNumber, errorCode, acceptedQuestionCount, us
     execution: {
       status: 'failed',
       ...(errorCode ? { errorCode } : {}),
+      ...(modelFailure ? { modelFailure } : {}),
       acceptedQuestionCount,
       usageComplete: usage?.usageComplete ?? false,
       lineageValid: false,
@@ -733,8 +734,9 @@ export async function runGenerationEvaluation({
         appendDurableJournal(journalPath, { type: 'cell-completed', case: cellOrder, requestCount: usage.requests.length, acceptedQuestionCount, usageComplete: true, lineageValid: true })
       } catch (error) {
         const errorCode = stageFailure(error)
+        const modelFailure = sanitizeModelFailure(error?.modelFailure) ?? undefined
         try { usage = ledger ? outputUsageFromLedger(ledger, adapter?.metadata?.() ?? [], cell.id) : undefined } catch { usage = undefined }
-        const failed = failedCellRecord(cell, cellOrder, errorCode, acceptedQuestionCount, usage)
+        const failed = failedCellRecord(cell, cellOrder, errorCode, acceptedQuestionCount, usage, modelFailure)
         if (usage) {
           try { addSourceBindings(sourceBindings, usage.requests) } catch { failed.execution.lineageValid = false }
         }

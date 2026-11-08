@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, lstat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { chatCompletionStream, LLM_RESPONSE_LIMITS, LlmRequestError } from '../../electron/services/llm.ts'
 import {
   runGenerationEvaluation,
   verifyGenerationProfileBinding
@@ -49,6 +50,7 @@ function syntheticTransport(options = {}) {
     const citations = [...new Set(messagesSeen.at(-1).match(/ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gu) ?? [])]
     assert.ok(citations.length > 0, 'the prepared public request contains fixed evidence IDs')
     callOptions.beforeRequest?.()
+    if (options.failureModel) throw new LlmRequestError('http', 'SYNTHETIC_PRIVATE_PROVIDER_BODY', { httpStatus: 503, finishReason: 'length' })
     const requestIndex = requestCount
     const questions = Array.from({ length: quota }, (_, index) => {
       const serial = `${requestIndex}-${index + 1}`
@@ -193,4 +195,78 @@ test('unknown usage stops after one dispatched request and remains a charged res
   assert.ok(report.matrix[0].execution.conservativeCharged.inputTokens > 0)
   assert.equal(report.usage.knownActual.requests, 0)
   assert.equal(report.usage.unknownReservations.length, 1)
+})
+
+test('failed cells preserve only the sanitized model failure classification', { timeout: 90_000 }, async (t) => {
+  const { report } = await runSynthetic(t, { failureModel: true })
+  assert.equal(report.matrix.length, 1)
+  assert.equal(report.matrix[0].execution.errorCode, 'model-failed')
+  assert.deepEqual(report.matrix[0].execution.modelFailure, { kind: 'http', httpStatus: 503, finishReason: 'length' })
+  const publicReport = JSON.stringify(report)
+  assert.equal(publicReport.includes('SYNTHETIC_PRIVATE_PROVIDER_BODY'), false)
+  assert.equal(publicReport.includes(syntheticProfile.apiKey), false)
+})
+
+test('synthetic ignored reasoning can exhaust the raw SSE byte cap before the usage tail', async () => {
+  const encoder = new TextEncoder()
+  const sse = (value) => `data: ${JSON.stringify(value)}\n\n`
+  const content = '{"synthetic":"answer"}'
+  const first = encoder.encode(sse({ choices: [{ delta: { role: 'assistant' }, finish_reason: null }] }))
+  const makeBody = (reasoningLength) => {
+    const reasoning = 'r'.repeat(reasoningLength)
+    const tail = encoder.encode(
+      sse({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+      sse({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 } }) +
+      'data: [DONE]\n\n'
+    )
+    const reasoningChunks = []
+    for (let offset = 0; offset < reasoning.length; offset += 400_000) {
+      const fragment = reasoning.slice(offset, offset + 400_000)
+      reasoningChunks.push(encoder.encode(sse({ choices: [{ index: 0, delta: { reasoning_content: fragment }, finish_reason: null }] })))
+    }
+    reasoningChunks.push(encoder.encode(sse({ choices: [{ index: 0, delta: { content }, finish_reason: null }] })))
+    let next = 0
+    let pulls = 0
+    let cancelled = false
+    const chunks = [first, ...reasoningChunks, tail]
+    const body = new ReadableStream({
+      pull(controller) {
+        pulls++
+        if (next < chunks.length) controller.enqueue(chunks[next++])
+        else controller.close()
+      },
+      cancel() { cancelled = true }
+    })
+    return { body, pulls: () => pulls, chunkCount: chunks.length, wasCancelled: () => cancelled, totalBytes: chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0) }
+  }
+  const originalFetch = globalThis.fetch
+  const run = async (fixture) => {
+    globalThis.fetch = async () => new Response(fixture.body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    const deltas = []
+    const usages = []
+    try {
+      const result = await chatCompletionStream(syntheticProfile, [{ role: 'user', content: 'synthetic only' }], (delta) => deltas.push(delta), { onUsage: (usage) => usages.push(usage) })
+      return { result, deltas, usages }
+    } catch (error) {
+      error.syntheticObservations = { deltas, usages }
+      throw error
+    } finally { globalThis.fetch = originalFetch }
+  }
+
+  const overCap = makeBody(LLM_RESPONSE_LIMITS.chatBodyBytes + 256)
+  assert.ok(overCap.totalBytes > LLM_RESPONSE_LIMITS.chatBodyBytes)
+  let failure
+  try { await run(overCap) } catch (error) { failure = error }
+  assert.ok(failure instanceof LlmRequestError)
+  assert.equal(failure.kind, 'response')
+  assert.ok(overCap.pulls() < overCap.chunkCount, 'usage tail chunks are never pulled after the byte cap is reached')
+  assert.deepEqual(failure.syntheticObservations, { deltas: [], usages: [] }, 'neither answer text nor the tail receipt was processed')
+  assert.equal(overCap.wasCancelled(), true)
+
+  const withinCap = makeBody(LLM_RESPONSE_LIMITS.chatBodyBytes - 4096)
+  assert.ok(withinCap.totalBytes <= LLM_RESPONSE_LIMITS.chatBodyBytes)
+  const accepted = await run(withinCap)
+  assert.equal(accepted.result, content)
+  assert.deepEqual(accepted.deltas, [content])
+  assert.deepEqual(accepted.usages, [{ inputTokens: 5, outputTokens: 2, totalTokens: 7 }])
 })
