@@ -1,6 +1,6 @@
 # M08 output rejection diagnostics and repair instructions
 
-Status: implementation plan; no further provider call starts before this work is reviewed.
+Status: implemented by isolated Luna work packages and integration-reviewed. Real quality remains unverified.
 
 ## Evidence and limits
 
@@ -14,6 +14,10 @@ Source review also establishes two protocol gaps independently of that historica
 2. Version the evidence writer as v3 and make the common protocol explicit in the last user message of initial/repair/compensation requests. Repeat the existing remaining quota, require a nonempty evidenceIds string array on each new main question, and state that root/section/follow-up citations do not replace it. IDs must be copied exactly from the provided evidence rows; no placeholder ID is introduced. Preserve the common v2 length guidance, source context, topic-card isolation, unresolved items and prior-question hints. Both conditions receive identical instructions except the topic-card block. Do not change the default static prompt or weaken citation/JSON validation.
 
 Luna implements the packages in separate worktrees; the main agent serially integrates the generator and evaluator contracts. Tests must exercise actual dispatch for a four-message repair, two-attempt rejection classification and receipt retention, safe diagnostic serialization, unchanged static messages, and unchanged hard budgets. No provider call is needed for these checks.
+
+The implementation deliberately retains the existing immediate-fatal behavior for early streamed checkpoint rejection. The new typed history covers rejections already handled by the existing two-attempt format loop; it does not add a retry or claim to classify every fatal error. Original messages and unknown errors retain their existing behavior.
+
+Integration checks passed typecheck, 243 workflow checks, 126 question-budget checks, 274 IPC checks and 40 recovery checks. Initial concurrent/mixed-permission runs had temporary-project snapshot preparation failures; the originals are retained and separate normal-host runs passed without weakening the reader. The read-only M08 gate returns nonzero for the old failed prefix, with no quality metrics; a direct checker probe identifies `m08-execution-incomplete`. None of these checks establishes real writer-v3 quality or diagnoses the earlier provider outputs.
 
 ## Accounting and next measurement
 

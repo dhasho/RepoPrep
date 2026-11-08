@@ -64,6 +64,7 @@ test('synthetic runtime artifacts use the shared verifier for current request ca
   const report = await runGenerationEvaluation({
     mode: 'synthetic', repoRoot, outputDir: path.join(temp, 'execution'), scratchRoot, profile, transport
   })
+  assert.equal(report.executionComplete, true, `synthetic setup failed: ${report.matrix.at(-1)?.execution?.errorCode ?? 'no-cell'}`)
   const bundle = await loadGenerationEvaluationBundle()
   const baseCaps = { maxRuns: 48, maxRequests: 419, maxInputTokens: 6_144_000, maxOutputTokensTotal: 3_145_728, maxOutputTokens: 32_768 }
   let metricWrites = 0

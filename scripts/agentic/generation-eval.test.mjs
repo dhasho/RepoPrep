@@ -188,7 +188,7 @@ test('synthetic runtime executes all 48 balanced fixed-evidence cells and preser
 
 test('unknown usage stops after one dispatched request and remains a charged reservation', { timeout: 90_000 }, async (t) => {
   const { report, fixture } = await runSynthetic(t, { unknownUsage: true })
-  assert.equal(fixture.requestCount(), 1)
+  assert.equal(fixture.requestCount(), 1, `synthetic setup failed: ${report.matrix[0]?.execution?.errorCode ?? 'no-cell'}`)
   assert.equal(report.executionComplete, false)
   assert.equal(report.status, 'incomplete')
   assert.equal(report.reviewState, 'blocked')
