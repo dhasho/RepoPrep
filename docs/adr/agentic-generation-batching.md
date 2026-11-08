@@ -1,6 +1,6 @@
 # Bound redundant fine evidence batches
 
-Status: planned writer-v4 batch policy; M08 remains incomplete.
+Status: writer-v4 batch policy implemented and reviewed; M08 remains incomplete.
 
 ## Evidence
 
@@ -19,5 +19,7 @@ Keep all shared minimum/target/maximum question counts; in this frozen one-bundl
 ## Verification and measurement
 
 Exercise actual fine dispatch quotas and sidecar lineage at the unchanged cumulative output boundary, plus one-/two-/three-/four-component grouping and required-combination preservation. Verify the full synthetic matrix uses the new deterministic base call count while the frozen 5/14 per-run and 420 full-matrix maximums remain intact. Keep default static equivalence and hard failure behavior.
+
+Root integration passed all 245 workflow checks and a fresh build/Electron smoke (`SMOKE-OK`, exit 0, fixture deletion confirmed). Luna's focused checks passed typecheck, 126 question-budget checks and the complete synthetic 48-cell matrix with 96 base requests. An early medium-group regression was fixed before integration; the final policy retains its original two groups. These are mechanism checks, not real generation quality results.
 
 A later real run uses a new immutable source/reference and the full 48-cell matrix. No old successful cell is spliced into it. Prior M08 totals are 31 requests, 30 known receipts (66,916 input / 487,255 output) and the original one-request unknown held at 2,813/32,768. The remaining ceiling is 389 requests, 6,074,271 input admission and 2,625,705 output allowance. All fixed quality thresholds remain unchanged; success is still determined by complete execution and independent blind review.
