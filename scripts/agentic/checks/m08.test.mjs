@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdir, mkdtemp, rm, lstat } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, lstat, readFile, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createChecks, validateM08SyntheticRawArtifactsForTest } from './m08.mjs'
+import { createChecks, validateFrozenM08QualityLimits, validateM08SyntheticRawArtifactsForTest } from './m08.mjs'
 import { runGenerationEvaluation } from '../generation-eval.mjs'
 import { loadGenerationEvaluationBundle } from '../generation-eval-contract.mjs'
+import { sha256 } from '../dataset-contract.mjs'
 
 test('M08 verifier cannot certify synthetic runs or missing execution artifacts', async () => {
   const check = createChecks().get('m08:frozen-sufficient-evidence-tasks')
@@ -16,6 +17,12 @@ test('M08 verifier cannot certify synthetic runs or missing execution artifacts'
 
   const realWithoutArtifacts = await check({ ...context, mode: 'real' })
   assert.match(realWithoutArtifacts.reason, /^m08_/u)
+})
+
+test('M08 review threshold is pinned to the frozen topic-value delta', () => {
+  const limits = { tasks: 12, repeatsPerStrategy: 2, unpackedEvidenceCitedMax: 0, materialErrorRateAtMostStatic: true, topicValueDeltaMin: -0.2 }
+  assert.equal(validateFrozenM08QualityLimits(limits), limits)
+  assert.throws(() => validateFrozenM08QualityLimits({ ...limits, topicValueDeltaMin: -1 }), /M08_QUALITY_LIMITS_INVALID/u)
 })
 
 test('synthetic runtime artifacts use the shared verifier for current request caps and reject below-usage caps', { timeout: 180_000 }, async t => {
@@ -59,6 +66,31 @@ test('synthetic runtime artifacts use the shared verifier for current request ca
   })
   const bundle = await loadGenerationEvaluationBundle()
   const baseCaps = { maxRuns: 48, maxRequests: 419, maxInputTokens: 6_144_000, maxOutputTokensTotal: 3_145_728, maxOutputTokens: 32_768 }
+  let metricWrites = 0
+  const realModeCheck = createChecks({
+    sourceRoot: repoRoot, reportPath: path.join(temp, 'execution', 'generation-evaluation.json')
+  }).get('m08:frozen-sufficient-evidence-tasks')
+  const syntheticReport = await realModeCheck({ mode: 'real', recordMetric() { metricWrites++ } })
+  assert.equal(syntheticReport.reason, 'm08_report_mode_invalid')
+  assert.equal(metricWrites, 0, 'a synthetic report cannot produce real gate metrics')
+
+  const journalPath = path.join(temp, 'execution', 'progress.ndjson')
+  const originalJournal = await readFile(journalPath)
+  const journalEvents = originalJournal.toString('utf8').trimEnd().split('\n').map(line => JSON.parse(line))
+  const usageIndex = journalEvents.findIndex(event => event.type === 'provider-usage')
+  const usageEvent = journalEvents[usageIndex]
+  const admissionIndex = journalEvents.findIndex(event => event.type === 'request-admitted' && event.requestId === usageEvent.requestId)
+  assert.ok(admissionIndex >= 0 && usageIndex > admissionIndex)
+  ;[journalEvents[admissionIndex], journalEvents[usageIndex]] = [journalEvents[usageIndex], journalEvents[admissionIndex]]
+  const reorderedBytes = Buffer.from(journalEvents.map(event => JSON.stringify(event)).join('\n') + '\n', 'utf8')
+  await writeFile(journalPath, reorderedBytes)
+  const reorderedReport = structuredClone(report)
+  reorderedReport.journal.sha256 = sha256(reorderedBytes)
+  await assert.rejects(validateM08SyntheticRawArtifactsForTest({
+    report: reorderedReport, outputRoot: path.join(temp, 'execution'), bundle, authorization: baseCaps
+  }), /M08_JOURNAL_RECEIPT_ORDER_INVALID/u)
+  await writeFile(journalPath, originalJournal)
+
   for (const maxRequests of [405, 407, 419]) {
     const verified = await validateM08SyntheticRawArtifactsForTest({
       report, outputRoot: path.join(temp, 'execution'), bundle, authorization: { ...baseCaps, maxRequests }

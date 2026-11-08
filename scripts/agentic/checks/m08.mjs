@@ -176,23 +176,23 @@ async function verifyJournal(outputRoot, report, cells) {
   const requests = new Map(cells.flatMap(item => item.requests.map(request => [request.requestId, { cell: item.cell, request }])))
   const admitted = new Map(), usage = new Map(), unknown = new Map(), starts = new Map(), terminals = new Map()
   const cellByOrder = new Map(cells.map(item => [item.cell.actualOrder, item.cell]))
-  for (const event of events) {
+  for (const [eventIndex, event] of events.entries()) {
     if (!isRecord(event)) fail('M08_JOURNAL_EVENT_INVALID')
     if (event.type === 'request-admitted') {
       if (Object.keys(event).sort().join(',') !== ['atCell','contextChars','estimatedInputTokens','estimatedOutputTokens','requestId','runId','type'].sort().join(',') ||
         admitted.has(event.requestId) || !requests.has(event.requestId)) fail('M08_JOURNAL_ADMISSION_INVALID')
-      admitted.set(event.requestId, event)
+      admitted.set(event.requestId, { event, eventIndex })
     } else if (event.type === 'provider-usage') {
       if (Object.keys(event).sort().join(',') !== ['atCell','requestId','runId','type','usage'].sort().join(',') || usage.has(event.requestId) || !requests.has(event.requestId)) fail('M08_JOURNAL_USAGE_INVALID')
-      usage.set(event.requestId, event)
+      usage.set(event.requestId, { event, eventIndex })
     } else if (event.type === 'usage-unknown') {
       if (Object.keys(event).sort().join(',') !== ['atCell','reason','requestId','runId','type'].sort().join(',') || unknown.has(event.requestId) || !requests.has(event.requestId)) fail('M08_JOURNAL_UNKNOWN_INVALID')
-      unknown.set(event.requestId, event)
+      unknown.set(event.requestId, { event, eventIndex })
     } else if (event.type === 'cell-started') {
       const order = event.cell?.actualOrder, expected = cellByOrder.get(order)
       if (!expected || starts.has(order) || Object.keys(event).sort().join(',') !== ['cell','evidenceCount','type'].sort().join(',') ||
         !same(event.cell, cellIdentity(expected)) || !Number.isSafeInteger(event.evidenceCount) || event.evidenceCount < 1) fail('M08_JOURNAL_CELL_INVALID')
-      starts.set(order, event)
+      starts.set(order, { event, eventIndex })
     } else if (event.type === 'cell-completed' || event.type === 'cell-failed') {
       const order = event.case, expected = cellByOrder.get(order), prior = terminals.get(order)
       const success = event.type === 'cell-completed'
@@ -204,31 +204,43 @@ async function verifyJournal(outputRoot, report, cells) {
       if (!Number.isSafeInteger(event.elapsedMs) || event.elapsedMs < 0 || (success && event.elapsedMs >= GENERATION_PER_RUN.wallClockMs) ||
         (!success && event.deadlineReason !== undefined && (event.deadlineReason !== 'per-run-wall-clock' || event.errorCode !== 'timeout' || event.elapsedMs < GENERATION_PER_RUN.wallClockMs)) ||
         (!success && event.elapsedMs >= GENERATION_PER_RUN.wallClockMs && event.deadlineReason !== 'per-run-wall-clock')) fail('M08_JOURNAL_DEADLINE_INVALID')
-      terminals.set(order, event)
+      terminals.set(order, { event, eventIndex, firstEventIndex: prior?.firstEventIndex ?? eventIndex })
     } else if (event.type === 'generation-progress') {
+      const terminal = terminals.get(event.case)
       if (Object.keys(event).sort().join(',') !== ['case','percent','type'].sort().join(',') || !starts.has(event.case) ||
+        terminal && eventIndex >= terminal.firstEventIndex ||
         !Number.isSafeInteger(event.percent) || event.percent < 0 || event.percent > 100) fail('M08_JOURNAL_PROGRESS_INVALID')
     } else fail('M08_JOURNAL_EVENT_UNKNOWN')
   }
   if (admitted.size !== requests.size) fail('M08_JOURNAL_ADMISSION_COVERAGE_INVALID')
   for (const [id, row] of requests) {
-    const a = admitted.get(id), u = usage.get(id), unk = unknown.get(id), req = row.request
-    if (!a || a.atCell !== row.cell.actualOrder || a.runId !== req.manifest.runId || a.estimatedInputTokens !== req.reservation.inputTokens ||
+    const admission = admitted.get(id), receipt = usage.get(id), unknownReceipt = unknown.get(id), req = row.request
+    const start = starts.get(row.cell.actualOrder), terminal = terminals.get(row.cell.actualOrder)
+    const a = admission?.event, u = receipt?.event, unk = unknownReceipt?.event
+    if (!a || !start || admission.eventIndex <= start.eventIndex || terminal && admission.eventIndex >= terminal.firstEventIndex ||
+      a.atCell !== row.cell.actualOrder || a.runId !== req.manifest.runId || a.estimatedInputTokens !== req.reservation.inputTokens ||
       a.estimatedOutputTokens !== req.reservation.outputTokens || a.contextChars !== req.manifest.contextChars) fail('M08_JOURNAL_ADMISSION_MISMATCH')
     if (req.reservation.state === 'settled') {
-      if (!u || unk || u.atCell !== row.cell.actualOrder || u.runId !== req.manifest.runId || !same(u.usage, req.usage)) fail('M08_JOURNAL_USAGE_MISMATCH')
+      if (!u || unk || receipt.eventIndex <= admission.eventIndex || terminal && receipt.eventIndex >= terminal.firstEventIndex ||
+        u.atCell !== row.cell.actualOrder || u.runId !== req.manifest.runId || !same(u.usage, req.usage)) fail('M08_JOURNAL_RECEIPT_ORDER_INVALID')
     } else if (req.reservation.state === 'unknown') {
-      if (!unk || u || unk.atCell !== row.cell.actualOrder || unk.runId !== req.manifest.runId) fail('M08_JOURNAL_UNKNOWN_MISMATCH')
+      if (!unk || u || unknownReceipt.eventIndex <= admission.eventIndex || terminal && unknownReceipt.eventIndex >= terminal.firstEventIndex ||
+        unk.atCell !== row.cell.actualOrder || unk.runId !== req.manifest.runId) fail('M08_JOURNAL_RECEIPT_ORDER_INVALID')
     } else fail('M08_JOURNAL_STATE_INVALID')
   }
   for (const item of cells) {
-    const order = item.cell.actualOrder, start = starts.get(order), terminal = terminals.get(order)
+    const order = item.cell.actualOrder, start = starts.get(order), terminalRecord = terminals.get(order), terminal = terminalRecord?.event
     if (!start || !terminal || terminal.elapsedMs !== item.cell.execution.elapsedMs ||
       (terminal.type === 'cell-completed') !== (item.cell.execution.status === 'succeeded') ||
       terminal.acceptedQuestionCount !== item.cell.execution.acceptedQuestionCount ||
       (terminal.type === 'cell-completed' && (terminal.requestCount !== item.requests.length || terminal.usageComplete !== true || terminal.lineageValid !== true)) ||
       (terminal.type === 'cell-failed' && (terminal.errorCode !== item.cell.execution.errorCode || terminal.usageComplete !== item.cell.execution.usageComplete ||
         terminal.deadlineReason !== item.cell.execution.deadlineReason))) fail('M08_JOURNAL_CELL_EXECUTION_MISMATCH')
+    for (const [requestId, row] of requests) {
+      if (row.cell.actualOrder !== order) continue
+      const admission = admitted.get(requestId), receipt = usage.get(requestId) ?? unknown.get(requestId)
+      if (!admission || !receipt || admission.eventIndex >= terminalRecord.firstEventIndex || receipt.eventIndex >= terminalRecord.firstEventIndex) fail('M08_JOURNAL_TERMINAL_BEFORE_RECEIPTS')
+    }
   }
   if (report.executionComplete && (starts.size !== cells.length || terminals.size !== cells.length || unknown.size)) fail('M08_JOURNAL_COVERAGE_INVALID')
   return events
@@ -267,6 +279,12 @@ function validateAuthorizationCaps(authorization, bundle) {
     maxRuns: authorization.maxRuns, maxRequests: authorization.maxRequests, maxInputTokens: authorization.maxInputTokens,
     maxOutputTokensTotal: authorization.maxOutputTokensTotal, maxOutputTokensPerRequest: authorization.maxOutputTokens
   }
+}
+
+export function validateFrozenM08QualityLimits(limits) {
+  if (!isRecord(limits) || limits.tasks !== 12 || limits.repeatsPerStrategy !== 2 || limits.unpackedEvidenceCitedMax !== 0 ||
+    limits.materialErrorRateAtMostStatic !== true || limits.topicValueDeltaMin !== -0.2) fail('M08_QUALITY_LIMITS_INVALID')
+  return limits
 }
 
 async function verifyRawArtifacts({ report, outputRoot, bundle, authorization, complete }) {
@@ -312,6 +330,7 @@ export function createChecks(options = {}) {
       if (typeof options.reportPath !== 'string' || !options.reportPath) fail('M08_REPORT_PATH_REQUIRED')
       const reportPath = path.resolve(options.reportPath)
       const report = parse(await safeRead(path.dirname(reportPath), path.basename(reportPath), LIMIT.report))
+      if (!isRecord(report) || report.mode !== 'real') fail('M08_REPORT_MODE_INVALID')
       const [binding, bundle] = await Promise.all([
         checkGenerationAuthorizationArtifact({ repoRoot: sourceRoot, authorizationPath: path.resolve(options.authorizationPath ?? '') }),
         loadGenerationEvaluationBundle(path.join(sourceRoot, 'scripts/agentic/datasets/v1'))
@@ -355,10 +374,8 @@ export function createChecks(options = {}) {
       const metrics = reviewed.metrics
       for (const [id, value] of Object.entries(metrics)) ctx.recordMetric(id, value, `m08-review:${reviewed.packetSetSha256}`)
       ctx.addRawReference(`m08-review-bundle:${reviewed.packetSetSha256}`)
-      const limits = ctx.definition?.limits
-      if (!isRecord(limits) || limits.tasks !== 12 || limits.repeatsPerStrategy !== 2 || limits.unpackedEvidenceCitedMax !== 0 ||
-        limits.materialErrorRateAtMostStatic !== true || !Number.isFinite(limits.topicValueDeltaMin) ||
-        metrics.unpackedEvidenceCited > limits.unpackedEvidenceCitedMax || metrics.materialErrorRate > metrics.staticControlMaterialErrorRate ||
+      const limits = validateFrozenM08QualityLimits(ctx.definition?.limits)
+      if (metrics.unpackedEvidenceCited > limits.unpackedEvidenceCitedMax || metrics.materialErrorRate > metrics.staticControlMaterialErrorRate ||
         metrics.topicValueMean < metrics.staticControlTopicValueMean + limits.topicValueDeltaMin || metrics.usageComplete !== true) {
         const error = new Error('M08_QUALITY_THRESHOLD_FAILED')
         error.gateFailure = true
