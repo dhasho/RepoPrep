@@ -1,6 +1,6 @@
 # Evidence-backed writer source boundaries
 
-Status: planned writer-v5 correction after a complete failed M08 quality comparison. No new provider execution or quality pass is established by this document.
+Status: writer-v5 correction implemented after a complete failed M08 quality comparison. Full synthetic workflow252/252, existing question-budget126/126 and typecheck passed. No new provider execution or quality pass is established by this document.
 
 ## Evidence and limits
 
