@@ -284,6 +284,30 @@ async function syntheticData() {
   return { bundle, cells, sourceBindings, rubricSha256: 'd'.repeat(64) }
 }
 
+test('review packet receipts use the shared 32k ceiling and still reject excess reservations or usage', async () => {
+  const data = await syntheticData()
+  // Profile-specific admission is checked by the execution loader; this fixture exercises the review contract ceiling.
+  for (const outputTokens of [16_385, 32_768]) {
+    const cells = structuredClone(data.cells)
+    const request = cells[0].requests[0]
+    request.reservation.outputTokens = 32_768
+    request.usage.outputTokens = outputTokens
+    request.usage.totalTokens = request.usage.inputTokens + outputTokens
+    const built = buildBlindedReviewPackets({ ...data, cells })
+    assert.equal(built.packetSet.packets.length, 48)
+    assert.equal(verifyBlindedReviewPackets({ ...data, cells, packetSet: built.packetSet, privateMap: built.privateMap }).answerUnits, 144)
+  }
+  const excess = structuredClone(data.cells)
+  excess[0].requests[0].reservation.outputTokens = 32_769
+  assert.throws(() => buildBlindedReviewPackets({ ...data, cells: excess }), /request-usage-invalid/u)
+  const overReservation = structuredClone(data.cells)
+  const request = overReservation[0].requests[0]
+  request.reservation.outputTokens = 16_384
+  request.usage.outputTokens = 16_385
+  request.usage.totalTokens = request.usage.inputTokens + request.usage.outputTokens
+  assert.throws(() => buildBlindedReviewPackets({ ...data, cells: overReservation }), /request-usage-invalid/u)
+})
+
 test('synthetic contract fixtures bind blinded packets to raw M07 artifacts and score disagreement without asserting real review', async () => {
   const data = await syntheticData()
   const built = buildBlindedReviewPackets(data)

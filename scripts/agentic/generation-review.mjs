@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { redactSensitiveContent } from '../../electron/services/sensitive.ts'
 import { canonicalJson, sha256 } from './dataset-contract.mjs'
-import { createGenerationMatrix, validateGenerationProjection } from './generation-eval-contract.mjs'
+import { GENERATION_PER_RUN, createGenerationMatrix, validateGenerationProjection } from './generation-eval-contract.mjs'
 
 export const GENERATION_REVIEW_PROTOCOL = 'm08-blind-review-v1'
 export const GENERATION_REVIEW_SCHEMA_VERSION = 1
@@ -187,7 +187,8 @@ function validateRequest(request, sourceBindings) {
     usage.inputTokens < 0 || usage.outputTokens < 0 || usage.totalTokens !== usage.inputTokens + usage.outputTokens ||
     !Number.isSafeInteger(request.reservation.inputTokens) || !Number.isSafeInteger(request.reservation.outputTokens) ||
     usage.inputTokens > request.reservation.inputTokens || usage.outputTokens > request.reservation.outputTokens ||
-    usage.outputTokens > 16_384) fail('request-usage-invalid')
+    request.reservation.outputTokens > GENERATION_PER_RUN.maxOutputTokensPerRequest ||
+    usage.outputTokens > GENERATION_PER_RUN.maxOutputTokensPerRequest) fail('request-usage-invalid')
   validatePackedManifest(request.manifest)
   for (const source of request.manifest.sources) {
     const descriptor = descriptorFromSource(source)
