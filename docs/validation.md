@@ -24,6 +24,8 @@
 | `npm run eval:agentic:retrieval:real -- --authorization <local-json> --output <new-local-directory>` | 需独立授权的真实M06检索测量；完整40格矩阵、最多120请求，缺授权先阻断、不读取保存凭据。只写本地忽略目录，不自动重试未知付费调用。 |
 | `npm run verify:agentic:m06 -- --mode real --report-file <report.json> --authorization-file <local-json>` | 只复核已完成真实报告和逐请求/逐运行持久化记录；不调用模型、不相信报告自报通过状态。 |
 | `npm run verify:agentic:m08 -- --mode real --source-root <frozen-checkout> --report-file <generation-evaluation.json> --authorization-file <local-json>` | 只读复核固定48格的真实运行、原始sidecar/收据日志、实际源码/授权绑定及独立盲评裁定；输出新的门禁报告，不读取凭据或调用模型。缺格、未知usage、缺评审或质量不达标均非0。 |
+| `npm run prepare:agentic:m08:review -- --source-root <frozen-checkout> --report-file <generation-evaluation.json> --authorization-file <local-json>` | 对完整真实M08运行执行同一只读验证后，独占创建报告目录下的 `review/`，输出盲评包、私有映射、冻结rubric和未评分模板；请求数为0，quality保持pending。 |
+| `npm run test:agentic:m08:review-preparation` | 检查准备CLI参数、递归答案单元模板覆盖和缺授权时不产生输出；只使用合成数据。 |
 | `npm run verify:agentic:m02` 至 `npm run verify:agentic:m13` | 已注册的失败关闭入口；未实现的检查及资产输出 incomplete/非 0。M06/M08/M09/M13 的 `-- --mode real` 无授权时输出 blocked/非 0，不回退合成响应。 |
 | `npm run test:ipc` | IPC schema、调用方权限、handler 防护与安全结果测试，OpenAI/Claude 格式、流式响应和本地合成模型生成链路。 |
 | `npm run test:recovery` | 增量 JSON 解析、逐题原子保存、取消与断流恢复，以及真实 SSE 跨进程续传；使用本地合成模型，不调用真实服务。 |

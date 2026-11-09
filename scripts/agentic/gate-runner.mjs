@@ -51,7 +51,7 @@ export function validateManifest(manifest) {
   return problems
 }
 
-async function sourceTreeHash(sourceRoot) {
+export async function sourceTreeHash(sourceRoot) {
   const root = await realpath(sourceRoot)
   const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
     cwd: root,

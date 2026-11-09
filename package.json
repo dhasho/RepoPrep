@@ -44,6 +44,8 @@
     "verify:agentic:m06": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/verify.mjs --module M06",
     "verify:agentic:m07": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/verify.mjs --module M07",
     "verify:agentic:m08": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/verify.mjs --module M08",
+    "prepare:agentic:m08:review": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/prepare-generation-review.mjs",
+    "test:agentic:m08:review-preparation": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs --test scripts/agentic/prepare-generation-review.test.mjs",
     "verify:agentic:m09": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/verify.mjs --module M09",
     "verify:agentic:m10": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/verify.mjs --module M10",
     "verify:agentic:m11": "node --experimental-strip-types --import ./tests/register-shared-alias.mjs scripts/agentic/verify.mjs --module M11",

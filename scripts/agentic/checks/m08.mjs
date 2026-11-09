@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { lstat, readFile, realpath } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { GRANULARITY_QUESTION_BUDGET } from '../../../shared/types.ts'
 import { assertInterviewResultContract } from '../../../shared/result-contract.ts'
@@ -14,7 +14,7 @@ import {
   GENERATION_REVIEW_FILES, validateGenerationReviewBundle, verifyBlindedReviewPackets,
   fingerprintGenerationQuestion
 } from '../generation-review.mjs'
-import { unknownCheck } from '../gate-runner.mjs'
+import { sourceTreeHash, unknownCheck } from '../gate-runner.mjs'
 
 const HASH = /^[a-f0-9]{64}$/u
 const COMMIT = /^[a-f0-9]{40}$/u
@@ -310,7 +310,7 @@ export async function validateM08SyntheticRawArtifactsForTest({ report, outputRo
   const structural = validateGenerationExecutionReport(testBoundReport, bundle)
   if (!structural.valid || !structural.executionComplete || testBoundReport.matrix.length !== 48) fail('M08_TEST_FIXTURE_INVALID')
   const cells = await verifyRawArtifacts({ report: testBoundReport, outputRoot, bundle, authorization, complete: true })
-  return Object.freeze({ cells: cells.length, requests: cells.reduce((sum, row) => add(sum, row.requests.length), 0) })
+  return Object.freeze({ cells: cells.length, requests: cells.reduce((sum, row) => add(sum, row.requests.length), 0), verifiedCells: cells })
 }
 
 function validateRubric(bytes) {
@@ -322,42 +322,61 @@ function validateRubric(bytes) {
   return digest(bytes)
 }
 
+function checkerCommit(root) {
+  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+  if (!COMMIT.test(commit)) fail('M08_CHECKER_COMMIT_INVALID')
+  return commit
+}
+
+/** Load a complete, independently verified real execution for both the gate and review preparation. */
+export async function loadVerifiedGenerationExecution({ sourceRoot: sourceRootInput, reportPath: reportPathInput, authorizationPath: authorizationPathInput, requireComplete = true }) {
+  const checkerRoot = await realpath(process.cwd())
+  const checkerStart = { sourceTreeHash: await sourceTreeHash(checkerRoot), commit: checkerCommit(checkerRoot) }
+  const sourceRoot = await realpath(path.resolve(sourceRootInput ?? process.cwd()))
+  if (typeof reportPathInput !== 'string' || !reportPathInput) fail('M08_REPORT_PATH_REQUIRED')
+  const reportPath = path.resolve(reportPathInput)
+  const report = parse(await safeRead(path.dirname(reportPath), path.basename(reportPath), LIMIT.report))
+  if (!isRecord(report) || report.mode !== 'real') fail('M08_REPORT_MODE_INVALID')
+  const [binding, bundle] = await Promise.all([
+    checkGenerationAuthorizationArtifact({ repoRoot: sourceRoot, authorizationPath: path.resolve(authorizationPathInput ?? '') }),
+    loadGenerationEvaluationBundle(path.join(sourceRoot, 'scripts/agentic/datasets/v1'))
+  ])
+  const commit = cleanCommit(sourceRoot)
+  if (commit !== binding.sourceCommit || report.purpose !== GENERATION_PURPOSE || report.qualityGate !== 'not-evaluated' ||
+    report.sourceBinding?.sourceCommit !== commit || report.sourceBinding?.generationDataHash !== bundle.generationDataHash ||
+    !same(report.sourceBinding?.sourceHashes, bundle.sourceHashes) || report.configurationBinding?.maxOutputTokens !== binding.authorization.maxOutputTokens) fail('M08_SOURCE_BINDING_INVALID')
+  const claimId = digest(Buffer.from(commit + '\0' + GENERATION_PURPOSE + '\0' + binding.reference, 'utf8'))
+  if (report.authorizationBinding?.reference !== binding.reference || report.authorizationBinding?.claimId !== claimId) fail('M08_CLAIM_BINDING_INVALID')
+  await verifyGenerationClaim({ repoRoot: sourceRoot, authorization: binding.authorization, claimPath: path.join(sourceRoot, '.validation/agentic/claims', `${claimId}.json`) })
+  const marker = parse(await safeRead(sourceRoot, `.validation/agentic/claims/${claimId}.started`, 1024))
+  if (marker.claimId !== claimId || marker.state !== 'started') fail('M08_CLAIM_NOT_STARTED')
+  if (!same(report.configurationBinding, {
+    endpointFingerprint: binding.authorization.endpointFingerprint, model: binding.authorization.model, protocol: binding.authorization.protocol,
+    temperature: binding.authorization.temperature, reasoningEffort: binding.authorization.reasoningEffort,
+    contextWindowTokens: binding.authorization.contextWindowTokens, maxOutputTokens: binding.authorization.maxOutputTokens
+  }) || report.configurationHash !== digest(canonicalJson(report.configurationBinding))) fail('M08_CONFIGURATION_OR_BUDGET_INVALID')
+  const checked = validateGenerationExecutionReport(report, bundle)
+  const complete = checked.executionComplete && report.executionComplete === true && report.status === 'awaiting-review' && report.reviewState === GENERATION_REVIEW_PENDING
+  if (complete && !checked.valid) fail('M08_EXECUTION_REPORT_INVALID')
+  if (!complete && (report.executionComplete !== false || report.status !== 'incomplete' || report.reviewState !== 'blocked')) fail('M08_EXECUTION_STATUS_INVALID')
+  if (requireComplete && !complete) fail('M08_EXECUTION_INCOMPLETE')
+  const outputRoot = safeOutputRoot(reportPath, report)
+  const cells = await verifyRawArtifacts({ report, outputRoot, bundle, authorization: binding.authorization, complete })
+  const rubricBytes = complete ? await safeRead(sourceRoot, 'scripts/agentic/assets/review-rubric.v2.json', 128 * 1024) : null
+  const rubricSha256 = complete ? validateRubric(rubricBytes) : null
+  const checkerEnd = { sourceTreeHash: await sourceTreeHash(checkerRoot), commit: checkerCommit(checkerRoot) }
+  if (!same(checkerStart, checkerEnd)) fail('M08_CHECKER_CHANGED_DURING_VERIFICATION')
+  return Object.freeze({ report, reportPath, outputRoot, sourceRoot, binding, bundle, cells, rubricBytes, rubricSha256, checker: checkerEnd, complete })
+}
+
 export function createChecks(options = {}) {
   return new Map([['m08:frozen-sufficient-evidence-tasks', async ctx => {
     if (ctx.mode !== 'real') return unknownCheck('real-report-required')
     try {
-      const sourceRoot = await realpath(path.resolve(options.sourceRoot ?? process.cwd()))
-      if (typeof options.reportPath !== 'string' || !options.reportPath) fail('M08_REPORT_PATH_REQUIRED')
-      const reportPath = path.resolve(options.reportPath)
-      const report = parse(await safeRead(path.dirname(reportPath), path.basename(reportPath), LIMIT.report))
-      if (!isRecord(report) || report.mode !== 'real') fail('M08_REPORT_MODE_INVALID')
-      const [binding, bundle] = await Promise.all([
-        checkGenerationAuthorizationArtifact({ repoRoot: sourceRoot, authorizationPath: path.resolve(options.authorizationPath ?? '') }),
-        loadGenerationEvaluationBundle(path.join(sourceRoot, 'scripts/agentic/datasets/v1'))
-      ])
-      const commit = cleanCommit(sourceRoot)
-      if (commit !== binding.sourceCommit || !isRecord(report) || report.purpose !== GENERATION_PURPOSE || report.qualityGate !== 'not-evaluated' ||
-        report.sourceBinding?.sourceCommit !== commit || report.sourceBinding?.generationDataHash !== bundle.generationDataHash ||
-        !same(report.sourceBinding?.sourceHashes, bundle.sourceHashes) || report.configurationBinding?.maxOutputTokens !== binding.authorization.maxOutputTokens) fail('M08_SOURCE_BINDING_INVALID')
-      const claimId = digest(Buffer.from(commit + '\0' + GENERATION_PURPOSE + '\0' + binding.reference, 'utf8'))
-      if (report.authorizationBinding?.reference !== binding.reference || report.authorizationBinding?.claimId !== claimId) fail('M08_CLAIM_BINDING_INVALID')
-      await verifyGenerationClaim({ repoRoot: sourceRoot, authorization: binding.authorization, claimPath: path.join(sourceRoot, '.validation/agentic/claims', `${claimId}.json`) })
-      const marker = parse(await safeRead(sourceRoot, `.validation/agentic/claims/${claimId}.started`, 1024))
-      if (marker.claimId !== claimId || marker.state !== 'started') fail('M08_CLAIM_NOT_STARTED')
-      if (!same(report.configurationBinding, {
-        endpointFingerprint: binding.authorization.endpointFingerprint, model: binding.authorization.model, protocol: binding.authorization.protocol,
-        temperature: binding.authorization.temperature, reasoningEffort: binding.authorization.reasoningEffort,
-        contextWindowTokens: binding.authorization.contextWindowTokens, maxOutputTokens: binding.authorization.maxOutputTokens
-      }) || report.configurationHash !== digest(canonicalJson(report.configurationBinding))) fail('M08_CONFIGURATION_OR_BUDGET_INVALID')
-      const checked = validateGenerationExecutionReport(report, bundle)
-      const complete = checked.executionComplete && report.executionComplete === true && report.status === 'awaiting-review' && report.reviewState === GENERATION_REVIEW_PENDING
-      if (complete && !checked.valid) fail('M08_EXECUTION_REPORT_INVALID')
-      if (!complete && (report.executionComplete !== false || report.status !== 'incomplete' || report.reviewState !== 'blocked')) fail('M08_EXECUTION_STATUS_INVALID')
-      const outputRoot = safeOutputRoot(reportPath, report)
-      const cells = await verifyRawArtifacts({ report, outputRoot, bundle, authorization: binding.authorization, complete })
+      const { report, outputRoot, bundle, cells, rubricSha256, complete } = await loadVerifiedGenerationExecution({
+        sourceRoot: options.sourceRoot ?? process.cwd(), reportPath: options.reportPath, authorizationPath: options.authorizationPath, requireComplete: false
+      })
       if (!complete) return unknownCheck('m08-execution-incomplete')
-      const rubricBytes = await safeRead(sourceRoot, 'scripts/agentic/assets/review-rubric.v2.json', 128 * 1024)
-      const rubricSha256 = validateRubric(rubricBytes)
       const readReview = async name => parse(await safeRead(outputRoot, path.join('review', name), LIMIT.review))
       const [packetSet, privateMap, reviewerA, reviewerB, adjudication, invocations] = await Promise.all([
         readReview(GENERATION_REVIEW_FILES.packets), readReview(GENERATION_REVIEW_FILES.privateMap),

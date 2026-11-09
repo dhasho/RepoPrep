@@ -8,6 +8,8 @@ import { createChecks, validateFrozenM08QualityLimits, validateM08SyntheticRawAr
 import { runGenerationEvaluation } from '../generation-eval.mjs'
 import { loadGenerationEvaluationBundle } from '../generation-eval-contract.mjs'
 import { sha256 } from '../dataset-contract.mjs'
+import { prepareSyntheticGenerationReviewForTest } from '../prepare-generation-review.mjs'
+import { deriveReviewDisagreements } from '../generation-review.mjs'
 
 test('M08 verifier cannot certify synthetic runs or missing execution artifacts', async () => {
   const check = createChecks().get('m08:frozen-sufficient-evidence-tasks')
@@ -101,6 +103,22 @@ test('synthetic runtime artifacts use the shared verifier for current request ca
     assert.ok(verified.requests <= maxRequests)
   }
   const actual = report.usage.knownActual
+  const prepared = await prepareSyntheticGenerationReviewForTest({
+    report, outputRoot: path.join(temp, 'execution'), bundle, authorization: baseCaps
+  })
+  assert.equal(prepared.packets, 48)
+  assert.equal(prepared.status, 'quality-pending')
+  assert.equal(prepared.providerRequests, 0)
+  const packetSet = JSON.parse(await readFile(path.join(temp, 'execution', 'review', 'packets.json'), 'utf8'))
+  const privateMap = JSON.parse(await readFile(path.join(temp, 'execution', 'review', 'private-map.json'), 'utf8'))
+  const reviewerA = JSON.parse(await readFile(path.join(temp, 'execution', 'review', 'templates', 'reviewer-a.json'), 'utf8'))
+  const reviewerB = JSON.parse(await readFile(path.join(temp, 'execution', 'review', 'templates', 'reviewer-b.json'), 'utf8'))
+  assert.equal(packetSet.packets.length, 48)
+  assert.ok(reviewerA.packets.every((packet, index) => packet.packetId === reviewerB.packets[index].packetId))
+  assert.throws(() => deriveReviewDisagreements({ packetSet, privateMap, reviewerA, reviewerB }), /review-answer-grade-invalid/u)
+  await assert.rejects(prepareSyntheticGenerationReviewForTest({
+    report, outputRoot: path.join(temp, 'execution'), bundle, authorization: baseCaps
+  }), /EEXIST/u)
   await assert.rejects(validateM08SyntheticRawArtifactsForTest({
     report, outputRoot: path.join(temp, 'execution'), bundle,
     authorization: { ...baseCaps, maxRequests: actual.requests - 1 }
