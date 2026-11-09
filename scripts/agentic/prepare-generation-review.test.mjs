@@ -4,7 +4,8 @@ import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { createReviewerTemplate, parsePreparationArgs } from './prepare-generation-review.mjs'
+import { createReviewerTemplate, parsePreparationArgs, prepareGenerationReview } from './prepare-generation-review.mjs'
+import { captureM08CheckerBinding, m08CheckerRawReference, verifyM08CheckerBinding } from './checks/m08.mjs'
 
 test('review preparation CLI accepts only its three required public arguments', () => {
   assert.deepEqual(parsePreparationArgs(['--source-root', 'src', '--report-file', 'report.json', '--authorization-file', 'auth.json']), {
@@ -56,4 +57,27 @@ test('public real CLI refuses synthetic reports without fallback or output', asy
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /M08_REPORT_MODE_INVALID/u)
   await assert.rejects(access(path.join(temp, 'review')))
+})
+
+test('checker binding resolves from the loaded module when the caller cwd differs', async t => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'm08-checker-cwd-'))
+  t.after(() => rm(temp, { recursive: true, force: true }))
+  const expected = await captureM08CheckerBinding()
+  const moduleUrl = new URL('./checks/m08.mjs', import.meta.url).href
+  const source = `const { captureM08CheckerBinding } = await import(${JSON.stringify(moduleUrl)}); process.stdout.write(JSON.stringify(await captureM08CheckerBinding()))`
+  const aliasLoader = new URL('../../tests/register-shared-alias.mjs', import.meta.url).href
+  const result = spawnSync(process.execPath, ['--experimental-strip-types', '--import', aliasLoader, '--input-type=module', '-e', source], {
+    cwd: temp, encoding: 'utf8'
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(JSON.parse(result.stdout), expected)
+  assert.equal(await verifyM08CheckerBinding(expected).then(value => value.commit), expected.commit)
+  assert.match(m08CheckerRawReference(expected), /^m08-checker-source:[a-f0-9]{64}:[a-f0-9]{40}$/u)
+  await assert.rejects(verifyM08CheckerBinding({ ...expected, sourceTreeHash: '0'.repeat(64) }), /M08_CHECKER_CHANGED_DURING_VERIFICATION/u)
+})
+
+test('prepare API rejects requireComplete bypasses and unknown argument keys before IO', async () => {
+  const args = { sourceRoot: 'source', reportPath: 'report', authorizationPath: 'authorization' }
+  await assert.rejects(prepareGenerationReview({ ...args, requireComplete: false }), /PREPARE_ARGUMENTS_INVALID/u)
+  await assert.rejects(prepareGenerationReview({ ...args, extra: true }), /PREPARE_ARGUMENTS_INVALID/u)
 })

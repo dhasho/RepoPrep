@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { canonicalJson, sha256 } from './dataset-contract.mjs'
 import { GENERATION_REVIEW_DIMENSIONS, buildBlindedReviewPackets, verifyBlindedReviewPackets } from './generation-review.mjs'
-import { loadVerifiedGenerationExecution, validateM08SyntheticRawArtifactsForTest } from './checks/m08.mjs'
+import { loadVerifiedGenerationExecution, validateM08SyntheticRawArtifactsForTest, verifyM08CheckerBinding } from './checks/m08.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const HASH = /^[a-f0-9]{64}$/u
@@ -87,6 +87,7 @@ async function writeReviewArtifacts({ report, outputRoot, bundle, cells, rubricB
     mainQuestions: built.mainQuestions,
     sourceBindingHash: sha256(canonicalJson(report.sourceBindings))
   }
+  if (checker) await verifyM08CheckerBinding(checker)
   await mkdir(reviewDir, { mode: 0o700 })
   await exclusiveWrite(reviewDir, 'packets.json', JSON.stringify(built.packetSet, null, 2) + '\n')
   await exclusiveWrite(reviewDir, 'private-map.json', JSON.stringify(built.privateMap, null, 2) + '\n')
@@ -100,7 +101,12 @@ async function writeReviewArtifacts({ report, outputRoot, bundle, cells, rubricB
 }
 
 export async function prepareGenerationReview(args) {
-  return writeReviewArtifacts(await loadVerifiedGenerationExecution(args))
+  if (!args || typeof args !== 'object' || Array.isArray(args)) fail('PREPARE_ARGUMENTS_INVALID')
+  const keys = Object.keys(args).sort()
+  if (keys.length !== 3 || keys.join(',') !== ['authorizationPath', 'reportPath', 'sourceRoot'].sort().join(',') ||
+    keys.some(key => typeof args[key] !== 'string' || !args[key])) fail('PREPARE_ARGUMENTS_INVALID')
+  const { sourceRoot, reportPath, authorizationPath } = args
+  return writeReviewArtifacts(await loadVerifiedGenerationExecution({ sourceRoot, reportPath, authorizationPath, requireComplete: true }))
 }
 
 /** Synthetic-only preparation hook for fixtures. The public CLI never calls this function. */

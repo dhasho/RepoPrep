@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { lstat, mkdir, open, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { GRANULARITY_QUESTION_BUDGET } from '../../../shared/types.ts'
 import { assertInterviewResultContract } from '../../../shared/result-contract.ts'
 import { canonicalJson, sha256 } from '../dataset-contract.mjs'
@@ -328,10 +329,27 @@ function checkerCommit(root) {
   return commit
 }
 
+export async function captureM08CheckerBinding(root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')) {
+  const checkerRoot = await realpath(root)
+  return Object.freeze({ sourceTreeHash: await sourceTreeHash(checkerRoot), commit: checkerCommit(checkerRoot) })
+}
+
+export async function verifyM08CheckerBinding(expected, root) {
+  const actual = await captureM08CheckerBinding(root)
+  if (!isRecord(expected) || !HASH.test(expected.sourceTreeHash ?? '') || !COMMIT.test(expected.commit ?? '') || !same(actual, expected)) {
+    fail('M08_CHECKER_CHANGED_DURING_VERIFICATION')
+  }
+  return actual
+}
+
+export function m08CheckerRawReference(binding) {
+  if (!isRecord(binding) || !HASH.test(binding.sourceTreeHash ?? '') || !COMMIT.test(binding.commit ?? '')) fail('M08_CHECKER_BINDING_INVALID')
+  return `m08-checker-source:${binding.sourceTreeHash}:${binding.commit}`
+}
+
 /** Load a complete, independently verified real execution for both the gate and review preparation. */
 export async function loadVerifiedGenerationExecution({ sourceRoot: sourceRootInput, reportPath: reportPathInput, authorizationPath: authorizationPathInput, requireComplete = true }) {
-  const checkerRoot = await realpath(process.cwd())
-  const checkerStart = { sourceTreeHash: await sourceTreeHash(checkerRoot), commit: checkerCommit(checkerRoot) }
+  const checkerStart = await captureM08CheckerBinding()
   const sourceRoot = await realpath(path.resolve(sourceRootInput ?? process.cwd()))
   if (typeof reportPathInput !== 'string' || !reportPathInput) fail('M08_REPORT_PATH_REQUIRED')
   const reportPath = path.resolve(reportPathInput)
@@ -364,8 +382,7 @@ export async function loadVerifiedGenerationExecution({ sourceRoot: sourceRootIn
   const cells = await verifyRawArtifacts({ report, outputRoot, bundle, authorization: binding.authorization, complete })
   const rubricBytes = complete ? await safeRead(sourceRoot, 'scripts/agentic/assets/review-rubric.v2.json', 128 * 1024) : null
   const rubricSha256 = complete ? validateRubric(rubricBytes) : null
-  const checkerEnd = { sourceTreeHash: await sourceTreeHash(checkerRoot), commit: checkerCommit(checkerRoot) }
-  if (!same(checkerStart, checkerEnd)) fail('M08_CHECKER_CHANGED_DURING_VERIFICATION')
+  const checkerEnd = await verifyM08CheckerBinding(checkerStart)
   return Object.freeze({ report, reportPath, outputRoot, sourceRoot, binding, bundle, cells, rubricBytes, rubricSha256, checker: checkerEnd, complete })
 }
 
@@ -373,7 +390,7 @@ export function createChecks(options = {}) {
   return new Map([['m08:frozen-sufficient-evidence-tasks', async ctx => {
     if (ctx.mode !== 'real') return unknownCheck('real-report-required')
     try {
-      const { report, outputRoot, bundle, cells, rubricSha256, complete } = await loadVerifiedGenerationExecution({
+      const { report, outputRoot, bundle, cells, rubricSha256, checker, complete } = await loadVerifiedGenerationExecution({
         sourceRoot: options.sourceRoot ?? process.cwd(), reportPath: options.reportPath, authorizationPath: options.authorizationPath, requireComplete: false
       })
       if (!complete) return unknownCheck('m08-execution-incomplete')
@@ -391,8 +408,6 @@ export function createChecks(options = {}) {
       }
       const reviewed = validateGenerationReviewBundle({ packetSet, privateMap, reviewerA, reviewerB, adjudication, invocations, outputHashes: hashes, usageComplete: true })
       const metrics = reviewed.metrics
-      for (const [id, value] of Object.entries(metrics)) ctx.recordMetric(id, value, `m08-review:${reviewed.packetSetSha256}`)
-      ctx.addRawReference(`m08-review-bundle:${reviewed.packetSetSha256}`)
       const limits = validateFrozenM08QualityLimits(ctx.definition?.limits)
       if (metrics.unpackedEvidenceCited > limits.unpackedEvidenceCitedMax || metrics.materialErrorRate > metrics.staticControlMaterialErrorRate ||
         metrics.topicValueMean < metrics.staticControlTopicValueMean + limits.topicValueDeltaMin || metrics.usageComplete !== true) {
@@ -400,6 +415,10 @@ export function createChecks(options = {}) {
         error.gateFailure = true
         throw error
       }
+      const finalChecker = await verifyM08CheckerBinding(checker)
+      for (const [id, value] of Object.entries(metrics)) ctx.recordMetric(id, value, `m08-review:${reviewed.packetSetSha256}`)
+      ctx.addRawReference(`m08-review-bundle:${reviewed.packetSetSha256}`)
+      ctx.addRawReference(m08CheckerRawReference(finalChecker))
       return metrics
     } catch (error) {
       if (error?.gateFailure === true) throw error
