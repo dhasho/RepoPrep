@@ -46,12 +46,13 @@ Trace 目前只在本次进程内存中存在，可由主进程显式注入；�
 | 命令 | 本次结果 |
 | --- | --- |
 | `npm run typecheck` | Node/Web 均通过 |
-| `npm run test:agentic` | writer-v4分批整合后245/245通过、0 skip；完整合成矩阵48格、96次基础请求，授权最大值仍420；非真实生成质量成绩 |
+| `npm run test:agentic` | 只读盲评准备工具与32k边界校验整合后252/252通过、0 skip；完整合成矩阵48格、96次基础请求，授权最大值仍420；非真实生成质量成绩 |
 | `npm run test:agentic:holdout` | 正常本机权限下7/7通过、0 skip，包含实际链接逃逸拒绝 |
 | `npm run verify:agentic:p0` | 11项必需检查通过，failed/missing/skipped/unknown均为0 |
 | `npm run test:question-budget` | 126/126通过，包含格式失败分类、包装超时传播与新证据分组fine深度；默认静态提示保持兼容 |
 | `npm run test:ipc` | 274/274 通过，含失败尾部的取消/超时、停止读取与安全错误映射 |
 | `npm run test:recovery` | 40/40通过，旧草稿/流式断开/恢复保持兼容；新证据adapter明确不使用旧检查点 |
+| `npm run test:renderer` | 170/170通过；只验证既有页面和交互，未修改renderer、样式、资源或preload |
 | `npm run test:smoke` | `VERDICT SMOKE-OK`、退出 0、runner 确认隔离目录已删除 |
 | `npm run test:security` | 构建通过；77通过、0失败、3项既有平台跳过 |
 | `npm run test:scan-cache` | 补齐既有命令的导入解析注册器后60通过、0失败、2项既有平台跳过；M02独立门禁的8项均无skip |
@@ -89,7 +90,7 @@ PLAN 第2节本身不授权新调用；用户随后明确授权 M06 最多120次
 
 固定充分证据生成矩阵为12任务、两种writer、各重复2次，共48格。独立于M06，最多420次请求、6,144,000输入准入和3,145,728输出额度；每运行和单次输出约束见[生成评测ADR](adr/agentic-generation-evaluation.md)。后续用户持续授权覆盖必要真实模型评测，授权文档本身不扩大范围或清除历史计账。
 
-候选 `54964577bf4a6994766c461398fd819d0e67e2ac` 在首格发出1次请求后以 `model-failed` 停止，没有完整usage，0格完成。实际token及费用未知；保留该次2,813输入、32,768输出预留。原始报告、fsync日志、逐请求metadata、一次性claim及哈希证明保存在原测量worktree的忽略目录；不重写或自动重发原请求。M08剩余上限为419次请求、6,141,187输入准入、3,112,960输出额度，后续新候选仍扣除这笔未知预留。
+候选 `54964577bf4a6994766c461398fd819d0e67e2ac` 在首格发出1次请求后以 `model-failed` 停止，没有完整usage，0格完成。实际token及费用未知；保留该次2,813输入、32,768输出预留。原始报告、fsync日志、逐请求metadata、一次性claim及哈希证明已从旧worktree转入共享仓库主目录的`.validation/worktree-recovery/m08-measurement-5496457-20261109/`：11个归档成员逐一解压SHA核对，源码提交已推送可重建；不重写或自动重发原请求。该次停止后的余额为419次请求、6,141,187输入准入、3,112,960输出额度，后续候选继续扣减。
 
 原失败仅有泛化错误，无法追认具体原因。离线小帧SSE探针另外复现了4 MiB流字节上限先于usage尾部耗尽的限制；修复方案见[流字节预算ADR](adr/agentic-stream-wire-budget.md)。该证据只证明客户端限制，不证明历史请求的故障原因。双盲packet构造与来源重建协议已实现；尚无完整矩阵和真实独立评分，因此M08门禁仍未通过，P5–P8未开始。
 
