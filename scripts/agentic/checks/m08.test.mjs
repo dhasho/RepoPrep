@@ -4,12 +4,13 @@ import { mkdir, mkdtemp, rm, lstat, readFile, writeFile } from 'node:fs/promises
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createChecks, validateFrozenM08QualityLimits, validateM08SyntheticRawArtifactsForTest } from './m08.mjs'
+import { captureM08CheckerBinding, createChecks, recordVerifiedM08ReviewOutcome, validateFrozenM08QualityLimits, validateM08SyntheticRawArtifactsForTest } from './m08.mjs'
 import { runGenerationEvaluation } from '../generation-eval.mjs'
 import { loadGenerationEvaluationBundle } from '../generation-eval-contract.mjs'
 import { sha256 } from '../dataset-contract.mjs'
 import { prepareSyntheticGenerationReviewForTest } from '../prepare-generation-review.mjs'
-import { deriveReviewDisagreements } from '../generation-review.mjs'
+import { adjudicationInputSha256, analyzeSyntheticReviewGrades, deriveReviewDisagreements, GENERATION_MATERIAL_ERROR_CATEGORIES, GENERATION_REVIEW_DIMENSIONS, GENERATION_REVIEW_PROTOCOL } from '../generation-review.mjs'
+import { createReviewerTemplate } from '../prepare-generation-review.mjs'
 
 test('M08 verifier cannot certify synthetic runs or missing execution artifacts', async () => {
   const check = createChecks().get('m08:frozen-sufficient-evidence-tasks')
@@ -116,6 +117,83 @@ test('synthetic runtime artifacts use the shared verifier for current request ca
   assert.equal(packetSet.packets.length, 48)
   assert.ok(reviewerA.packets.every((packet, index) => packet.packetId === reviewerB.packets[index].packetId))
   assert.throws(() => deriveReviewDisagreements({ packetSet, privateMap, reviewerA, reviewerB }), /review-answer-grade-invalid/u)
+
+  const makeValidatedSyntheticReviews = (candidateErrors) => {
+    const privatePackets = new Map(privateMap.packets.map(packet => [packet.packetId, packet]))
+    const makeReviewer = role => {
+      const reviewer = createReviewerTemplate(packetSet, role)
+      for (const record of reviewer.packets) {
+        const packet = packetSet.packets.find(item => item.packetId === record.packetId)
+        const isCandidate = privatePackets.get(record.packetId).strategy === 'agentic'
+        const units = new Map()
+        const collect = question => {
+          units.set(question.answerUnitId, question)
+          for (const followUp of question.followUps ?? []) collect(followUp)
+        }
+        packet.questions.forEach(collect)
+        for (const grade of record.answers) {
+          const unit = units.get(grade.answerUnitId)
+          const source = packet.sources.find(item => unit.sourceIds.includes(item.sourceId))
+          const materialError = candidateErrors && isCandidate
+          Object.assign(grade, {
+            materialError,
+            errorCategories: materialError ? [GENERATION_MATERIAL_ERROR_CATEGORIES[0]] : [],
+            reason: 'Synthetic structural review tied to a cited source excerpt.',
+            sourceSupport: [{ sourceId: source.sourceId, path: source.path, startLine: source.startLine, endLine: source.endLine, sha256: source.sourceHash }]
+          })
+        }
+        for (const topic of record.topicValues) {
+          topic.scores = Object.fromEntries(GENERATION_REVIEW_DIMENSIONS.map(dimension => [dimension, 3]))
+          topic.reason = 'Synthetic structural topic assessment for the public question.'
+        }
+      }
+      reviewer.agentIdentity = `synthetic-reviewer-${role}`
+      return reviewer
+    }
+    const a = makeReviewer('A'), b = makeReviewer('B')
+    return analyzeSyntheticReviewGrades({ packetSet, privateMap, reviewerA: a, reviewerB: b, adjudication: {
+      schemaVersion: 1, protocol: GENERATION_REVIEW_PROTOCOL, rubricSha256: packetSet.rubricSha256,
+      packetSetSha256: packetSet.packetSetSha256,
+      inputPacketSha256: adjudicationInputSha256(packetSet.packetSetSha256, []), resolutions: []
+    } })
+  }
+  const checkerBinding = await captureM08CheckerBinding(repoRoot)
+  const outcomeContext = () => {
+    const metrics = {}, rawReferences = []
+    return {
+      definition: { limits: { tasks: 12, repeatsPerStrategy: 2, unpackedEvidenceCitedMax: 0, materialErrorRateAtMostStatic: true, topicValueDeltaMin: -0.2 } },
+      metrics, rawReferences,
+      recordMetric(id, value, reference) { metrics[id] = value; rawReferences.push({ kind: 'measurement', metricId: id, reference }) },
+      addRawReference(reference) { rawReferences.push({ kind: 'assertion-output', reference }) }
+    }
+  }
+  const thresholdFailure = outcomeContext()
+  const failedReview = makeValidatedSyntheticReviews(true)
+  await assert.rejects(recordVerifiedM08ReviewOutcome(thresholdFailure, {
+    packetSetSha256: packetSet.packetSetSha256, metrics: { ...failedReview.metrics, usageComplete: true }
+  }, checkerBinding), error => error.message === 'M08_QUALITY_THRESHOLD_FAILED' && error.gateFailure === true)
+  assert.deepEqual(Object.keys(thresholdFailure.metrics).sort(), [
+    'unpackedEvidenceCited', 'materialErrorRate', 'staticControlMaterialErrorRate', 'topicValueMean', 'staticControlTopicValueMean', 'usageComplete'
+  ].sort())
+  assert.equal(thresholdFailure.metrics.materialErrorRate, 1)
+  assert.equal(thresholdFailure.rawReferences.length, 8)
+  assert.ok(thresholdFailure.rawReferences.some(row => row.reference === `m08-review:${packetSet.packetSetSha256}`))
+  assert.ok(thresholdFailure.rawReferences.some(row => row.reference.startsWith('m08-checker-source:')))
+
+  const passingContext = outcomeContext()
+  const passingReview = makeValidatedSyntheticReviews(false)
+  const passedMetrics = await recordVerifiedM08ReviewOutcome(passingContext, {
+    packetSetSha256: packetSet.packetSetSha256, metrics: { ...passingReview.metrics, usageComplete: true }
+  }, checkerBinding)
+  assert.equal(passedMetrics.materialErrorRate, 0)
+  assert.equal(Object.keys(passingContext.metrics).length, 6)
+
+  const changedSourceContext = outcomeContext()
+  await assert.rejects(recordVerifiedM08ReviewOutcome(changedSourceContext, {
+    packetSetSha256: packetSet.packetSetSha256, metrics: { ...passingReview.metrics, usageComplete: true }
+  }, { ...checkerBinding, sourceTreeHash: '0'.repeat(64) }), /M08_CHECKER_CHANGED_DURING_VERIFICATION/u)
+  assert.deepEqual(changedSourceContext.metrics, {})
+  assert.deepEqual(changedSourceContext.rawReferences, [])
   await assert.rejects(prepareSyntheticGenerationReviewForTest({
     report, outputRoot: path.join(temp, 'execution'), bundle, authorization: baseCaps
   }), /EEXIST/u)

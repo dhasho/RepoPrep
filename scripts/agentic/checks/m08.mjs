@@ -347,6 +347,24 @@ export function m08CheckerRawReference(binding) {
   return `m08-checker-source:${binding.sourceTreeHash}:${binding.commit}`
 }
 
+/** Record independently validated review measurements before applying quality thresholds. */
+export async function recordVerifiedM08ReviewOutcome(ctx, reviewed, checkerBinding) {
+  const metrics = reviewed?.metrics
+  const limits = validateFrozenM08QualityLimits(ctx.definition?.limits)
+  if (!HASH.test(reviewed?.packetSetSha256 ?? '') || !isRecord(metrics)) fail('M08_REVIEW_METRICS_INVALID')
+  const finalChecker = await verifyM08CheckerBinding(checkerBinding)
+  for (const [id, value] of Object.entries(metrics)) ctx.recordMetric(id, value, `m08-review:${reviewed.packetSetSha256}`)
+  ctx.addRawReference(`m08-review-bundle:${reviewed.packetSetSha256}`)
+  ctx.addRawReference(m08CheckerRawReference(finalChecker))
+  if (metrics.unpackedEvidenceCited > limits.unpackedEvidenceCitedMax || metrics.materialErrorRate > metrics.staticControlMaterialErrorRate ||
+    metrics.topicValueMean < metrics.staticControlTopicValueMean + limits.topicValueDeltaMin || metrics.usageComplete !== true) {
+    const error = new Error('M08_QUALITY_THRESHOLD_FAILED')
+    error.gateFailure = true
+    throw error
+  }
+  return metrics
+}
+
 /** Load a complete, independently verified real execution for both the gate and review preparation. */
 export async function loadVerifiedGenerationExecution({ sourceRoot: sourceRootInput, reportPath: reportPathInput, authorizationPath: authorizationPathInput, requireComplete = true }) {
   const checkerStart = await captureM08CheckerBinding()
@@ -407,19 +425,7 @@ export function createChecks(options = {}) {
         hashes[key] = digest(await safeRead(outputRoot, path.join('review', file), LIMIT.review))
       }
       const reviewed = validateGenerationReviewBundle({ packetSet, privateMap, reviewerA, reviewerB, adjudication, invocations, outputHashes: hashes, usageComplete: true })
-      const metrics = reviewed.metrics
-      const limits = validateFrozenM08QualityLimits(ctx.definition?.limits)
-      if (metrics.unpackedEvidenceCited > limits.unpackedEvidenceCitedMax || metrics.materialErrorRate > metrics.staticControlMaterialErrorRate ||
-        metrics.topicValueMean < metrics.staticControlTopicValueMean + limits.topicValueDeltaMin || metrics.usageComplete !== true) {
-        const error = new Error('M08_QUALITY_THRESHOLD_FAILED')
-        error.gateFailure = true
-        throw error
-      }
-      const finalChecker = await verifyM08CheckerBinding(checker)
-      for (const [id, value] of Object.entries(metrics)) ctx.recordMetric(id, value, `m08-review:${reviewed.packetSetSha256}`)
-      ctx.addRawReference(`m08-review-bundle:${reviewed.packetSetSha256}`)
-      ctx.addRawReference(m08CheckerRawReference(finalChecker))
-      return metrics
+      return await recordVerifiedM08ReviewOutcome(ctx, reviewed, checker)
     } catch (error) {
       if (error?.gateFailure === true) throw error
       return unknownCheck(typeof error?.message === 'string' && /^M08_[A-Z0-9_]+$/u.test(error.message) ? error.message.toLowerCase() : 'm08-verification-failed')
