@@ -62,7 +62,7 @@ export interface EvidenceGenerationAdapter {
   finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
 }
 
-export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v4' as const
+export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v5' as const
 export const EVIDENCE_GENERATION_WRITER_VARIANTS = Object.freeze({ topicCards: 'topic-cards', staticControl: 'static-control' } as const)
 export type EvidenceGenerationWriterVariant = typeof EVIDENCE_GENERATION_WRITER_VARIANTS[keyof typeof EVIDENCE_GENERATION_WRITER_VARIANTS]
 
@@ -283,7 +283,7 @@ function legacyContext(scan: ScanResult, authorizedFilePaths: readonly string[],
 }
 
 function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], unresolved: readonly string[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[], quota: number): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
-  const instruction = `\n\n## 简洁写作指导\n每道新问题的主答案控制在 150–220 字，并提供 2 个追问，每个追问答案控制在 50–80 字；追问内部的 followUps 默认输出空数组。保持 JSON 完整，不得截断内容；精简时仍须保留实际机制、适用条件与异常情况。question、answer 和追问文本中的专业术语继续用 [[术语]] 标记，根级 glossary 必须覆盖所有标记术语。\n\n## 引用协议\n本次只生成 ${quota} 道新主问题；quota 为 0 时不要生成主问题。每个新主问题对象都必须包含非空的 evidenceIds 字符串数组，最多 16 个 ID；root、section 或追问上的引用字段不能替代主问题的 evidenceIds。ID 必须从本次提供的证据行 ids 元数据中逐字复制，不得改写、缩写或虚构；不要在证据未充分支持时编造问题。引用 ID 只表示来源绑定，不代表事实已核实。`
+  const instruction = `\n\n## 简洁写作指导\n每道新问题的主答案控制在 150–220 字，并提供 2 个追问，每个追问答案控制在 50–80 字；追问内部的 followUps 默认输出空数组。保持 JSON 完整，不得截断内容；精简时仍须保留实际机制、适用条件与异常情况。question、answer 和追问文本中的专业术语继续用 [[术语]] 标记，根级 glossary 必须覆盖所有标记术语。\n\n## 引用协议\n本次只生成 ${quota} 道新主问题；quota 为 0 时不要生成主问题。每个新主问题对象都必须包含非空的 evidenceIds 字符串数组，最多 16 个 ID；root、section 或追问上的引用字段不能替代主问题的 evidenceIds。ID 必须从本次提供的证据行 ids 元数据中逐字复制，不得改写、缩写或虚构；不要在证据未充分支持时编造问题。引用 ID 只表示来源绑定，不代表事实已核实。\n\n## 源码范围\n只把本次实际提供的源码片段当作观察依据；被省略、截断或未提供的代码不等于不存在。核对已提供的绑定、类型、完整守卫与调用路径；若所需定义或方法未提供，替代方案只能作为条件假设。明确区分源码观察与建议、假设，追问也遵守这些限定。ID、公开目标和选题卡都不是事实核验。`
   const cards = writerVariant === 'topic-cards'
     ? `\n\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n${topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'}`
     : ''

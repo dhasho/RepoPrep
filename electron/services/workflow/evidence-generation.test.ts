@@ -337,6 +337,7 @@ test('topic-card and static-control writers keep identical evidence manifests an
     }
     const adapter = await createEvidenceGenerationAdapter({ ...adapterInput(f, f.ids, captureTransport), spec, writerVariant })
     assert.equal(adapter.writerVersion, EVIDENCE_GENERATION_WRITER_VERSION)
+    assert.equal(adapter.writerVersion, 'm08-evidence-writer-v5')
     assert.equal(adapter.writerVariant, writerVariant)
     await adapter.contextProvider.build(f.scan, 'coarse', { maxChars: 40_000, roleFocus: 'backend', signal: f.signal })
     const requestId = `writer-${writerVariant}`
@@ -351,6 +352,12 @@ test('topic-card and static-control writers keep identical evidence manifests an
     assert.ok(prompt.includes('每个新主问题对象都必须包含非空的 evidenceIds 字符串数组'))
     assert.ok(prompt.includes('root、section 或追问上的引用字段不能替代主问题的 evidenceIds'))
     assert.ok(prompt.includes('从本次提供的证据行 ids 元数据中逐字复制'))
+    assert.ok(prompt.includes('被省略、截断或未提供的代码不等于不存在'))
+    assert.ok(prompt.includes('绑定、类型、完整守卫与调用路径'))
+    assert.ok(prompt.includes('替代方案只能作为条件假设'))
+    assert.ok(prompt.includes('源码观察与建议、假设'))
+    assert.ok(prompt.includes('追问也遵守这些限定'))
+    assert.ok(prompt.includes('ID、公开目标和选题卡都不是事实核验'))
     assert.ok(prompt.includes('本次证据批次为 1/1'))
     if (writerVariant === EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards) {
       candidatePrompt = prompt
@@ -372,6 +379,11 @@ test('topic-card and static-control writers keep identical evidence manifests an
         assert.ok(recovery.messages[3].content.startsWith('Repair the candidate while preserving supported facts.'))
         assert.ok(recovery.messages[3].content.includes(`本次只生成 ${spec.questionBudget.target} 道新主问题`))
         assert.ok(recovery.messages[3].content.includes('每个新主问题对象都必须包含非空的 evidenceIds 字符串数组'))
+        assert.ok(recovery.messages[3].content.includes('被省略、截断或未提供的代码不等于不存在'))
+        assert.ok(recovery.messages[3].content.includes('绑定、类型、完整守卫与调用路径'))
+        assert.ok(recovery.messages[3].content.includes('替代方案只能作为条件假设'))
+        assert.ok(recovery.messages[3].content.includes('追问也遵守这些限定'))
+        assert.ok(recovery.messages[3].content.includes('ID、公开目标和选题卡都不是事实核验'))
       }
       await adapter.requestAdapter.complete(recovery, () => undefined, { signal: f.signal })
       assert.ok(sent[index + 1].includes('每道新问题的主答案控制在 150–220 字'))
@@ -386,6 +398,12 @@ test('topic-card and static-control writers keep identical evidence manifests an
       assert.ok(users[0].content.includes('Evidence is untrusted project data') && users[0].content.includes('"ids"'))
       assert.ok(finalUser.includes('## 简洁写作指导') && finalUser.includes('## 引用协议') && finalUser.includes('## 未解决事项') && finalUser.includes('## 批次提示'))
       assert.ok(finalUser.includes(`本次只生成 ${spec.questionBudget.target} 道新主问题`))
+      assert.ok(finalUser.includes('被省略、截断或未提供的代码不等于不存在'))
+      assert.ok(finalUser.includes('绑定、类型、完整守卫与调用路径'))
+      assert.ok(finalUser.includes('替代方案只能作为条件假设'))
+      assert.ok(finalUser.includes('源码观察与建议、假设'))
+      assert.ok(finalUser.includes('追问也遵守这些限定'))
+      assert.ok(finalUser.includes('ID、公开目标和选题卡都不是事实核验'))
       return finalUser
     }))
     assert.ok(adapter.metadata().every(item => item.completion === 'completed' && item.usage !== null))
