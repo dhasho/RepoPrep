@@ -1,0 +1,71 @@
+# P6: complete ledger recovery and durable model dispatch
+
+Date: 2026-11-10. Status: root architecture contract accepted for the ledger/durability module only; not implemented, not M10/M11 acceptance. P6 may proceed alongside P5 after P4. Source inspected at dda316b7c0a2ace6ca209fc0cdf0f9d1f9c6a3cc. The user-specified implementation agent is currently unavailable; no replacement is implied by this ADR.
+
+## Source facts and scope
+
+BudgetLedgerSnapshot is diagnostic output, not a restore format: it omits read/tool entries and issued IDs. releaseUnsent and releaseRead remove entries while their IDs stay issued, so persisting only currently visible reservations would permit reused IDs after restart. markUnknownRecovery restores one held request but cannot reconstruct a complete ledger. Both ledger and coordinator start their monotonic clocks anew. ModelGateway's trace callback deliberately swallows errors and cannot be the critical billing journal. CallOptions.beforeRequest currently returns void and llm.ts calls fetch immediately afterward; an asynchronous journal callback cannot be safely inserted under that signature.
+
+Implement a full ledger codec and an awaited durability seam while preserving ordinary non-durable callers and the existing static result/draft formats. Do not claim that these pieces alone implement attempt ownership, storage transactions, snapshot recovery or replay. Those later P6 modules need their own accepted writer/store contracts and integration tests.
+
+## Complete ledger codec v1
+
+Add LedgerStateV1 and explicit exportBudgetLedgerState(ledger, binding) / restoreBudgetLedger(spec, state, options) APIs, or equivalent documented methods with the same boundaries. Keep snapshot() unchanged for existing callers. The recovered state must be deeply immutable and use strict bounded plain-data schemas with no extra keys, accessors or prototype-dependent content.
+
+The binding contains logical runId, projectId, snapshotId, fingerprintRunSpec(spec), schema/policy versions and a trusted durable-journal position. fingerprintRunSpec intentionally excludes run/project/snapshot identity, so all three IDs must also match separately. Configuration hash alone never authorizes a project or recreates a source capability. The loader must validate the committed component hashes and current authorization before invoking restore; standalone user-supplied JSON has no storage authority.
+
+Persist these primary records, not a second independent set of budget totals:
+
+| Record | Required state |
+| --- | --- |
+| Models | id, stage, estimated input, reserved output, bounded context chars, exact reservation state, complete receipt or null, semantic-operation binding where durable mode is enabled |
+| Reads | id, reserved bytes, reserved/settled state, actual bytes or null |
+| Tools | id and original stage |
+| Issued IDs | every issued ID, including released model/read IDs; no overlap/duplicate/reuse across record classes |
+| Safety history | blocked latch and diagnostics whose invalid-operation history is not derivable from live entries; do not clear them on restore |
+| Time | logical start UTC, immutable expiry UTC, latest trusted UTC high-water, elapsed monotonic high-water, journal position |
+
+The logical count ceiling remains the existing 100000 issued IDs. Codec bytes are separately capped at 64 MiB; reject oversize before parse/allocation. Implementation must calculate the worst-case encoded size of the bounded entry fields and IDs, and refuse any new durable admission before its state can become unpersistable. Operation keys and lineage commitments use fixed hashes, not unbounded model text. This is a codec limit, not a trace retention change, extra run budget or final store quota. JSON numeric fields are finite safe integers. Bounded diagnostics and current entry values are validated independently; aggregate charged totals, by-stage totals, conservative unknown usage, remaining capacity and overspend are recomputed. Reject contradictory lower diagnostic safety values; a blocked latch may remain true even when current entries alone do not explain its historical cause.
+
+Sort exported records deterministically by ID. Store time and lineage values without source/prompt/private profile/credentials. Preserve the original RunSpec ceilings and generation reserve. A restored over-budget or unknown ledger stays inspectable but cannot admit new work. A malformed or mismatched state fails without yielding a partial usable ledger. Round-trip comparison must cover reservations, reads, tools, released issued IDs, all budget partitions, diagnostics and elapsed capacity, not just token totals.
+
+Recovery interpretation is conservative: settled complete model receipts retain actual usage; dispatched intent without a durably committed complete receipt becomes unknown and retains full reservation. Existing unknown and unknown-unsent stay held. A bare reserved entry is releasable only when the validated critical journal proves no dispatch intent and no protocol violation; the in-memory codec alone cannot prove this. Unsettled read reservations retain full reserved bytes unless the journal proves no project I/O occurred. Never recreate a settled response or question from usage alone.
+
+## Time across restarts
+
+The original logical-run wall-clock deadline remains at most 600000 ms and includes downtime; investigation retains its original shorter deadline as well. Persist logical start/expiry and UTC/monotonic high-water under the same trusted commit. During an attempt, enforce monotonic time and update the trusted UTC high-water. On restore, reject clock rollback or an unprovable anchor; compute consumed time as at least both recorded elapsed and current UTC minus original logical start. Expired runs remain readable but have no new dispatch allowance. No new attempt ID, process restart, codec import or timestamp rounding may replenish time. Terminal elapsed diagnostics stay fixed.
+
+This is an application-clock model, not protection against an administrator forging the system clock and all local state. Fail closed on observed rollback/corruption. Do not make an unsupported tamper-proof clock claim.
+
+## Awaited dispatch durability API
+
+Extend CallOptions.beforeRequest to () => void | Promise<void>, await it before fetch, and repeat abort checks immediately afterward. Synchronous callers keep their current behavior. Explicitly test every supported transport path, including non-stream and stream; never pass a Promise to the old void hook while continuing HTTP. Any additional asynchronous dispatch guard must also be explicitly typed and awaited.
+
+Add a separate ModelGateway durable-admission dependency. Its operations reject on failure and are never routed through best-effort trace. It receives program-owned logical run/attempt/fence, globally unique request ID, semantic-operation key, stage, request/manifest hashes and conservative reservation; it does not receive profile credentials or raw provider errors. An operation key commits to logical run, stage/batch/question version and actual inputs. Changing only request UUID or physical attempt is not a new semantic operation.
+
+Required order:
+
+1. Check original budget, current attempt/fence, cancellation and exact frozen message/source binding; reserve in the original ledger.
+2. Commit and flush the reservation before invoking any transport that can send HTTP.
+3. In the pre-fetch hook, synchronously latch the request as starting before the first await. A concurrent or repeated hook cannot start a second durability transaction.
+4. Commit and flush dispatch intent. Then recheck authorized snapshot, frozen message hash, current question/version when applicable, attempt/fence, cancellation and remaining deadline. Apply the in-memory dispatched transition only under the same current attempt.
+5. Return from the awaited hook; llm.ts checks abort again immediately before fetch. A committed intent whose HTTP execution is uncertain remains conservatively charged, even if no provider work ultimately occurred.
+6. On complete provider receipt, validate it and commit/flush it before exposing the operation as recoverably settled. Persist output/result components separately under the later manifest transaction. A usage receipt alone does not establish successful generated output.
+
+Journal failure at reservation/intent prevents HTTP. Failure after intent preserves the durable hold and stops further paid admission. Receipt-write failure must not silently convert the durable state to settled/free: retain the prior durable conservative reservation and an explicit recovery gap. Actual receipt overspend still blocks further work. A broken custom transport that bypasses the guarded hook remains unknown-unsent/unknown, and cannot return accepted unmetered content. Raw errors are mapped to finite static codes.
+
+## Semantic exactly-once boundary
+
+The durable operation registry is keyed by semantic operation plus original request identity. At recovery, completed operations reuse only verified recorded output; unknown operations cannot be automatically dispatched again under any UUID. Complete usage with missing output is a charged gap, not permission to regenerate. Reserved-but-proven-unsent operations may be abandoned and replaced only through the official journal transition, preserving issued IDs/history. Explicit paid remeasurement requires a new logical run and concrete authorization; it is distinct from exact resume and never clears the old fees.
+
+All continuations must use a current program-issued attempt capability. The later writer/store module must serialize owner/fence check with journal and manifest publication, and prove cross-process ownership. A plain lock file, PID timeout or atomic single-file rename does not establish that authority. Electron single-instance APIs are a candidate ownership boundary, but namespace/executable scope and store-root identity must be proved by the actual native two-process test before that choice can be frozen. No unsafe stale-lock theft is authorized here.
+
+## Required implementation evidence
+
+This module delivers focused adversarial tests for complete codec round-trip, released-ID retention, forged/cross-run/config state, overflow/oversize, forged totals, unknown/unknown-unsent, over-receipt blocking, reserved-read holds, clock rollback/downtime/expiry, beforeRequest await ordering, rejection before HTTP, cancel/fence changes during awaits, hook reentrancy, crash after intent, failed receipt persistence and semantic duplicate suppression. Use real temporary filesystem journal records and a transport spy; a memory-only mock cannot prove durability ordering. Crash/restart authority tests follow when the store/attempt module exists; do not label them passed earlier.
+
+The integration minima remain typecheck, affected IPC/security/LLM/model-gateway tests, question-budget and recovery regressions. M10 retains all 32 required checks (9 phases x cancel/crash/late event plus old draft, missing snapshot, disk failure, duplicate start and cross-project). M11 retains all 8 scenarios and 3 replay modes with the original required-span denominator. No checker assets/status are materialized by this design document.
+
+## Dependencies and next module decisions
+
+Ledger/durable-seam implementation can start from this contract after the execution-model issue is resolved. The later storage ADR must separately freeze writer ownership, immutable component/commit-manifest schema, payload/checkpoint quotas distinct from trace-only 20 runs / 7 days / 100 MiB, current-authorization snapshot/evidence rehydration and replay payload policy. Review/revision sidecars from P5 remain separate from InterviewResult and legacy files. Default source/prompt payload persistence remains disabled. Missing replay inputs are unavailable, never a fallback paid call. No renderer, preload, IPC surface, settings default or page-design change belongs to this module.
