@@ -149,7 +149,7 @@ function validateSingleQuestionReplacement(input: SingleQuestionReplacementInput
 
 Patch proposals have exactly `{question, evidenceIds, glossary}`. Their question has only optional `title` and required `question`, `answer`, `followUps`; the original ID is supplied by the program. Follow-up depth remains the generator's two levels, and strict validation prevents the existing normalizer from dropping supplied content. New glossary entries are limited to 64, evidence references to 16 distinct actually packed IDs, and total patch content to 256,000 characters; existing result-contract bounds still apply. Whole-result replacement checks the shared granularity range, all section/question IDs, normalized primary-question duplicates, all glossary markers and the result contract, then returns a detached frozen result. It never mutates or freezes caller-owned input and preserves existing unrelated values. The single-question evaluation functions validate an actual unit directly and do not manufacture a full result.
 
-The generation adapter's two `beforeRequest` forwarding layers preserve synchronous callbacks and return/await asynchronous callbacks, rechecking cancellation, authorized snapshot and exact packed messages after awaits. End-to-end asynchronous admission requires the companion gateway/LLM await support; M08 prompt bytes, writer version, metadata sidecar and normal synchronous callback ordering are unchanged.
+The generation adapter keeps the M07 `dispatchGuard` synchronous, pure and repeatable at admission, intent and receipt fences. Its actual transport's prefetch hook performs outer `beforeRequest` admission, snapshot checks after asynchronous work, gateway `beforeRequest` admission, further snapshot/exact-message checks, one source registration, request notification and the final guard. Synchronous hooks retain a synchronous path; Promise hooks return the entire admission chain for the transport/LLM to await. A transport that drops this Promise cannot register a late source and does not leak an unhandled rejection. End-to-end native asynchronous admission requires the companion LLM await support; M08 prompt bytes, writer version and metadata sidecar are unchanged.
 
 
 Internal cross-module exports are capability-gated and are not downstream authoring APIs:
@@ -168,3 +168,5 @@ function createGenerationQuestionSourceRecorder(input: QuestionSourceAuthorityIn
   sourceFor(question: QuestionItem): Promise<QuestionSourceCapability>
 }>
 ```
+
+Follow-up and evidence-ID arrays at the unknown patch boundary require the standard array prototype, continuous own enumerable data elements, bounded length and no extra/symbol/accessor properties. Validation rejects array accessors without executing them.

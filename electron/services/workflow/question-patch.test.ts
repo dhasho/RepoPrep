@@ -117,3 +117,20 @@ test('single-question evaluation validates one real unit without a fake granular
   assert.equal(Object.isFrozen(changed.glossary), true)
   assert.throws(() => validateSingleQuestionReplacement({ question: original, glossary: {}, expectedFingerprint: 'f'.repeat(64), proposal: proposal(), allowedEvidenceIds: [ev] }))
 })
+
+
+test('array accessors, sparse arrays, extra keys and nonstandard prototypes are rejected without executing getters', () => {
+  let reads = 0
+  const accessorFollowUps = Object.defineProperty([], '0', { get() { reads++; throw new Error('must not execute') }, enumerable: true })
+  assert.throws(() => normalizeQuestionPatch(proposal({ question: 'Valid?', answer: 'Valid.', followUps: accessorFollowUps }), question(), [ev]), { code: 'invalid-argument' })
+  const accessorIds = Object.defineProperty([], '0', { get() { reads++; throw new Error('must not execute') }, enumerable: true })
+  assert.throws(() => normalizeQuestionPatch({ ...proposal(), evidenceIds: accessorIds }, question(), [ev]), { code: 'invalid-argument' })
+  const sparse = new Array(1)
+  const extra = Object.assign([], { command: 'execute' })
+  const symbol = Object.assign([], { [Symbol('hidden')]: 'value' })
+  const nonstandard = Object.setPrototypeOf([], null)
+  for (const followUps of [sparse, extra, symbol, nonstandard]) {
+    assert.throws(() => normalizeQuestionPatch(proposal({ question: 'Valid?', answer: 'Valid.', followUps }), question(), [ev]), { code: 'invalid-argument' })
+  }
+  assert.equal(reads, 0)
+})

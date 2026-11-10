@@ -440,44 +440,64 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         dispatchMetadata.set(state.requestId, { stage: state.stage, manifest: state.packet.manifest, completion: 'pending' })
         state.registered = true
       }
-      const dispatchGuard = (messages: readonly import('../llm.ts').ChatMessage[]): void | Promise<void> => {
-        if (state.registered) fail()
-        assertDispatchCurrent(messages)
-        const pending: unknown = options.beforeRequest?.()
-        if (pending && typeof (pending as PromiseLike<void>).then === 'function') {
-          return Promise.resolve(pending).then(async () => {
-            assertDispatchCurrent(messages)
-            await snapshot.assertCurrent(signal)
-            registerDispatch(messages)
-          })
-        }
-        registerDispatch(messages)
-      }
+      // M07's guard is deliberately synchronous and repeatable at admission, intent and receipt fences.
+      const dispatchGuard = assertDispatchCurrent
       const actualTransport = input.transport ?? chatCompletionStream
       const transport: ModelTransport = async (activeProfile, messages, emit, gatewayOptions) => {
         const timeoutMs = options.timeoutMs === undefined ? gatewayOptions.timeoutMs : Math.min(options.timeoutMs, gatewayOptions.timeoutMs ?? options.timeoutMs)
         const maxOutputTokens = options.maxOutputTokens === undefined ? gatewayOptions.maxOutputTokens : Math.min(options.maxOutputTokens, gatewayOptions.maxOutputTokens ?? options.maxOutputTokens)
-        return actualTransport(activeProfile, messages, emit, {
-          signal: state.signal,
-          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-          ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-          ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
-          includeUsage: true,
-          beforeRequest: () => {
-            const notify = (): void => { try { options.onRequest?.() } catch { /* request observers cannot affect dispatch */ } }
-            const pending: unknown = gatewayOptions.beforeRequest?.()
-            if (pending && typeof (pending as PromiseLike<void>).then === 'function') {
-              return Promise.resolve(pending).then(async () => {
-                assertDispatchCurrent(messages)
-                await snapshot.assertCurrent(signal)
-                assertDispatchCurrent(messages)
-                notify()
-              })
-            }
-            notify()
-          },
-          onUsage: usage => { gatewayOptions.onUsage?.(usage) }
-        })
+        let active = true
+        let prefetchStarted = false
+        let prefetchViolation = false
+        const assertPrefetchCurrent = (): void => {
+          if (!active || prefetchViolation) fail('model-failed')
+          assertDispatchCurrent(messages)
+        }
+        const afterAwait = async (): Promise<void> => {
+          assertPrefetchCurrent()
+          await snapshot.assertCurrent(signal)
+          assertPrefetchCurrent()
+        }
+        const registerAndNotify = (): void => {
+          assertPrefetchCurrent()
+          registerDispatch(messages)
+          try { options.onRequest?.() } catch { /* request observers cannot replace the gateway outcome */ }
+          assertPrefetchCurrent()
+        }
+        const admitGateway = (): void | Promise<void> => {
+          assertPrefetchCurrent()
+          const pending: unknown = gatewayOptions.beforeRequest?.()
+          if (pending && typeof (pending as PromiseLike<void>).then === 'function') {
+            return Promise.resolve(pending).then(async () => {
+              await afterAwait()
+              registerAndNotify()
+            })
+          }
+          registerAndNotify()
+        }
+        const beforeRequest = (): void | Promise<void> => {
+          if (prefetchStarted) { prefetchViolation = true; fail('model-failed') }
+          prefetchStarted = true
+          assertPrefetchCurrent()
+          const pending: unknown = options.beforeRequest?.()
+          const admitted = pending && typeof (pending as PromiseLike<void>).then === 'function'
+            ? Promise.resolve(pending).then(async () => { await afterAwait(); return admitGateway() })
+            : admitGateway()
+          // A broken custom transport may discard the returned Promise. It still fails closed without an unhandled rejection.
+          if (admitted) void admitted.catch(() => {})
+          return admitted
+        }
+        try {
+          return await actualTransport(activeProfile, messages, emit, {
+            signal: state.signal,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+            ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+            ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
+            includeUsage: true,
+            beforeRequest,
+            onUsage: usage => { gatewayOptions.onUsage?.(usage) }
+          })
+        } finally { active = false }
       }
       const gateway = createModelGateway(spec, privateProfile, ledger, { transport })
       const forwardSettledUsage = (): void => {

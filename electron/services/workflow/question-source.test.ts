@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -257,4 +259,155 @@ test('frozen evaluation imports reserve real reads, settle cache hits at zero an
   await assert.rejects(createFrozenEvaluationQuestionSource({ spec: limited.spec, ledger: limited.ledger, snapshot: limitedSnapshot, store: createEvidenceStore(limitedSnapshot), signal: limited.signal, question: question(), glossary: {}, evidence: [{ fileId: limited.file.fileId, range: { startLine: 1, endLine: 1 } }] }), { code: 'budget-exhausted' })
   assert.equal(blockedReads, 0)
   assert.equal(limited.ledger.snapshot().total.readBytes, 0)
+})
+
+
+test('an asynchronous outer admission hook settles before gateway dispatch, source registration or fetch acceptance', async t => {
+  const f = await fixture('async-admission'); t.after(f.cleanup)
+  let resolveHook!: () => void
+  let enteredHook!: () => void
+  const waiting = new Promise<void>(resolve => { resolveHook = resolve })
+  const entered = new Promise<void>(resolve => { enteredHook = resolve })
+  let accepted = 0
+  let notifications = 0
+  const state = await adapterFor(f, async (_profile, messages, _emit, options) => {
+    await options.beforeRequest?.()
+    accepted++
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  })
+  const completing = state.adapter.requestAdapter.complete(state.prepared, () => undefined, { signal: f.signal, beforeRequest: async () => { enteredHook(); await waiting }, onRequest: () => { notifications++ } })
+  try {
+    await entered
+    assert.equal(accepted, 0)
+    assert.equal(notifications, 0)
+    assert.equal(f.ledger.snapshot().total.dispatchedRequests, 0)
+    assert.equal(f.ledger.snapshot().total.reservedRequests, 1)
+    assert.deepEqual(state.adapter.metadata(), [])
+    await assert.rejects(state.adapter.sourceFor(state.questions[0]))
+  } finally { resolveHook() }
+  await completing
+  assert.equal(accepted, 1)
+  assert.equal(notifications, 1)
+  state.accept()
+  await state.adapter.finalize(result(f, state.questions))
+  const source = await state.adapter.sourceFor(state.questions[0])
+  assert.equal(state.adapter.sourceAuthority.describe(source, state.questions[0]).requestId, state.prepared.requestId)
+  assert.equal(state.adapter.metadata().length, 1)
+})
+
+test('asynchronous admission rejection, cancellation and stale snapshot fail before gateway dispatch with no unhandled rejection', async t => {
+  const unhandled: unknown[] = []
+  const observe = (error: unknown) => { unhandled.push(error) }
+  process.on('unhandledRejection', observe)
+  t.after(() => process.off('unhandledRejection', observe))
+  for (const mode of ['reject', 'cancel', 'stale'] as const) {
+    const f = await fixture(`async-${mode}`); t.after(f.cleanup)
+    let accepted = 0
+    let notifications = 0
+    const state = await adapterFor(f, async (_profile, _messages, _emit, options) => { await options.beforeRequest?.(); accepted++; return '{}' })
+    const outcome = state.adapter.requestAdapter.complete(state.prepared, () => undefined, {
+      signal: f.signal,
+      beforeRequest: async () => {
+        await Promise.resolve()
+        if (mode === 'reject') throw new Error('Synthetic admission rejection.')
+        if (mode === 'cancel') f.abort()
+        if (mode === 'stale') await fs.writeFile(path.join(f.root, 'src/value.ts'), 'export const changedAfterAdmission = true\n')
+      },
+      onRequest: () => { notifications++ }
+    }).then(() => null, error => error as { code: string })
+    const error = await outcome
+    assert.equal(error?.code, mode === 'cancel' ? 'cancelled' : mode === 'stale' ? 'stale-snapshot' : 'model-failed')
+    assert.equal(accepted, 0)
+    assert.equal(notifications, 0)
+    assert.equal(f.ledger.snapshot().total.dispatchedRequests, 0)
+    assert.equal(f.ledger.snapshot().total.reservedRequests, 0)
+    assert.deepEqual(state.adapter.metadata(), [])
+    await assert.rejects(state.adapter.sourceFor(state.questions[0]))
+  }
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.deepEqual(unhandled, [])
+})
+
+test('a transport that discards asynchronous admission cannot register a late source or leak a rejected Promise', async t => {
+  const f = await fixture('discarded-admission'); t.after(f.cleanup)
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  const unhandled: unknown[] = []
+  const observe = (error: unknown) => { unhandled.push(error) }
+  process.on('unhandledRejection', observe)
+  t.after(() => process.off('unhandledRejection', observe))
+  const state = await adapterFor(f, async (_profile, _messages, _emit, options) => { options.beforeRequest?.(); return '{}' })
+  const outcome = state.adapter.requestAdapter.complete(state.prepared, () => undefined, { signal: f.signal, beforeRequest: () => waiting }).then(() => null, error => error as { code: string })
+  assert.equal((await outcome)?.code, 'model-failed')
+  assert.equal(f.ledger.snapshot().usageComplete, false)
+  assert.deepEqual(state.adapter.metadata(), [])
+  release()
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.deepEqual(state.adapter.metadata(), [])
+  assert.deepEqual(unhandled, [])
+})
+
+test('request notification cancellation is fenced before the transport accepts fetch', async t => {
+  const f = await fixture('notification-cancel'); t.after(f.cleanup)
+  let accepted = 0
+  const state = await adapterFor(f, async (_profile, _messages, _emit, options) => { await options.beforeRequest?.(); accepted++; return '{}' })
+  await assert.rejects(state.adapter.requestAdapter.complete(state.prepared, () => undefined, { signal: f.signal, onRequest: f.abort }), { code: 'cancelled' })
+  assert.equal(accepted, 0)
+  assert.equal(f.ledger.snapshot().usageComplete, false)
+  await assert.rejects(state.adapter.sourceFor(state.questions[0]), { code: 'cancelled' })
+})
+
+test('repeatable pure guards preserve one actual prefetch registration', async t => {
+  if (process.env.REPOPREP_REPEAT_SOURCE_GUARDS !== '1') {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-repeat-guards-'))
+    t.after(() => fs.rm(temporary, { recursive: true, force: true }))
+    const gatewayFile = path.join(temporary, 'gateway.mjs')
+    const loaderFile = path.join(temporary, 'loader.mjs')
+    const actualGateway = new URL('./model-gateway.ts', import.meta.url).href
+    await fs.writeFile(gatewayFile, `import { createModelGateway as actual } from ${JSON.stringify(actualGateway)};
+export function createModelGateway(spec, profile, ledger, options) {
+  const gateway = actual(spec, profile, ledger, { ...options, transport: (profile, messages, emit, gatewayOptions) => options.transport(profile, messages, emit, { ...gatewayOptions, beforeRequest: async () => { await Promise.resolve(); gatewayOptions.beforeRequest?.(); } }) });
+  return { async complete(input) {
+    const check = () => { if (input.dispatchGuard?.(input.messages) !== undefined) throw new Error('Dispatch guard must be synchronous.'); };
+    check(); check();
+    const completion = await gateway.complete(input);
+    check(); check();
+    return completion;
+  } };
+}
+`)
+    const sourceModule = new URL('./evidence-generation.ts', import.meta.url).href
+    await fs.writeFile(loaderFile, `import { registerHooks } from 'node:module';
+process.env.REPOPREP_REPEAT_SOURCE_GUARDS = '1';
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (specifier === './model-gateway.ts' && context.parentURL === ${JSON.stringify(sourceModule)}) return { url: ${JSON.stringify(pathToFileURL(gatewayFile).href)}, shortCircuit: true };
+  return nextResolve(specifier, context);
+} });
+`)
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--import', new URL('../../../tests/register-shared-alias.mjs', import.meta.url).href, '--import', pathToFileURL(loaderFile).href, '--test', '--test-name-pattern', '^repeatable pure guards preserve one actual prefetch registration$', fileURLToPath(import.meta.url)], { encoding: 'utf8', timeout: 30_000 })
+    assert.equal(child.status, 0, `${child.stdout}\n${child.stderr}`)
+    return
+  }
+  const f = await fixture('repeated-pure-guards'); t.after(f.cleanup)
+  let hooks = 0
+  let notifications = 0
+  let accepted = 0
+  const state = await adapterFor(f, async (_profile, messages, _emit, options) => {
+    await options.beforeRequest?.()
+    accepted++
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  })
+  await state.adapter.requestAdapter.complete(state.prepared, () => undefined, { signal: f.signal, beforeRequest: async () => { hooks++; await Promise.resolve() }, onRequest: () => { notifications++ } })
+  state.accept()
+  await state.adapter.finalize(result(f, state.questions))
+  await state.adapter.sourceFor(state.questions[0])
+  assert.equal(hooks, 1)
+  assert.equal(notifications, 1)
+  assert.equal(accepted, 1)
+  assert.equal(state.adapter.metadata().length, 1)
+  assert.equal(f.ledger.snapshot().total.dispatchedRequests, 1)
 })

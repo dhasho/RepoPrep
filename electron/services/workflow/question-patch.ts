@@ -65,6 +65,13 @@ function keys(value: unknown, allowed: readonly string[], required: readonly str
   }
   if (required.some(key => !Object.hasOwn(value, key))) fail()
 }
+function array(value: unknown, min: number, max: number): asserts value is unknown[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length < min || value.length > max || Reflect.ownKeys(value).length !== value.length + 1) fail()
+  for (let index = 0; index < value.length; index++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+    if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) fail()
+  }
+}
 function text(value: unknown, max: number): asserts value is string {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0')) fail()
 }
@@ -87,7 +94,8 @@ function validateQuestionContent(value: unknown, depth: number, counter: { count
   }
   if (counter.chars > MAX_PATCH_CHARS || depth > 2 || depth > 0 && ++counter.count > 64) fail()
   if (Object.hasOwn(value, 'followUps')) {
-    if (!Array.isArray(value.followUps) || value.followUps.length > 32 || depth === 2 && value.followUps.length) fail()
+    array(value.followUps, 0, 32)
+    if (depth === 2 && value.followUps.length) fail()
     for (const child of value.followUps) validateQuestionContent(child, depth + 1, counter)
   }
 }
@@ -150,9 +158,11 @@ function assertFingerprint(question: QuestionItem, expected: string): string {
 
 export function normalizeQuestionPatch(proposal: unknown, original: QuestionItem, allowedEvidenceIds: readonly string[]): NormalizedQuestionPatch {
   keys(proposal, ['question', 'evidenceIds', 'glossary'], ['question', 'evidenceIds', 'glossary'])
-  if (!original || !ID.test(original.id) || !Array.isArray(allowedEvidenceIds) || allowedEvidenceIds.length < 1 || allowedEvidenceIds.length > 4096 || allowedEvidenceIds.some(id => typeof id !== 'string' || !EVIDENCE_ID.test(id)) || new Set(allowedEvidenceIds).size !== allowedEvidenceIds.length) fail()
+  array(allowedEvidenceIds, 1, 4096)
+  if (!original || !ID.test(original.id) || allowedEvidenceIds.some(id => typeof id !== 'string' || !EVIDENCE_ID.test(id)) || new Set(allowedEvidenceIds).size !== allowedEvidenceIds.length) fail()
   const ids = proposal.evidenceIds
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 16 || ids.some(id => typeof id !== 'string' || !allowedEvidenceIds.includes(id)) || new Set(ids).size !== ids.length) fail()
+  array(ids, 1, 16)
+  if (ids.some(id => typeof id !== 'string' || !allowedEvidenceIds.includes(id)) || new Set(ids).size !== ids.length) fail()
   const question = normalizeContent(proposal.question, original.id)
   const additions = glossary(proposal.glossary, MAX_GLOSSARY_ADDITIONS)
   if (JSON.stringify({ question, glossary: additions }).length > MAX_PATCH_CHARS) fail()
