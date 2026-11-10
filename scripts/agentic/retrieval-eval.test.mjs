@@ -407,3 +407,45 @@ test('sanitized child environment can secure a private temp directory without us
     await rm(folder, { recursive: true, force: true })
   }
 })
+
+
+test('guarded transport awaits asynchronous upstream admission before journaling and HTTP', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const events = []; let release, enter
+  const gate = new Promise(resolve => { release = resolve })
+  const entered = new Promise(resolve => { enter = resolve })
+  const guarded = createGuardedTransport({ collector, runId: 'async-guard', getReservation: () => ({ id: 'call-async', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+    await options.beforeRequest()
+    events.push('HTTP')
+    options.onUsage({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+    return 'synthetic output'
+  } })
+  const pending = guarded({}, [], () => {}, { beforeRequest: async () => { events.push('guard'); enter(); await gate; events.push('flushed') } })
+  await entered
+  assert.deepEqual(events, ['guard'])
+  release()
+  assert.equal(await pending, 'synthetic output')
+  assert.deepEqual(events, ['guard', 'flushed', 'request-admitted', 'HTTP', 'provider-usage'])
+})
+
+test('guarded transport propagates asynchronous admission rejection before HTTP', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const events = []; const failure = new Error('Static admission failure.')
+  const guarded = createGuardedTransport({ collector, runId: 'async-reject', getReservation: () => ({ id: 'call-reject', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+    await options.beforeRequest(); events.push('HTTP'); return 'forbidden'
+  } })
+  await assert.rejects(guarded({}, [], () => {}, { beforeRequest: async () => { await Promise.resolve(); throw failure } }), error => error === failure)
+  assert.equal(events.includes('HTTP'), false)
+  assert.equal(events.includes('request-admitted'), false)
+  assert.equal(collector.snapshot().admittedRequests, 0)
+})
+
+test('guarded transport preserves synchronous admission hook return semantics', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const guarded = createGuardedTransport({ collector, runId: 'sync-guard', getReservation: () => ({ id: 'call-sync', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal() {}, transport: async (_p, _m, _d, options) => {
+    assert.equal(options.beforeRequest(), undefined)
+    options.onUsage({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+    return 'synthetic output'
+  } })
+  assert.equal(await guarded({}, [], () => {}, { beforeRequest() {} }), 'synthetic output')
+})

@@ -1,16 +1,23 @@
 import type { RunSpec } from './run-spec.ts'
 import { performance } from 'node:perf_hooks'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { validateLedgerBinding, validateLedgerState, validateLedgerUsage, ledgerInteger, worstCaseLedgerBytes, LEDGER_STATE_MAX_BYTES } from './ledger-state.ts'
+import type { LedgerBinding, LedgerStateV1, LedgerModelState } from './ledger-state.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { CONTEXT_CHAR_BUDGETS } from '../../../shared/context-budget.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { WorkflowError } from './project-contract.ts'
 
 export type ModelStage = 'investigation' | 'generation' | 'review' | 'repair' | 'compensation'
-export interface ModelReservation { readonly id: string; readonly stage: ModelStage; readonly inputTokens: number; readonly outputTokens: number; readonly contextChars?: number }
+export interface ModelReservation { readonly id: string; readonly stage: ModelStage; readonly inputTokens: number; readonly outputTokens: number; readonly contextChars?: number; readonly semanticOperationHash?: string }
 export interface ModelUsage { readonly inputTokens: number; readonly outputTokens: number; readonly totalTokens: number }
-export interface BudgetLedgerOptions { readonly clock?: () => number }
+export interface BudgetLedgerOptions { readonly clock?: () => number; readonly utcClock?: () => number; readonly durable?: boolean }
+/** A program-owned store capability, never constructed from the decoded JSON.
+ * Its implementation verifies committed hashes, current project authorization and writer ownership. */
+export interface LedgerRecoveryAuthority { readonly binding: LedgerBinding; assertCurrent(): void; proveModelUnsent?(id: string): boolean; proveReadUnsent?(id: string): boolean }
+export interface BudgetLedgerRestoreOptions extends BudgetLedgerOptions { readonly authority: LedgerRecoveryAuthority }
 
-interface ModelEntry extends Omit<ModelReservation, 'contextChars'> { readonly contextChars: number | null; state: 'reserved' | 'unknown-unsent' | 'dispatched' | 'settled' | 'unknown'; usage: ModelUsage | null }
+interface ModelEntry extends Omit<ModelReservation, 'contextChars' | 'semanticOperationHash'> { readonly contextChars: number | null; readonly semanticOperationHash: string | null; state: 'reserved' | 'unknown-unsent' | 'dispatched' | 'settled' | 'unknown'; usage: ModelUsage | null }
 interface ReadEntry { readonly id: string; readonly reservedBytes: number; state: 'reserved' | 'settled'; actualBytes: number | null }
 interface ToolEntry { readonly id: string; readonly stage: ModelStage }
 
@@ -46,7 +53,7 @@ export interface BudgetLedgerSnapshot {
   readonly total: Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number; actualProviderUsage: Readonly<ModelUsage> | null; readBytes: number; toolCalls: number }>
   readonly remaining: Readonly<{ modelRequests: number; inputTokens: number; outputTokens: number; readBytes: number; toolCalls: number; investigationRequests: number; investigationInputTokens: number; investigationOutputTokens: number; investigationReadBytes: number; investigationToolCalls: number; investigationWallClockMs: number }>
   readonly byStage: Readonly<Record<ModelStage, Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number }>>>
-  readonly reservations: readonly (Readonly<ModelEntry> & Readonly<{ estimatedInputTokens: number }>)[]
+  readonly reservations: readonly (Readonly<Omit<ModelEntry, 'semanticOperationHash'>> & Readonly<{ estimatedInputTokens: number }>)[]
 }
 
 export interface BudgetLedger {
@@ -67,14 +74,62 @@ export interface BudgetLedger {
   snapshot(): BudgetLedgerSnapshot
 }
 
-export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions = {}): BudgetLedger {
+interface LedgerInternals { readonly spec: RunSpec; enableDurability(): void; seal(): void; block(): void; retainUnknown(id: string, sent: boolean): void; export(binding: LedgerBinding, projection?: LedgerProjection): LedgerStateV1 }
+export interface LedgerProjection { readonly id: string; readonly state: LedgerModelState; readonly usage: unknown | null }
+const internals = new WeakMap<BudgetLedger, LedgerInternals>()
+export function enableBudgetLedgerDurability(ledger: BudgetLedger): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.enableDurability() }
+export function sealBudgetLedger(ledger: BudgetLedger): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.seal() }
+export function blockBudgetLedger(ledger: BudgetLedger): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.block() }
+export function retainUnknownModel(ledger: BudgetLedger, id: string, sent: boolean): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.retainUnknown(id, sent) }
+/** Projection prepares a durable intent/receipt without prematurely changing live counters. */
+export function exportBudgetLedgerState(ledger: BudgetLedger, binding: LedgerBinding, projection?: LedgerProjection): LedgerStateV1 {
+  const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); return state.export(binding, projection)
+}
+export function restoreBudgetLedger(spec: RunSpec, value: unknown, options: BudgetLedgerRestoreOptions): BudgetLedger {
+  try { return restoreLedger(spec, value, options) } catch (error) { if (error instanceof WorkflowError) throw error; throw new WorkflowError('invalid-argument') }
+}
+function assertRecoveryCurrent(authority: LedgerRecoveryAuthority): void {
+  const result = authority.assertCurrent()
+  if (result !== undefined) { void Promise.resolve(result).catch(() => {}); throw new WorkflowError('invalid-argument') }
+}
+function recoveryProof(prove: ((id: string) => boolean) | undefined, id: string): boolean {
+  if (!prove) return false
+  const result = prove(id)
+  if (typeof result !== 'boolean') { void Promise.resolve(result).catch(() => {}); throw new WorkflowError('invalid-argument') }
+  return result
+}
+function restoreLedger(spec: RunSpec, value: unknown, options: BudgetLedgerRestoreOptions): BudgetLedger {
+  if (!options?.authority || typeof options.authority.assertCurrent !== 'function') throw new WorkflowError('invalid-argument')
+  assertRecoveryCurrent(options.authority)
+  const state = validateLedgerState(spec, value); const expected = validateLedgerBinding(spec, options.authority.binding)
+  if (state.binding.journal.sequence !== expected.journal.sequence || state.binding.journal.hash !== expected.journal.hash) throw new WorkflowError('configuration-changed')
+  const models = state.models.map(entry => entry.state === 'dispatched' ? { ...entry, state: 'unknown' as const } : entry.state === 'reserved' && !recoveryProof(options.authority.proveModelUnsent?.bind(options.authority), entry.id) ? { ...entry, state: 'unknown-unsent' as const } : entry)
+  assertRecoveryCurrent(options.authority)
+  const ledger = createLedger(spec, { ...options, durable: true }, validateLedgerState(spec, { ...state, models }))
+  assertRecoveryCurrent(options.authority)
+  return ledger
+}
+export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions = {}): BudgetLedger { return createLedger(spec, options) }
+function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly authority?: LedgerRecoveryAuthority }, recovered?: LedgerStateV1): BudgetLedger {
   const now = options.clock ?? performance.now.bind(performance)
   const started = now()
   if (typeof started !== 'number' || !Number.isFinite(started)) throw new WorkflowError('invalid-argument')
   let lastNow = started
+  const utcNow = options.utcClock ?? Date.now
+  const utcStarted = ledgerInteger(utcNow())
+  let durable = options.durable ?? false
+  const startedUtcMs = recovered?.time.startedUtcMs ?? utcStarted
+  const expiresUtcMs = recovered?.time.expiresUtcMs ?? ledgerInteger(startedUtcMs + spec.budget.total.wallClockMs)
+  let utcHighWaterMs = recovered?.time.utcHighWaterMs ?? utcStarted
+  if (utcStarted < utcHighWaterMs) throw new WorkflowError('invalid-argument')
+  let terminalElapsedMs = recovered?.time.terminalElapsedMs ?? null
+  if (terminalElapsedMs === null) utcHighWaterMs = utcStarted
+  const elapsedAnchor = terminalElapsedMs ?? (recovered ? Math.max(recovered.time.elapsedHighWaterMs, utcStarted - startedUtcMs) : 0)
+  let elapsedHighWaterMs = elapsedAnchor
   const models = new Map<string, ModelEntry>()
   const reads = new Map<string, ReadEntry>()
   const tools = new Map<string, ToolEntry>()
+  const unreleasableReads = new Set(recovered?.reads.filter(entry => entry.state === 'reserved' && !recoveryProof(options.authority?.proveReadUnsent?.bind(options.authority), entry.id)).map(entry => entry.id))
   const issuedIds = new Set<string>()
   let dispatchedRequests = 0; let reservedRequests = 0
   let inputTokens = 0; let outputTokens = 0; let readBytes = 0; let toolCalls = 0
@@ -84,11 +139,25 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
 
   const sampleTime = (): number => {
     const value = now()
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < lastNow) throw new WorkflowError('invalid-argument')
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < lastNow) { blocked = true; throw new WorkflowError('invalid-argument') }
     lastNow = value
     return value
   }
-  const elapsed = (): number => sampleTime() - started
+  const elapsed = (): number => {
+    if (terminalElapsedMs !== null) return terminalElapsedMs
+    const duration = Math.ceil(sampleTime() - started + elapsedAnchor)
+    const utc = utcNow()
+    if (!Number.isSafeInteger(duration) || duration < 0 || !Number.isSafeInteger(utc) || utc < 0) { blocked = true; throw new WorkflowError('invalid-argument') }
+    if (durable && utc < utcHighWaterMs) { blocked = true; throw new WorkflowError('invalid-argument') }
+    utcHighWaterMs = Math.max(utcHighWaterMs, utc)
+    elapsedHighWaterMs = Math.max(elapsedHighWaterMs, duration, durable ? utcHighWaterMs - startedUtcMs : 0)
+    return elapsedHighWaterMs
+  }
+  const ensureCodecCapacity = (kind?: 'models' | 'reads' | 'tools'): void => {
+    if (!durable) return
+    const sizes = { models: { length: models.size + (kind === 'models' ? 1 : 0) }, reads: { length: reads.size + (kind === 'reads' ? 1 : 0) }, tools: { length: tools.size + (kind === 'tools' ? 1 : 0) }, issuedIds: { length: issuedIds.size + (kind ? 1 : 0) } }
+    if (worstCaseLedgerBytes(sizes) > LEDGER_STATE_MAX_BYTES) throw new WorkflowError('budget-exhausted')
+  }
   const ensureTime = (stage?: ModelStage): void => {
     const duration = elapsed()
     if (duration >= spec.budget.total.wallClockMs || (stage === 'investigation' && duration >= spec.budget.investigation.wallClockMs)) throw new WorkflowError('budget-exhausted')
@@ -112,14 +181,17 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
   const settleUnknown = (entry: ModelEntry): void => {
     entry.state = 'unknown'
     entry.usage = null
+    blocked = true
     // Keep its full token reservation in the consumed counters. It is neither zero usage nor refundable.
   }
   const ledger: BudgetLedger = {
     reserveModel(value) {
       validId(value?.id); validStage(value?.stage); integer(value?.inputTokens); integer(value?.outputTokens); if (value.contextChars !== undefined) integer(value.contextChars); unique(value.id)
       if (value.contextChars !== undefined && value.contextChars > CONTEXT_CHAR_BUDGETS[spec.granularity]) throw new WorkflowError('budget-exhausted')
+      if (value.semanticOperationHash !== undefined && (typeof value.semanticOperationHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.semanticOperationHash) || [...models.values()].some(entry => entry.semanticOperationHash === value.semanticOperationHash))) throw new WorkflowError('invalid-argument')
+      ensureCodecCapacity('models')
       ensureModelCapacity(value.stage, value.inputTokens, value.outputTokens)
-      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, state: 'reserved', usage: null }
+      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, semanticOperationHash: value.semanticOperationHash ?? null, state: 'reserved', usage: null }
       models.set(value.id, entry)
       issuedIds.add(value.id)
       reservedRequests++; inputTokens += value.inputTokens; outputTokens += value.outputTokens
@@ -134,12 +206,13 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
     markUnknownUnsent(id) {
       validId(id); const entry = models.get(id)
       if (!entry || entry.state !== 'reserved') throw new WorkflowError('invalid-argument')
-      entry.state = 'unknown-unsent'
+      entry.state = 'unknown-unsent'; blocked = true
       // Retain both token and request reservations. A broken transport cannot return an unmetered result.
     },
     releaseUnsent(id) {
       validId(id); const entry = models.get(id)
       if (!entry || entry.state !== 'reserved') throw new WorkflowError('invalid-argument')
+      if (durable && entry.semanticOperationHash !== null) throw new WorkflowError('invalid-argument')
       models.delete(id); reservedRequests--; inputTokens -= entry.inputTokens; outputTokens -= entry.outputTokens
       if (entry.stage === 'investigation') { investigationRequests--; investigationInput -= entry.inputTokens; investigationOutput -= entry.outputTokens }
     },
@@ -148,6 +221,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       if (!entry || entry.state !== 'dispatched') throw new WorkflowError('invalid-argument')
       const usage = usageReceipt(rawUsage)
       if (!usage) { settleUnknown(entry); return }
+      if (!Number.isSafeInteger(inputTokens - entry.inputTokens + usage.inputTokens) || !Number.isSafeInteger(outputTokens - entry.outputTokens + usage.outputTokens) || !Number.isSafeInteger(inputTokens - entry.inputTokens + usage.inputTokens + outputTokens - entry.outputTokens + usage.outputTokens)) { blocked = true; settleUnknown(entry); return }
       const overInput = Math.max(0, usage.inputTokens - entry.inputTokens)
       const overOutput = Math.max(0, usage.outputTokens - entry.outputTokens)
       inputTokens = Math.max(0, inputTokens - entry.inputTokens + usage.inputTokens)
@@ -163,7 +237,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       if (inputTokens > spec.budget.total.inputTokens || outputTokens > spec.budget.total.outputTokens || (entry.stage === 'investigation' && (investigationInput > spec.budget.investigation.inputTokens || investigationOutput > spec.budget.investigation.outputTokens))) blocked = true
     },
     reserveRead(id, bytes) {
-      validId(id); integer(bytes); unique(id); ensureTime('investigation')
+      validId(id); integer(bytes); unique(id); ensureCodecCapacity('reads'); ensureTime('investigation')
       if (blocked || add(readBytes, bytes) > spec.budget.total.readBytes || add(investigationReadBytes, bytes) > spec.budget.investigation.readBytes) {
         budgetExhausted()
       }
@@ -172,6 +246,7 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
     settleRead(id, actualBytes) {
       validId(id); integer(actualBytes); const entry = reads.get(id)
       if (!entry || entry.state !== 'reserved') throw new WorkflowError('invalid-argument')
+      if (!Number.isSafeInteger(readBytes - entry.reservedBytes + actualBytes)) { blocked = true; throw new WorkflowError('invalid-argument') }
       entry.state = 'settled'; entry.actualBytes = actualBytes
       if (actualBytes > entry.reservedBytes) { const over = actualBytes - entry.reservedBytes; overspendReadBytes += over; readBytes += over; investigationReadBytes += over; blocked = true }
       else { readBytes -= entry.reservedBytes - actualBytes; investigationReadBytes -= entry.reservedBytes - actualBytes }
@@ -179,13 +254,14 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
     releaseRead(id) {
       validId(id); const entry = reads.get(id)
       if (!entry || entry.state !== 'reserved') throw new WorkflowError('invalid-argument')
+      if (unreleasableReads.has(id)) throw new WorkflowError('invalid-argument')
       reads.delete(id); readBytes -= entry.reservedBytes; investigationReadBytes -= entry.reservedBytes
     },
     chargeRead(id, bytes) {
       ledger.reserveRead(id, bytes); ledger.settleRead(id, bytes)
     },
     chargeTool(id, stage = 'investigation') {
-      validId(id); validStage(stage); unique(id); ensureTime(stage)
+      validId(id); validStage(stage); unique(id); ensureCodecCapacity('tools'); ensureTime(stage)
       const totalLimit = spec.budget.total.maxToolCalls
       if (blocked || (totalLimit !== undefined && toolCalls + 1 > totalLimit) || (stage === 'investigation' && investigationTools + 1 > (spec.budget.investigation.maxToolCalls ?? 0))) budgetExhausted()
       tools.set(id, { id, stage }); issuedIds.add(id); toolCalls++
@@ -196,8 +272,12 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
       validId(value?.id); validStage(value?.stage); integer(value?.inputTokens); integer(value?.outputTokens); unique(value.id)
       if (value.contextChars !== undefined) integer(value.contextChars)
       if (value.contextChars !== undefined && value.contextChars > CONTEXT_CHAR_BUDGETS[spec.granularity]) throw new WorkflowError('budget-exhausted')
+      if (value.semanticOperationHash !== undefined && (typeof value.semanticOperationHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.semanticOperationHash) || [...models.values()].some(entry => entry.semanticOperationHash === value.semanticOperationHash))) throw new WorkflowError('invalid-argument')
+      if (!Number.isSafeInteger(inputTokens + value.inputTokens) || !Number.isSafeInteger(outputTokens + value.outputTokens) || !Number.isSafeInteger(inputTokens + value.inputTokens + outputTokens + value.outputTokens)) throw new WorkflowError('invalid-argument')
+      ensureCodecCapacity('models')
+      blocked = true
       // Recovered sent work counts as an actual attempt, and its maximum reservation remains charged.
-      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, state: 'unknown', usage: null }
+      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, semanticOperationHash: value.semanticOperationHash ?? null, state: 'unknown', usage: null }
       models.set(value.id, entry); issuedIds.add(value.id); dispatchedRequests++
       inputTokens = add(inputTokens, value.inputTokens); outputTokens = add(outputTokens, value.outputTokens)
       if (value.stage === 'investigation') { investigationRequests++; investigationInput = add(investigationInput, value.inputTokens); investigationOutput = add(investigationOutput, value.outputTokens) }
@@ -234,9 +314,58 @@ export function createBudgetLedger(spec: RunSpec, options: BudgetLedgerOptions =
           investigationWallClockMs: Math.max(0, spec.budget.investigation.wallClockMs - elapsed())
         }),
         byStage: Object.freeze(byStage),
-        reservations: Object.freeze(modelEntries.map(entry => Object.freeze({ ...entry, estimatedInputTokens: entry.inputTokens })))
+        reservations: Object.freeze(modelEntries.map(({ semanticOperationHash: _operation, ...entry }) => Object.freeze({ ...entry, estimatedInputTokens: entry.inputTokens })))
       })
     }
   }
+  if (recovered) {
+    for (const id of recovered.issuedIds) issuedIds.add(id)
+    for (const entry of recovered.models) {
+      models.set(entry.id, { ...entry })
+      if (entry.state === 'reserved' || entry.state === 'unknown-unsent') reservedRequests++; else dispatchedRequests++
+      inputTokens += entry.usage?.inputTokens ?? entry.inputTokens; outputTokens += entry.usage?.outputTokens ?? entry.outputTokens
+      if (entry.stage === 'investigation') { investigationRequests++; investigationInput += entry.usage?.inputTokens ?? entry.inputTokens; investigationOutput += entry.usage?.outputTokens ?? entry.outputTokens }
+    }
+    for (const entry of recovered.reads) { reads.set(entry.id, { ...entry }); readBytes += entry.actualBytes ?? entry.reservedBytes }
+    investigationReadBytes = readBytes
+    for (const entry of recovered.tools) { tools.set(entry.id, { ...entry }); toolCalls++; if (entry.stage === 'investigation') investigationTools++ }
+    overspendInputTokens = recovered.diagnostics.overspendInputTokens; overspendOutputTokens = recovered.diagnostics.overspendOutputTokens; overspendReadBytes = recovered.diagnostics.overspendReadBytes
+    overspendAdmissions = recovered.diagnostics.overspendAdmissions; doubleSettlements = recovered.diagnostics.doubleSettlements; unknownUsageTreatedAsZero = recovered.diagnostics.unknownUsageTreatedAsZero
+    blocked = terminalElapsedMs !== null || recovered.blocked || overspendAdmissions > 0 || doubleSettlements > 0 || unknownUsageTreatedAsZero > 0 || models.size > spec.budget.total.maxModelRequests || inputTokens > spec.budget.total.inputTokens || outputTokens > spec.budget.total.outputTokens || readBytes > spec.budget.total.readBytes || toolCalls > (spec.budget.total.maxToolCalls ?? MAX_ENTRIES) || investigationRequests > spec.budget.investigation.maxModelRequests || investigationInput > spec.budget.investigation.inputTokens || investigationOutput > spec.budget.investigation.outputTokens || investigationReadBytes > spec.budget.investigation.readBytes || investigationTools > (spec.budget.investigation.maxToolCalls ?? 0) || overspendInputTokens > 0 || overspendOutputTokens > 0 || overspendReadBytes > 0 || [...models.values()].some(entry => entry.state === 'unknown' || entry.state === 'unknown-unsent')
+  }
+  internals.set(ledger, {
+    spec,
+    enableDurability() { durable = true; ensureCodecCapacity() },
+    seal() { terminalElapsedMs = elapsed(); blocked = true },
+    block() { blocked = true },
+    retainUnknown(id, sent) {
+      const entry = models.get(id)
+      if (!entry || !['reserved', 'dispatched'].includes(entry.state)) throw new WorkflowError('invalid-argument')
+      if (entry.state === 'reserved' && sent) { reservedRequests--; dispatchedRequests++ }
+      entry.state = sent || entry.state === 'dispatched' ? 'unknown' : 'unknown-unsent'; entry.usage = null; blocked = true
+    },
+    export(binding, projection) {
+      const checkedBinding = validateLedgerBinding(spec, binding)
+      durable = true; ensureCodecCapacity(); elapsed()
+      let projectedOverInput = 0; let projectedOverOutput = 0
+      const records = [...models.values()].map(entry => {
+        if (!projection || projection.id !== entry.id) return { ...entry }
+        const usage = projection.usage === null ? null : validateLedgerUsage(projection.usage)
+        if (projection.state === 'settled') {
+          projectedOverInput = Math.max(0, (usage?.inputTokens ?? 0) - entry.inputTokens)
+          projectedOverOutput = Math.max(0, (usage?.outputTokens ?? 0) - entry.outputTokens)
+        }
+        return { ...entry, state: projection.state, usage }
+      })
+      if (projection && !models.has(projection.id)) throw new WorkflowError('invalid-argument')
+      return validateLedgerState(spec, {
+        version: 1, binding: checkedBinding,
+        time: { startedUtcMs, expiresUtcMs, utcHighWaterMs, elapsedHighWaterMs, terminalElapsedMs },
+        blocked: blocked || projectedOverInput > 0 || projectedOverOutput > 0 || projection?.state === 'unknown' || projection?.state === 'unknown-unsent',
+        diagnostics: { overspendInputTokens: add(overspendInputTokens, projectedOverInput), overspendOutputTokens: add(overspendOutputTokens, projectedOverOutput), overspendReadBytes, overspendAdmissions, doubleSettlements, unknownUsageTreatedAsZero },
+        models: records, reads: [...reads.values()].map(entry => ({ ...entry })), tools: [...tools.values()].map(entry => ({ ...entry })), issuedIds: [...issuedIds]
+      })
+    }
+  })
   return Object.freeze(ledger)
 }

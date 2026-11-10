@@ -1,4 +1,9 @@
 import { createHash } from 'node:crypto'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createDurableModelAdmission, durableModelEvent } from './model-journal.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { retainUnknownModel, blockBudgetLedger } from './budget-ledger.ts'
+import type { DurableModelJournal, DurableOperationInput } from './model-journal.ts'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript modules with explicit extensions.
 import { chatCompletionStream, isLlmTimeoutError, LLM_RESPONSE_LIMITS, LlmRequestError, normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 TS5097 -- direct Node tests execute TypeScript modules with explicit extensions.
@@ -24,10 +29,12 @@ export interface ModelCompletionInput {
   /** Main-process proof that the exact frozen messages still satisfy their evidence manifest. */
   readonly dispatchGuard?: (messages: readonly ChatMessage[]) => void
   readonly maxOutputTokens?: number
+  /** Required by the critical journal when durable admission is enabled. Program-owned hashes only. */
+  readonly durableOperation?: DurableOperationInput
 }
 export interface ModelCompletion { readonly content: string; readonly usage: LlmUsage | null }
 export type ModelTransport = (profile: LlmProfile, messages: ChatMessage[], onDelta: (delta: string) => unknown, options: CallOptions) => Promise<string>
-export interface ModelGatewayOptions { readonly transport?: ModelTransport; readonly trace?: (event: Readonly<{ type: 'reserved' | 'dispatched' | 'settled' | 'failed'; id: string; stage: ModelStage }>) => void }
+export interface ModelGatewayOptions { readonly durability?: DurableModelJournal; readonly transport?: ModelTransport; readonly trace?: (event: Readonly<{ type: 'reserved' | 'dispatched' | 'settled' | 'failed'; id: string; stage: ModelStage }>) => void }
 
 function normalizedProtocol(profile: LlmProfile): 'openai' | 'anthropic' { return profile.protocol ?? 'openai' }
 function endpointFingerprint(profile: LlmProfile): string {
@@ -64,16 +71,23 @@ function mapFailure(error: unknown, signal?: AbortSignal): WorkflowError {
   return new WorkflowError('model-failed', modelFailure)
 }
 
+function assertDispatchGuard(guard: ModelCompletionInput['dispatchGuard'], messages: readonly ChatMessage[]): void {
+  const result = guard?.(messages)
+  if (result !== undefined) { void Promise.resolve(result).catch(() => {}); throw new WorkflowError('invalid-argument') }
+}
+
 export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, ledger: BudgetLedger, options: ModelGatewayOptions = {}) {
   assertConfiguration(spec, privateProfile)
   const profile = freezeProfile(privateProfile)
   const transport = options.transport ?? chatCompletionStream
+  const durable = options.durability ? createDurableModelAdmission(spec, ledger, options.durability) : undefined
   const safeTrace = (event: Readonly<{ type: 'reserved' | 'dispatched' | 'settled' | 'failed'; id: string; stage: ModelStage }>): void => {
     try { options.trace?.(Object.freeze(event)) } catch { /* tracing is observational */ }
   }
   return Object.freeze({
     async complete(input: ModelCompletionInput): Promise<ModelCompletion> {
       if (!input || typeof input !== 'object' || !Array.isArray(input.messages) || input.messages.length > 256 || typeof input.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.id) || !['investigation', 'generation', 'review', 'repair', 'compensation'].includes(input.stage)) throw new WorkflowError('invalid-argument')
+      if (input.durableOperation !== undefined && !durable) throw new WorkflowError('invalid-argument')
       if (input.onDelta !== undefined && typeof input.onDelta !== 'function') throw new WorkflowError('invalid-argument')
       if (input.dispatchGuard !== undefined && typeof input.dispatchGuard !== 'function') throw new WorkflowError('invalid-argument')
       const dispatchGuard = input.dispatchGuard
@@ -90,10 +104,24 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
       const estimatedInputTokens = estimateMessageTokens(messages)
       if (!Number.isSafeInteger(estimatedInputTokens) || (spec.model.contextWindowTokens !== undefined && estimatedInputTokens + outputTokens > spec.model.contextWindowTokens)) throw new WorkflowError('budget-exhausted')
       if (input.signal?.aborted) throw new WorkflowError('cancelled')
+      const durableContext = durable?.context(input.id, input.stage, messages, input.durableOperation, estimatedInputTokens, outputTokens)
+      if (durableContext) {
+        try { durable!.assertCurrent(durableContext, messages); assertDispatchGuard(dispatchGuard, messages) } catch (error) { throw mapFailure(error, input.signal) }
+      }
       ledger.assertCanContinue(input.stage)
-      ledger.reserveModel({ id: input.id, stage: input.stage, inputTokens: estimatedInputTokens, outputTokens, contextChars: messages.reduce((sum, message) => sum + message.content.length, 0) })
+      ledger.reserveModel({ id: input.id, stage: input.stage, inputTokens: estimatedInputTokens, outputTokens, contextChars: messages.reduce((sum, message) => sum + message.content.length, 0), ...(durableContext ? { semanticOperationHash: durableContext.semanticOperationHash } : {}) })
       safeTrace({ type: 'reserved', id: input.id, stage: input.stage })
       let dispatched = false
+      let hookStarted = false
+      let intentStarted = false
+      let finished = false
+      let protocolViolation = false
+      let journalFailed = false
+      const flush = async (kind: 'reservation' | 'intent' | 'receipt' | 'unknown', state?: 'dispatched' | 'settled' | 'unknown' | 'unknown-unsent', usage: LlmUsage | null = null, afterFlush?: () => void): Promise<void> => {
+        if (!durable || !durableContext) return
+        try { await durable.flush(durableModelEvent(kind, durableContext, usage, content === null ? 'missing' : 'uncommitted', protocolViolation ? 'transport-protocol' : kind === 'unknown' ? 'receipt-unavailable' : 'none'), state ? { id: input.id, state, usage } : undefined, afterFlush) }
+        catch { journalFailed = true; blockBudgetLedger(ledger); throw new WorkflowError('model-failed') }
+      }
       let unknownUnsent = false
       let receipt: LlmUsage | null = null
       let content: string | null = null
@@ -117,17 +145,38 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
         return safe ? input.onDelta(safe) : undefined
       }
       try {
+        if (durable) await flush('reservation')
         const snapshot = ledger.snapshot()
         const remainingMs = Math.min(spec.budget.total.wallClockMs - snapshot.elapsedMs, input.stage === 'investigation' ? snapshot.remaining.investigationWallClockMs : Number.MAX_SAFE_INTEGER)
         if (remainingMs <= 0) throw new WorkflowError('budget-exhausted')
-        const beforeRequest = (): void => {
+        const checkDispatch = (): void => {
+          if (finished || protocolViolation) throw new WorkflowError('model-failed')
+          if (input.signal?.aborted) throw new WorkflowError('cancelled')
           assertConfiguration(spec, profile)
+          if (durableContext) durable!.assertCurrent(durableContext, messages)
+          assertDispatchGuard(dispatchGuard, messages)
           ledger.assertCanContinue(input.stage)
-          dispatchGuard?.(messages)
+        }
+        const markDispatched = (): void => {
+          checkDispatch()
           ledger.markDispatched(input.id)
           dispatched = true
           safeTrace({ type: 'dispatched', id: input.id, stage: input.stage })
         }
+        const beforeRequest = durable ? (): Promise<void> => {
+          if (hookStarted || finished) {
+            protocolViolation = true; blockBudgetLedger(ledger)
+            const refused = Promise.reject(new WorkflowError('model-failed')); void refused.catch(() => {}); return refused
+          }
+          hookStarted = true
+          const guarded = (async (): Promise<void> => {
+            checkDispatch()
+            intentStarted = true
+            await flush('intent', 'dispatched', null, markDispatched)
+          })()
+          void guarded.catch(() => {})
+          return guarded
+        } : markDispatched
         const rawContent = await transport(profile, transportMessages, emitSafeDelta, {
           signal: input.signal,
           timeoutMs: Math.max(1, Math.min(300_000, remainingMs)),
@@ -137,14 +186,16 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           beforeRequest,
           onUsage: (usage) => { receipt = normalizeUsage(usage) }
         })
-        if (!dispatched) {
-          ledger.markUnknownUnsent(input.id)
+        if (!dispatched || protocolViolation) {
+          if (!durable) ledger.markUnknownUnsent(input.id)
+          else protocolViolation = true
           unknownUnsent = true
           throw new WorkflowError('model-failed')
         }
         // A custom transport or synchronous response handling may outlive the timer. Never return a result after either hard deadline.
         if (input.signal?.aborted) throw new WorkflowError('cancelled')
         ledger.assertCanContinue(input.stage)
+        if (durable && !normalizeUsage(receipt)) throw new WorkflowError('model-failed')
         if (typeof rawContent !== 'string') throw new WorkflowError('model-failed')
         if (apiKey && rawContent.includes(apiKey)) throw new WorkflowError('model-failed')
         if (pendingDelta && input.onDelta) await input.onDelta(pendingDelta)
@@ -156,7 +207,27 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
       } catch (error) {
         throw mapFailure(error, input.signal)
       } finally {
-        if (!dispatched) {
+        finished = true
+        if (durable) {
+          if (!dispatched || protocolViolation || !normalizeUsage(receipt) || journalFailed) {
+            retainUnknownModel(ledger, input.id, dispatched || intentStarted)
+            if (!journalFailed) await flush('unknown', dispatched || intentStarted ? 'unknown' : 'unknown-unsent')
+            safeTrace({ type: 'failed', id: input.id, stage: input.stage })
+          } else {
+            try { await flush('receipt', 'settled', normalizeUsage(receipt), () => ledger.settleModel(input.id, normalizeUsage(receipt))) }
+            catch (error) { retainUnknownModel(ledger, input.id, true); throw error }
+            if (content !== null) {
+              try {
+                if (input.signal?.aborted) throw new WorkflowError('cancelled')
+                durable!.assertCurrent(durableContext!, messages)
+                assertDispatchGuard(dispatchGuard, messages)
+                const final = ledger.snapshot()
+                if (final.elapsedMs >= spec.budget.total.wallClockMs || input.stage === 'investigation' && final.remaining.investigationWallClockMs <= 0) throw new WorkflowError('budget-exhausted')
+              } catch (error) { throw mapFailure(error, input.signal) }
+            }
+            safeTrace({ type: content === null ? 'failed' : 'settled', id: input.id, stage: input.stage })
+          }
+        } else if (!dispatched) {
           if (!unknownUnsent) ledger.releaseUnsent(input.id)
           safeTrace({ type: 'failed', id: input.id, stage: input.stage })
         } else {
