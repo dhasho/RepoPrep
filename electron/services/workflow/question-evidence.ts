@@ -114,7 +114,7 @@ function followupFingerprint(value: unknown, depth: number, counter: { count: nu
   return { question: value.question, answer: value.answer, followUps: children }
 }
 
-function fingerprintQuestion(question: QuestionItem): string {
+export function fingerprintQuestion(question: QuestionItem): string {
   if (!isRecord(question) || typeof question.question !== 'string' || typeof question.answer !== 'string' || !Array.isArray(question.followUps) || question.followUps.length > 32) reject()
   const counter = { count: 0, chars: question.question.length + question.answer.length + (typeof question.title === 'string' ? question.title.length : 0) }
   if (counter.chars > 256_000) reject()

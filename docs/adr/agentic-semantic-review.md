@@ -49,3 +49,122 @@ Before any provider call freeze one exact aggregate authorization and per-case b
 ## Delivery and checks
 
 Root owns architecture, contracts, integration and final review. Implement S, then R/V/E in isolated worktrees using the user's requested implementation agent when available. Each module delivers focused adversarial tests (forgery, unknown usage, stale snapshot/fingerprint, cancellation, duplicate/conflicting replacement and late completion as applicable). Required integration checks: typecheck, test:agentic, test:question-budget and affected security/recovery checks. Register new tests in the existing agentic entry point. Synthetic checks establish mechanism only; M09 stays incomplete until the full real gate and independent repair judgments pass. Keep static default, existing UI and legacy data unchanged. Record all actual invocation provenance and unavailable service usage honestly.
+
+## Module S exported contract (implemented)
+
+`fingerprintQuestion(question: QuestionItem): string` is now exported from `question-evidence.ts`; its original canonical serialization and bounds are unchanged. It intentionally excludes the program-owned question ID.
+
+`question-source.ts` exports the following main-process-only contracts:
+
+```ts
+interface QuestionSourceAuthorityInput {
+  readonly spec: RunSpec
+  readonly ledger: BudgetLedger
+  readonly snapshot: WorkflowProjectSnapshot
+  readonly store: WorkflowEvidenceStore
+  readonly signal: AbortSignal
+}
+interface QuestionSourceAuthority extends QuestionSourceAuthorityInput {
+  describe(source: unknown, question: QuestionItem): QuestionSourceDescription
+  assertCurrent(source: unknown, question: QuestionItem, signal?: AbortSignal): Promise<QuestionSourceDescription>
+}
+interface QuestionSourceCapability { readonly kind: 'question-source' }
+type QuestionSourceOrigin = 'completed-generation' | 'frozen-evaluation-input'
+interface QuestionSourceDescription {
+  readonly version: 1
+  readonly origin: QuestionSourceOrigin
+  readonly verification: 'source-bound-unverified' | 'imported-input-unverified'
+  readonly runId: string
+  readonly projectId: string
+  readonly snapshotId: string
+  readonly questionId: string
+  readonly questionFingerprint: string
+  readonly requestId: string | null
+  readonly requestHash: string
+  readonly manifestHash: string
+  readonly evidenceIds: readonly string[]
+}
+function assertQuestionSourceAuthority(value: unknown): asserts value is QuestionSourceAuthority
+interface FrozenEvaluationQuestionSourceInput extends QuestionSourceAuthorityInput {
+  readonly question: QuestionItem
+  readonly glossary: Readonly<Record<string, string>>
+  readonly evidence: readonly Readonly<{ fileId: string; range: LineRange }>[]
+}
+function createFrozenEvaluationQuestionSource(input: FrozenEvaluationQuestionSourceInput): Promise<Readonly<{
+  authority: QuestionSourceAuthority
+  source: QuestionSourceCapability
+  question: QuestionItem
+  glossary: Readonly<Record<string, string>>
+}>>
+```
+
+Consumers first call `assertQuestionSourceAuthority` on the authority itself, then reuse its exact captured references and call `assertCurrent` before and after asynchronous work. `describe` is a synchronous membership/fingerprint/receipt check and metadata view; fresh filesystem authorization requires `assertCurrent`. Copied authorities and copied/serialized capabilities are rejected. A description contains only bounded IDs, hashes and origin/verification metadata. Neither origin claims factual correctness.
+
+`EvidenceGenerationAdapter` retains all existing methods and adds `readonly sourceAuthority: QuestionSourceAuthority` plus `sourceFor(question: QuestionItem): Promise<QuestionSourceCapability>`. `sourceFor` only issues after the existing `finalize` has succeeded. The recorder is retained inside the generation adapter; its internal bootstrap requires an adapter-owned non-exported token, checked through a read-only identity predicate. No public authority method can register, complete or import production dispatches. The separately named frozen evaluation factory reads the authorized snapshot, verifies snapshot-owned reads, issues evidence through its store and runs the real packer. Each read reserves a program-generated unique ledger ID before I/O and settles the returned `consumedBytes` (including zero for cache hits); failed attempted reads retain their reservation. Imported answers remain unverified and have `requestId: null`; the factory does not dispatch a model or fabricate a provider/generation receipt.
+
+`question-patch.ts` exports:
+
+```ts
+interface NormalizedQuestionPatch {
+  readonly question: QuestionItem
+  readonly evidenceIds: readonly string[]
+  readonly glossary: Readonly<Record<string, string>>
+}
+function normalizeQuestionPatch(proposal: unknown, original: QuestionItem, allowedEvidenceIds: readonly string[]): NormalizedQuestionPatch
+interface QuestionReplacementInput {
+  readonly result: InterviewResult
+  readonly questionId: string
+  readonly expectedFingerprint: string
+  readonly proposal: unknown
+  readonly allowedEvidenceIds: readonly string[]
+}
+interface QuestionReplacement {
+  readonly result: InterviewResult
+  readonly question: QuestionItem
+  readonly evidenceIds: readonly string[]
+  readonly beforeFingerprint: string
+  readonly afterFingerprint: string
+}
+function validateQuestionReplacement(input: QuestionReplacementInput): QuestionReplacement
+function validateSingleQuestionEvaluationInput(question: QuestionItem, glossary: Readonly<Record<string, string>>): Readonly<{
+  question: QuestionItem
+  glossary: Readonly<Record<string, string>>
+}>
+interface SingleQuestionReplacementInput {
+  readonly question: QuestionItem
+  readonly glossary: Readonly<Record<string, string>>
+  readonly expectedFingerprint: string
+  readonly proposal: unknown
+  readonly allowedEvidenceIds: readonly string[]
+}
+interface SingleQuestionReplacement {
+  readonly question: QuestionItem
+  readonly glossary: Readonly<Record<string, string>>
+  readonly evidenceIds: readonly string[]
+  readonly beforeFingerprint: string
+  readonly afterFingerprint: string
+}
+function validateSingleQuestionReplacement(input: SingleQuestionReplacementInput): SingleQuestionReplacement
+```
+
+Patch proposals have exactly `{question, evidenceIds, glossary}`. Their question has only optional `title` and required `question`, `answer`, `followUps`; the original ID is supplied by the program. Follow-up depth remains the generator's two levels, and strict validation prevents the existing normalizer from dropping supplied content. New glossary entries are limited to 64, evidence references to 16 distinct actually packed IDs, and total patch content to 256,000 characters; existing result-contract bounds still apply. Whole-result replacement checks the shared granularity range, all section/question IDs, normalized primary-question duplicates, all glossary markers and the result contract, then returns a detached frozen result. It never mutates or freezes caller-owned input and preserves existing unrelated values. The single-question evaluation functions validate an actual unit directly and do not manufacture a full result.
+
+The generation adapter's two `beforeRequest` forwarding layers preserve synchronous callbacks and return/await asynchronous callbacks, rechecking cancellation, authorized snapshot and exact packed messages after awaits. End-to-end asynchronous admission requires the companion gateway/LLM await support; M08 prompt bytes, writer version, metadata sidecar and normal synchronous callback ordering are unchanged.
+
+
+Internal cross-module exports are capability-gated and are not downstream authoring APIs:
+
+```ts
+// evidence-generation.ts: read-only membership predicate; owner tokens are never exposed.
+function ownsGenerationSourceRecorder(owner: unknown, input: QuestionSourceAuthorityInput): boolean
+// question-source.ts: construction fails without that exact adapter-owned token and captured references.
+function createGenerationQuestionSourceRecorder(input: QuestionSourceAuthorityInput, owner: unknown): Readonly<{
+  authority: QuestionSourceAuthority
+  recordDispatch(requestId: string, packet: PackedContext, stage: ModelStage): void
+  completeDispatch(requestId: string): void
+  failDispatch(requestId: string): void
+  capture(requestId: string, question: QuestionItem, evidenceIds: readonly string[]): void
+  finalize(sidecar: QuestionEvidenceSidecar): void
+  sourceFor(question: QuestionItem): Promise<QuestionSourceCapability>
+}>
+```
