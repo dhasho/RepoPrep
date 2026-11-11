@@ -178,3 +178,11 @@ E3a 已完成一次合成密钥的真实 Windows Electron 验证：首个 await 
 候选 `6d022f5` 的完整 npm run test:agentic：860 tests，859 passed、0 failed、1 skipped，exit 0。唯一平台 skip 是 Windows 上不适用的 unsupported-platform 反向测试。上一候选 d3ea038 的 typecheck、IPC、question-budget、security/build 与真实 Electron smoke 均通过；两候选之间仅修改一个测试夹具，因此复用这五组运行代码证据。该夹具现在自建真实脏 Git 仓库，保留 dirty-source 在私密 profile 访问前拒绝的断言，避免依赖开发目录状态。最初完整套件失败日志保留。
 
 本次集成与验证的 provider 请求为 0；没有重跑已通过并封存的 M08。详细契约见本目录的 [语义审查](adr/agentic-semantic-review.md)、[语义执行](adr/agentic-semantic-execution.md)、[质量证据](adr/agentic-semantic-quality-evidence.md)、[账本持久化](adr/agentic-ledger-durability.md)、[因果日志](adr/agentic-critical-accounting.md)、[隔离存储](adr/agentic-workflow-store.md)、[工作登记](adr/agentic-accepted-work-registry.md) 和 [原生快照](adr/m09-profile-snapshot.md)。
+
+## P6 A2a 持久化模型账本（2026-11-11）
+
+A2a 提交 `1a1e25d` 已经独立审查并整合到重构分支。新工厂内部独占生产 W 和原始 durable ledger，在 created 记录被真实接受后才返回 session；模型日志的私有队列覆盖 W 追加、完整外层回执校验与 A1 因果接受。写入或回执不确定时永久撤销会话。只读分类器重新读取真实完整前缀，核对最新尾部和 manifest 锚点。
+
+实际 Windows/NTFS 验证覆盖 30 个不同场景：R1 为 25/29；修正四个测试夹具后 R2 为 4/4；新增真实 journal-open 故障测试 R3 为 1/1。Node typecheck 和三个新增文件的 whitespace 检查通过，provider 请求为 0。原始失败、三轮日志及失败夹具恢复归档均保留；没有把组合证据写成单次 30/30 运行。该测试文件已加入既有 `test:agentic` 命令，集成运行证据随后登记。
+
+此组件仅提供 storage/accounting 保证。`terminal` 分类表示账本日志封闭，不代表最终结果已核验；它不授予恢复、项目读取、工具或付费继续权限。B0 的真实 owner 委托、跨 read/tool/control 结算和终态协调尚未完成，M10/M11 继续保持未通过。
