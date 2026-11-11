@@ -24,10 +24,10 @@
       "scripts/agentic/verify.mjs": "8d55c6adac5edeff8e3324a82c70d6e396d4c8eb43a06d00999cbf90767a549f",
       "scripts/evaluation/m09-semantic-io.cjs": "a64c2a9ded7b669e0d6c0dd9e05b9b00d23867ebffebcf76c19490333a208deb",
       "scripts/evaluation/m09-semantic-native.cjs": "316dabdc7fb61e334d419d6c9dfce2844f8c498aec74b96dd40e0172cd448f8a",
-      "scripts/evaluation/run-semantic-profile-entry.cjs": "484509fb5abdea469d7c35a35559bf7e7fd7de047de55bc6bf36d6b480a343ab",
+      "scripts/evaluation/run-semantic-profile-entry.cjs": "5aa431d4354bb7fedc60324e427c093f7f9323e469d54e9744be05ca2f8bcba0",
       "scripts/evaluation/run-semantic-profile.cjs": "2bf6c34cb750df8a05bc0f7fcc7e15c37d01d4ba40a46f1c233493a0e8cf54c1"
     },
-    "sourceSha256": "8d5a13da53f1c0565689c5d17f64936b08926e38ca9c0641dbbd483e37b3ce33",
+    "sourceSha256": "77123b29e8f1d2f4f38396bcfd06c9e15da6df78927e7d20d23ab64feaf35130",
     "protocolSha256": "0f6f686fd98221d136fb095fe4bc9005a5363150fe40a3a6a934591ecca138c3",
     "assetDescriptorsSha256": "a78d42a3556756311c7f1c2b8efd3f93818496db2199aaf67842b79db916c87b"
   }
