@@ -257,9 +257,22 @@ function checkJournal(bytes,report,requestsByUnit) {
   for(const requests of requestsByUnit.values())for(const id of requests.keys())check(states.get(id)==='done','semantic-journal-missing')
   jsonEqual(report.journal,{path:'critical.jsonl',events:lines.length,headHash:previous})
 }
+function checkNativeProvenance(value,frozen,authorization) {
+  record(value,['schemaVersion','purpose','mode','native','transport','parentNonce','childNonce','source','entrySourceSha256','bundleSha256','publicDataHash','planHash','executionMapHash','configurationHash','authorizationHash','grantHash','grantFileSha256','claimId','bootstrap','freezeBinding'])
+  check(value.schemaVersion===1 && value.purpose===SEMANTIC_PURPOSE && value.mode==='real' && value.transport==='electron/services/llm.ts#chatCompletionStream/v1' && value.freezeBinding==='parent-observed-close-exact-freeze-v1','semantic-native-provenance-invalid')
+  record(value.native,['platform','processType','electron','node','chrome'])
+  check(value.native.platform==='win32' && value.native.processType==='browser','semantic-native-provenance-invalid')
+  for(const name of ['electron','node','chrome'])check(typeof value.native[name]==='string' && /^\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.]+)?$/u.test(value.native[name]),'semantic-native-provenance-invalid')
+  for(const name of ['parentNonce','childNonce','entrySourceSha256','bundleSha256','grantHash','grantFileSha256'])hash(value[name])
+  check(value.parentNonce!==value.childNonce,'semantic-native-provenance-invalid')
+  for(const name of ['source','publicDataHash','planHash','executionMapHash','configurationHash','authorizationHash','claimId'])jsonEqual(value[name],frozen[name],'semantic-native-provenance-invalid')
+  const body={type:'semantic-grant',schemaVersion:1,purpose:SEMANTIC_PURPOSE,mode:'real',parentNonce:value.parentNonce,childNonce:value.childNonce,authorization}
+  check(semanticHash(body)===value.grantHash && sha256(Buffer.from(canonicalJson({...body,grantHash:value.grantHash})+'\n','utf8'))===value.grantFileSha256,'semantic-native-provenance-invalid')
+  jsonEqual(value.bootstrap,{capture:1,stage:1,paths:4,release:1,privateProfile:1,distinctPaths:4,captureBeforeReady:true,pathSwitchBeforeReady:true,releaseAfterPathSwitch:true},'semantic-native-provenance-invalid')
+}
 /** Independently validates exact frozen bytes and all referenced public/execution artifacts. */
 export async function validateFrozenSemanticExecution(outputDirectory,options={}) {
-  record(options,['bundle','requireReal','expectedFreezeBytes'],[])
+  record(options,['bundle','requireReal','expectedFreezeBytes','nativeParentProof'],[])
   const root=await assertSafeSemanticDirectory(outputDirectory)
   const freezeBytes=await readSemanticFile(root,'execution-freeze.json')
   if(options.expectedFreezeBytes!==undefined)check(Buffer.isBuffer(options.expectedFreezeBytes) && freezeBytes.equals(options.expectedFreezeBytes),'semantic-freeze-bytes')
@@ -267,8 +280,8 @@ export async function validateFrozenSemanticExecution(outputDirectory,options={}
   record(frozen,['schemaVersion','purpose','protocol','mode','source','publicDataHash','planHash','executionMapHash','configurationHash','authorizationHash','claimId','artifacts'])
   check(frozen.schemaVersion===1 && frozen.purpose===SEMANTIC_PURPOSE && frozen.protocol===SEMANTIC_PROTOCOL && ['real','synthetic'].includes(frozen.mode),'semantic-freeze-schema')
   if(options.requireReal===true)check(frozen.mode==='real','semantic-synthetic-not-real')
-  // This isolated runtime cannot originate a real execution until native companion-L composition is integrated.
-  check(frozen.mode==='synthetic','semantic-native-fetch-integration-required')
+  if(options.requireReal===true)check(options.nativeParentProof,'semantic-native-parent-proof-required')
+  if(frozen.mode==='synthetic')check(options.nativeParentProof===undefined,'semantic-native-parent-proof-mismatch')
   array(frozen.artifacts,109,SEMANTIC_LIMITS.files.maxArtifacts)
   const artifacts=new Map();let bytesTotal=freezeBytes.length
   for(const artifact of frozen.artifacts) {
@@ -301,6 +314,20 @@ export async function validateFrozenSemanticExecution(outputDirectory,options={}
   array(report.cases,100,100)
   const aggregate={requests:0,inputAdmission:0,outputReservation:0,actualInputTokens:0,actualOutputTokens:0,unknownRequests:0}
   const cases=[];const seenRequests=new Set();const requestsByUnit=new Map();const expectedFiles=new Set(['public-data.json','plan.json','execution-map.json','authorization.json','claim.json','execution.json','critical.jsonl',...SEMANTIC_PUBLIC_FILES.map(name=>'inputs/'+name)])
+  let nativeProvenance='not-applicable'
+  if(frozen.mode==='real') {
+    const provenance=readJson('native-provenance.json');expectedFiles.add('native-provenance.json')
+    checkNativeProvenance(provenance,frozen,authorization)
+    nativeProvenance='unavailable'
+    if(options.nativeParentProof!==undefined) {
+      // Load the canonical source CJS launcher only in the parent verifier. The
+      // child bundle must not create a second parent-proof WeakMap instance.
+      const {default:semanticLauncher}=await import(new URL('../evaluation/run-semantic-profile.cjs',import.meta.url).href)
+      semanticLauncher.verifySemanticParentProof(options.nativeParentProof,{outputDirectory:root,freezeBytes,provenance})
+      nativeProvenance='parent-observed-native-close'
+    }
+    if(options.requireReal===true)check(nativeProvenance==='parent-observed-native-close','semantic-native-parent-proof-required')
+  }
   let complete=true;let unknownSeen=false
   for(let index=0;index<100;index++) {
     const unit=plan.units[index];const mapping=executionMap.entries[index];const entry=report.cases[index]
@@ -332,7 +359,7 @@ export async function validateFrozenSemanticExecution(outputDirectory,options={}
   checkJournal(artifacts.get('critical.jsonl'),report,requestsByUnit)
   if(unknownSeen)check(report.sealed && !complete,'semantic-unknown-seal')
   const executionHash=sha256(freezeBytes)
-  const wrapper=freezeSemanticValue({schemaVersion:1,executionHash,publicDataHash:bundle.publicDataHash,mode:frozen.mode,executionComplete:complete && report.sourceStable && !report.sealed,accounting:aggregate,cases:100,quality:'not-evaluated'})
+  const wrapper=freezeSemanticValue({schemaVersion:1,executionHash,publicDataHash:bundle.publicDataHash,mode:frozen.mode,executionComplete:complete && report.sourceStable && !report.sealed && (frozen.mode==='synthetic'||nativeProvenance==='parent-observed-native-close'),nativeProvenance,accounting:aggregate,cases:100,quality:'not-evaluated'})
   verified.set(wrapper,freezeSemanticValue({bundle,plan,executionMap,cases,executionHash,publicDataHash:bundle.publicDataHash}))
   return wrapper
 }
