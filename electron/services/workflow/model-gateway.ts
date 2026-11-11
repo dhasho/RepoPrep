@@ -19,6 +19,9 @@ import { LLM_PROFILE_LIMITS } from '../../../shared/result-contract.ts'
 import type { BudgetLedger, ModelStage } from './budget-ledger.ts'
 import type { RunSpec } from './run-spec.ts'
 import type { ChatMessage, CallOptions } from '../llm.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createActualSettlement } from '../actual-settlement.ts'
+import type { ActualSettlement } from '../actual-settlement.ts'
 
 export interface ModelCompletionInput {
   readonly id: string
@@ -71,9 +74,13 @@ function mapFailure(error: unknown, signal?: AbortSignal): WorkflowError {
   return new WorkflowError('model-failed', modelFailure)
 }
 
-function assertDispatchGuard(guard: ModelCompletionInput['dispatchGuard'], messages: readonly ChatMessage[]): void {
-  const result = guard?.(messages)
-  if (result !== undefined) { void Promise.resolve(result).catch(() => {}); throw new WorkflowError('invalid-argument') }
+function assertDispatchGuard(guard: ModelCompletionInput['dispatchGuard'], messages: readonly ChatMessage[], settlement?: ActualSettlement): void {
+  const accepted = settlement?.capture(() => guard?.(messages))
+  const result = accepted ? accepted.value : guard?.(messages)
+  if (result !== undefined) {
+    if (!accepted) void Promise.resolve(result).catch(() => {})
+    throw new WorkflowError('invalid-argument')
+  }
 }
 
 export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, ledger: BudgetLedger, options: ModelGatewayOptions = {}) {
@@ -86,13 +93,20 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
     if (requiresDurableModelAdmission(ledger) && !durable) throw new WorkflowError('invalid-argument')
   }
   assertAdmission()
-  const safeTrace = (event: Readonly<{ type: 'reserved' | 'dispatched' | 'settled' | 'failed'; id: string; stage: ModelStage }>): void => {
-    try { options.trace?.(Object.freeze(event)) } catch { /* tracing is observational */ }
-  }
   return Object.freeze({
     async complete(input: ModelCompletionInput): Promise<ModelCompletion> {
       assertAdmission()
       const releaseOrdinary = durable ? undefined : beginOrdinaryModelCompletion(ledger)
+      const settlement = durable ? createActualSettlement() : undefined
+      const traceWork: Promise<void>[] = []
+      const safeTrace = (event: Readonly<{ type: 'reserved' | 'dispatched' | 'settled' | 'failed'; id: string; stage: ModelStage }>): void => {
+        try {
+          if (settlement) {
+            const accepted = settlement.capture(() => options.trace?.(Object.freeze(event)))
+            traceWork.push(accepted.settlement.then(() => {}, () => {}))
+          } else void Promise.resolve(options.trace?.(Object.freeze(event))).catch(() => {})
+        } catch { /* tracing is observational */ }
+      }
       try {
         if (!input || typeof input !== 'object' || !Array.isArray(input.messages) || input.messages.length > 256 || typeof input.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.id) || !['investigation', 'generation', 'review', 'repair', 'compensation'].includes(input.stage)) throw new WorkflowError('invalid-argument')
         if (input.durableOperation !== undefined && !durable) throw new WorkflowError('invalid-argument')
@@ -114,7 +128,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
         if (input.signal?.aborted) throw new WorkflowError('cancelled')
         const durableContext = durable?.context(input.id, input.stage, messages, input.durableOperation, estimatedInputTokens, outputTokens)
         if (durableContext) {
-          try { durable!.assertCurrent(durableContext, messages); assertDispatchGuard(dispatchGuard, messages) } catch (error) { throw mapFailure(error, input.signal) }
+          try { durable!.assertCurrent(durableContext, messages); assertDispatchGuard(dispatchGuard, messages, settlement) } catch (error) { throw mapFailure(error, input.signal) }
         }
         ledger.assertCanContinue(input.stage)
         ledger.reserveModel({ id: input.id, stage: input.stage, inputTokens: estimatedInputTokens, outputTokens, contextChars: messages.reduce((sum, message) => sum + message.content.length, 0), ...(durableContext ? { semanticHash: durableContext.semanticHash, semanticOperationHash: durableContext.semanticOperationHash, requestHash: durableContext.requestHash, manifestHash: durableContext.manifestHash } : {}) })
@@ -136,9 +150,13 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
         let pendingDelta = ''
         let credentialEcho = false
         const apiKey = profile.apiKey
+        const deliverDelta = (delta: string): unknown => {
+          if (durable && finished) throw new WorkflowError('model-failed')
+          return settlement ? settlement.capture(() => input.onDelta!(delta)).settlement : input.onDelta!(delta)
+        }
         const emitSafeDelta = (delta: string): unknown => {
           if (!input.onDelta || !delta) return undefined
-          if (!apiKey) return input.onDelta(delta)
+          if (!apiKey) return deliverDelta(delta)
           if (credentialEcho) throw new WorkflowError('model-failed')
           const combined = pendingDelta + delta
           if (combined.includes(apiKey)) {
@@ -150,7 +168,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           if (safeLength > 0 && safeLength < combined.length && /[\uD800-\uDBFF]/.test(combined[safeLength - 1]) && /[\uDC00-\uDFFF]/.test(combined[safeLength])) safeLength--
           const safe = combined.slice(0, safeLength)
           pendingDelta = combined.slice(safeLength)
-          return safe ? input.onDelta(safe) : undefined
+          return safe ? deliverDelta(safe) : undefined
         }
         try {
           if (durable) await flush('reservation')
@@ -162,7 +180,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
             if (input.signal?.aborted) throw new WorkflowError('cancelled')
             assertConfiguration(spec, profile)
             if (durableContext) durable!.assertCurrent(durableContext, messages)
-            assertDispatchGuard(dispatchGuard, messages)
+            assertDispatchGuard(dispatchGuard, messages, settlement)
             ledger.assertCanContinue(input.stage)
             // Keep this last: a synchronous guard can try to activate durability too.
             assertAdmission()
@@ -179,11 +197,11 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
               const refused = Promise.reject(new WorkflowError('model-failed')); void refused.catch(() => {}); return refused
             }
             hookStarted = true
-            const guarded = (async (): Promise<void> => {
+            const guarded = settlement!.capture(async (): Promise<void> => {
               checkDispatch()
               intentStarted = true
               await flush('intent', 'dispatched', null, markDispatched)
-            })()
+            }).settlement
             void guarded.catch(() => {})
             return guarded
           } : markDispatched
@@ -193,6 +211,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
             maxOutputTokens: outputTokens,
             maxStreamBodyBytes,
             includeUsage: true,
+            ...(durable ? { awaitActualSettlement: true } : {}),
             beforeRequest,
             beforeFetch: () => {
               if (!dispatched) throw new WorkflowError('model-failed')
@@ -212,7 +231,7 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
           if (durable && !normalizeUsage(receipt)) throw new WorkflowError('model-failed')
           if (typeof rawContent !== 'string') throw new WorkflowError('model-failed')
           if (apiKey && rawContent.includes(apiKey)) throw new WorkflowError('model-failed')
-          if (pendingDelta && input.onDelta) await input.onDelta(pendingDelta)
+          if (pendingDelta && input.onDelta) await deliverDelta(pendingDelta)
           pendingDelta = ''
           if (input.signal?.aborted) throw new WorkflowError('cancelled')
           ledger.assertCanContinue(input.stage)
@@ -230,16 +249,19 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
             } else {
               try { await flush('receipt', 'settled', normalizeUsage(receipt), () => ledger.settleModel(input.id, normalizeUsage(receipt))) }
               catch (error) { retainUnknownModel(ledger, input.id, true); throw error }
+              safeTrace({ type: content === null ? 'failed' : 'settled', id: input.id, stage: input.stage })
+              // Observers may be asynchronous. Settle them before the original
+              // final source/signal/deadline fences; their failures remain diagnostic.
+              await Promise.all(traceWork)
               if (content !== null) {
                 try {
                   if (input.signal?.aborted) throw new WorkflowError('cancelled')
                   durable!.assertCurrent(durableContext!, messages)
-                  assertDispatchGuard(dispatchGuard, messages)
+                  assertDispatchGuard(dispatchGuard, messages, settlement)
                   const final = ledger.snapshot()
                   if (final.elapsedMs >= spec.budget.total.wallClockMs || input.stage === 'investigation' && final.remaining.investigationWallClockMs <= 0) throw new WorkflowError('budget-exhausted')
                 } catch (error) { throw mapFailure(error, input.signal) }
               }
-              safeTrace({ type: content === null ? 'failed' : 'settled', id: input.id, stage: input.stage })
             }
           } else if (!dispatched) {
             if (!unknownUnsent) ledger.releaseUnsent(input.id)
@@ -249,7 +271,10 @@ export function createModelGateway(spec: RunSpec, privateProfile: LlmProfile, le
             safeTrace({ type: content === null ? 'failed' : 'settled', id: input.id, stage: input.stage })
           }
         }
-      } finally { releaseOrdinary?.() }
+      } finally {
+        try { if (settlement) await settlement.sealAndDrain() }
+        finally { releaseOrdinary?.() }
+      }
     }
   })
 }

@@ -4,6 +4,9 @@ import type { ListModelsResult, LlmProfile, LlmUsage, TestConnectionResult } fro
 import { SseDecoder } from './sse-parser.ts'
 // @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
 import { LLM_PROFILE_LIMITS } from '../../shared/result-contract.ts'
+// @ts-ignore TS5097 -- the direct Node test runner needs explicit TypeScript extensions.
+import { createActualSettlement } from './actual-settlement.ts'
+import type { ActualSettlement } from './actual-settlement.ts'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -209,6 +212,8 @@ export interface CallOptions {
   /** Private M05 streaming allowance; omitted callers retain the 4 MiB legacy cap. */
   maxStreamBodyBytes?: number
   includeUsage?: boolean
+  /** Private main-process opt-in; waits for actual callbacks/cleanup, not an ownership proof. */
+  awaitActualSettlement?: boolean
   /** Main-process admission guard. Unlike observers, rejection must prevent fetch. */
   beforeRequest?: () => void | Promise<void>
   /** Pure synchronous, repeatable final fence. Runs after awaited admission and observers, immediately before fetch. */
@@ -279,10 +284,18 @@ async function request(
   let callbackFailure: unknown
   let pendingUsageReceipt: LlmUsage | null = null
   let usageReported = false
+  const settlement = opts.awaitActualSettlement ? createActualSettlement() : undefined
+  const cancelResponseBody = createBodyCanceller(settlement)
+  const observe = (invoke: () => unknown): void => {
+    try {
+      if (settlement) settlement.capture(invoke)
+      else void Promise.resolve(invoke()).catch(() => {})
+    } catch { /* diagnostics cannot affect generation */ }
+  }
   const reportUsage = (): void => {
     if (!pendingUsageReceipt || usageReported) return
     usageReported = true
-    try { opts.onUsage?.(pendingUsageReceipt) } catch { /* diagnostics cannot affect generation */ }
+    observe(() => opts.onUsage?.(pendingUsageReceipt!))
   }
   const abort = (kind: 'timeout' | 'cancelled'): void => {
     if (abortKind !== null) return
@@ -310,18 +323,19 @@ async function request(
     const body = JSON.stringify(requestBody(profile, messages, stream, opts))
     throwIfAborted()
     try {
-      const admission = opts.beforeRequest?.()
-      if (admission !== undefined) await admission
+      const admission = settlement?.capture(() => opts.beforeRequest?.())
+      const value = admission ? admission.value : opts.beforeRequest?.()
+      if (value !== undefined) await (admission ? admission.settlement : value)
     }
     catch (error) { callbackFailed = true; callbackFailure = error; throw error }
     throwIfAborted()
-    try { opts.onRequest?.() } catch { /* diagnostics cannot affect generation */ }
+    observe(() => opts.onRequest?.())
     throwIfAborted()
     try {
-      const finalGuard: unknown = opts.beforeFetch?.()
+      const guard = settlement?.capture(() => opts.beforeFetch?.())
+      const finalGuard: unknown = guard ? guard.value : opts.beforeFetch?.()
       if (finalGuard !== undefined) {
-        // Fail synchronously; drain a malformed async guard only to prevent an unhandled rejection.
-        void Promise.resolve(finalGuard).catch(() => {})
+        if (!guard) void Promise.resolve(finalGuard).catch(() => {})
         throw new LlmRequestError('response')
       }
     } catch (error) { callbackFailed = true; callbackFailure = error; throw error }
@@ -335,14 +349,15 @@ async function request(
     throwIfAborted()
 
     if (!response.ok) {
-      cancelBody(response.body)
+      cancelResponseBody(response.body)
       throw new LlmRequestError('http', `大模型服务返回 HTTP ${response.status}。`, { httpStatus: response.status })
     }
 
     if (!stream) {
       const text = await readBodyText(response.body, controller.signal, {
         maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
-        fatalUtf8: true
+        fatalUtf8: true,
+        cancel: cancelResponseBody
       })
       throwIfAborted()
       let json: unknown
@@ -379,12 +394,13 @@ async function request(
       ? { mode: 'sse' as const, chunks: [] as Uint8Array[] }
       : contentType.includes('application/json')
         ? { mode: 'json' as const, chunks: [] as Uint8Array[] }
-        : await probeStreamBody(response.body, controller.signal, maxStreamBodyBytes)
+        : await probeStreamBody(response.body, controller.signal, maxStreamBodyBytes, cancelResponseBody)
     if (probe.mode === 'json') {
       const text = await readBodyText(response.body, controller.signal, {
         maxBytes: LLM_RESPONSE_LIMITS.chatBodyBytes,
         fatalUtf8: true,
-        initialChunks: probe.chunks
+        initialChunks: probe.chunks,
+        cancel: cancelResponseBody
       })
       throwIfAborted()
       let json: unknown
@@ -396,7 +412,7 @@ async function request(
         : extractOpenAiContent(json)
       if (!content || content.length > LLM_RESPONSE_LIMITS.chatContentChars || hasUnpairedSurrogate(content)) throw new LlmRequestError('response')
       if (onDelta) {
-        try { await awaitCallback(onDelta(content), controller.signal) }
+        try { await awaitCallback(() => onDelta(content), controller.signal, settlement) }
         catch (error) { callbackFailed = true; callbackFailure = error; throw error }
       }
       throwIfAborted()
@@ -560,7 +576,7 @@ async function request(
       if (terminalFailure) queued.length = 0
       for (const delta of queued) {
         if (abortKind) throw new LlmRequestError(abortKind)
-        try { if (onDelta) await awaitCallback(onDelta(delta), controller.signal) }
+        try { if (onDelta) await awaitCallback(() => onDelta(delta), controller.signal, settlement) }
         catch (error) { callbackFailed = true; callbackFailure = error; throw error }
       }
       if (parseFailure !== undefined) throw parseFailure
@@ -572,7 +588,8 @@ async function request(
       fatalUtf8: true,
       maxBytes: stream ? maxStreamBodyBytes : LLM_RESPONSE_LIMITS.chatBodyBytes,
       ...(stream ? { maxBytesResponseLimit: 'stream-bytes' as const } : {}),
-      initialChunks: probe.chunks
+      initialChunks: probe.chunks,
+      cancel: cancelResponseBody
     })
     throwIfAborted()
     if (!decoder.stopped) {
@@ -586,7 +603,7 @@ async function request(
       if (terminalFailure) queued.length = 0
       for (const delta of queued) {
         if (abortKind) throw new LlmRequestError(abortKind)
-        try { if (onDelta) await awaitCallback(onDelta(delta), controller.signal) }
+        try { if (onDelta) await awaitCallback(() => onDelta(delta), controller.signal, settlement) }
         catch (error) { callbackFailed = true; callbackFailure = error; throw error }
       }
       if (parseFailure !== undefined) throw parseFailure
@@ -612,7 +629,8 @@ async function request(
     if (opts.signal && externalListenerAttached) {
       opts.signal.removeEventListener('abort', onExternalAbort)
     }
-    if (response?.body && !response.body.locked && !response.bodyUsed) cancelBody(response.body)
+    if (response?.body && !response.body.locked && !response.bodyUsed) cancelResponseBody(response.body)
+    if (settlement) await settlement.sealAndDrain()
   }
 }
 
@@ -628,15 +646,18 @@ function extractOpenAiContent(value: unknown): string {
   return content
 }
 
-async function awaitCallback(value: unknown, signal: AbortSignal): Promise<void> {
-  if (!value || typeof (value as Promise<void>).then !== 'function') return
+async function awaitCallback(invoke: () => unknown, signal: AbortSignal, settlement?: ActualSettlement): Promise<void> {
+  const accepted = settlement?.capture(invoke)
+  const actual = accepted ? accepted.settlement : Promise.resolve(invoke())
+  // The legacy abort race also needs an observer when already aborted.
+  void actual.catch(() => {})
   if (signal.aborted) throw new LlmRequestError('cancelled')
   let listener: (() => void) | undefined
   const aborted = new Promise<never>((_resolve, reject) => {
     listener = () => reject(new LlmRequestError('cancelled'))
     signal.addEventListener('abort', listener, { once: true })
   })
-  try { await Promise.race([value, aborted]) }
+  try { await Promise.race([actual, aborted]) }
   finally { if (listener) signal.removeEventListener('abort', listener) }
 }
 
@@ -644,7 +665,7 @@ async function awaitCallback(value: unknown, signal: AbortSignal): Promise<void>
 async function readBodyText(
   body: ReadableStream<Uint8Array> | null,
   signal: AbortSignal,
-  options: { maxBytes?: number; fatalUtf8?: boolean; initialChunks?: Uint8Array[] } = {}
+  options: { maxBytes?: number; fatalUtf8?: boolean; initialChunks?: Uint8Array[]; cancel?: BodyCanceller } = {}
 ): Promise<string> {
   if (!body) return ''
   let text = ''
@@ -652,7 +673,7 @@ async function readBodyText(
   return text
 }
 
-async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSignal, maxBytes = LLM_RESPONSE_LIMITS.chatBodyBytes): Promise<{ mode: 'json' | 'sse'; chunks: Uint8Array[] }> {
+async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSignal, maxBytes = LLM_RESPONSE_LIMITS.chatBodyBytes, cancelBodyReader: BodyCanceller = cancelBody): Promise<{ mode: 'json' | 'sse'; chunks: Uint8Array[] }> {
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let bytesRead = 0
@@ -665,7 +686,12 @@ async function probeStreamBody(body: ReadableStream<Uint8Array>, signal: AbortSi
     classified = true
     return byte === 0x7b || byte === 0x5b ? 'json' : 'sse'
   }
-  const cancel = (): void => { try { void reader.cancel().catch(() => undefined) } catch { /* best effort */ } }
+  let cancelRequested = false
+  const cancel = (): void => {
+    if (cancelRequested) return
+    cancelRequested = true
+    cancelBodyReader(body, reader)
+  }
   const onAbort = (): void => cancel()
   signal.addEventListener('abort', onAbort, { once: true })
   if (signal.aborted) onAbort()
@@ -704,7 +730,7 @@ async function readBodyChunks(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
   onChunk: (text: string) => boolean | void | Promise<boolean | void>,
-  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number; maxBytesResponseLimit?: 'stream-bytes'; initialChunks?: Uint8Array[] } = {}
+  options: { flushDecoder?: boolean; fatalUtf8?: boolean; maxBytes?: number; maxBytesResponseLimit?: 'stream-bytes'; initialChunks?: Uint8Array[]; cancel?: BodyCanceller } = {}
 ): Promise<void> {
   const reader = body.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: options.fatalUtf8 ?? false })
@@ -714,7 +740,8 @@ async function readBodyChunks(
   const cancelReader = (): void => {
     if (cancelRequested) return
     cancelRequested = true
-    try { void reader.cancel().catch(() => undefined) } catch { /* cleanup must not mask the request error */ }
+    const cancel = options.cancel ?? cancelBody
+    cancel(body, reader)
   }
   const onAbort = (): void => cancelReader()
   signal.addEventListener('abort', onAbort, { once: true })
@@ -752,9 +779,21 @@ async function readBodyChunks(
   }
 }
 
-function cancelBody(body: ReadableStream<Uint8Array> | null): void {
-  if (!body || body.locked) return
-  try { void body.cancel().catch(() => undefined) } catch { /* best-effort cleanup */ }
+type BodyCanceller = (body: ReadableStream<Uint8Array> | null, reader?: ReadableStreamDefaultReader<Uint8Array>) => void
+
+function cancelBody(body: ReadableStream<Uint8Array> | null, reader?: ReadableStreamDefaultReader<Uint8Array>): void {
+  if (!body || !reader && body.locked) return
+  try { void Promise.resolve(reader ? reader.cancel() : body.cancel()).catch(() => {}) } catch { /* best-effort cleanup */ }
+}
+
+function createBodyCanceller(settlement?: ActualSettlement): BodyCanceller {
+  const cancelled = new WeakSet<ReadableStream<Uint8Array>>()
+  return (body, reader): void => {
+    if (!body || cancelled.has(body) || !reader && body.locked) return
+    cancelled.add(body)
+    if (!settlement) { cancelBody(body, reader); return }
+    try { settlement.capture(() => reader ? reader.cancel() : body.cancel()) } catch { /* cleanup cannot mask the request outcome */ }
+  }
 }
 
 /** 非流式对话 */
