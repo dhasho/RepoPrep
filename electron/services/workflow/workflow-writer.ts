@@ -231,6 +231,9 @@ function stateFor(token: WorkflowWriterOwner): OwnerState {
   return state
 }
 
+/** Owner-only fence check; it neither waits for nor drains the writer queue. */
+export function assertWorkflowWriterOwner(owner: WorkflowWriterOwner): void { stateFor(owner) }
+
 export async function acquireWorkflowWriter(storageDirectory: string): Promise<WorkflowWriterOwner> {
   const root = resolveWorkflowRoot(storageDirectory, true)
   const endpoint = `\\\\.\\pipe\\repoprep-workflow-store-v1-${workflowHash(`repoprep-workflow-store:v1:win32:${root.identity.dev}:${root.identity.ino}`)}`

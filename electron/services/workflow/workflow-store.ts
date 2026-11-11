@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript sources.
-import { acquireWorkflowWriter, closeWorkflowWriter, fenceWorkflowWriter, fenceWorkflowAttempt, finishWorkflowAttempt, queueWorkflowWriter, readWorkflowFile, resolveWorkflowRoot, validateWorkflowRoot, workflowAttemptInfo, workflowDirectory, workflowDiskUsage, workflowFail, workflowFilePath, workflowFsError, workflowHash, WorkflowStoreError } from './workflow-writer.ts'
+import { acquireWorkflowWriter, assertWorkflowWriterOwner, closeWorkflowWriter, fenceWorkflowWriter, fenceWorkflowAttempt, finishWorkflowAttempt, queueWorkflowWriter, readWorkflowFile, resolveWorkflowRoot, validateWorkflowRoot, workflowAttemptInfo, workflowDirectory, workflowDiskUsage, workflowFail, workflowFilePath, workflowFsError, workflowHash, WorkflowStoreError } from './workflow-writer.ts'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript sources.
 import type { WorkflowAttempt, WorkflowProducingEpoch, WorkflowRoot, WorkflowRunBinding, WorkflowWriterGuard, WorkflowAttemptInfo } from './workflow-writer.ts'
 export type { WorkflowAttempt, WorkflowProducingEpoch, WorkflowRunBinding, WorkflowAttemptInfo } from './workflow-writer'
@@ -88,6 +88,8 @@ export interface WorkflowStore {
   appendJournal(attempt: WorkflowAttempt, payload: unknown): Promise<WorkflowVerifiedJournal>
   finishAttempt(attempt: WorkflowAttempt): boolean
   read(binding: WorkflowRunBinding): WorkflowStoreRead
+  /** Full read fenced by the genuine owner on both sides; NOT a queue barrier or drain. */
+  readOwned(binding: WorkflowRunBinding): WorkflowStoreRead
   close(): Promise<void>
 }
 interface Settings {
@@ -559,6 +561,12 @@ export async function openWorkflowStore(options: WorkflowStoreOptions): Promise<
     },
     finishAttempt(attempt: WorkflowAttempt): boolean { return finishWorkflowAttempt(owner, attempt) },
     read(requested: WorkflowRunBinding): WorkflowStoreRead { return readConfigured(storageDirectory, config, requested) },
+    readOwned(requested: WorkflowRunBinding): WorkflowStoreRead {
+      assertWorkflowWriterOwner(owner)
+      const view = readConfigured(storageDirectory, config, requested)
+      assertWorkflowWriterOwner(owner)
+      return view
+    },
     close(): Promise<void> { return closeWorkflowWriter(owner) }
   })
 }
