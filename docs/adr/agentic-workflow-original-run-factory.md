@@ -1,0 +1,15 @@
+# Dormant original-run factory (B03a)
+
+Date: 2026-11-11. Status: implementation slice; generation and success activation remain unavailable.
+
+`createWorkflowOriginalRun` in `workflow-ledger-journal.ts` constructs one original durable ledger, genuine W owner/attempt and critical journal before exposing its actual cancellation-only token. It captures an immutable private profile and constructs investigation/generation gateways against that same spec, ledger and journal. These business objects stay in the private owner entry; there is no public paid dispatch or owner accessor. The existing raw ModelTransport seam can be supplied, but it cannot supply a gateway, storage, receipt, plan or capability.
+
+Options and profile are captured through exact own enumerable data descriptors. Accessor properties and unsupported fields/shapes fail before W acquisition. This is shape validation, not a promise to recognize every possible proxy. Configuration is checked against the actual original spec and checked again by gateway construction. Credentials remain private and absent from observations and persistence metadata.
+
+The original owner creates the one business registry, AbortController and signal. Its coordinator consumes fixed stage/observer operations and the same drain/seal lifetime, rather than creating a parallel registry or signal. Admission closes and W attempt revocation occurs synchronously on cancel/deadline; terminal reconciliation waits for actual accepted promise settlement, including returned thenables. Self-wait remains rejected. Terminal observers keep their existing separate post-business drain. Original ledger time covers asynchronous W construction and delayed claim; a fresh coordinator clock cannot restart the original deadline.
+
+The wrapper exposes only its empty frozen single-consumer cancellation token, immutable JSON observation (`generationAdmission: unavailable`, `terminalSupport: cancellation-only`), and unclaimed disposal. A claimed run closes through its real coordinator. Existing A2a and ordinary A2b APIs retain their previous behavior; cancellation still accepts only cancelled/failed and a sole original ledger component. `succeed`/business result `commit` remain unavailable.
+
+This is a dormant construction/lifecycle bridge. Before business activation, investigation still needs program-owned durable logical operations and tool/read accounting must flush at the actual I/O boundaries. Generation needs an original evidence/plan owner, bounded private operations, actual full-output/receipt acceptance and shared absorb persistence. The future success resolver must publish/verify the exact full selected component set before accepting succeeded. No default runner, adapter, generator, IPC or store format changes are part of B03a.
+
+Tests use the production factory/controller/journal/store and synthetic profiles, with fetch and raw transport forbidden. Genuine Windows named-pipe/file tests are offline native owner tests, not model or native-credential measurements. No child crash/reacquire or M08/M10/M11 acceptance is implied.

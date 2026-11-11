@@ -1,6 +1,16 @@
 import { createHash } from 'node:crypto'
 import { types } from 'node:util'
 import type { RunSpec } from './run-spec.ts'
+import type { LlmProfile } from '../../../shared/types.ts'
+import type { ModelTransport } from './model-gateway.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createModelGateway } from './model-gateway.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createAcceptedWorkRegistry } from './accepted-work-registry.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { LLM_PROFILE_LIMITS } from '../../../shared/result-contract.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { normalizeBaseUrl } from '../llm.ts'
 import type { BudgetLedger } from './budget-ledger.ts'
 import type { DurableModelContext, DurableModelEvent, DurableModelJournal } from './model-journal.ts'
 import type { LedgerBinding, LedgerJournalPosition, LedgerStateV1 } from './ledger-state.ts'
@@ -118,7 +128,18 @@ export type WorkflowCancellationOutcome = 'cancelled' | 'failed'
 export type WorkflowCancellationResolution =
   | Readonly<{ status: 'accepted'; outcome: WorkflowCancellationOutcome }>
   | Readonly<{ status: 'pending' }>
+/** Fixed coordinator operations over the original owner's one business lifetime. */
+interface OriginalRunWork {
+  readonly signal: AbortSignal
+  runStage<T>(start: () => T | PromiseLike<T>): Promise<T>
+  runObserver<T>(start: () => T | PromiseLike<T>): Promise<T>
+  seal(): void
+  drain(): Promise<void>
+  /** Observation of the original ledger deadline; cannot extend or reset it. */
+  remainingMs(): number
+}
 interface CancellationStorage {
+  readonly work?: OriginalRunWork
   assertAvailable(): void
   sealAdmission(): boolean
   resolve(outcome: WorkflowCancellationOutcome): Promise<WorkflowCancellationResolution>
@@ -129,6 +150,12 @@ interface CancellationOwner {
   // Retain the original A2a session too; none of its raw references leave this module.
   readonly session: WorkflowLedgerJournalSession
   readonly storage: CancellationStorage
+  /** Dormant business objects never leave this original-owner entry. */
+  readonly originalBusiness?: Readonly<{
+    profile: LlmProfile
+    investigation: ReturnType<typeof createModelGateway>
+    generation: ReturnType<typeof createModelGateway>
+  }>
   claimed: boolean
   closing: boolean
 }
@@ -144,6 +171,100 @@ export function createWorkflowCancellationControl(input: WorkflowLedgerJournalOp
     cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, session: created.session, storage: created.storage, claimed: false, closing: false })
     return token
   })
+}
+export interface OriginalWorkflowRunOptions extends WorkflowLedgerJournalOptions {
+  readonly profile: LlmProfile
+  /** Existing raw transport seam; no gateway, storage or receipt can be supplied. */
+  readonly transport?: ModelTransport
+}
+export interface OriginalRunObservation {
+  readonly mode: 'dormant-original-run-v1'
+  readonly durable: true
+  readonly generationAdmission: 'unavailable'
+  readonly terminalSupport: 'cancellation-only'
+}
+export interface OriginalWorkflowRun {
+  readonly cancellationControl: WorkflowCancellationControl
+  observe(): Readonly<OriginalRunObservation>
+  closeUnclaimed(): Promise<void>
+}
+const originalRunObservation: Readonly<OriginalRunObservation> = Object.freeze({
+  mode: 'dormant-original-run-v1', durable: true,
+  generationAdmission: 'unavailable', terminalSupport: 'cancellation-only'
+})
+function captureOriginalProfile(value: unknown, spec: RunSpec): LlmProfile {
+  const copy = fields(value, ['id', 'name', 'baseUrl', 'apiKey', 'model', 'protocol', 'reasoningEffort', 'temperature', 'contextWindowTokens', 'maxOutputTokens'], ['id', 'name', 'baseUrl', 'apiKey', 'model'])
+  for (const key of ['id', 'name', 'baseUrl', 'apiKey', 'model'] as const) {
+    const text = copy[key]
+    if (typeof text !== 'string' || text.length > LLM_PROFILE_LIMITS[key] || key !== 'apiKey' && !text.length) invalid()
+  }
+  if (copy.protocol !== undefined && !['openai', 'anthropic'].includes(copy.protocol as string)) invalid()
+  if (copy.reasoningEffort !== undefined && !['low', 'high'].includes(copy.reasoningEffort as string)) invalid()
+  if (copy.temperature !== undefined && (typeof copy.temperature !== 'number' || !Number.isFinite(copy.temperature))) invalid()
+  for (const key of ['contextWindowTokens', 'maxOutputTokens']) if (copy[key] !== undefined && (typeof copy[key] !== 'number' || !Number.isSafeInteger(copy[key]) || (copy[key] as number) < 1)) invalid()
+  const profile = Object.freeze(copy) as unknown as LlmProfile
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  if (profile.id !== spec.model.profileId || profile.model !== spec.model.model || endpointFingerprint !== spec.model.endpointFingerprint || (profile.protocol ?? 'openai') !== (spec.model.protocol ?? 'openai') || profile.reasoningEffort !== spec.model.reasoningEffort || (profile.temperature ?? 0.4) !== (spec.model.temperature ?? 0.4) || profile.contextWindowTokens !== spec.model.contextWindowTokens || profile.maxOutputTokens !== spec.model.maxOutputTokens) throw new WorkflowError('configuration-changed')
+  return profile
+}
+function originalRunWork(ledger: BudgetLedger, spec: RunSpec): OriginalRunWork {
+  const registry = createAcceptedWorkRegistry()
+  const stages = registry.createIssuer('original-coordinator-stage')
+  const observers = registry.createIssuer('original-coordinator-observer')
+  const controller = new AbortController()
+  return Object.freeze({
+    signal: controller.signal,
+    runStage<T>(start: () => T | PromiseLike<T>): Promise<T> { return stages.run(start) },
+    runObserver<T>(start: () => T | PromiseLike<T>): Promise<T> { return observers.run(start) },
+    seal() { registry.seal(); if (!controller.signal.aborted) controller.abort() },
+    drain() { return registry.drain() },
+    remainingMs() {
+      // A broken original clock closes the deadline rather than granting a new one.
+      try { return Math.max(0, spec.budget.total.wallClockMs - ledger.snapshot().elapsedMs) } catch { return 0 }
+    }
+  })
+}
+
+/**
+ * New original logical run, before investigation expenditure. Captures real storage,
+ * durable accounting and private gateways together. No paid business entrance exists
+ * until original evidence/plan/operation and output/terminal protocols are implemented.
+ */
+export async function createWorkflowOriginalRun(input: OriginalWorkflowRunOptions): Promise<OriginalWorkflowRun> {
+  const data = fields(input, ['storageDirectory', 'spec', 'limits', 'onDurableStep', 'profile', 'transport'], ['storageDirectory', 'spec', 'profile'])
+  if (data.transport !== undefined && typeof data.transport !== 'function') invalid()
+  const { prepared, options } = captureOptions({
+    storageDirectory: data.storageDirectory as string, spec: data.spec,
+    ...(data.limits === undefined ? {} : { limits: data.limits as WorkflowStoreLimits }),
+    ...(data.onDurableStep === undefined ? {} : { onDurableStep: data.onDurableStep as WorkflowStoreOptions['onDurableStep'] })
+  }, true)
+  const profile = captureOriginalProfile(data.profile, prepared.spec)
+  const ledger = createBudgetLedger(prepared.spec, { durable: true })
+  const work = originalRunWork(ledger, prepared.spec)
+  const created = await initialize(prepared, options, ledger, true, work)
+  try {
+    // Gateway construction performs its own original configuration/durability guard.
+    const gatewayOptions = { durability: created.session.journal, ...(data.transport === undefined ? {} : { transport: data.transport as ModelTransport }) }
+    const originalBusiness = Object.freeze({
+      profile,
+      investigation: createModelGateway(prepared.spec, profile, ledger, gatewayOptions),
+      generation: createModelGateway(prepared.spec, profile, ledger, gatewayOptions)
+    })
+    // Storage initialization consumes the original allowance too; never restart it.
+    ledger.assertCanContinue()
+    const token = Object.freeze({}) as WorkflowCancellationControl
+    cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, session: created.session, storage: created.storage, originalBusiness, claimed: false, closing: false })
+    return Object.freeze({
+      cancellationControl: token,
+      observe() { return originalRunObservation },
+      closeUnclaimed() { return closeWorkflowCancellationControl(token) }
+    })
+  } catch (error) {
+    created.storage.sealAdmission()
+    await created.storage.close()
+    if (error instanceof WorkflowError) throw error
+    throw new WorkflowError('unreadable')
+  }
 }
 /** Dispose only an unclaimed factory token. Claimed runs close through their real coordinator. */
 export function closeWorkflowCancellationControl(token: WorkflowCancellationControl): Promise<void> {
@@ -162,7 +283,7 @@ export function claimWorkflowCancellationControl(token: WorkflowCancellationCont
   return owner.storage
 }
 
-async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage }> {
+async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage }> {
   let store: WorkflowStore | undefined
   let revoke: (() => boolean) | undefined
   try {
@@ -172,7 +293,7 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
     let attempt: WorkflowAttempt = await owned.beginAttempt(prepared.binding)
     let active = true
     // Legacy A2a finish/poison remains unchanged. A2b admission closure never calls it.
-    revoke = () => { active = false; blockBudgetLedger(ledger); return owned.finishAttempt(attempt) }
+    revoke = () => { work?.seal(); active = false; blockBudgetLedger(ledger); return owned.finishAttempt(attempt) }
     let info: WorkflowAttemptInfo = owned.assertCurrent(attempt)
     if (!same(info.binding, prepared.binding) || info.epoch.attempt !== 1) unavailable()
     let cursor = createLedgerCriticalCursor(prepared)
@@ -184,6 +305,7 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
     let accepted: WorkflowCancellationResolution | null = null
     let unresolved: { step: LedgerCriticalStep; bytes: Buffer } | null = null
     const poison = (): void => {
+      work?.seal()
       if (!controlled) revoke!()
       else { active = false; metadataActive = false; owned.finishAttempt(attempt) }
     }
@@ -246,10 +368,14 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
     })
     const closeStorage = (): Promise<void> => {
       if (!closing) {
+        work?.seal()
         active = false; metadataActive = false
         owned.finishAttempt(attempt)
-        const closed = owned.close()
-        closing = Promise.all([queue, closed]).then(() => {})
+        if (work) closing = (async () => { await work.drain(); await Promise.all([queue, owned.close()]) })()
+        else {
+          const closed = owned.close()
+          closing = Promise.all([queue, closed]).then(() => {})
+        }
       }
       return closing
     }
@@ -303,8 +429,10 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       return task
     }
     const storage: CancellationStorage = Object.freeze({
-      assertAvailable() { if (!controlled || !active || closing) invalid(); assertOwned() },
+      ...(work ? { work } : {}),
+      assertAvailable() { if (!controlled || !active || closing) invalid(); assertOwned(); if (work) ledger.assertCanContinue() },
       sealAdmission() {
+        work?.seal()
         if (!active) return false
         active = false
         // Revoke W synchronously without blocking or otherwise changing L accounting.
@@ -314,6 +442,7 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       async resolve(outcome: WorkflowCancellationOutcome): Promise<WorkflowCancellationResolution> {
         if (accepted) return accepted
         if (!controlled || active || closing || !['cancelled', 'failed'].includes(outcome)) return pendingResolution
+        if (work) await work.drain()
         await queue
         try {
           let current = readReconciled()
@@ -353,6 +482,7 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
     })
     return { session, storage }
   } catch (error) {
+    work?.seal()
     revoke?.()
     blockBudgetLedger(ledger)
     if (store) await store.close()
