@@ -48,6 +48,9 @@ import { createLedgerCriticalCursor, checkLedgerCriticalTransition, acceptLedger
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { WorkflowError } from './project-contract.ts'
 
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { validateArchivedWorkflowLedger } from './workflow-ledger-archive.ts'
+
 export const WORKFLOW_LEDGER_STATE_SCHEMA_ID = 'workflow-ledger-state-v1'
 export interface WorkflowLedgerJournalOptions {
   readonly storageDirectory: string
@@ -117,16 +120,16 @@ function captureOptions(input: WorkflowLedgerJournalOptions, write: boolean) {
   }
   if (data.onDurableStep !== undefined && typeof data.onDurableStep !== 'function') invalid()
   const options: WorkflowStoreOptions = {
-    storageDirectory: data.storageDirectory, validators: validators(prepared),
+    storageDirectory: data.storageDirectory, validators: validators(prepared, write),
     ...(limits === undefined ? {} : { limits }),
     ...(data.onDurableStep === undefined ? {} : { onDurableStep: data.onDurableStep as WorkflowStoreOptions['onDurableStep'] })
   }
   return { prepared, options }
 }
-function validators(prepared: PreparedCriticalSpec): WorkflowStoreOptions['validators'] {
+function validators(prepared: PreparedCriticalSpec, archivedReads: boolean): WorkflowStoreOptions['validators'] {
   return Object.freeze({
     'critical-journal': createLedgerCriticalPayloadValidator(),
-    ledger: Object.freeze({ schemaId: WORKFLOW_LEDGER_STATE_SCHEMA_ID, validate(payload: unknown): boolean {
+    ledger: Object.freeze({ schemaId: WORKFLOW_LEDGER_STATE_SCHEMA_ID, ...(archivedReads ? { validateRead: validateArchivedWorkflowLedger } : {}), validate(payload: unknown): boolean {
       try { validateLedgerState(prepared.spec, payload); return true } catch { return false }
     } })
   })
