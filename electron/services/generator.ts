@@ -21,14 +21,18 @@ import { InterviewJsonStream, type InterviewJsonPreview, type StreamedInterviewQ
 import { renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
 import { staticContextProvider, type ContextProvider } from './workflow/context-provider'
 import type { WorkflowTrace, WorkflowTraceInput } from './workflow/trace'
-import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
-import { buildCompensationInstruction, normalizeQuestionKey, selectUniqueQuestions } from './question-dedupe'
+import { planQuestionQuotas, type QuestionPlan } from './question-budget'
+import { normalizeQuestionKey } from './question-dedupe'
+import { absorbGenerationBatch, capSectionsToMax, collectReferencedTerms, createGenerationMergeState, nextGenerationCompensation, pruneGlossary } from './generation-merge-policy'
+export { capSectionsToMax, collectReferencedTerms, pruneGlossary } from './generation-merge-policy'
 import type { ScanResult } from './scanner'
 import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
 import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
 import { WorkflowError } from './workflow/project-contract'
 import { GenerationOutputError, type GenerationOutputFailureReason, type GenerationOutputRejection } from './generation-output-error'
+import { normalizeParsed, validateCheckpointBatch, type ParsedGenerationBatch } from './generation-output-policy'
+export { normalizeParsed } from './generation-output-policy'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
@@ -96,20 +100,7 @@ function sha256(value: unknown): string { return createHash('sha256').update(sta
 function cloneBatch(batch: ParsedBatch): GenerationCheckpoint['entries'][number]['batch'] {
   return JSON.parse(JSON.stringify(batch)) as GenerationCheckpoint['entries'][number]['batch']
 }
-function validateCheckpointBatch(batch: unknown): ParsedBatch {
-  if (!batch || typeof batch !== 'object') throw new Error(GENERATION_DRAFT_MESSAGES.changed)
-  const keys = Object.keys(batch as object).sort()
-  if (keys.join(',') !== 'glossary,projectSummary,sections') throw new Error(GENERATION_DRAFT_MESSAGES.changed)
-  const candidate = batch as ParsedBatch
-  try {
-    assertInterviewResultContract({
-      version: 1, createdAt: '2026-01-01T00:00:00.000Z', projectName: 'checkpoint', projectPath: '/checkpoint',
-      granularity: 'coarse', roleFocus: 'general', profileId: 'checkpoint', modelUsed: 'checkpoint',
-      projectSummary: candidate.projectSummary, sections: candidate.sections, glossary: candidate.glossary
-    }, () => true)
-  } catch { throw new Error(GENERATION_DRAFT_MESSAGES.changed) }
-  return JSON.parse(JSON.stringify(candidate)) as ParsedBatch
-}
+
 
 const SYSTEM_PROMPT = `你是一位经验丰富的资深技术面试官，擅长通读候选人的项目代码与文档，围绕真实项目出有深度的面试题。
 判断当前实现时，以提供的源码为主要证据；文档承诺不证明实现已经落实。未提供的代码要明确说明无法从当前上下文确认，不要仅凭依赖、函数名或模块名推断内部保证。
@@ -205,42 +196,7 @@ ${quota === 0 ? `## 输出 JSON 结构
 
 // ---------- JSON 规范化 ----------
 
-interface RawQuestion {
-  title?: unknown
-  question?: unknown
-  answer?: unknown
-  followUps?: unknown
-}
-interface RawSection {
-  title?: unknown
-  summary?: unknown
-  questions?: unknown
-}
-interface RawResult {
-  projectSummary?: unknown
-  sections?: unknown
-  glossary?: unknown
-}
-
-function normalizeFollowUps(raw: unknown, depth: number): FollowUp[] {
-  if (!Array.isArray(raw) || depth > 2) return []
-  return raw
-    .map((item): FollowUp | null => {
-      if (!item || typeof item !== 'object') return null
-      const q = item as RawQuestion
-      const question = typeof q.question === 'string' ? q.question.trim() : ''
-      const answer = typeof q.answer === 'string' ? q.answer.trim() : ''
-      if (!question || !answer) return null
-      return { question, answer, followUps: normalizeFollowUps(q.followUps, depth + 1) }
-    })
-    .filter((f): f is FollowUp => f !== null)
-}
-
-type ParsedBatch = {
-  projectSummary: string
-  sections: Section[]
-  glossary: Record<string, string>
-}
+type ParsedBatch = ParsedGenerationBatch
 
 const PREVIEW_TOTAL_CHARS = RESULT_LIMITS.totalChars - 250_000
 
@@ -339,57 +295,6 @@ function makeGenerationPreview(
   return preview
 }
 
-export function normalizeParsed(raw: unknown, allowEmpty = false): ParsedBatch {
-  if (!raw || typeof raw !== 'object') throw new Error('模型输出不是 JSON 对象')
-  const obj = raw as RawResult
-  const projectSummary = typeof obj.projectSummary === 'string' ? obj.projectSummary.trim() : ''
-
-  const sections: Section[] = []
-  if (Array.isArray(obj.sections)) {
-    for (const s of obj.sections) {
-      if (!s || typeof s !== 'object') continue
-      const sec = s as RawSection
-      const title = typeof sec.title === 'string' && sec.title.trim() ? sec.title.trim() : '未命名主题'
-      const questions: QuestionItem[] = []
-      if (Array.isArray(sec.questions)) {
-        for (const q of sec.questions) {
-          if (!q || typeof q !== 'object') continue
-          const qo = q as RawQuestion
-          const question = typeof qo.question === 'string' ? qo.question.trim() : ''
-          const answer = typeof qo.answer === 'string' ? qo.answer.trim() : ''
-          if (!question || !answer) continue
-          const title = typeof qo.title === 'string'
-            ? qo.title.trim().replace(/[\r\n]+/g, ' ')
-            : ''
-          questions.push({
-            id: randomUUID(),
-            ...(title && title.length <= RESULT_LIMITS.questionTitle ? { title } : {}),
-            question,
-            answer,
-            followUps: normalizeFollowUps(qo.followUps, 1)
-          })
-        }
-      }
-      if (questions.length) {
-        sections.push({
-          id: randomUUID(),
-          title,
-          summary: typeof sec.summary === 'string' ? sec.summary.trim() : undefined,
-          questions
-        })
-      }
-    }
-  }
-  if (!sections.length && !allowEmpty) throw new Error('模型输出中没有有效的问题（sections 为空）')
-
-  const glossary: Record<string, string> = {}
-  if (obj.glossary && typeof obj.glossary === 'object') {
-    for (const [k, v] of Object.entries(obj.glossary as Record<string, unknown>)) {
-      if (typeof v === 'string' && v.trim()) Object.defineProperty(glossary, k, { value: v.trim(), enumerable: true, writable: true, configurable: true })
-    }
-  }
-  return { projectSummary, sections, glossary }
-}
 
 function batchQuestionCount(batch: ParsedBatch): number {
   return batch.sections.reduce((count, section) => count + section.questions.length, 0)
@@ -1215,38 +1120,7 @@ export async function mergeWithCompensation(
   maxCompensationRounds = 2
 ): Promise<MergeResult> {
   const { budget, batches, quotas, total, requestBatch, onBatch, onCompensate, signal } = input
-  const merged: MergeResult = {
-    projectSummary: '',
-    sections: [],
-    glossary: {},
-    droppedByQuota: 0,
-    compensated: 0,
-    compensationRounds: 0,
-    collected: 0,
-    duplicates: 0,
-  }
-  /** 每批实际贡献的题量，用于挑出"给得最少"的批次做补偿 */
-  const delivered = quotas.map(() => 0)
-  const seen = new Set<string>()
-  const retainedByBatch: Section[][] = quotas.map(() => [])
-
-  const absorb = (parsed: ParsedBatch, quota: number, index: number): number => {
-    const unique = selectUniqueQuestions(parsed.sections, quota, seen)
-    merged.droppedByQuota += unique.dropped
-    merged.duplicates += unique.duplicates
-    if (unique.kept > 0) {
-      if (!merged.projectSummary && parsed.projectSummary) merged.projectSummary = parsed.projectSummary
-      merged.sections.push(...unique.sections)
-      retainedByBatch[index].push(...unique.sections)
-      const retainedGlossary = pruneGlossary(parsed.glossary, unique.sections)
-      for (const [term, definition] of Object.entries(retainedGlossary)) {
-        if (!Object.hasOwn(merged.glossary, term)) merged.glossary[term] = definition
-      }
-    }
-    delivered[index] += unique.kept
-    merged.collected += unique.kept
-    return unique.kept
-  }
+  let state = createGenerationMergeState(quotas.length)
 
   for (let i = 0; i < batches.length; i++) {
     if (signal?.aborted) throw new LlmRequestError('cancelled')
@@ -1254,47 +1128,33 @@ export async function mergeWithCompensation(
     const span = 1 / Math.max(1, batches.length)
     onBatch?.(
       i,
-      `本批目标 ${quota} 题，累计 ${merged.collected}/${total} 题（预算 ${budget.min}–${budget.max}）`,
+      `本批目标 ${quota} 题，累计 ${state.collected}/${total} 题（预算 ${budget.min}–${budget.max}）`,
       i * span
     )
     const parsed = await requestBatch(i, quota)
-    const kept = absorb(parsed, quota, i)
+    const absorbed = absorbGenerationBatch({ state, slotIndex: i, quota, batch: parsed, role: 'initial' })
+    state = absorbed.state
+    const kept = absorbed.kept
     onBatch?.(
       i,
-      `本批 ${kept}/${quota} 题${kept < quota ? `（少 ${quota - kept} 题）` : ''}，累计 ${merged.collected} 题`,
+      `本批 ${kept}/${quota} 题${kept < quota ? `（少 ${quota - kept} 题）` : ''}，累计 ${state.collected} 题`,
       (i + 1) * span
     )
   }
 
-  // 补偿：总量低于下限时，挑贡献最少的批次补一次，只要求补足缺口。
+  // Keep the cancellation fence on every legacy iteration, even when the
+  // previous request filled the gap and this iteration will make no request.
   for (let round = 0; round < maxCompensationRounds; round++) {
     if (signal?.aborted) throw new LlmRequestError('cancelled')
-    const gap = budget.min - merged.collected
-    if (gap <= 0) break
-    let target = 0
-    for (let i = 1; i < delivered.length; i++) {
-      if (delivered[i] < delivered[target]) target = i
-    }
-    if (!batches.length) break
-    const ask = Math.min(gap, MAX_QUESTIONS_PER_BATCH)
+    const next = nextGenerationCompensation({ state, minimum: budget.min, maxRounds: maxCompensationRounds })
+    if (!next || !batches.length) break
     onCompensate?.(
-      `第 ${round + 1} 轮：累计 ${merged.collected} 题，比下限少 ${gap} 题，向「${batches[target].label}」补充请求 ${ask} 题`
+      `第 ${next.round} 轮：累计 ${state.collected} 题，比下限少 ${next.gap} 题，向「${batches[next.slotIndex].label}」补充请求 ${next.ask} 题`
     )
-    merged.compensationRounds++
+    state = next.startedState
     try {
-      const parsed = await requestBatch(
-        target,
-        ask,
-        buildCompensationInstruction({
-          delivered: delivered[target],
-          gap,
-          ask,
-          sections: [...retainedByBatch[target], ...retainedByBatch.flatMap((sections, index) =>
-            index === target ? [] : sections
-          )]
-        })
-      )
-      merged.compensated += absorb(parsed, ask, target)
+      const parsed = await requestBatch(next.slotIndex, next.ask, next.instruction)
+      state = absorbGenerationBatch({ state, slotIndex: next.slotIndex, quota: next.ask, batch: parsed, role: 'compensation' }).state
     } catch (error) {
       if (signal?.aborted) throw error
       if (input.checkpointResume) throw error
@@ -1306,74 +1166,16 @@ export async function mergeWithCompensation(
     }
   }
 
-  return merged
-}
-
-/**
- * 只保留被最终结果真正引用的名词解释。
- *
- * 裁剪题量后，被丢弃的题里标记过的名词会变成"有解释但没人引用"的孤儿词条；
- * 提示词要求 glossary 覆盖所有 [[ ]] 标记，因此模型每批都会带上自己的词条，
- * 多批合并后会明显膨胀（旧行为下 115 题可产出上千词条，而 IPC 校验对对象键数
- * 有 256 的上限，会导致导出被拒）。这里按最终 sections 里实际出现的标记收敛。
- *
- * 只做删减、不做补全：渲染层对缺失词条有 AI 现取作为兜底。
- */
-export function collectReferencedTerms(sections: Section[]): Set<string> {
-  const terms = new Set<string>()
-  const fromText = (text: string): void => {
-    for (const match of text.matchAll(/\[\[([^\[\]]+)\]\]/g)) terms.add(match[1])
+  return {
+    projectSummary: state.projectSummary,
+    sections: [...state.sections],
+    glossary: { ...state.glossary },
+    droppedByQuota: state.droppedByQuota,
+    compensated: state.compensated,
+    compensationRounds: state.compensationRounds,
+    collected: state.collected,
+    duplicates: state.duplicates
   }
-  const walkFollowUps = (list: FollowUp[]): void => {
-    for (const f of list) {
-      fromText(f.question)
-      fromText(f.answer)
-      if (f.followUps?.length) walkFollowUps(f.followUps)
-    }
-  }
-  for (const section of sections) {
-    for (const q of section.questions) {
-      fromText(q.question)
-      fromText(q.answer)
-      walkFollowUps(q.followUps)
-    }
-  }
-  return terms
-}
-
-export function pruneGlossary(glossary: Record<string, string>, sections: Section[]): Record<string, string> {
-  const referenced = collectReferencedTerms(sections)
-  const pruned: Record<string, string> = {}
-  for (const [term, definition] of Object.entries(glossary)) {
-    if (referenced.has(term)) pruned[term] = definition
-  }
-  return pruned
-}
-
-/**
- * 把总题量压到上限以内：从题量最少的 section 开始整段移除。
- * 整段移除而不是删单题，是为了不留下"半截"主题；同题量时按原顺序靠后者先移除，保证确定性。
- */
-export function capSectionsToMax(sections: Section[], max: number): { sections: Section[]; dropped: number } {
-  let total = sections.reduce((a, s) => a + s.questions.length, 0)
-  if (total <= max) return { sections, dropped: 0 }
-
-  const indexed = sections.map((section, index) => ({ section, index }))
-  indexed.sort((a, b) => {
-    const bySize = a.section.questions.length - b.section.questions.length
-    return bySize !== 0 ? bySize : b.index - a.index
-  })
-
-  const removed = new Set<number>()
-  let dropped = 0
-  for (const { section, index } of indexed) {
-    if (total <= max) break
-    removed.add(index)
-    total -= section.questions.length
-    dropped += section.questions.length
-  }
-
-  return { sections: sections.filter((_s, i) => !removed.has(i)), dropped }
 }
 
 /** 仅用于点词弹卡的详细解释，不改变报告问题、答案或术语表。 */
