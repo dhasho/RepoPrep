@@ -234,3 +234,16 @@ B0.1/B0.2 的既有离线验收允许提交及集成；下一阶段将接入真�
 整合候选 `ddd6e9c83ac6940ef41968c93003c1b649113f08` 的首轮定向检查还发现历史保护测试将作者的 CRLF 检出哈希当成唯一编码。主代理只修正测试为接受原历史文件已知的 LF 或 CRLF 两种精确哈希，并额外绑定原规范化内容；历史 manifest/lock 文件没有编辑，运行时精确字节策略没有变化。修正后 M09 host/publication/source-binding 三文件的 122 项定向回归全通过，退出 0；这是修复范围的验证，不宣称重新执行完整 test:agentic。日志保留在 `.validation/m09-byte-bindings-root-20261111` 和 `-r2-20261111`。
 
 一次性原生合成 R3 在 preflight 因准备包遗留 R2 路径而拒绝，未启动任何原生进程或请求；失败被保留。下一诊断包须验证完整实际 preflight 并单独获得运行审批。真实 M09 质量、B03 后续生成链、成功终态、M10/M11 及完整 PLAN 仍未完成。页面设计、UI、renderer/preload/IPC、默认策略与发布未变，M08/E3a 测量保持封存。
+
+
+## B03a 原始工厂与 stdout 首行修复验收（2026-11-11）
+
+B03a 四文件已独立审查并提交为 `dc0eecf0a96ce4561447cd440dc937eb3fa27a68`，整合到重构分支。工厂在任何调查支出前私有构造同一个原始 W/ledger/journal/profile 和 durable gateways，共享真实业务 registry、取消 signal、排空与原始期限；只公开取消 token、安全观察和未接管关闭。没有生成入口、原始计划/收据导入、原始对象导出或 succeeded 终态，默认 runner 未启用。
+
+115 项相关生命周期/账本验证、9 项未变的 preflight/F01–F08、4 项修正及新增期限检查形成 128 个不同成功案例；最终边界复核的 1 项与其中重叠。初次原始工厂运行出现 2 项测试时钟错误且未完成整套退出，原日志和合成 W 夹具保留，不能记整套通过。测试改为构造前安装同一 UTC 闭包并推进值，失败路径 finally 关闭资源；最终 Node/Web typecheck 与 diff-check 通过。新增原始工厂测试已登记在 test:agentic。
+
+正式父进程 stdout framing 修复已提交 `9d3b751eff4be103565e6d66c749995a3bf17509`，只允许第一物理行出现一次精确 CRLF；JSON 字节、状态、配置、nonce、额度、grant/outcome、实际 close 与私有父证明检查保留。新独立纯 helper 纳入第 17 个 LF scoped source，当前聚合哈希 `470ff6baa4e314b92397574bb9736e0004505d63e6e305837cf12872adbf6ef9`。89 项作者定向验证及主代理 88 项受影响 host/publication 回归分别通过，Node/Web typecheck 通过；没有重跑完整 test:agentic。
+
+R4 一次性原生合成运行在第一行 JSON 解析处停止：stdout 仅 2 字节，摘要与 CRLF 一致；实际 SIGTERM close 已确认、setup 退出 0、合成 HTTP 请求/外部模型请求/证明写入均 0。失败、批准、占位和原 bundle 保留，禁止重用。新来源候选必须重新冻结 bundle/实际 preflight 和独立一次性运行批准；离线测试不转为原生 witness 或 M09 质量证据。
+
+B03b 的私有调查及 tool/read 临界落盘、原始证据/计划冻结、完整输出与已结算收据接受、成功终态、M09 真实质量、M10/M11/M13 仍未完成。M08 和已接受 E3a 测量封存；本轮真实模型请求为 0。主目录仍在 main，页面设计/UI/renderer/preload/IPC/样式/资源/默认策略/发布保持原样。
