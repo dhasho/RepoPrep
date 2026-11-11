@@ -260,3 +260,14 @@ B03b2a 三文件提交 4a0cbd57e839deb6e17b5c0e4a73ca952a890083 已由主代理�
 历史主机仍有明确未解边界：workflow-ledger-journal 的 ledger-v1 校验闭包使用当前 prepared.spec，不能据此接受同根不同 RunSpec 的历史终态。B03b2a 仅提供存储路由前置能力，未实现关键 V2、原始 plan/lineage、生成结果与 settled receipt 接受或 succeeded 终态。B03b1 私有实际调查仍在实现；后续须在全新 run genesis 前选择版本并核对真实 W 完整记录容量。
 
 最近完整 test:agentic 仍是历史 1063 项中的 1061 通过、1 失败、1 跳过，后续仅有定向修复验证，未宣称重跑整套通过。R6 尚未运行；必须使用独立的新候选绑定、bundle、支持冻结、真实 preflight 与一次性批准。M08 和已接受 E3a R2 继续封存。正式 M09 质量、B03 后续、M10/M11/M13 和完整 PLAN 仍未完成，草稿 PR 继续保留。主目录仍为 main；本轮没有真实模型请求或页面设计/UI/renderer/preload/IPC/样式/资源/默认策略/发布变更。
+
+
+## 原始调查费用落盘与 R6 实际运行（2026-11-11）
+
+B03b1 提交 `930e201023e397fcea3429daf332eff7d08361ad` 已经主代理审查并整合。显式 opt-in 原始调查入口将真正 W、原始 ledger、profile、accepted-work registry、snapshot、evidence store 和 coordinator 私有组合；模型 finally、完整工具动作及 source 记账共用原始串行序列。tool charge、read reservation、read receipt 均在真实 critical append builder 里记账并等待落盘，原始 snapshot 在 model intent 落盘后且 wire 前再次检查。公开面只返回安全状态与计数，调查结果和 journal tail 私有保存，generation 仍 unavailable，不能发布成功终态。
+
+作者 96 个不同案例通过：17 个新增实际 Windows W 用例、75 个普通受影响回归、4 个原始工厂/取消定向回归。初次 fixture/typecheck/时限失败保留；某一 I3 聚合仍为真实 exit 1，四个 I3 通过且其中 I4 fixture 失败，修正后的 I4 单独 exit 0，不能将原聚合记为通过。最终 I1 成功夹具使用捕获且 finally 恢复的确定性记账时钟，真实 native 写入、取消、settlement 和 close 未替代。主代理整合后另行运行 I1 实际用例，1/1、无 skip、exit 0；Node/Web typecheck 均 exit 0。首次整合类型检查误用缺失的工作树本地编译器路径，修正为现有共享编译器后通过，原失败日志保留。新测试已登记在 test:agentic。
+
+R6 revision 8 已经独立审查、真实生产 preflight 和一次性实际批准后执行，冻结候选仍为 `792685686c77604ea58b3bbef48edf56e5a100dd`。setup/readback 成功，实际测量越过 Electron 动态入口、bootstrap、私有合成 profile 解锁和 ready 阶段，随后 child 报 `semantic-native-handshake-invalid`。约 71.6 秒后实际子进程 SIGTERM close、父进程 exit 1；合成 HTTP 请求、外部 provider 请求和父证明写入均为 0。原批准、claim、日志和失败 runtime 全部保留，不重跑 R6，不当作正式 M09 质量证据。
+
+B03b2b 历史宿主上下文切片的 21 项定向检查通过；194 项更广回归为 191 通过、2 失败、1 跳过，两项已定位为 mixed-ledger decoder 顺序断言和 known-spec 空 anchor 诊断，正在最小修复，尚未整合或计整套通过。critical V2、新 run genesis、真实原始 plan/lineage、生成输出与 settled receipt 接受、成功终态、正式 M09、M10/M11/M13 仍未完成。最近完整 test:agentic 仍保留历史 1063 项的 1061 通过、1 失败、1 跳过，本轮未重跑全套。M08 和已接受 E3a R2 保持封存。没有页面设计/UI/renderer/preload/IPC/样式/资源/默认策略或发布变更，本轮外部模型请求为 0。
