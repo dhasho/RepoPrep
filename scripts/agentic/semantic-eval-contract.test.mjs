@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { readFile,writeFile,link,mkdir,symlink } from 'node:fs/promises'
 import path from 'node:path'
 import { canonicalJson,sha256 } from './dataset-contract.mjs'
@@ -36,7 +38,13 @@ test('runtime plan is shuffled, bijective and opaque; configuration only tighten
 test('exclusive synthetic claims bind the complete grant, reject copies/purpose/config and real dirty source before profile access',async t=>{
   const f=await fixture(t);await f.claim();await assert.rejects(f.claim(),/EEXIST/u)
   const authorization=structuredClone(f.authorization);authorization.purpose='m08-generation-v1';assert.throws(()=>validateSemanticAuthorization(authorization,{mode:'synthetic',source,bundle:f.bundle,plan:f.plan,executionMap:f.executionMap,configuration:f.configuration}))
-  let profiles=0;const {syntheticSource,...real}=f.input;await assert.rejects(claimSemanticExecution({...real,mode:'real',repoRoot:path.resolve('.'),currentProfile:()=>{profiles++;throw new Error('must not read profile')}}),/semantic-source-dirty/u);assert.equal(profiles,0)
+  const repoRoot=path.join(f.root,'dirty-source');await mkdir(repoRoot)
+  const runGit=promisify(execFile)
+  await runGit('git',['init',repoRoot],{windowsHide:true})
+  await writeFile(path.join(repoRoot,'untracked.txt'),'synthetic dirty source\n')
+  const {stdout}=await runGit('git',['-C',repoRoot,'status','--porcelain=v1','--untracked-files=all'],{encoding:'utf8',windowsHide:true})
+  assert.equal(stdout.trim(),'?? untracked.txt')
+  let profiles=0;const {syntheticSource,...real}=f.input;await assert.rejects(claimSemanticExecution({...real,mode:'real',repoRoot,currentProfile:()=>{profiles++;throw new Error('must not read profile')}}),/semantic-source-dirty/u);assert.equal(profiles,0)
 })
 
 
