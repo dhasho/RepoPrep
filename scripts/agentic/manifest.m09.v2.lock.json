@@ -1,0 +1,34 @@
+{
+  "lockVersion": 1,
+  "baselineSourceCommit": "9ef10caae918a2b86c27afdd8b19cbe5ad40869c",
+  "manifestSha256": "6976eae77ea83e6703bab336b6d0d1dd9c09d0dc9111aa710436a9f1a8595e17",
+  "hashes": {
+    "configurationSha256": "277de7641342bcd65d7649d0c738a1c20e23a02179d4fa72abebd424a0eaf369",
+    "dataSha256": "17060cb86ecbf9602b15e2813a20f0616720a8e46bd62e64d3bde08f5bd2752e",
+    "schemaSha256": "bbe444081b06e6edd28b792b7790e563453f97726e93a288885480e22c9954b2"
+  },
+  "m09": {
+    "sourceHashMeaning": "sha256-canonical-scoped-source-file-map-v1",
+    "sourceFiles": {
+      "scripts/agentic/checks/index.mjs": "360737b1014c85531a56c439ce72dd40f6fce8ed07f9d66f7062a1b8093d6f93",
+      "scripts/agentic/checks/m09.mjs": "18ed4f3db7c0b2e31f0ed41a802284f1b67d60ac1806b7d0ec485f016932d8b5",
+      "scripts/agentic/gate-runner.mjs": "d09291dba2bf1de7a9371d6944e0cfafa65ff43a45451b7ad007f5b5e6e0cb6a",
+      "scripts/agentic/m09-manifest.mjs": "2882e55083e5574cf3ad802ed47d20848d73b62f118b9ff87e3ea491d9a67e58",
+      "scripts/agentic/m09-native-collaboration.mjs": "c84a82d27da09d9ce668e20168ed885bd05858ab963fc2e256cf256730977012",
+      "scripts/agentic/m09-quality-host.mjs": "1534692325200591718c8efc8e7e683174efd52f2b4331c5dbb4bd2dfbb89531",
+      "scripts/agentic/semantic-eval-contract.mjs": "999de27005ea7991aeb52ce193cc8824557e66ff1069dd09af88a14af1748e7b",
+      "scripts/agentic/semantic-eval.mjs": "ea41c3f7bbf4f7ed13d585c4879042e137183bc498b3328f66ac17219b1bd718",
+      "scripts/agentic/semantic-execution-validation.mjs": "a5d4b5b231b721dcb3015ace81b80ea48a0b4a97288fab62264d1facea8211a0",
+      "scripts/agentic/semantic-review-score.mjs": "6ec75485727d3e62d6a825871801f9aac9fbc4379149ae70c16e9fcd32c55b6d",
+      "scripts/agentic/semantic-review.mjs": "86fef0e5a43709ebfc21ceb2191c89d4f9fe945530c19d3eaecfb9322f7a25f2",
+      "scripts/agentic/verify.mjs": "8d55c6adac5edeff8e3324a82c70d6e396d4c8eb43a06d00999cbf90767a549f",
+      "scripts/evaluation/m09-semantic-io.cjs": "a64c2a9ded7b669e0d6c0dd9e05b9b00d23867ebffebcf76c19490333a208deb",
+      "scripts/evaluation/m09-semantic-native.cjs": "316dabdc7fb61e334d419d6c9dfce2844f8c498aec74b96dd40e0172cd448f8a",
+      "scripts/evaluation/run-semantic-profile-entry.cjs": "484509fb5abdea469d7c35a35559bf7e7fd7de047de55bc6bf36d6b480a343ab",
+      "scripts/evaluation/run-semantic-profile.cjs": "2bf6c34cb750df8a05bc0f7fcc7e15c37d01d4ba40a46f1c233493a0e8cf54c1"
+    },
+    "sourceSha256": "8d5a13da53f1c0565689c5d17f64936b08926e38ca9c0641dbbd483e37b3ce33",
+    "protocolSha256": "0f6f686fd98221d136fb095fe4bc9005a5363150fe40a3a6a934591ecca138c3",
+    "assetDescriptorsSha256": "a78d42a3556756311c7f1c2b8efd3f93818496db2199aaf67842b79db916c87b"
+  }
+}

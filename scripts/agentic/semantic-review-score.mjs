@@ -3,6 +3,7 @@ import { lstat, open, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import {
   SEMANTIC_REVIEW_LIMITS,
+  SEMANTIC_NATIVE_COLLABORATION_V2,
   buildSemanticReviewPackets,
   freezeSemanticScoringProjection,
   parseSemanticJsonBytes,
@@ -34,7 +35,7 @@ async function safeDirectory(rootDir) {
   if (!samePath(await realpath(absolute), absolute)) unavailable()
   return absolute
 }
-async function loadBoundPrivateKey(rootDir, descriptor) {
+async function loadBoundPrivateKey(rootDir, descriptor, normalizedSha256) {
   let handle
   try {
     const root = await safeDirectory(rootDir)
@@ -57,7 +58,7 @@ async function loadBoundPrivateKey(rootDir, descriptor) {
     const after = await handle.stat(); const pathAfter = await lstat(filename)
     if (isLink(pathAfter) || pathAfter.nlink !== 1 || !sameFile(opened, after) || !sameFile(opened, pathAfter) || await safeDirectory(rootDir) !== root) unavailable()
     const bytes = buffer.subarray(0, offset)
-    if (semanticSha256(bytes) !== descriptor.sha256) unavailable()
+    if (semanticSha256(bytes) !== descriptor.sha256 || (normalizedSha256 && semanticSha256(Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'), 'utf8')) !== normalizedSha256)) unavailable()
     return parseSemanticJsonBytes(bytes, SEMANTIC_REVIEW_LIMITS.maxPrivateKeyBytes)
   } catch {
     unavailable()
@@ -72,7 +73,11 @@ async function loadBoundPrivateKey(rootDir, descriptor) {
  * not an accepted result: callbacks return the verified projection/receipt.
  * No file is read by this factory, freezeExecution, buildPackets or freezeJudgments.
  */
-export function createSemanticScoringOnlyAdapter({ verifyExecutionFreeze, verifyJudgeInvocation, privateKeyBindings }) {
+export function createSemanticScoringOnlyAdapter({ verifyExecutionFreeze, verifyJudgeInvocation, privateKeyBindings, invocationProtocol, normalizedPrivateKeyHashes }) {
+  if (invocationProtocol !== undefined && invocationProtocol !== SEMANTIC_NATIVE_COLLABORATION_V2) throw new Error('SEMANTIC_INVOCATION_PROTOCOL_INVALID')
+  if (normalizedPrivateKeyHashes !== undefined && (!normalizedPrivateKeyHashes || Object.keys(normalizedPrivateKeyHashes).sort().join(',') !== 'repairKey,reviewKey' || Object.values(normalizedPrivateKeyHashes).some(value => !/^[0-9a-f]{64}$/u.test(value)))) unavailable()
+  const normalizedHashes = normalizedPrivateKeyHashes && Object.freeze({ ...normalizedPrivateKeyHashes })
+  const invocationOptions = Object.freeze({ invocationProtocol })
   if (typeof verifyExecutionFreeze !== 'function' || typeof verifyJudgeInvocation !== 'function') throw new Error('SEMANTIC_TRUSTED_VERIFIERS_REQUIRED')
   if (!privateKeyBindings || Object.keys(privateKeyBindings).sort().join(',') !== 'repairKey,reviewKey,rootDir' || typeof privateKeyBindings.rootDir !== 'string' || !path.isAbsolute(privateKeyBindings.rootDir)) unavailable()
   const bindings = Object.freeze({ rootDir: privateKeyBindings.rootDir, reviewKey: binding(privateKeyBindings.reviewKey, 'review-key.json'), repairKey: binding(privateKeyBindings.repairKey, 'repair-key.json') })
@@ -102,13 +107,13 @@ export function createSemanticScoringOnlyAdapter({ verifyExecutionFreeze, verify
         // An owned, immutable copy is used across every awaited native-record lookup.
         const bundle = JSON.parse(JSON.stringify(packetBundle))
         const document = parseSemanticSubmissions(bytes)
-        const inputs = semanticInvocationInputs(bundle.publicPackets, document.submissions)
+        const inputs = semanticInvocationInputs(bundle.publicPackets, document.submissions, invocationOptions)
         const invocations = []
         for (const role of ['A', 'B', 'adjudicator']) {
           const output = document.submissions.find((item) => item.role === role).output
           invocations.push(await verifyJudgeInvocation(Object.freeze({ role, inputBytes: Buffer.from(inputs[role]), outputBytes: Buffer.from(output, 'utf8') })))
         }
-        const evidence = validateSemanticJudgments(state.projection, bundle, bytes, invocations)
+        const evidence = validateSemanticJudgments(state.projection, bundle, bytes, invocations, invocationOptions)
         const handle = Object.freeze({ executionHash: state.projection.executionHash, judgmentsHash: evidence.judgmentsHash })
         judgments.set(handle, Object.freeze({ projection: state.projection, bundle, bytes, invocations: evidence.invocations }))
         return handle
@@ -119,9 +124,9 @@ export function createSemanticScoringOnlyAdapter({ verifyExecutionFreeze, verify
       if (!state) throw new Error('SEMANTIC_JUDGMENTS_NOT_FROZEN')
       // These are the only two disk reads in the adapter. Both immutable freezes
       // and all three independent invocation receipts have already been verified.
-      const reviewKey = await loadBoundPrivateKey(bindings.rootDir, bindings.reviewKey)
-      const repairKey = await loadBoundPrivateKey(bindings.rootDir, bindings.repairKey)
-      return scoreSemanticQuality({ projection: state.projection, bundle: state.bundle, judgmentBytes: state.bytes, invocations: state.invocations, reviewKey, repairKey })
+      const reviewKey = await loadBoundPrivateKey(bindings.rootDir, bindings.reviewKey, normalizedHashes?.reviewKey)
+      const repairKey = await loadBoundPrivateKey(bindings.rootDir, bindings.repairKey, normalizedHashes?.repairKey)
+      return scoreSemanticQuality({ projection: state.projection, bundle: state.bundle, judgmentBytes: state.bytes, invocations: state.invocations, reviewKey, repairKey, invocationProtocol })
     }
   })
 }

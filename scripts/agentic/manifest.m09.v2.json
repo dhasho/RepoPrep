@@ -1,0 +1,141 @@
+{
+  "manifestVersion": 2,
+  "planVersion": "1.3",
+  "schema": {
+    "gateReportVersion": 1,
+    "contract": "agentic-module-gate-v1",
+    "manifestFile": "manifest.m09.v2.json",
+    "datasetVersion": 1,
+    "reviewProtocol": "agent-review-v1"
+  },
+  "freezeStatus": "m09-native-collaboration-v2-scoped-contract-frozen",
+  "baselineSourceCommit": "9ef10caae918a2b86c27afdd8b19cbe5ad40869c",
+  "hashAlgorithm": "sha256",
+  "configuration": {
+    "quality": {
+      "relativeMaterialErrorReduction": 0.2,
+      "minimumCoreFactCoverageDelta": 0,
+      "minimumTopicValueDelta": -0.2,
+      "maxTokenRatio": 1.1,
+      "maxP95LatencyRatio": 1.5,
+      "staticZeroErrorCandidateErrorRate": 0,
+      "staticZeroErrorMinimumCoverageDelta": 0.05,
+      "p95Method": "nearest-rank"
+    },
+    "limits": {
+      "investigation": {
+        "llmDecisionsPerTask": 3,
+        "toolCallsPerTask": 8,
+        "inputTokensPerTask": 18000,
+        "outputTokensPerTask": 6000,
+        "readBytesPerTask": 2097152,
+        "secondsPerTask": 180
+      },
+      "endToEnd": {
+        "requestsPerCoarseOrMediumRun": 5,
+        "requestsPerFineRun": 14,
+        "inputTokensPerRun": 128000,
+        "outputTokensPerRun": 65536,
+        "secondsPerRun": 600,
+        "usageRequired": true
+      }
+    },
+    "retention": {
+      "maxRuns": 20,
+      "maxAgeDays": 7,
+      "maxBytes": 104857600,
+      "sourcePayloadPersisted": false,
+      "promptPersisted": false
+    },
+    "reviewProtocol": {
+      "version": 1,
+      "kind": "independent-subagent",
+      "model": "gpt-6-luna",
+      "reviewers": 2,
+      "adjudicatorOnDisagreement": true,
+      "hideStrategyAndAuthorLabels": true,
+      "numericThresholdsUnchanged": true,
+      "externalModelAuthorizationUnchanged": true
+    },
+    "semanticReviewProtocol": {
+      "version": 2,
+      "kind": "native-collaboration",
+      "invocationProtocol": "native-collaboration-v2",
+      "judgeInputProtocol": "m09-semantic-judge-input-v2",
+      "adjudicatorInputProtocol": "m09-semantic-adjudicator-input-v2",
+      "model": "gpt-6.1-sol",
+      "roles": [
+        "A",
+        "B",
+        "adjudicator"
+      ],
+      "forkTurns": "none",
+      "freshContexts": 3,
+      "adjudicateAllPairs": 20,
+      "inputPolicy": "supplied-public-bytes-only-no-tools",
+      "externalBoundary": "trusted-root-native-observations",
+      "serviceUsageUnavailableRemainsUnavailable": true
+    }
+  },
+  "modules": {
+    "M09": {
+      "requiredCheckIds": [
+        "m09:frozen-review-and-repair-set"
+      ],
+      "requiredMetricIds": [
+        "errorRecall",
+        "falsePositiveRate",
+        "correctRepairs",
+        "introducedMaterialErrors",
+        "budgetCompliant"
+      ],
+      "limits": {
+        "erroneousSamples": 40,
+        "correctSamples": 40,
+        "repairSamples": 20,
+        "errorRecallMin": 0.85,
+        "falsePositiveRateMax": 0.1,
+        "correctRepairsMin": 14,
+        "introducedMaterialErrorsMax": 0
+      },
+      "assets": [
+        {
+          "id": "m09-review-packet",
+          "path": "scripts/agentic/datasets/v1/review-packet.json",
+          "status": "available",
+          "required": true,
+          "sha256": "26f0b354d3b850b9778ad244749e35d7ef76480142c66a047cad2e6070187385"
+        },
+        {
+          "id": "m09-review-key",
+          "path": "scripts/agentic/datasets/v1/review-key.json",
+          "status": "available",
+          "required": true,
+          "sha256": "2d36c3399be608668d08f6dc143c5a42a51ba48ae1b9d7719ceac17d432a358e"
+        },
+        {
+          "id": "m09-repair-samples",
+          "path": "scripts/agentic/datasets/v1/repair-samples.json",
+          "status": "available",
+          "required": true,
+          "sha256": "c4bc19d0eccaa8ae6f6e7b4ad8572df7605a7add2f177c703eb73aafe2ba0780"
+        },
+        {
+          "id": "m09-repair-key",
+          "path": "scripts/agentic/datasets/v1/repair-key.json",
+          "status": "available",
+          "required": true,
+          "sha256": "b54bc2fa7ce4c6cf8e32e549e98f128173cb62b1d6e3d87f0a405dd8204ad553"
+        }
+      ]
+    }
+  },
+  "realOnlyModules": [
+    "M09"
+  ],
+  "authorization": {
+    "realRunsApproved": false,
+    "reference": null
+  },
+  "assetPolicy": "M09 uses unchanged historical development assets and numeric limits. Native receipts verify bindings under the explicit trusted root observation boundary; no archive grants live authority. Raw key byte descriptors remain separate from normalized asset hashes."
+}

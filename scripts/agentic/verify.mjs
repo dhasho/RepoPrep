@@ -40,6 +40,8 @@ try {
       authorization = { authorized: true, reference: binding.reference }
     } catch { /* Invalid local approval remains blocked; verification never reads credentials. */ }
   }
+  // M09 is intentionally detached/incomplete here. Formal execution is only
+  // available through createM09QualityHost in one long-lived root-supervised Node.
   const checks = await loadChecks(moduleId, { mode, sourceRoot, reportPath, authorizationPath })
   const gateRoot = process.cwd()
   const m08Source = moduleId === 'M08' ? sourceRoot : gateRoot
