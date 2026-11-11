@@ -6,11 +6,11 @@ import type { DurableModelContext, DurableModelEvent, DurableModelJournal } from
 import type { LedgerBinding, LedgerJournalPosition, LedgerStateV1 } from './ledger-state.ts'
 import type { LedgerCriticalCursor, LedgerCriticalStep } from './ledger-critical-transitions.ts'
 import type { PreparedCriticalSpec, LedgerCriticalEvent, LedgerCriticalEnvelopeV1, LedgerCriticalOutcome } from './ledger-critical-envelope.ts'
-import type { WorkflowStore, WorkflowStoreOptions, WorkflowStoreLimits, WorkflowProducingEpoch, WorkflowRecordReference, WorkflowRunBinding } from './workflow-store.ts'
+import type { WorkflowStore, WorkflowStoreOptions, WorkflowStoreLimits, WorkflowProducingEpoch, WorkflowRecordReference, WorkflowRunBinding, WorkflowVerifiedJournal, WorkflowAttempt, WorkflowAttemptInfo } from './workflow-store.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { openWorkflowStore, readWorkflowStore } from './workflow-store.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { createBudgetLedger, blockBudgetLedger, exportBudgetLedgerState } from './budget-ledger.ts'
+import { createBudgetLedger, blockBudgetLedger, sealBudgetLedger, exportBudgetLedgerState } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { createLedgerBinding, validateLedgerState } from './ledger-state.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
@@ -108,28 +108,87 @@ function validators(prepared: PreparedCriticalSpec): WorkflowStoreOptions['valid
 export function createWorkflowLedgerJournal(input: WorkflowLedgerJournalOptions): Promise<WorkflowLedgerJournalSession> {
   const { prepared, options } = captureOptions(input, true)
   const ledger = createBudgetLedger(prepared.spec, { durable: true })
-  return initialize(prepared, options, ledger)
+  return initialize(prepared, options, ledger, false).then(value => value.session)
 }
-async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger): Promise<WorkflowLedgerJournalSession> {
+
+declare const cancellationBrand: unique symbol
+/** An empty frozen, single-consumer token. It contains no storage or business handles. */
+export interface WorkflowCancellationControl { readonly [cancellationBrand]: true }
+export type WorkflowCancellationOutcome = 'cancelled' | 'failed'
+export type WorkflowCancellationResolution =
+  | Readonly<{ status: 'accepted'; outcome: WorkflowCancellationOutcome }>
+  | Readonly<{ status: 'pending' }>
+interface CancellationStorage {
+  assertAvailable(): void
+  sealAdmission(): boolean
+  resolve(outcome: WorkflowCancellationOutcome): Promise<WorkflowCancellationResolution>
+  close(): Promise<void>
+}
+interface CancellationOwner {
+  readonly originalSpecJson: string
+  // Retain the original A2a session too; none of its raw references leave this module.
+  readonly session: WorkflowLedgerJournalSession
+  readonly storage: CancellationStorage
+  claimed: boolean
+  closing: boolean
+}
+const cancellationOwners = new WeakMap<object, CancellationOwner>()
+const pendingResolution: WorkflowCancellationResolution = Object.freeze({ status: 'pending' })
+
+/** Creates its own genuine A2a run before exposing the opaque cancellation-only token. */
+export function createWorkflowCancellationControl(input: WorkflowLedgerJournalOptions): Promise<WorkflowCancellationControl> {
+  const { prepared, options } = captureOptions(input, true)
+  const ledger = createBudgetLedger(prepared.spec, { durable: true })
+  return initialize(prepared, options, ledger, true).then(created => {
+    const token = Object.freeze({}) as WorkflowCancellationControl
+    cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, session: created.session, storage: created.storage, claimed: false, closing: false })
+    return token
+  })
+}
+/** Dispose only an unclaimed factory token. Claimed runs close through their real coordinator. */
+export function closeWorkflowCancellationControl(token: WorkflowCancellationControl): Promise<void> {
+  const owner = token && typeof token === 'object' ? cancellationOwners.get(token) : undefined
+  if (!owner || owner.claimed) return Promise.reject(new WorkflowError('invalid-argument'))
+  owner.closing = true
+  owner.storage.sealAdmission()
+  return owner.storage.close()
+}
+/** @internal Real coordinator consumer; no raw ledger, journal, W owner or attempt is returned. */
+export function claimWorkflowCancellationControl(token: WorkflowCancellationControl, spec: RunSpec): CancellationStorage {
+  const owner = token && typeof token === 'object' ? cancellationOwners.get(token) : undefined
+  if (!owner || owner.claimed || owner.closing || prepareLedgerCriticalSpec({ spec }).originalSpecJson !== owner.originalSpecJson) invalid()
+  owner.storage.assertAvailable()
+  owner.claimed = true
+  return owner.storage
+}
+
+async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage }> {
   let store: WorkflowStore | undefined
   let revoke: (() => boolean) | undefined
   try {
     store = await openWorkflowStore(options)
     const owned = store
-    // This read is under our genuine exclusive W owner. Every non-absent view is rejected.
-    if (owned.read(prepared.binding).status !== 'absent') unavailable()
-    const attempt = await owned.beginAttempt(prepared.binding)
+    if (owned.readOwned(prepared.binding).status !== 'absent') unavailable()
+    let attempt: WorkflowAttempt = await owned.beginAttempt(prepared.binding)
     let active = true
+    // Legacy A2a finish/poison remains unchanged. A2b admission closure never calls it.
     revoke = () => { active = false; blockBudgetLedger(ledger); return owned.finishAttempt(attempt) }
-    const info = owned.assertCurrent(attempt)
+    let info: WorkflowAttemptInfo = owned.assertCurrent(attempt)
     if (!same(info.binding, prepared.binding) || info.epoch.attempt !== 1) unavailable()
     let cursor = createLedgerCriticalCursor(prepared)
     let binding: LedgerBinding = createLedgerBinding(prepared.spec, prepared.genesis)
     let queue: Promise<unknown> = Promise.resolve()
     let closing: Promise<void> | undefined
-    const poison = (): void => { revoke!() }
-    const assertOwned = (): void => {
-      if (!active) throw new WorkflowError('configuration-changed')
+    let metadataActive = false
+    let fixedOutcome: WorkflowCancellationOutcome | null = null
+    let accepted: WorkflowCancellationResolution | null = null
+    let unresolved: { step: LedgerCriticalStep; bytes: Buffer } | null = null
+    const poison = (): void => {
+      if (!controlled) revoke!()
+      else { active = false; metadataActive = false; owned.finishAttempt(attempt) }
+    }
+    const assertOwned = (metadata = false): void => {
+      if (closing || (metadata ? !metadataActive : !active)) throw new WorkflowError('configuration-changed')
       try {
         const current = owned.assertCurrent(attempt)
         if (!same(current.binding, prepared.binding) || !same(current.epoch, info.epoch)) unavailable()
@@ -140,28 +199,30 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       const c = scalars(context, contextKeys)
       if (c.runId !== prepared.spec.runId || c.projectId !== prepared.spec.projectId || c.snapshotId !== prepared.spec.snapshotId || c.attemptId !== info.epoch.attemptId || c.fence !== info.epoch.owner) throw new WorkflowError('configuration-changed')
     }
-    const enqueue = (event: LedgerCriticalEvent, buildState: (position: LedgerJournalPosition) => LedgerStateV1): Promise<LedgerJournalPosition> => {
+    const enqueue = (event: LedgerCriticalEvent, buildState: (position: LedgerJournalPosition) => LedgerStateV1, metadata = false): Promise<LedgerJournalPosition> => {
       const task = queue.then(async () => {
         try {
-          assertOwned()
+          assertOwned(metadata)
           let step: LedgerCriticalStep | undefined
           let bytes: Buffer | undefined
           let built = false
           const ack = await owned.appendJournal(attempt, context => {
-            assertOwned()
-            if (built || !same(context.binding, prepared.binding) || !same(context.producingEpoch, info.epoch) || context.sequence !== cursor.logicalPosition.sequence + 1 || !same(context.previous, cursor.reference)) unavailable()
+            assertOwned(metadata)
+            if (built || unresolved || !same(context.binding, prepared.binding) || !same(context.producingEpoch, info.epoch) || context.sequence !== cursor.logicalPosition.sequence + 1 || !same(context.previous, cursor.reference)) unavailable()
             built = true
             const position = ledgerCriticalPosition(prepared, context, event)
             const state = buildState(position)
             const envelope = validateLedgerCriticalEnvelope({ format: LEDGER_CRITICAL_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance: context, event, logicalPosition: position, state }, prepared)
             step = checkLedgerCriticalTransition(cursor, envelope)
-            // W's exact complete outer encoding, not the logical marker or payload alone.
+            // W's complete outer encoding, never just its logical marker or payload.
             bytes = Buffer.from(JSON.stringify({ format: 'workflow-journal/v1', binding: context.binding, producingEpoch: context.producingEpoch, kind: 'critical-journal', schemaId: LEDGER_CRITICAL_SCHEMA_ID, payload: envelope, sequence: context.sequence, previous: context.previous }))
+            unresolved = { step, bytes }
             return envelope
           })
-          assertOwned()
-          if (!built || !step || !bytes || ack.schemaId !== LEDGER_CRITICAL_SCHEMA_ID || ack.sequence !== step.logicalPosition.sequence || !same(ack.payload, step.envelope) || !same(ack.reference.producingEpoch, info.epoch) || ack.reference.id !== 'j-' + String(ack.sequence).padStart(12, '0') || ack.reference.byteLength !== bytes.length || ack.reference.sha256 !== createHash('sha256').update(bytes).digest('hex')) unavailable()
+          assertOwned(metadata)
+          if (!built || !step || !bytes || !ackMatches(ack, step, bytes)) unavailable()
           cursor = acceptLedgerCriticalStep(step, ack.reference)
+          unresolved = null
           binding = createLedgerBinding(prepared.spec, cursor.logicalPosition)
           return step.logicalPosition
         } catch { poison(); throw new WorkflowError('unreadable') }
@@ -169,6 +230,7 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       queue = task.catch(() => {})
       return task
     }
+    const ackMatches = (ack: WorkflowVerifiedJournal, step: LedgerCriticalStep, bytes: Buffer): boolean => ack.schemaId === LEDGER_CRITICAL_SCHEMA_ID && ack.sequence === step.logicalPosition.sequence && same(ack.payload, step.envelope) && same(ack.reference.producingEpoch, step.envelope.provenance.producingEpoch) && ack.reference.id === 'j-' + String(ack.sequence).padStart(12, '0') && ack.reference.byteLength === bytes.length && ack.reference.sha256 === createHash('sha256').update(bytes).digest('hex')
     await enqueue({ kind: 'created', genesis: prepared.genesis }, position => exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position)))
     const journal: DurableModelJournal = Object.freeze({
       get binding() { return binding }, attemptId: info.epoch.attemptId, fence: info.epoch.owner, assertCurrent,
@@ -182,15 +244,114 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
         } catch { poison(); return Promise.reject(new WorkflowError('unreadable')) }
       }
     })
-    return Object.freeze({ spec: prepared.spec, ledger, journal, finish: revoke, close(): Promise<void> {
+    const closeStorage = (): Promise<void> => {
       if (!closing) {
-        revoke!()
-        // W close revokes synchronously and waits for the real pending writes/listener.
+        active = false; metadataActive = false
+        owned.finishAttempt(attempt)
         const closed = owned.close()
         closing = Promise.all([queue, closed]).then(() => {})
       }
       return closing
+    }
+    const session: WorkflowLedgerJournalSession = Object.freeze({ spec: prepared.spec, ledger, journal, finish: revoke, close(): Promise<void> {
+      revoke!()
+      return closeStorage()
     } })
+
+    // Only this factory owns W. There are no other-project or business entrances.
+    const readReconciled = () => {
+      if (closing) unavailable()
+      const view = owned.readOwned(prepared.binding)
+      if (view.status !== 'verified' || !same(view.binding, prepared.binding) || !view.journal.length) unavailable()
+      const records: { payload: LedgerCriticalEnvelopeV1; reference: WorkflowRecordReference }[] = []
+      for (const item of view.journal) {
+        const envelope = validateLedgerCriticalEnvelope(item.payload, prepared)
+        if (item.schemaId !== LEDGER_CRITICAL_SCHEMA_ID || item.sequence !== records.length + 1 || item.reference.id !== 'j-' + String(item.sequence).padStart(12, '0') || envelope.provenance.sequence !== item.sequence || !same(envelope.provenance.binding, prepared.binding) || !same(envelope.provenance.producingEpoch, item.reference.producingEpoch) || !same(envelope.provenance.previous, records.at(-1)?.reference ?? null)) unavailable()
+        records.push({ payload: envelope, reference: item.reference })
+      }
+      const folded = foldLedgerCriticalPrefix(records.map(item => ({ payload: item.payload, reference: item.reference })))
+      const latest = view.journal.at(-1)!
+      if (!folded.state || !folded.reference || !same(folded.reference, latest.reference)) unavailable()
+      if (unresolved) {
+        if (!ackMatches(latest, unresolved.step, unresolved.bytes)) unavailable()
+        cursor = acceptLedgerCriticalStep(unresolved.step, latest.reference)
+        unresolved = null
+        binding = createLedgerBinding(prepared.spec, cursor.logicalPosition)
+      }
+      if (!same(cursor.reference, folded.reference) || !same(cursor.logicalPosition, folded.logicalPosition) || !same(cursor.state, folded.state) || cursor.terminalOutcome !== folded.terminalOutcome) unavailable()
+      // This original live ledger must still agree. A fresh/restored ledger is never substituted.
+      const live = exportBudgetLedgerState(ledger, binding), disk = folded.state
+      const accounting = (state: LedgerStateV1) => ({ models: state.models, reads: state.reads, tools: state.tools, issuedIds: state.issuedIds, diagnostics: state.diagnostics, blocked: state.blocked, startedUtcMs: state.time.startedUtcMs, expiresUtcMs: state.time.expiresUtcMs, terminalElapsedMs: state.time.terminalElapsedMs })
+      if (!same(accounting(live), accounting(disk)) || live.time.utcHighWaterMs < disk.time.utcHighWaterMs || live.time.elapsedHighWaterMs < disk.time.elapsedHighWaterMs || disk.time.terminalElapsedMs !== null && !same(live.time, disk.time)) unavailable()
+      if (folded.terminalOutcome !== null && folded.terminalOutcome !== fixedOutcome) unavailable()
+      return { view, folded }
+    }
+    const acceptTerminal = (current: ReturnType<typeof readReconciled>): WorkflowCancellationResolution | null => {
+      const { view, folded } = current, manifest = view.manifest
+      if (!manifest) return null
+      // Terminal acceptance requires the latest full prefix, exact sole ledger component and real manifest.
+      if (folded.terminalOutcome !== 'cancelled' && folded.terminalOutcome !== 'failed') unavailable()
+      if (manifest.stage !== folded.terminalOutcome || !same(manifest.binding, prepared.binding) || !same(manifest.producingEpoch, view.currentEpoch) || !same(manifest.journalPosition, folded.reference) || view.components.length !== 1 || manifest.components.length !== 1 || view.components[0].reference.kind !== 'ledger' || view.components[0].reference.schemaId !== WORKFLOW_LEDGER_STATE_SCHEMA_ID || !same(manifest.components[0], view.components[0].reference) || !same(view.components[0].payload, folded.state)) unavailable()
+      accepted = Object.freeze({ status: 'accepted', outcome: folded.terminalOutcome })
+      metadataActive = false
+      owned.finishAttempt(attempt)
+      return accepted
+    }
+    const metadataTask = <T>(operation: () => Promise<T>): Promise<T> => {
+      const task = queue.then(operation)
+      queue = task.catch(() => {})
+      return task
+    }
+    const storage: CancellationStorage = Object.freeze({
+      assertAvailable() { if (!controlled || !active || closing) invalid(); assertOwned() },
+      sealAdmission() {
+        if (!active) return false
+        active = false
+        // Revoke W synchronously without blocking or otherwise changing L accounting.
+        owned.finishAttempt(attempt)
+        return true
+      },
+      async resolve(outcome: WorkflowCancellationOutcome): Promise<WorkflowCancellationResolution> {
+        if (accepted) return accepted
+        if (!controlled || active || closing || !['cancelled', 'failed'].includes(outcome)) return pendingResolution
+        await queue
+        try {
+          let current = readReconciled()
+          const persisted = acceptTerminal(current)
+          if (persisted) return persisted
+          owned.finishAttempt(attempt)
+          metadataActive = false
+          await metadataTask(async () => {
+            attempt = await owned.beginAttempt(prepared.binding)
+            info = owned.assertCurrent(attempt)
+            if (!same(info.binding, prepared.binding)) unavailable()
+            metadataActive = true
+          })
+          await enqueue({ kind: 'recovery', from: cursor.logicalPosition }, position => exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position)), true)
+          if (cursor.terminalOutcome === null) {
+            fixedOutcome ??= outcome
+            await enqueue({ kind: 'seal', outcome: fixedOutcome }, position => {
+              sealBudgetLedger(ledger)
+              return exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position))
+            }, true)
+          }
+          if (cursor.terminalOutcome !== fixedOutcome || !cursor.state) unavailable()
+          const state = cursor.state, terminalOutcome = fixedOutcome!
+          await metadataTask(() => owned.publish(attempt, { stage: terminalOutcome, components: [{ kind: 'ledger', payload: state }] }))
+          await queue
+          current = readReconciled()
+          return acceptTerminal(current) ?? pendingResolution
+        } catch {
+          metadataActive = false
+          owned.finishAttempt(attempt)
+          await queue
+          // A fully persisted terminal wins over a lost/rejected append or publish ack.
+          try { return acceptTerminal(readReconciled()) ?? pendingResolution } catch { return pendingResolution }
+        }
+      },
+      close: closeStorage
+    })
+    return { session, storage }
   } catch (error) {
     revoke?.()
     blockBudgetLedger(ledger)

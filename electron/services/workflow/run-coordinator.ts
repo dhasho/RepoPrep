@@ -1,5 +1,10 @@
 // @ts-ignore TS5097 -- Node executes this module through the direct TypeScript runner.
 import type { RunSpec } from './run-spec.ts'
+import type { WorkflowCancellationControl } from './workflow-ledger-journal.ts'
+import type { ControlledRunSession } from './workflow-cancellation-control.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { beginControlledRun } from './workflow-cancellation-control.ts'
+export type { ControlledRunSession } from './workflow-cancellation-control.ts'
 
 export const RUN_STAGES = Object.freeze([
   'created', 'scanning', 'investigating', 'tool', 'packing', 'generating',
@@ -44,6 +49,8 @@ export interface RunCoordinatorOptions {
 }
 
 export interface BeginRunOptions {
+  /** Internal opt-in, issued by the genuine cancellation-only factory. */
+  cancellationControl?: WorkflowCancellationControl
   signal?: AbortSignal
   onEvent?: (event: RunCoordinatorEvent) => void
 }
@@ -64,6 +71,7 @@ export interface RunSession {
 }
 
 export interface RunCoordinator {
+  begin(spec: RunSpec, options: BeginRunOptions & { cancellationControl: WorkflowCancellationControl }): ControlledRunSession | null
   begin(spec: RunSpec, options?: BeginRunOptions): RunSession | null
   cancel(runId: string): boolean
   cancelProject(projectId: string): boolean
@@ -120,13 +128,28 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
     if (activeProjects.get(projectId) === token) activeProjects.delete(projectId)
   }
 
-  return {
-    begin(spec, beginOptions = {}) {
+  function begin(spec: RunSpec, beginOptions: BeginRunOptions & { cancellationControl: WorkflowCancellationControl }): ControlledRunSession | null
+  function begin(spec: RunSpec, beginOptions?: BeginRunOptions): RunSession | null
+  function begin(spec: RunSpec, beginOptions: BeginRunOptions = {}): RunSession | null {
       const validId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value)
       if (!spec || !validId(spec.runId) || !validId(spec.projectId) || !validId(spec.snapshotId) || !Number.isSafeInteger(spec.budget?.total?.wallClockMs) || spec.budget.total.wallClockMs < 1) throw new TypeError('Invalid run identity or deadline')
       if (activeRuns.has(spec.runId) || activeProjects.has(spec.projectId) || seenRunIds.has(spec.runId)) return null
 
       const token = Symbol(spec.runId)
+      if (beginOptions.cancellationControl !== undefined) {
+        const controlledIdentity = Object.freeze({ runId: spec.runId, projectId: spec.projectId })
+        return beginControlledRun({
+          spec, control: beginOptions.cancellationControl, signal: beginOptions.signal,
+          observers: [options.onEvent, beginOptions.onEvent], clock,
+          canTransition: (from, to) => RUN_STAGES.includes(to) && transitions[from].has(to),
+          activate(session) {
+            activeProjects.set(controlledIdentity.projectId, token)
+            activeRuns.set(controlledIdentity.runId, { token, cancel: () => session.cancel() })
+            seenRunIds.add(controlledIdentity.runId)
+          },
+          release: () => release(controlledIdentity.runId, controlledIdentity.projectId, token)
+        })
+      }
       const identity = Object.freeze({ runId: spec.runId, projectId: spec.projectId, snapshotId: spec.snapshotId })
       const controller = new AbortController()
       const startedAt = finiteNow(clock)
@@ -275,7 +298,9 @@ export function createRunCoordinator(options: RunCoordinatorOptions = {}): RunCo
         }
       }
       return session
-    },
+  }
+  return {
+    begin,
     cancel(runId) { return activeRuns.get(runId)?.cancel() ?? false },
     cancelProject(projectId) {
       const token = activeProjects.get(projectId)
