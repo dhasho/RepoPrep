@@ -247,3 +247,16 @@ B03a 四文件已独立审查并提交为 `dc0eecf0a96ce4561447cd440dc937eb3fa27
 R4 一次性原生合成运行在第一行 JSON 解析处停止：stdout 仅 2 字节，摘要与 CRLF 一致；实际 SIGTERM close 已确认、setup 退出 0、合成 HTTP 请求/外部模型请求/证明写入均 0。失败、批准、占位和原 bundle 保留，禁止重用。新来源候选必须重新冻结 bundle/实际 preflight 和独立一次性运行批准；离线测试不转为原生 witness 或 M09 质量证据。
 
 B03b 的私有调查及 tool/read 临界落盘、原始证据/计划冻结、完整输出与已结算收据接受、成功终态、M09 真实质量、M10/M11/M13 仍未完成。M08 和已接受 E3a 测量封存；本轮真实模型请求为 0。主目录仍在 main，页面设计/UI/renderer/preload/IPC/样式/资源/默认策略/发布保持原样。
+
+
+## Electron 动态入口与历史 schema 读取验收（2026-11-11）
+
+一次性原生合成 R5 使用冻结候选 d12a615540183ab70e8eb2c694267f9a1290accf，并经过主代理真实、未 mock 的生产 preflight 后执行。setup 实际退出 0；测量在约 600 秒壁钟上限后 SIGTERM，实际 close 已核对，相关父/子进程已消失。stdout 为精确 CRLF 两字节，观察器已安装 20 个观测点，日志停在 registry-init；没有 bootstrap、ready、合成 HTTP 请求、外部模型请求或证明写入。R5 已消费，失败、批准、claim 和支持文件全部保留，禁止重试或将其当成正式 M09 质量结果。
+
+Electron 42 的 default_app 动态 import 路径可使 require.main 不再指向入口模块。修复 792685686c77604ea58b3bbef48edf56e5a100dd 保留原 CJS main 条件，另加仅适用于 Windows、Electron browser 主线程、无 ELECTRON_RUN_AS_NODE 且 argv[1] 为本文件绝对路径的入口条件；同步 bootstrap 和 native issuer/config/父证明守卫保持原有顺序。42 项完整生产入口 VM 测试、173 项 framing/source/host/publication 和 7 项直接相关 native 检查共 222 个不同案例通过；Node/Web typecheck、语法和 diff-check 通过。17 个实际 LF 源文件的聚合哈希为 cb2b18af95664d64f77c74c109fcb5c7ac41411382fd305758cd16b602ba889f。独立只读审查无 actionable finding。此前较宽 native-focused-r1 工具超时缺少 PID/退出码，仍列为结果不完整；进程快照排除了原启动时段残留进程，不能补计通过。
+
+B03b2a 三文件提交 4a0cbd57e839deb6e17b5c0e4a73ca952a890083 已由主代理审查并整合。真实 W 只按精确 schema ID 选择最多 8 个每 kind 历史解码器，当前 validator 仍是唯一写入版本；同步捕获配置、验证完整 journal/manifest 祖先及 inherited heads。混合 schema 或版本不同的续跑、publish、append 在写 marker/调用 builder 前拒绝，不隐式迁移。可见响应仍受 genuine policy 守卫，外层格式和容量上限未变。主代理完整五文件回归实际退出 0：105 项中 104 通过、0 失败、1 项 Windows 平台条件跳过；作者最终 Node/Web typecheck 通过。新 schema-routing 测试已登记在 test:agentic。
+
+历史主机仍有明确未解边界：workflow-ledger-journal 的 ledger-v1 校验闭包使用当前 prepared.spec，不能据此接受同根不同 RunSpec 的历史终态。B03b2a 仅提供存储路由前置能力，未实现关键 V2、原始 plan/lineage、生成结果与 settled receipt 接受或 succeeded 终态。B03b1 私有实际调查仍在实现；后续须在全新 run genesis 前选择版本并核对真实 W 完整记录容量。
+
+最近完整 test:agentic 仍是历史 1063 项中的 1061 通过、1 失败、1 跳过，后续仅有定向修复验证，未宣称重跑整套通过。R6 尚未运行；必须使用独立的新候选绑定、bundle、支持冻结、真实 preflight 与一次性批准。M08 和已接受 E3a R2 继续封存。正式 M09 质量、B03 后续、M10/M11/M13 和完整 PLAN 仍未完成，草稿 PR 继续保留。主目录仍为 main；本轮没有真实模型请求或页面设计/UI/renderer/preload/IPC/样式/资源/默认策略/发布变更。
