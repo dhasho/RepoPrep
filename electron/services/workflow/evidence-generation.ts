@@ -449,6 +449,9 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         let active = true
         let prefetchStarted = false
         let prefetchViolation = false
+        type FinalFenceOptions = import('../llm.ts').CallOptions & { readonly beforeFetch?: () => void }
+        const callerFinalFence = (options as FinalFenceOptions).beforeFetch
+        const gatewayFinalFence = (gatewayOptions as FinalFenceOptions).beforeFetch
         const assertPrefetchCurrent = (): void => {
           if (!active || prefetchViolation) fail('model-failed')
           assertDispatchCurrent(messages)
@@ -460,9 +463,22 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         }
         const registerAndNotify = (): void => {
           assertPrefetchCurrent()
+          beforeFetch()
           registerDispatch(messages)
           try { options.onRequest?.() } catch { /* request observers cannot replace the gateway outcome */ }
+          beforeFetch()
+        }
+        const beforeFetch = (): void => {
           assertPrefetchCurrent()
+          for (const fence of [callerFinalFence, gatewayFinalFence]) {
+            if (!fence) continue
+            const result: unknown = fence()
+            if (result !== undefined) {
+              void Promise.resolve(result).catch(() => {})
+              fail('model-failed')
+            }
+            assertPrefetchCurrent()
+          }
         }
         const admitGateway = (): void | Promise<void> => {
           assertPrefetchCurrent()
@@ -495,8 +511,9 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
             ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
             includeUsage: true,
             beforeRequest,
+            beforeFetch,
             onUsage: usage => { gatewayOptions.onUsage?.(usage) }
-          })
+          } as FinalFenceOptions)
         } finally { active = false }
       }
       const gateway = createModelGateway(spec, privateProfile, ledger, { transport })

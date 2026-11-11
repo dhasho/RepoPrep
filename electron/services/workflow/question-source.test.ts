@@ -21,13 +21,18 @@ import { createBudgetLedger } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- direct Node test runner.
 import { createEvidenceGenerationAdapter } from './evidence-generation.ts'
 // @ts-ignore TS5097 -- direct Node test runner.
-import { createFrozenEvaluationQuestionSource, createGenerationQuestionSourceRecorder, assertQuestionSourceAuthority } from './question-source.ts'
+import { createFrozenEvaluationQuestionSource, readQuestionSourceManifest, readFrozenQuestionSourceReads, createGenerationQuestionSourceRecorder, createRevisionQuestionSourceRecorder, assertQuestionSourceAuthority } from './question-source.ts'
 // @ts-ignore TS5097 -- direct Node test runner.
 import { estimateMessageTokens } from '../../../shared/token-budget.ts'
 // @ts-ignore TS5097 -- direct Node test runner.
 import { normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- direct Node test runner.
 import { fingerprintQuestion } from './question-evidence.ts'
+
+// @ts-ignore TS5097 -- direct Node test runner.
+import { createQuestionReviewService } from './question-review.ts'
+// @ts-ignore TS5097 -- direct Node test runner.
+import { createQuestionRevisionService, createQuestionRevisionTarget, readQuestionRevisionTarget, readAcceptedQuestionRevisionSource } from './question-revision.ts'
 
 const sourceText = 'export function syntheticValue() { return 42 }\n'
 function question(index = 0): QuestionItem { return { id: `question-${index}`, title: `Topic ${index}`, question: `How does function ${index} work?`, answer: 'It returns a number.', followUps: [] } }
@@ -410,4 +415,162 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   assert.equal(accepted, 1)
   assert.equal(state.adapter.metadata().length, 1)
   assert.equal(f.ledger.snapshot().total.dispatchedRequests, 1)
+})
+test('source prefetch composes caller and gateway final fences after awaited snapshot checks and observers', async t => {
+  if (!process.env.REPOPREP_SOURCE_FINAL_FENCE_MODE) {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'repoprep-source-final-fence-'))
+    t.after(() => fs.rm(temporary, { recursive: true, force: true }))
+    const gatewayFile = path.join(temporary, 'gateway.mjs')
+    const snapshotFile = path.join(temporary, 'snapshot.mjs')
+    const loaderFile = path.join(temporary, 'loader.mjs')
+    await fs.writeFile(gatewayFile, `import { createModelGateway as actual } from ${JSON.stringify(new URL('./model-gateway.ts', import.meta.url).href)};
+export function createModelGateway(spec, profile, ledger, options = {}) {
+  return actual(spec, profile, ledger, { ...options, transport: (profile, messages, emit, gatewayOptions) => options.transport(profile, messages, emit, { ...gatewayOptions,
+    beforeRequest: async () => { await Promise.resolve(); await gatewayOptions.beforeRequest?.(); globalThis.__sourceAfterIntent = true; },
+    beforeFetch: () => {
+      globalThis.__sourceGatewayFenceCalls = (globalThis.__sourceGatewayFenceCalls || 0) + 1;
+      if (globalThis.__sourceRevoked) throw new Error('Synthetic fence revoked.');
+      gatewayOptions.beforeFetch?.();
+    }
+  }) });
+}
+`)
+    await fs.writeFile(snapshotFile, `import * as actual from ${JSON.stringify(new URL('./snapshot-adapter.ts', import.meta.url).href)};
+const originals = new WeakMap();
+export async function createWorkflowSnapshot(...args) {
+  const snapshot = await actual.createWorkflowSnapshot(...args);
+  const wrapped = Object.freeze({ ...snapshot, async assertCurrent(signal) {
+    if (globalThis.__sourceAfterIntent && process.env.REPOPREP_SOURCE_FINAL_FENCE_MODE === 'revoked') { globalThis.__sourceSnapshotEntered(); await globalThis.__sourceSnapshotWait; }
+    return snapshot.assertCurrent(signal);
+  } });
+  originals.set(wrapped, snapshot);
+  return wrapped;
+}
+export function snapshotMatchesScan(snapshot, scan) { return actual.snapshotMatchesScan(originals.get(snapshot) || snapshot, scan); }
+`)
+    const sourceModule = new URL('./evidence-generation.ts', import.meta.url).href
+    await fs.writeFile(loaderFile, `import { registerHooks } from 'node:module';
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (specifier === './model-gateway.ts' && context.parentURL === ${JSON.stringify(sourceModule)}) return { url: ${JSON.stringify(pathToFileURL(gatewayFile).href)}, shortCircuit: true };
+  if (specifier === './snapshot-adapter.ts' && [${JSON.stringify(sourceModule)}, ${JSON.stringify(import.meta.url)}].includes(context.parentURL)) return { url: ${JSON.stringify(pathToFileURL(snapshotFile).href)}, shortCircuit: true };
+  return nextResolve(specifier, context);
+} });
+`)
+    for (const mode of ['repeat', 'revoked', 'observer', 'caller-promise', 'caller-nonvoid']) {
+      const child = spawnSync(process.execPath, ['--experimental-strip-types', '--import', new URL('../../../tests/register-shared-alias.mjs', import.meta.url).href, '--import', pathToFileURL(loaderFile).href, '--test', '--test-name-pattern', '^source prefetch composes caller and gateway final fences after awaited snapshot checks and observers$', fileURLToPath(import.meta.url)], { encoding: 'utf8', timeout: 30_000, env: { ...process.env, REPOPREP_SOURCE_FINAL_FENCE_MODE: mode } })
+      assert.equal(child.status, 0, `${mode}\n${child.stdout}\n${child.stderr}`)
+    }
+    return
+  }
+  const mode = process.env.REPOPREP_SOURCE_FINAL_FENCE_MODE
+  type Globals = typeof globalThis & { __sourceAfterIntent?: boolean; __sourceRevoked?: boolean; __sourceSnapshotEntered?: () => void; __sourceSnapshotWait?: Promise<void>; __sourceGatewayFenceCalls?: number }
+  const globals = globalThis as Globals
+  let enterSnapshot!: () => void; const entered = new Promise<void>(resolve => { enterSnapshot = resolve })
+  let releaseSnapshot!: () => void; const release = new Promise<void>(resolve => { releaseSnapshot = resolve })
+  globals.__sourceSnapshotEntered = enterSnapshot; globals.__sourceSnapshotWait = release
+  const f = await fixture(); t.after(f.cleanup)
+  let fetches = 0; let notifications = 0; let callerFenceCalls = 0
+  const state = await adapterFor(f, async (_profile, messages, _emit, options) => {
+    await options.beforeRequest?.()
+    const finalOptions = options as import('../llm.ts').CallOptions & { beforeFetch?: () => void }
+    finalOptions.beforeFetch?.(); finalOptions.beforeFetch?.()
+    fetches++
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return '{}'
+  })
+  const callerOptions = {
+    signal: f.signal,
+    beforeFetch: () => {
+      callerFenceCalls++
+      if (mode === 'caller-promise') return Promise.reject(new Error('synthetic asynchronous final fence'))
+      if (mode === 'caller-nonvoid') return 1
+      if (globals.__sourceRevoked) throw new Error('synthetic caller fence revoked')
+    },
+    onRequest: () => { notifications++; if (mode === 'observer') globals.__sourceRevoked = true }
+  }
+  const pending = state.adapter.requestAdapter.complete(state.prepared, () => undefined, callerOptions)
+  if (mode === 'revoked') { await entered; globals.__sourceRevoked = true; releaseSnapshot() }
+  if (mode === 'repeat') {
+    await pending
+    assert.equal(fetches, 1); assert.equal(notifications, 1); assert.equal(state.adapter.metadata().length, 1)
+    assert.ok(callerFenceCalls >= 4); assert.ok((globals.__sourceGatewayFenceCalls ?? 0) >= 4)
+    state.accept(); await state.adapter.finalize(result(f, state.questions)); await state.adapter.sourceFor(state.questions[0])
+  } else {
+    await assert.rejects(pending, { code: 'model-failed' })
+    assert.equal(fetches, 0)
+    assert.equal(notifications, mode === 'observer' ? 1 : 0)
+    assert.equal(state.adapter.metadata().length, 0)
+    assert.equal(f.signal.aborted, false)
+    if (mode === 'revoked') assert.equal(f.ledger.snapshot().total.dispatchedRequests, 1)
+  }
+})
+
+
+test('a completed semantic revision source requires its private recorder and preserves original and actual repair receipt lineage', async t => {
+  const f = await fixture('revision-lineage'); t.after(f.cleanup)
+  const state = await completed(f)
+  const authority = state.adapter.sourceAuthority
+  const originalQuestion = state.questions[0]
+  const originalSource = await state.adapter.sourceFor(originalQuestion)
+  const original = authority.describe(originalSource, originalQuestion)
+  const findings = [{ kind: 'missing-condition', path: 'answer', evidenceIds: f.ids, reason: 'Synthetic repair requirement.' }]
+  let repairHash = ''
+  const known = (value: unknown): ModelTransport => async (_profile, messages, _emit, options) => {
+    await options.beforeRequest?.()
+    ;(options as import('../llm.ts').CallOptions & { beforeFetch?: () => void }).beforeFetch?.()
+    const inputTokens = estimateMessageTokens(messages)
+    options.onUsage?.({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1 })
+    return JSON.stringify(value)
+  }
+  const assessed = await createQuestionReviewService({ authority, profile: f.profile, transport: known({ assessment: 'material-risk', findings }) }).review({ source: originalSource, question: originalQuestion })
+  assert.equal(assessed.status, 'assessed'); if (assessed.status !== 'assessed') throw new Error('Expected genuine review.')
+  const target = createQuestionRevisionTarget({ authority, result: result(f, state.questions) })
+  const { id: _id, ...content } = originalQuestion
+  const patch = { question: { ...content, answer: 'It returns the fixed [[RepairTerm]] value.' }, evidenceIds: f.ids, glossary: { RepairTerm: 'A fixed returned number. It is synthetic test data.' } }
+  const revision = await createQuestionRevisionService({ authority, profile: f.profile, transport: async (profile, messages, emit, options) => {
+    repairHash = createHash('sha256').update(JSON.stringify(messages)).digest('hex')
+    return known(patch)(profile, messages, emit, options)
+  } }).revise({ target, source: originalSource, questionId: originalQuestion.id, outcome: assessed, findingIds: [assessed.findings[0].id] })
+  assert.equal(revision.status, 'applied'); if (revision.status !== 'applied') throw new Error('Expected applied revision.')
+  const current = readQuestionRevisionTarget(target).result
+  const revisedQuestion = current.sections[0].questions[0]
+  const description = await authority.assertCurrent(revision.source, revisedQuestion)
+  assert.equal(readAcceptedQuestionRevisionSource(target, originalQuestion.id), revision.source)
+  assert.equal(description.origin, 'completed-semantic-revision')
+  assert.equal(description.verification, 'source-bound-unverified')
+  assert.equal(description.requestHash, repairHash)
+  assert.deepEqual(description.revision?.before, { questionFingerprint: original.questionFingerprint, requestId: original.requestId, requestHash: original.requestHash, manifestHash: original.manifestHash })
+  assert.deepEqual(description.revision?.after, { questionFingerprint: fingerprintQuestion(revisedQuestion), requestId: description.requestId, requestHash: repairHash, manifestHash: description.manifestHash })
+  assert.deepEqual(description.revision?.findingIds, [assessed.findings[0].id])
+  assert.deepEqual(description.evidenceIds, f.ids)
+  assert.equal(Object.isFrozen(description.revision), true)
+  assert.equal(Object.isFrozen(description.revision?.before), true)
+  assert.equal(Object.isFrozen(description.revision?.findingIds), true)
+  const receipt = f.ledger.snapshot().reservations.find(entry => entry.id === description.requestId)
+  assert.equal(receipt?.state, 'settled'); assert.equal(receipt?.stage, 'repair'); assert.ok(receipt?.usage)
+  assert.equal(authority.describe(originalSource, originalQuestion), original)
+  assert.throws(() => authority.describe(revision.source, originalQuestion), { code: 'unknown-evidence' })
+  for (const value of [{ ...revision.source }, structuredClone(revision.source), JSON.parse(JSON.stringify(description))]) assert.throws(() => authority.describe(value, revisedQuestion), { code: 'unknown-evidence' })
+  const fake = { authority, source: originalSource, question: originalQuestion, claim: { kind: 'question-revision-claim' as const } }
+  for (const owner of [{}, description, state.sidecar, fake]) assert.throws(() => createRevisionQuestionSourceRecorder(fake, owner), { code: 'permission-denied' })
+  const rereview = await createQuestionReviewService({ authority, profile: f.profile, glossary: current.glossary, transport: known({ assessment: 'no-material-risk', findings: [] }) }).review({ source: revision.source, question: revisedQuestion })
+  assert.equal(rereview.status, 'assessed')
+  assert.equal(f.ledger.snapshot().total.dispatchedRequests, 4)
+})
+
+
+test('source import metadata exposes original immutable manifest/read receipts without ledger copying or capability import', async t => {
+  const f = await fixture('metadata-source'); t.after(f.cleanup)
+  const imported = await createFrozenEvaluationQuestionSource({ ...f, question: question(), glossary: {}, evidence: [{ fileId: f.file.fileId, range: { startLine: 1, endLine: 1 } }] })
+  assert.equal(imported.authority.ledger, f.ledger)
+  const manifest = readQuestionSourceManifest(imported.authority, imported.source, imported.question)
+  const reads = readFrozenQuestionSourceReads(imported.authority, imported.source, imported.question)
+  assert.equal(manifest.manifestHash, imported.authority.describe(imported.source, imported.question).manifestHash)
+  assert.equal(readQuestionSourceManifest(imported.authority, imported.source, imported.question), manifest)
+  assert.equal(Object.isFrozen(manifest), true); assert.equal(Object.isFrozen(reads), true); assert.equal(Object.isFrozen(reads[0]), true)
+  assert.match(reads[0].id, /^evaluation-read-/); assert.equal(reads[0].reservedBytes, f.file.byteLength); assert.equal(reads[0].actualBytes, 0)
+  assert.equal(reads[0].state, 'settled'); assert.equal(f.ledger.snapshot().total.readBytes, reads[0].actualBytes)
+  assert.throws(() => readQuestionSourceManifest(imported.authority, { ...imported.source }, imported.question), { code: 'unknown-evidence' })
+  assert.throws(() => readFrozenQuestionSourceReads(imported.authority, structuredClone(imported.source), imported.question), { code: 'unknown-evidence' })
 })

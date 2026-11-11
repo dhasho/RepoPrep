@@ -13,10 +13,20 @@ import { WorkflowError } from './project-contract.ts'
 import { ownsGenerationSourceRecorder } from './evidence-generation.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { validateSingleQuestionEvaluationInput } from './question-patch.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { ownsQuestionRevisionSourceRecorder } from './question-revision.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { guardQuestionRevisionClaim, describeQuestionRevisionClaim, type QuestionRevisionClaim } from './question-review.ts'
 
 /** Opaque process capability. Its enumerable shape never authorizes a source. */
 export interface QuestionSourceCapability { readonly kind: 'question-source' }
-export type QuestionSourceOrigin = 'completed-generation' | 'frozen-evaluation-input'
+export type QuestionSourceOrigin = 'completed-generation' | 'frozen-evaluation-input' | 'completed-semantic-revision'
+export interface QuestionRevisionSourceLineage {
+  readonly version: 1
+  readonly before: Readonly<{ questionFingerprint: string; requestId: string | null; requestHash: string; manifestHash: string }>
+  readonly after: Readonly<{ questionFingerprint: string; requestId: string; requestHash: string; manifestHash: string }>
+  readonly findingIds: readonly string[]
+}
 export interface QuestionSourceDescription {
   readonly version: 1
   readonly origin: QuestionSourceOrigin
@@ -31,6 +41,7 @@ export interface QuestionSourceDescription {
   readonly requestHash: string
   readonly manifestHash: string
   readonly evidenceIds: readonly string[]
+  readonly revision?: QuestionRevisionSourceLineage
 }
 
 export interface QuestionSourceAuthorityInput {
@@ -59,6 +70,23 @@ interface Binding {
   readonly dispatch?: Dispatch
 }
 const capabilities = new WeakMap<object, Binding>()
+export interface FrozenQuestionSourceRead { readonly id: string; readonly reservedBytes: number; readonly actualBytes: number; readonly state: 'settled' }
+const frozenSourceReads = new WeakMap<object, readonly FrozenQuestionSourceRead[]>()
+/** Reads the original immutable packet, without repacking or issuing a capability. */
+export function readQuestionSourceManifest(authority: QuestionSourceAuthority, source: unknown, question: QuestionItem): PackedContext['manifest'] {
+  assertQuestionSourceAuthority(authority)
+  authority.describe(source, question)
+  const binding = source && typeof source === 'object' ? capabilities.get(source) : undefined
+  if (!binding || binding.authority !== authority) fail()
+  return binding.packet.manifest
+}
+/** Successful frozen imports expose only their actual settled source-read receipts. */
+export function readFrozenQuestionSourceReads(authority: QuestionSourceAuthority, source: unknown, question: QuestionItem): readonly FrozenQuestionSourceRead[] {
+  readQuestionSourceManifest(authority, source, question)
+  const reads = source && typeof source === 'object' ? frozenSourceReads.get(source) : undefined
+  if (!reads) fail()
+  return reads
+}
 const authorities = new WeakSet<object>()
 export function assertQuestionSourceAuthority(value: unknown): asserts value is QuestionSourceAuthority {
   if (!value || typeof value !== 'object' || !authorities.has(value)) fail('unknown-evidence')
@@ -133,13 +161,13 @@ function createAuthority(input: QuestionSourceAuthorityInput): QuestionSourceAut
   authorities.add(authority)
   return authority
 }
-function issue(authority: QuestionSourceAuthority, question: QuestionItem, packet: PackedContext, origin: QuestionSourceOrigin, evidenceIds: readonly string[], requestId: string | null, dispatch?: Dispatch): QuestionSourceCapability {
+function issue(authority: QuestionSourceAuthority, question: QuestionItem, packet: PackedContext, origin: QuestionSourceOrigin, evidenceIds: readonly string[], requestId: string | null, dispatch?: Dispatch, revision?: QuestionRevisionSourceLineage): QuestionSourceCapability {
   if (!ID.test(question.id) || evidenceIds.length < 1 || evidenceIds.length > 16 || evidenceIds.some(id => !EVIDENCE_ID.test(id) || !packet.manifest.packedIds.includes(id)) || new Set(evidenceIds).size !== evidenceIds.length) fail()
   const description: QuestionSourceDescription = Object.freeze({
-    version: 1, origin, verification: origin === 'completed-generation' ? 'source-bound-unverified' : 'imported-input-unverified',
+    version: 1, origin, verification: origin === 'frozen-evaluation-input' ? 'imported-input-unverified' : 'source-bound-unverified',
     runId: authority.spec.runId, projectId: authority.spec.projectId, snapshotId: authority.spec.snapshotId,
     questionId: question.id, questionFingerprint: fingerprintQuestion(question), requestId,
-    requestHash: packet.manifest.requestHash, manifestHash: packet.manifest.manifestHash, evidenceIds: Object.freeze([...evidenceIds])
+    requestHash: packet.manifest.requestHash, manifestHash: packet.manifest.manifestHash, evidenceIds: Object.freeze([...evidenceIds]), ...(revision ? { revision } : {})
   })
   const source = Object.freeze({ kind: 'question-source' as const })
   capabilities.set(source, Object.freeze({ authority, description, packet, ...(dispatch ? { dispatch } : {}) }))
@@ -214,6 +242,7 @@ export async function createFrozenEvaluationQuestionSource(input: FrozenEvaluati
   await authority.snapshot.assertCurrent(authority.signal)
   checkCurrent(authority)
   const ids: string[] = []
+  const reads: FrozenQuestionSourceRead[] = []
   for (const item of evidence) {
     checkCurrent(authority)
     const file = authority.snapshot.files.find(file => file.fileId === item.fileId)
@@ -223,6 +252,7 @@ export async function createFrozenEvaluationQuestionSource(input: FrozenEvaluati
     // An attempted read retains its conservative reservation on failure; no unproved unsent release.
     const { read, consumedBytes } = await authority.snapshot.readFile(item.fileId, authority.signal)
     authority.ledger.settleRead(readId, consumedBytes)
+    reads.push(Object.freeze({ id: readId, reservedBytes: file.byteLength, actualBytes: consumedBytes, state: 'settled' }))
     checkCurrent(authority)
     if (!authority.snapshot.ownsRead(read)) fail('unknown-evidence')
     const records = await authority.store.issue(read, item.range, authority.signal)
@@ -238,5 +268,71 @@ export async function createFrozenEvaluationQuestionSource(input: FrozenEvaluati
   checkCurrent(authority)
   assertHealthyLedger(authority.ledger)
   if (fingerprintQuestion(unit.question) !== fingerprint) fail()
-  return Object.freeze({ authority, source: issue(authority, unit.question, packed.context, 'frozen-evaluation-input', ids, null), question: unit.question, glossary: unit.glossary })
+  const source = issue(authority, unit.question, packed.context, 'frozen-evaluation-input', ids, null)
+  frozenSourceReads.set(source, Object.freeze(reads))
+  return Object.freeze({ authority, source, question: unit.question, glossary: unit.glossary })
+}
+
+
+export interface RevisionQuestionSourceRecorderInput {
+  readonly authority: QuestionSourceAuthority
+  readonly source: QuestionSourceCapability
+  readonly question: QuestionItem
+  readonly claim: QuestionRevisionClaim
+}
+
+/** @internal Only the revision module owns the token. No JSON or generic receipt issuer. */
+export function createRevisionQuestionSourceRecorder(input: RevisionQuestionSourceRecorderInput, owner: unknown) {
+  if (!ownsQuestionRevisionSourceRecorder(owner, input)) fail('permission-denied')
+  assertQuestionSourceAuthority(input.authority)
+  const { authority, source, question, claim } = input
+  const original = authority.describe(source, question)
+  const selected = describeQuestionRevisionClaim(claim)
+  if (selected.authority !== authority || selected.source !== source || selected.expectedFingerprint !== original.questionFingerprint || selected.question.id !== original.questionId) fail()
+  const dispatches = new Map<string, Dispatch>()
+  const ensure = (): void => {
+    checkCurrent(authority)
+    guardQuestionRevisionClaim(claim)
+    const prior = capabilities.get(source)
+    if (!prior || prior.authority !== authority || prior.description !== original || question.id !== original.questionId || fingerprintQuestion(question) !== original.questionFingerprint) fail()
+  }
+  return Object.freeze({
+    recordDispatch(requestId: string, packet: PackedContext): void {
+      ensure()
+      if (!ID.test(requestId) || dispatches.has(requestId) || dispatches.size >= 2) fail()
+      assertPacket(authority, packet)
+      if (original.evidenceIds.some(id => !packet.manifest.requiredIds.includes(id) || !packet.manifest.packedIds.includes(id))) fail()
+      dispatches.set(requestId, { packet, stage: 'repair', state: 'pending' })
+    },
+    completeDispatch(requestId: string): void {
+      ensure()
+      const dispatch = dispatches.get(requestId)
+      if (!dispatch || dispatch.state !== 'pending') fail()
+      dispatch.state = 'completed'
+      try { assertReceipt(authority, dispatch, requestId) } catch (error) { dispatch.state = 'failed'; throw error }
+    },
+    failDispatch(requestId: string): void { const dispatch = dispatches.get(requestId); if (dispatch) dispatch.state = 'failed' },
+    async prepareSource(value: { readonly requestId: string; readonly question: QuestionItem; readonly evidenceIds: readonly string[] }): Promise<QuestionSourceCapability> {
+      ensure()
+      const dispatch = dispatches.get(value.requestId)
+      const afterFingerprint = fingerprintQuestion(value.question)
+      if (!dispatch || value.question.id !== original.questionId || afterFingerprint === original.questionFingerprint) fail()
+      assertReceipt(authority, dispatch, value.requestId)
+      await authority.assertCurrent(source, question)
+      ensure()
+      await assertIssuedPacket(authority, dispatch.packet)
+      ensure()
+      await authority.snapshot.assertCurrent(authority.signal)
+      ensure()
+      assertReceipt(authority, dispatch, value.requestId)
+      if (fingerprintQuestion(value.question) !== afterFingerprint || value.question.id !== original.questionId) fail()
+      const revision: QuestionRevisionSourceLineage = Object.freeze({
+        version: 1,
+        before: Object.freeze({ questionFingerprint: original.questionFingerprint, requestId: original.requestId, requestHash: original.requestHash, manifestHash: original.manifestHash }),
+        after: Object.freeze({ questionFingerprint: afterFingerprint, requestId: value.requestId, requestHash: dispatch.packet.manifest.requestHash, manifestHash: dispatch.packet.manifest.manifestHash }),
+        findingIds: Object.freeze(selected.findings.map(finding => finding.id))
+      })
+      return issue(authority, value.question, dispatch.packet, 'completed-semantic-revision', value.evidenceIds, value.requestId, dispatch, revision)
+    }
+  })
 }
