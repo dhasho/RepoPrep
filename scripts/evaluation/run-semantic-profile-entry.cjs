@@ -1,6 +1,7 @@
 'use strict'
 
 const path = require('node:path')
+const { isMainThread } = require('node:worker_threads')
 const io = require('./m09-semantic-io.cjs')
 const native = require('./m09-semantic-native.cjs')
 
@@ -29,7 +30,12 @@ async function continueNative(token) {
 }
 // No await, store import, readiness callback or asynchronous setup precedes this
 // one capture/stage/path-switch bootstrap. E3a remains the only staging helper.
-if (require.main === module) {
+const electronMainEntry = process.platform === 'win32' && process.type === 'browser' &&
+  typeof process.versions.electron === 'string' && isMainThread &&
+  !Object.hasOwn(process.env, 'ELECTRON_RUN_AS_NODE') && Array.isArray(process.argv) &&
+  typeof process.argv[1] === 'string' && path.isAbsolute(process.argv[1]) &&
+  path.resolve(process.argv[1]) === path.resolve(__filename)
+if (require.main === module || electronMainEntry) {
   try {
     const token = native.bootstrapNativeSemanticContext(args(process.argv.slice(2)), __filename)
     void continueNative(token)

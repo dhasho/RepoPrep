@@ -25,10 +25,10 @@
       "scripts/evaluation/m09-semantic-child-framing.cjs": "8a54d7dffa7c98c398771aeef7e5dd1f919ea6f07dd4df8148e1d5f2654ce612",
       "scripts/evaluation/m09-semantic-io.cjs": "a64c2a9ded7b669e0d6c0dd9e05b9b00d23867ebffebcf76c19490333a208deb",
       "scripts/evaluation/m09-semantic-native.cjs": "316dabdc7fb61e334d419d6c9dfce2844f8c498aec74b96dd40e0172cd448f8a",
-      "scripts/evaluation/run-semantic-profile-entry.cjs": "5aa431d4354bb7fedc60324e427c093f7f9323e469d54e9744be05ca2f8bcba0",
+      "scripts/evaluation/run-semantic-profile-entry.cjs": "cfcfd5b7c7d46aa8988a6eda6274088551b85a26ef119db0ba99438efa957834",
       "scripts/evaluation/run-semantic-profile.cjs": "15e06ea0b58ec4f3f5030555dcedfd4f5b89001bec39bc392e0cb733a32d607b"
     },
-    "sourceSha256": "470ff6baa4e314b92397574bb9736e0004505d63e6e305837cf12872adbf6ef9",
+    "sourceSha256": "cb2b18af95664d64f77c74c109fcb5c7ac41411382fd305758cd16b602ba889f",
     "protocolSha256": "0f6f686fd98221d136fb095fe4bc9005a5363150fe40a3a6a934591ecca138c3",
     "assetDescriptorsSha256": "a78d42a3556756311c7f1c2b8efd3f93818496db2199aaf67842b79db916c87b"
   }
