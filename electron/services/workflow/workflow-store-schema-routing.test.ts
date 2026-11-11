@@ -251,7 +251,8 @@ for (const kind of ['ledger', 'critical-journal'] as const) test('historical rou
     const current = { ...v2, [kind]: { schemaId: v2[kind]!.schemaId, validate: (value: unknown) => { if (object(value)) seen.push(value.version as number); return v2[kind]!.validate(value) } } }
     const config = options(directory, current)
     assert.equal(readWorkflowStore(config, binding).status, 'unavailable')
-    assert.ok(seen.includes(2), 'new exact schema was decoded before conflicting ancestry rejected')
+    if (kind === 'ledger') assert.equal(seen.length, 0, 'complete conflicting ancestry must reject before any component decoder')
+    else assert.ok(seen.includes(2), 'new exact journal codec was checked before conflicting ancestry rejected')
     await assert.rejects(openWorkflowStore(config), { code: 'unavailable' })
   } finally { await store?.close(); cleanup(directory) }
 })
