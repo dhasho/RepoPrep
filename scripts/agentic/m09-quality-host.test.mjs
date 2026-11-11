@@ -300,9 +300,10 @@ test('scoped manifest/lock preserve historical global protocol, assets and sourc
   assert.match(frozen.lock.m09.sourceSha256, /^[0-9a-f]{64}$/u)
   assert.equal(frozen.lock.m09.sourceHashMeaning, 'sha256-canonical-scoped-source-file-map-v1')
   assert.equal(frozen.lock.m09.sourceFiles['scripts/agentic/m09-quality-host.mjs'], semanticSha256(await readFile(path.join(root, 'scripts/agentic/m09-quality-host.mjs'))))
-  assert.equal(semanticSha256(historicalBytes), '317399efba2720e236858ad2caa4f92e301f8b15a6f9c0c8dcfebadeeffa2d09')
+  assert.ok(['5207defd296efdd657b7d9bcb5e6dda7bc6f9c5112ed260e97f56a745fce3574', '317399efba2720e236858ad2caa4f92e301f8b15a6f9c0c8dcfebadeeffa2d09'].includes(semanticSha256(historicalBytes)))
   assert.equal(semanticSha256(Buffer.from(historicalBytes.toString('utf8').replaceAll('\r\n', '\n'))), '5207defd296efdd657b7d9bcb5e6dda7bc6f9c5112ed260e97f56a745fce3574')
-  assert.equal(semanticSha256(historicalLockBytes), '81062babf88197cd5608638e6da5e144faa03e1aaf53904996446a5aa5a31767')
+  assert.ok(['102534258dadfc10322ba89a53c14ba19ec3e4077bea413dbc8e21272c668c57', '81062babf88197cd5608638e6da5e144faa03e1aaf53904996446a5aa5a31767'].includes(semanticSha256(historicalLockBytes)))
+  assert.equal(semanticSha256(Buffer.from(historicalLockBytes.toString('utf8').replaceAll('\r\n', '\n'))), '102534258dadfc10322ba89a53c14ba19ec3e4077bea413dbc8e21272c668c57')
 })
 
 test('scoped lock rejects manifest, protocol, limits, private asset or source map tampering without reading any key', async t => {
