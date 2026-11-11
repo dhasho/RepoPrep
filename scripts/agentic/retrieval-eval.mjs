@@ -507,15 +507,25 @@ export function createGuardedTransport({ collector, runId, getReservation, appen
       beforeRequest: () => {
         const reservation = getReservation()
         admission = collector.admit(runId, reservation)
-        try {
-          options.beforeRequest?.()
-          appendJournal({ type: 'request-admitted', runId, requestId: admission.requestId, estimatedInputTokens: admission.estimatedInputTokens, estimatedOutputTokens: admission.estimatedOutputTokens, contextChars: admission.contextChars })
-        } catch (error) {
+        const rejectDispatch = error => {
           dispatchFailed = true
           if (journalError) collector.markUnknown(admission)
           else collector.failBeforeDispatch(admission)
           throw error
         }
+        const acceptDispatch = () => {
+          const finalGuard = options.beforeFetch?.()
+          if (finalGuard !== undefined) {
+            void Promise.resolve(finalGuard).catch(() => {})
+            throw new Error('invalid-final-guard')
+          }
+          appendJournal({ type: 'request-admitted', runId, requestId: admission.requestId, estimatedInputTokens: admission.estimatedInputTokens, estimatedOutputTokens: admission.estimatedOutputTokens, contextChars: admission.contextChars })
+        }
+        try {
+          const guarded = options.beforeRequest?.()
+          if (guarded && typeof guarded.then === 'function') return Promise.resolve(guarded).then(acceptDispatch).catch(rejectDispatch)
+          acceptDispatch()
+        } catch (error) { return rejectDispatch(error) }
       },
       onUsage: usage => {
         if (usageSeen) { journalError = new Error('duplicate-usage'); collector.markUnknown(admission); return }
