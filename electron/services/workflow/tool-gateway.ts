@@ -13,6 +13,12 @@ export interface ToolBudget {
   releaseRead(id: string): void
   assertCanContinue(stage?: ModelStage): void
 }
+/** Internal composition port. The original-run boundary never accepts this from callers. */
+export interface AwaitedToolAccounting {
+  chargeTool(): Promise<void>
+  reserveRead(bytes: number): Promise<string>
+  settleRead(id: string, actualBytes: number): Promise<void>
+}
 export interface ToolResult {
   readonly actionId: string
   readonly tool: ToolName | 'unknown'
@@ -97,6 +103,13 @@ function validateArgs(tool: ToolName, args: unknown): boolean {
 }
 
 export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: WorkflowEvidenceStore, ledger: ToolBudget, options: { signal?: AbortSignal } = {}) {
+  return toolGateway(snapshot, store, ledger, options)
+}
+/** @internal Shared algorithms; only genuine original composition supplies accounting. */
+export function createAccountedToolGateway(snapshot: WorkflowProjectSnapshot, store: WorkflowEvidenceStore, ledger: ToolBudget, accounting: AwaitedToolAccounting, options: { signal?: AbortSignal } = {}) {
+  return toolGateway(snapshot, store, ledger, options, accounting)
+}
+function toolGateway(snapshot: WorkflowProjectSnapshot, store: WorkflowEvidenceStore, ledger: ToolBudget, options: { signal?: AbortSignal }, accounting?: AwaitedToolAccounting) {
   if (!snapshot || !store || !ledger || !dataObject(options, ['signal'])) workflow('invalid-argument')
   if (options.signal !== undefined) abort(options.signal)
   const reads = new Map<string, CachedRead>()
@@ -124,16 +137,17 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
       read = cached.read
       cacheHit = true
     } else {
-      const reservation = `tool-read:${snapshot.snapshotId}:${++globalReadNonce}`
       ledger.assertCanContinue('investigation')
-      ledger.reserveRead(reservation, file.byteLength)
+      const reservation = accounting ? await accounting.reserveRead(file.byteLength) : `tool-read:${snapshot.snapshotId}:${++globalReadNonce}`
+      if (!accounting) ledger.reserveRead(reservation, file.byteLength)
       let ioStarted = false
       try {
         abort(signal)
         ledger.assertCanContinue('investigation')
         ioStarted = true
         const response = await snapshot.readFile(file.fileId, signal)
-        ledger.settleRead(reservation, response.consumedBytes)
+        if (accounting) await accounting.settleRead(reservation, response.consumedBytes)
+        else ledger.settleRead(reservation, response.consumedBytes)
         abort(signal)
         await snapshot.assertCurrent(signal)
         abort(signal)
@@ -156,7 +170,7 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
           }
         }
       } catch (error) {
-        if (!ioStarted) { try { ledger.releaseRead(reservation) } catch { /* conservative if ledger rejects */ } }
+        if (!accounting && !ioStarted) { try { ledger.releaseRead(reservation) } catch { /* conservative if ledger rejects */ } }
         throw error
       }
     }
@@ -188,7 +202,10 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
       }
       abort(merged)
       ledger.assertCanContinue('investigation')
-      ledger.chargeTool(`tool-call:${snapshot.snapshotId}:${++globalToolCallNonce}`, 'investigation')
+      if (accounting) await accounting.chargeTool()
+      else ledger.chargeTool(`tool-call:${snapshot.snapshotId}:${++globalToolCallNonce}`, 'investigation')
+      abort(merged)
+      ledger.assertCanContinue('investigation')
       let out: ToolResult
       const args = action.args
       if (action.tool === 'get_overview') {
@@ -229,7 +246,7 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
             }
             for (const line of foundLines) { const cited = await issue(ctx, line, line, merged); evidenceIds.push(...cited.evidence.map(item => item.id)) }
           } catch (error) {
-            if ((error as { code?: string })?.code === 'budget-exhausted') { reason = 'budget-exhausted'; break }
+            if (!accounting && (error as { code?: string })?.code === 'budget-exhausted') { reason = 'budget-exhausted'; break }
             throw error
           }
         }
@@ -266,6 +283,7 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
       actions.set(action.actionId, { fingerprint, result: out })
       return out
     } catch (error) {
+      if (accounting) throw error instanceof WorkflowError ? error : new WorkflowError('unreadable')
       const code = error instanceof WorkflowError ? error.code : (error as { code?: string })?.code === 'budget-exhausted' || (error instanceof Error && error.message === 'Workflow budget exhausted.') ? 'budget-exhausted' : 'unreadable'
       if (code === 'stale-snapshot') { reads.clear(); gatewayCacheBytes = 0 }
       const status: ToolResult['status'] = code === 'cancelled' || merged?.aborted ? 'cancelled' : code === 'budget-exhausted' ? 'budget-exhausted' : 'rejected'
@@ -282,6 +300,7 @@ export function createToolGateway(snapshot: WorkflowProjectSnapshot, store: Work
       actionId = actionValue.actionId as string; tool = actionValue.tool as ToolName
       return await run({ actionId, tool, args: actionValue.args as Record<string, unknown> }, signalMerged)
     } catch (error) {
+      if (accounting) throw error instanceof WorkflowError ? error : new WorkflowError('invalid-argument')
       const code = error instanceof WorkflowError ? error.code : 'invalid-argument'
       return Promise.resolve(result(actionId, tool, code === 'cancelled' ? 'cancelled' : code === 'budget-exhausted' ? 'budget-exhausted' : 'rejected', SAFE_REASON.has(code) ? code : 'invalid-argument'))
     }
