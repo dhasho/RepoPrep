@@ -1,6 +1,24 @@
 import { createHash } from 'node:crypto'
 import { types } from 'node:util'
 import type { RunSpec } from './run-spec.ts'
+import type { ScanResult } from '../scanner.ts'
+import type { WorkflowProjectSnapshot, WorkflowEvidenceStore } from './project-contract.ts'
+import type { ControlledRunSession } from './run-coordinator.ts'
+import type { InvestigationResult } from './investigation-contract.ts'
+import type { AwaitedToolAccounting } from './tool-gateway.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createRunCoordinator } from './run-coordinator.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createEvidenceStore } from './evidence-store.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createAccountedToolGateway } from './tool-gateway.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { snapshotMatchesScan } from './snapshot-adapter.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { INVESTIGATION_PROMPT_VERSION, runInvestigation } from './investigation-controller.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { hashModelMessages } from './model-journal.ts'
+
 import type { LlmProfile } from '../../../shared/types.ts'
 import type { ModelTransport } from './model-gateway.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
@@ -10,7 +28,7 @@ import { createAcceptedWorkRegistry } from './accepted-work-registry.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { LLM_PROFILE_LIMITS } from '../../../shared/result-contract.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { normalizeBaseUrl } from '../llm.ts'
+import { normalizeBaseUrl, chatCompletionStream } from '../llm.ts'
 import type { BudgetLedger } from './budget-ledger.ts'
 import type { DurableModelContext, DurableModelEvent, DurableModelJournal } from './model-journal.ts'
 import type { LedgerBinding, LedgerJournalPosition, LedgerStateV1 } from './ledger-state.ts'
@@ -207,12 +225,15 @@ function captureOriginalProfile(value: unknown, spec: RunSpec): LlmProfile {
   if (profile.id !== spec.model.profileId || profile.model !== spec.model.model || endpointFingerprint !== spec.model.endpointFingerprint || (profile.protocol ?? 'openai') !== (spec.model.protocol ?? 'openai') || profile.reasoningEffort !== spec.model.reasoningEffort || (profile.temperature ?? 0.4) !== (spec.model.temperature ?? 0.4) || profile.contextWindowTokens !== spec.model.contextWindowTokens || profile.maxOutputTokens !== spec.model.maxOutputTokens) throw new WorkflowError('configuration-changed')
   return profile
 }
-function originalRunWork(ledger: BudgetLedger, spec: RunSpec): OriginalRunWork {
+function originalRunWork(ledger: BudgetLedger, spec: RunSpec) {
   const registry = createAcceptedWorkRegistry()
   const stages = registry.createIssuer('original-coordinator-stage')
   const observers = registry.createIssuer('original-coordinator-observer')
+  const model = registry.createIssuer('original-model')
+  const tool = registry.createIssuer('original-tool')
+  const source = registry.createIssuer('original-source')
   const controller = new AbortController()
-  return Object.freeze({
+  const control: OriginalRunWork = Object.freeze({
     signal: controller.signal,
     runStage<T>(start: () => T | PromiseLike<T>): Promise<T> { return stages.run(start) },
     runObserver<T>(start: () => T | PromiseLike<T>): Promise<T> { return observers.run(start) },
@@ -223,15 +244,20 @@ function originalRunWork(ledger: BudgetLedger, spec: RunSpec): OriginalRunWork {
       try { return Math.max(0, spec.budget.total.wallClockMs - ledger.snapshot().elapsedMs) } catch { return 0 }
     }
   })
+  return Object.freeze({ control, model, tool, source })
 }
 
 /**
  * New original logical run, before investigation expenditure. Captures real storage,
- * durable accounting and private gateways together. No paid business entrance exists
- * until original evidence/plan/operation and output/terminal protocols are implemented.
+ * durable accounting and private gateways together. This wrapper stays dormant;
+ * the explicit investigation factory composes its own private original owner.
  */
 export async function createWorkflowOriginalRun(input: OriginalWorkflowRunOptions): Promise<OriginalWorkflowRun> {
   const data = fields(input, ['storageDirectory', 'spec', 'limits', 'onDurableStep', 'profile', 'transport'], ['storageDirectory', 'spec', 'profile'])
+  const { token } = await createOriginalOwner(data)
+  return Object.freeze({ cancellationControl: token, observe() { return originalRunObservation }, closeUnclaimed() { return closeWorkflowCancellationControl(token) } })
+}
+async function createOriginalOwner(data: Record<string, unknown>) {
   if (data.transport !== undefined && typeof data.transport !== 'function') invalid()
   const { prepared, options } = captureOptions({
     storageDirectory: data.storageDirectory as string, spec: data.spec,
@@ -241,7 +267,7 @@ export async function createWorkflowOriginalRun(input: OriginalWorkflowRunOption
   const profile = captureOriginalProfile(data.profile, prepared.spec)
   const ledger = createBudgetLedger(prepared.spec, { durable: true })
   const work = originalRunWork(ledger, prepared.spec)
-  const created = await initialize(prepared, options, ledger, true, work)
+  const created = await initialize(prepared, options, ledger, true, work.control)
   try {
     // Gateway construction performs its own original configuration/durability guard.
     const gatewayOptions = { durability: created.session.journal, ...(data.transport === undefined ? {} : { transport: data.transport as ModelTransport }) }
@@ -254,11 +280,8 @@ export async function createWorkflowOriginalRun(input: OriginalWorkflowRunOption
     ledger.assertCanContinue()
     const token = Object.freeze({}) as WorkflowCancellationControl
     cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, session: created.session, storage: created.storage, originalBusiness, claimed: false, closing: false })
-    return Object.freeze({
-      cancellationControl: token,
-      observe() { return originalRunObservation },
-      closeUnclaimed() { return closeWorkflowCancellationControl(token) }
-    })
+    return { token, prepared, ledger, work, originalBusiness, created }
+
   } catch (error) {
     created.storage.sealAdmission()
     await created.storage.close()
@@ -266,6 +289,182 @@ export async function createWorkflowOriginalRun(input: OriginalWorkflowRunOption
     throw new WorkflowError('unreadable')
   }
 }
+export interface OriginalInvestigationRunOptions extends OriginalWorkflowRunOptions {
+  readonly scan: ScanResult
+  readonly snapshot: WorkflowProjectSnapshot
+  readonly objective?: string
+}
+export interface OriginalInvestigationObservation {
+  readonly phase: 'ready' | 'running' | 'completed' | 'closed'
+  readonly generationAdmission: 'unavailable'
+  readonly terminalSupport: 'cancellation-only'
+  readonly terminalStatus: WorkflowCancellationOutcome | null
+  readonly decisions: number
+  readonly toolRequests: number
+  readonly selectedEvidenceCount: number
+  readonly topicCount: number
+}
+export interface OriginalInvestigationRun {
+  run(): Promise<Readonly<OriginalInvestigationObservation>>
+  observe(): Readonly<OriginalInvestigationObservation>
+  cancel(): boolean
+  close(): Promise<void>
+}
+// All opt-in original investigation services share actual project/run exclusion.
+const originalInvestigationCoordinator = createRunCoordinator()
+// Private investigation material only; it conveys no generation or terminal proof.
+const completedInvestigations = new WeakMap<object, Readonly<{ result: InvestigationResult; store: WorkflowEvidenceStore; tail: WorkflowRecordReference }>>()
+function commitment(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex') }
+
+/** Explicit opt-in main-program entry. No ordinary run or default caller is changed. */
+export async function createOriginalInvestigationRun(input: OriginalInvestigationRunOptions): Promise<OriginalInvestigationRun> {
+  const data = fields(input, ['storageDirectory', 'spec', 'limits', 'onDurableStep', 'profile', 'transport', 'scan', 'snapshot', 'objective'], ['storageDirectory', 'spec', 'profile', 'scan', 'snapshot'])
+  const scan = data.scan as ScanResult, snapshot = data.snapshot as WorkflowProjectSnapshot
+  if (!snapshotMatchesScan(snapshot, scan)) throw new WorkflowError('stale-snapshot')
+  const preflight = prepareLedgerCriticalSpec({ spec: data.spec }).spec
+  if (preflight.strategy !== 'agentic' || preflight.strategyVersion !== 'agentic-v1' || preflight.promptVersion !== INVESTIGATION_PROMPT_VERSION || preflight.toolVersion !== 'read-tools-v1' || preflight.policyVersion !== snapshot.policyVersion || preflight.projectId !== snapshot.projectId || preflight.snapshotId !== snapshot.snapshotId) throw new WorkflowError('configuration-changed')
+  const objective = data.objective === undefined ? `Explore ${preflight.roleFocus} mechanisms at ${preflight.granularity} depth for interview preparation.` : data.objective
+  if (typeof objective !== 'string' || !objective.length || objective.length > 800 || objective.includes('\0')) invalid()
+  const store = createEvidenceStore(snapshot)
+  if (data.transport !== undefined && typeof data.transport !== 'function') invalid()
+  const actualTransport = (data.transport as ModelTransport | undefined) ?? chatCompletionStream
+  // The genuine gateway awaits reservation and intent flushes. Recheck the
+  // captured source after those waits, before the raw transport may send bytes.
+  const transport: ModelTransport = async (profile, messages, emit, options) => {
+    let active = true, started = false, admitted = false, violation = false
+    let admission: Promise<void> | undefined
+    const assertActive = (): void => {
+      if (!active || violation) throw new WorkflowError('model-failed')
+      if (options.signal?.aborted) throw new WorkflowError('cancelled')
+      if (!snapshotMatchesScan(snapshot, scan)) throw new WorkflowError('stale-snapshot')
+    }
+    const beforeFetch = (): void => {
+      assertActive()
+      if (!admitted) { violation = true; throw new WorkflowError('model-failed') }
+      options.beforeFetch?.()
+      assertActive()
+    }
+    try {
+      return await actualTransport(profile, messages, emit, {
+        ...options,
+        beforeRequest() {
+          assertActive()
+          if (started) { violation = true; throw new WorkflowError('model-failed') }
+          started = true
+          admission = (async () => {
+            await options.beforeRequest?.()
+            assertActive()
+            await snapshot.assertCurrent(options.signal)
+            assertActive()
+            admitted = true
+            beforeFetch()
+          })()
+          void admission.catch(() => {})
+          return admission
+        },
+        beforeFetch,
+        onRequest() { beforeFetch(); options.onRequest?.(); beforeFetch() }
+      })
+    } finally {
+      active = false
+      // A broken injected transport cannot detach the post-intent source fence.
+      await admission?.catch(() => {})
+    }
+  }
+  // Calling the owner captures spec, profile and options synchronously before its
+  // first await. Snapshot currentness is then checked before claiming any work.
+  const original = await createOriginalOwner({ ...data, transport })
+  const { prepared, ledger, work, created, originalBusiness, token } = original
+  let session: ControlledRunSession | null = null
+  try {
+    await snapshot.assertCurrent(work.control.signal)
+    session = originalInvestigationCoordinator.begin(prepared.spec, { cancellationControl: token })
+    if (!session) throw new WorkflowError('configuration-changed')
+  } catch (error) { await closeWorkflowCancellationControl(token); throw error }
+  const controlled = session
+  let phase: OriginalInvestigationObservation['phase'] = 'ready'
+  let invoked = false, decisionOrdinal = 0
+  let operationQueue: Promise<unknown> = Promise.resolve()
+  let statistics = { decisions: 0, toolRequests: 0, selectedEvidenceCount: 0, topicCount: 0 }
+  const observe = (): Readonly<OriginalInvestigationObservation> => Object.freeze({ phase, generationAdmission: 'unavailable', terminalSupport: 'cancellation-only', terminalStatus: controlled.terminalStatus as WorkflowCancellationOutcome | null, ...statistics })
+  const assertCurrent = async (): Promise<void> => {
+    controlled.assertActive()
+    if (!snapshotMatchesScan(snapshot, scan)) throw new WorkflowError('stale-snapshot')
+    await snapshot.assertCurrent(controlled.signal)
+    controlled.assertActive()
+  }
+  // A single private sequence covers each model finally and each entire tool action.
+  // The critical writer queue then serializes every individual full-ledger event.
+  const sequential = <T>(start: () => Promise<T>): Promise<T> => {
+    const task = operationQueue.then(async () => { await assertCurrent(); return start() })
+    operationQueue = task.catch(() => {})
+    return task
+  }
+  const source: AwaitedToolAccounting = Object.freeze({
+    chargeTool: () => work.source.run(async () => { await assertCurrent(); await created.source.chargeTool(); controlled.assertActive() }),
+    reserveRead: (bytes: number) => work.source.run(async () => { await assertCurrent(); const id = await created.source.reserveRead(bytes); controlled.assertActive(); return id }),
+    settleRead: (id: string, bytes: number) => work.source.run(async () => { controlled.assertActive(); await created.source.settleRead(id, bytes); controlled.assertActive() })
+  })
+  let engine: ReturnType<typeof createAccountedToolGateway>
+  try { engine = createAccountedToolGateway(snapshot, store, ledger, source, { signal: controlled.signal }) }
+  catch (error) {
+    // Original expiry can close the signal at the synchronous claim boundary.
+    // Construction failure must still dispose the now-claimed W owner.
+    await controlled.close()
+    throw error instanceof WorkflowError ? error : new WorkflowError('unreadable')
+  }
+  const tools: ReturnType<typeof createAccountedToolGateway> = Object.freeze({ execute: (action, signal) => work.tool.run(() => sequential(async () => {
+    if (signal !== controlled.signal) invalid()
+    const value = await engine.execute(action, signal)
+    await assertCurrent()
+    if (value.status !== 'ok') throw new WorkflowError('unreadable')
+    statistics = { ...statistics, toolRequests: statistics.toolRequests + 1 }
+    return value
+  })) })
+  const model: Parameters<typeof runInvestigation>[0]['model'] = Object.freeze({ complete: input => work.model.run(() => sequential(async () => {
+    if (input.stage !== 'investigation' || input.signal !== controlled.signal || decisionOrdinal >= 3) invalid()
+    const ordinal = ++decisionOrdinal
+    statistics = { ...statistics, decisions: ordinal }
+    const semanticHash = commitment({ domain: 'original-investigation-decision-v1', binding: prepared.binding, ordinal })
+    const manifestHash = commitment({ domain: 'original-investigation-manifest-v1', originalSpec: prepared.originalSpecJson, objective, snapshot: { id: snapshot.snapshotId, policy: snapshot.policyVersion, files: snapshot.files }, messages: hashModelMessages(input.messages) })
+    const value = await originalBusiness.investigation.complete({ ...input, id: `original-decision:${ordinal}`, durableOperation: { semanticHash, manifestHash } })
+    await assertCurrent()
+    return value
+  })) })
+  return Object.freeze({
+    observe,
+    cancel() { return controlled.cancel() },
+    async close() { phase = 'closed'; await controlled.close() },
+    async run() {
+      if (invoked || phase !== 'ready') invalid()
+      invoked = true; phase = 'running'
+      try {
+        await controlled.execute('scanning', assertCurrent)
+        await controlled.execute('investigating', async () => {
+          const result = await runInvestigation({ spec: prepared.spec, snapshot, store, ledger, tools, model, objective, signal: controlled.signal })
+          await assertCurrent()
+          if (result.status !== 'completed' || !result.usageComplete || !result.selection.selectedIds.length || !result.topics.length) throw new WorkflowError('unknown-evidence')
+          const records = await store.resolve(result.selection.selectedIds, prepared.spec.snapshotId, controlled.signal)
+          await assertCurrent()
+          if (records.length !== result.selection.selectedIds.length || !created.tail()) throw new WorkflowError('unknown-evidence')
+          const meter = ledger.snapshot()
+          if (!meter.usageComplete || meter.blocked || meter.reservations.some(row => row.state !== 'settled')) throw new WorkflowError('budget-exhausted')
+          completedInvestigations.set(token, Object.freeze({ result, store, tail: created.tail()! }))
+          statistics = { ...statistics, selectedEvidenceCount: records.length, topicCount: result.topics.length }
+        })
+        controlled.assertActive()
+        phase = 'completed'
+        return observe()
+      } catch (error) {
+        phase = 'closed'
+        controlled.fail()
+        // Stage/child leases have settled before an outer caller can close/drain.
+        throw error instanceof WorkflowError ? error : new WorkflowError(controlled.signal.aborted ? 'cancelled' : 'unreadable')
+      }
+    }
+  })
+}
+
 /** Dispose only an unclaimed factory token. Claimed runs close through their real coordinator. */
 export function closeWorkflowCancellationControl(token: WorkflowCancellationControl): Promise<void> {
   const owner = token && typeof token === 'object' ? cancellationOwners.get(token) : undefined
@@ -283,7 +482,7 @@ export function claimWorkflowCancellationControl(token: WorkflowCancellationCont
   return owner.storage
 }
 
-async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage }> {
+async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage; source: AwaitedToolAccounting; tail(): WorkflowRecordReference | null }> {
   let store: WorkflowStore | undefined
   let revoke: (() => boolean) | undefined
   try {
@@ -480,7 +679,37 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       },
       close: closeStorage
     })
-    return { session, storage }
+    let toolOrdinal = 0, readOrdinal = 0
+    const readIds = new Set<string>()
+    const source: AwaitedToolAccounting = Object.freeze({
+      async chargeTool() {
+        if (!work || ++toolOrdinal > 8) invalid()
+        const id = `original-tool:${toolOrdinal}`
+        await enqueue({ kind: 'tool-charge', id, stage: 'investigation' }, position => {
+          ledger.chargeTool(id, 'investigation')
+          return exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position))
+        })
+      },
+      async reserveRead(bytes: number) {
+        if (!work || ++readOrdinal > 1024) invalid()
+        const id = `original-read:${readOrdinal}`
+        await enqueue({ kind: 'read-reservation', id, reservedBytes: bytes }, position => {
+          ledger.reserveRead(id, bytes)
+          return exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position))
+        })
+        readIds.add(id)
+        return id
+      },
+      async settleRead(id: string, actualBytes: number) {
+        if (!work || !readIds.has(id)) invalid()
+        readIds.delete(id)
+        await enqueue({ kind: 'read-receipt', id, actualBytes }, position => {
+          ledger.settleRead(id, actualBytes)
+          return exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position))
+        })
+      }
+    })
+    return { session, storage, source, tail: () => cursor.reference }
   } catch (error) {
     work?.seal()
     revoke?.()
