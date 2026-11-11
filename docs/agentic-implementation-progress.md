@@ -186,3 +186,9 @@ A2a 提交 `1a1e25d` 已经独立审查并整合到重构分支。新工厂内�
 实际 Windows/NTFS 验证覆盖 30 个不同场景：R1 为 25/29；修正四个测试夹具后 R2 为 4/4；新增真实 journal-open 故障测试 R3 为 1/1。Node typecheck 和三个新增文件的 whitespace 检查通过，provider 请求为 0。原始失败、三轮日志及失败夹具恢复归档均保留；没有把组合证据写成单次 30/30 运行。该测试文件已加入既有 `test:agentic` 命令，集成运行证据随后登记。
 
 此组件仅提供 storage/accounting 保证。`terminal` 分类表示账本日志封闭，不代表最终结果已核验；它不授予恢复、项目读取、工具或付费继续权限。B0 的真实 owner 委托、跨 read/tool/control 结算和终态协调尚未完成，M10/M11 继续保持未通过。
+
+## P6 L2 实际异步结算（2026-11-11）
+
+已审查并整合 `f40ba98`。生产模型 transport 在 durable admission 下登记原始回调、reader/body cancellation 的实际 promise；取消仍关闭派发，外层 completion 等待已接受工作真正结束。gateway 同时等待异步 trace、尾部 delta、完整 receipt/unknown flush 与 L afterFlush，并在异步观察之后重查来源、配置、signal 和原时限。legacy 取消保持响应。
+
+新增定向场景 25/25、既有受影响测试 153/153，Node/Web 类型检查与 diff-check 通过。原始日志和源码 hash 已由根代理复核。此模块仅加强局部等待语义；Boolean 选项或 injected transport 不构成真实 owner、付费、业务终态或恢复权限。整合候选的组合验证待后续模块收敛后统一执行，M10/M11 仍未通过。
