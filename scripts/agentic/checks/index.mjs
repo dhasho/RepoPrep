@@ -25,6 +25,10 @@ export async function loadChecks(_moduleId, options = {}) {
       if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error
     }
   }
+  if (_moduleId === 'M09') {
+    const implementation = await import('./m09.mjs')
+    return implementation.createChecks(options)
+  }
   if (_moduleId === 'M08') {
     const implementation = await import('./m08.mjs')
     return implementation.createChecks(options)

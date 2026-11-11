@@ -161,8 +161,24 @@ export async function runGate({
   authorization = null,
   expectedHashes = null,
   manifestLockPath = path.join(path.dirname(manifestPath), path.basename(manifestPath) === 'manifest.v2.json' ? 'manifest.v2.lock.json' : 'manifest.lock.json'),
-  printSummary = false
+  printSummary = false,
+  m09Session,
+  m09GatePermit
 }) {
+  // M09 must fail before sourceTreeHash/verifyAssets (which may read keys).
+  // A detached CLI/report or an arbitrary checker cannot open this boundary.
+  let m09Publication
+  if (moduleId === 'M09') {
+    try {
+      const { preflightM09Gate } = await import('./m09-quality-host.mjs')
+      m09Publication = await preflightM09Gate(m09Session, m09GatePermit)
+      if (mode !== 'real') throw new Error('M09_REAL_MODE_REQUIRED')
+    } catch {
+      const result = { schemaVersion: 1, module: 'M09', mode, status: 'incomplete', counts: { failed: 0, missing: 1, skipped: 0, unknown: 1 }, hashes: null, checks: [{ id: 'm09:frozen-review-and-repair-set', status: 'unknown', errorCode: 'M09_SAME_HOST_GATE_REQUIRED' }], metrics: {}, missingMetrics: ['errorRecall', 'falsePositiveRate', 'correctRepairs', 'introducedMaterialErrors', 'budgetCompliant'], reportPath: null }
+      if (printSummary) process.stdout.write(`${JSON.stringify({ module: 'M09', status: result.status, ...result.counts, report: null })}\n`)
+      return result
+    }
+  }
   const rawManifest = manifest === undefined ? await readFile(manifestPath) : null
   const frozenManifest = manifest ?? JSON.parse(rawManifest.toString('utf8'))
   let effectiveExpectedHashes = expectedHashes ?? {}
@@ -357,7 +373,23 @@ export async function runGate({
     freezeStatus: frozenManifest.freezeStatus,
     reportPath
   }
-  await writeExclusive(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+  if (moduleId === 'M09') {
+    try {
+      // This capability is bound to the preflight's live canonical session.
+      // It revalidates after every awaited runner tail step and commits under
+      // a final synchronous liveness fence; arbitrary callbacks cannot enter.
+      await m09Publication.publishReport(report)
+    } catch {
+      report.status = 'failed'
+      report.counts.failed += 1
+      report.checks.push({ id: 'm09:report-publication', status: 'failed', errorCode: 'M09_LIVE_SESSION_LOST_BEFORE_PUBLICATION' })
+      // Failed diagnostics may still be persisted after cancellation. No pass
+      // content ever goes through this asynchronous fallback.
+      await writeExclusive(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+    }
+  } else {
+    await writeExclusive(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+  }
   const summary = resultSummary(report)
   if (printSummary) process.stdout.write(`${JSON.stringify(summary)}\n`)
   return { ...report, summary }
