@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { types } from 'node:util'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript sources.
 import { acquireWorkflowWriter, assertWorkflowWriterOwner, closeWorkflowWriter, fenceWorkflowWriter, fenceWorkflowAttempt, finishWorkflowAttempt, queueWorkflowWriter, readWorkflowFile, resolveWorkflowRoot, validateWorkflowRoot, workflowAttemptInfo, workflowDirectory, workflowDiskUsage, workflowFail, workflowFilePath, workflowFsError, workflowHash, WorkflowStoreError } from './workflow-writer.ts'
 // @ts-ignore TS5097 -- direct Node tests execute TypeScript sources.
@@ -21,6 +22,8 @@ const STAGES = ['created', 'scanning', 'investigating', 'tool', 'packing', 'gene
 export type WorkflowStoreStage = typeof STAGES[number]
 export interface WorkflowComponentValidator { readonly schemaId: string; readonly validate: (payload: unknown) => boolean }
 export type WorkflowComponentValidators = Readonly<Partial<Record<WorkflowComponentKind, WorkflowComponentValidator>>>
+/** Exact historical decoders are read-only; current validators remain the only writers. */
+export type WorkflowHistoricalValidators = Readonly<Partial<Record<WorkflowComponentKind, readonly WorkflowComponentValidator[]>>>
 declare const payloadBrand: unique symbol
 export interface WorkflowVisiblePayloadPolicy { readonly [payloadBrand]: true }
 const payloadPolicies = new WeakMap<object, (payload: unknown) => boolean>()
@@ -42,6 +45,8 @@ export type WorkflowStoreStep = 'owner-marker-opened' | 'owner-marker-flushed' |
 export interface WorkflowStoreOptions {
   readonly storageDirectory: string
   readonly validators: WorkflowComponentValidators
+  /** Exact schema IDs accepted only while reading historical records. */
+  readonly historicalValidators?: WorkflowHistoricalValidators
   readonly limits?: WorkflowStoreLimits
   readonly visiblePayloadPolicy?: WorkflowVisiblePayloadPolicy
   /** Main-program instrumentation/fault seam; no paths, payloads, or raw errors. */
@@ -93,13 +98,15 @@ export interface WorkflowStore {
   close(): Promise<void>
 }
 interface Settings {
+  storageDirectory: string
   validators: WorkflowComponentValidators
+  historicalValidators: WorkflowHistoricalValidators
   limits: { aggregateBytes: number; runBytes: number; controlBytes: number; maxEntries: number; componentBytes: Record<WorkflowComponentKind, number> }
   visible?: (payload: unknown) => boolean
   step?: WorkflowStoreOptions['onDurableStep']
 }
 interface OwnerHead { marker: OwnerMarker; hash: string }
-interface View { prefix: Prefix; marker: AttemptMarker; lineage: Map<string, AttemptMarker>; manifest: WorkflowCommitManifest | null; components: WorkflowVerifiedComponent[]; journal: WorkflowVerifiedJournal[] }
+interface View { schemas: Readonly<Partial<Record<WorkflowComponentKind, string>>>; prefix: Prefix; marker: AttemptMarker; lineage: Map<string, AttemptMarker>; manifest: WorkflowCommitManifest | null; components: WorkflowVerifiedComponent[]; journal: WorkflowVerifiedJournal[] }
 
 function plain(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
@@ -188,34 +195,68 @@ function prefix(value: unknown, controlBytes: number): Prefix {
   for (const ref of [result.manifest, result.journal]) if (ref && (ref.producingEpoch.owner > producingEpoch.owner || ref.producingEpoch.attempt > producingEpoch.attempt)) workflowFail('unavailable')
   return result
 }
-function settings(options: WorkflowStoreOptions): Settings {
-  if (!plain(options.validators)) workflowFail('invalid-input')
-  const validators: Partial<Record<WorkflowComponentKind, WorkflowComponentValidator>> = {}
-  for (const [kind, validator] of Object.entries(options.validators)) {
-    if (!WORKFLOW_COMPONENT_KINDS.includes(kind as WorkflowComponentKind) || !validator || typeof validator.validate !== 'function' || typeof validator.schemaId !== 'string' || !LABEL.test(validator.schemaId)) workflowFail('invalid-input')
-    validators[kind as WorkflowComponentKind] = Object.freeze({ schemaId: validator.schemaId, validate: validator.validate })
+/** Configuration is main-program data, captured without invoking getters or proxies. */
+function configurationFields(value: unknown, allowed: readonly string[], required: readonly string[] = []): Record<string, unknown> {
+  if (types.isProxy(value) || !plain(value)) workflowFail('invalid-input')
+  const own = Reflect.ownKeys(value)
+  if (own.some(key => typeof key !== 'string' || !allowed.includes(key)) || required.some(key => !own.includes(key))) workflowFail('invalid-input')
+  const result: Record<string, unknown> = Object.create(null)
+  for (const key of own as string[]) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!
+    if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable) workflowFail('invalid-input')
+    result[key] = descriptor.value
   }
-  const tighten = (value: number | undefined, max: number): number => { if (value === undefined) return max; if (!Number.isSafeInteger(value) || value < 1 || value > max) workflowFail('invalid-input'); return value }
-  const input = options.limits
-  const componentBytes = { ...WORKFLOW_STORE_MAXIMA.componentBytes }
-  for (const [key, value] of Object.entries(input?.componentBytes ?? {})) {
-    if (!WORKFLOW_COMPONENT_KINDS.includes(key as WorkflowComponentKind)) workflowFail('invalid-input')
-    componentBytes[key as WorkflowComponentKind] = tighten(value, componentBytes[key as WorkflowComponentKind])
-  }
-  const limits = { aggregateBytes: tighten(input?.aggregateBytes, WORKFLOW_STORE_MAXIMA.aggregateBytes), runBytes: tighten(input?.runBytes, WORKFLOW_STORE_MAXIMA.runBytes), controlBytes: tighten(input?.controlBytes, WORKFLOW_STORE_MAXIMA.controlBytes), maxEntries: tighten(input?.maxEntries, WORKFLOW_STORE_MAXIMA.maxEntries), componentBytes }
-  let visible: Settings['visible']
-  if (options.visiblePayloadPolicy !== undefined) { visible = payloadPolicies.get(options.visiblePayloadPolicy); if (!visible) workflowFail('invalid-input') }
-  if (options.onDurableStep !== undefined && typeof options.onDurableStep !== 'function') workflowFail('invalid-input')
-  return { validators: Object.freeze(validators), limits, visible, step: options.onDurableStep }
+  return result
 }
-function validatePayload(config: Settings, kind: WorkflowComponentKind, schemaId: string, payload: unknown): void {
-  const validator = config.validators[kind]
-  if (!validator || validator.schemaId !== schemaId) workflowFail('unavailable')
+function captureValidator(value: unknown): WorkflowComponentValidator {
+  const captured = configurationFields(value, ['schemaId', 'validate'], ['schemaId', 'validate'])
+  if (typeof captured.schemaId !== 'string' || !LABEL.test(captured.schemaId) || typeof captured.validate !== 'function' || types.isProxy(captured.validate) || types.isAsyncFunction(captured.validate) || types.isGeneratorFunction(captured.validate)) workflowFail('invalid-input')
+  return Object.freeze({ schemaId: captured.schemaId, validate: captured.validate as WorkflowComponentValidator['validate'] })
+}
+function settings(options: WorkflowStoreOptions): Settings {
+  const captured = configurationFields(options, ['storageDirectory', 'validators', 'historicalValidators', 'limits', 'visiblePayloadPolicy', 'onDurableStep'], ['storageDirectory', 'validators'])
+  if (typeof captured.storageDirectory !== 'string' || !captured.storageDirectory.length) workflowFail('invalid-input')
+  const validators: Partial<Record<WorkflowComponentKind, WorkflowComponentValidator>> = Object.create(null)
+  for (const [kind, validator] of Object.entries(configurationFields(captured.validators, WORKFLOW_COMPONENT_KINDS))) validators[kind as WorkflowComponentKind] = captureValidator(validator)
+  const historicalValidators: Partial<Record<WorkflowComponentKind, readonly WorkflowComponentValidator[]>> = Object.create(null)
+  if (captured.historicalValidators !== undefined) {
+    for (const [kind, values] of Object.entries(configurationFields(captured.historicalValidators, WORKFLOW_COMPONENT_KINDS))) {
+      const current = validators[kind as WorkflowComponentKind]
+      if (!current || types.isProxy(values) || !Array.isArray(values) || Object.getPrototypeOf(values) !== Array.prototype || values.length < 1 || values.length > 8 || Reflect.ownKeys(values).length !== values.length + 1) workflowFail('invalid-input')
+      const seen = new Set([current.schemaId]), copied: WorkflowComponentValidator[] = []
+      for (let index = 0; index < values.length; index++) {
+        const descriptor = Object.getOwnPropertyDescriptor(values, String(index))
+        if (!descriptor || !Object.hasOwn(descriptor, 'value') || !descriptor.enumerable) workflowFail('invalid-input')
+        const validator = captureValidator(descriptor.value)
+        if (seen.has(validator.schemaId)) workflowFail('invalid-input')
+        seen.add(validator.schemaId); copied.push(validator)
+      }
+      historicalValidators[kind as WorkflowComponentKind] = Object.freeze(copied)
+    }
+  }
+  const tighten = (value: unknown, max: number): number => { if (value === undefined) return max; if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > max) workflowFail('invalid-input'); return value }
+  const input = captured.limits === undefined ? Object.create(null) as Record<string, unknown> : configurationFields(captured.limits, ['aggregateBytes', 'runBytes', 'controlBytes', 'maxEntries', 'componentBytes'])
+  const componentBytes = { ...WORKFLOW_STORE_MAXIMA.componentBytes }
+  if (input.componentBytes !== undefined) for (const [key, value] of Object.entries(configurationFields(input.componentBytes, WORKFLOW_COMPONENT_KINDS))) componentBytes[key as WorkflowComponentKind] = tighten(value, componentBytes[key as WorkflowComponentKind])
+  const limits = Object.freeze({ aggregateBytes: tighten(input.aggregateBytes, WORKFLOW_STORE_MAXIMA.aggregateBytes), runBytes: tighten(input.runBytes, WORKFLOW_STORE_MAXIMA.runBytes), controlBytes: tighten(input.controlBytes, WORKFLOW_STORE_MAXIMA.controlBytes), maxEntries: tighten(input.maxEntries, WORKFLOW_STORE_MAXIMA.maxEntries), componentBytes: Object.freeze(componentBytes) })
+  let visible: Settings['visible']
+  if (captured.visiblePayloadPolicy !== undefined) { visible = payloadPolicies.get(captured.visiblePayloadPolicy as object); if (!visible) workflowFail('invalid-input') }
+  if (captured.onDurableStep !== undefined && (typeof captured.onDurableStep !== 'function' || types.isProxy(captured.onDurableStep))) workflowFail('invalid-input')
+  return Object.freeze({ storageDirectory: captured.storageDirectory, validators: Object.freeze(validators), historicalValidators: Object.freeze(historicalValidators), limits, visible, step: captured.onDurableStep as WorkflowStoreOptions['onDurableStep'] })
+}
+function validatePayload(config: Settings, kind: WorkflowComponentKind, schemaId: string, payload: unknown, historicalRead = false): void {
+  const current = config.validators[kind]
+  const validator = current?.schemaId === schemaId ? current : historicalRead ? config.historicalValidators[kind]?.find(value => value.schemaId === schemaId) : undefined
+  if (!validator) workflowFail('unavailable')
   const accepted = (value: unknown): boolean => {
-    if (value instanceof Promise) void value.catch(() => {})
+    if (types.isPromise(value)) void Promise.resolve(value).catch(() => {})
     return value === true
   }
   try { freeze(payload); if (!accepted(validator.validate(payload)) || (kind === 'recorded-visible-response' && (!config.visible || !accepted(config.visible(payload))))) workflowFail('unavailable') } catch { workflowFail('unavailable') }
+}
+/** Existing per-kind schema selections never become new write selections on resume. */
+function assertWritableSchemas(view: View | null, config: Settings): void {
+  if (view) for (const [kind, schemaId] of Object.entries(view.schemas)) if (config.validators[kind as WorkflowComponentKind]?.schemaId !== schemaId) workflowFail('unavailable')
 }
 function names(root: WorkflowRoot, segments: string[], pattern: RegExp, max: number): string[] {
   const directory = workflowDirectory(root, segments)
@@ -300,6 +341,11 @@ function derivePrefix(root: WorkflowRoot, owner: OwnerHead, key: string, config:
 }
 function verifyView(root: WorkflowRoot, current: Prefix, owner: OwnerHead, config: Settings): View {
   const bound = current.binding, key = runKey(bound), lineage = new Map<string, AttemptMarker>()
+  const schemas: Partial<Record<WorkflowComponentKind, string>> = Object.create(null)
+  const selectSchema = (kind: WorkflowComponentKind, schemaId: string): void => {
+    if (schemas[kind] !== undefined && schemas[kind] !== schemaId) workflowFail('unavailable')
+    schemas[kind] = schemaId
+  }
   let cursor: Prefix | null = current
   while (cursor) {
     if (lineage.size >= MAX_CHAIN || cursor.attempt.producingEpoch.owner > owner.marker.epoch) workflowFail('unavailable')
@@ -315,13 +361,13 @@ function verifyView(root: WorkflowRoot, current: Prefix, owner: OwnerHead, confi
   }
   const journal: WorkflowVerifiedJournal[] = []
   let journalRef = current.journal
-  const journalIds = new Set<string>()
+  const journalReferences = new Map<string, WorkflowRecordReference>()
   while (journalRef) {
     if (journal.length >= MAX_LOCAL_RECORDS) workflowFail('capacity-exhausted')
     allowed(journalRef)
     const id = `${epochKey(journalRef.producingEpoch)}:${journalRef.id}`
-    if (journalIds.has(id)) workflowFail('unavailable')
-    journalIds.add(id)
+    if (journalReferences.has(id)) workflowFail('unavailable')
+    journalReferences.set(id, journalRef)
     const raw = readReferenced(root, key, journalRef, config.limits.componentBytes['critical-journal'])
     keys(raw, ['format', 'binding', 'producingEpoch', 'kind', 'schemaId', 'payload', 'sequence', 'previous'])
     if (raw.format !== 'workflow-journal/v1' || raw.kind !== 'critical-journal' || !bindingEqual(binding(raw.binding), bound) || !equal(epoch(raw.producingEpoch), journalRef.producingEpoch)) workflowFail('unavailable')
@@ -329,7 +375,8 @@ function verifyView(root: WorkflowRoot, current: Prefix, owner: OwnerHead, confi
     if (journalRef.id !== `j-${numberName(raw.sequence)}`) workflowFail('unavailable')
     const previous = nullableReference(raw.previous, 'j', config.limits.componentBytes['critical-journal'])
     if (raw.sequence !== (previous ? Number(previous.id.slice(2)) + 1 : 1)) workflowFail('unavailable')
-    validatePayload(config, 'critical-journal', raw.schemaId, raw.payload)
+    selectSchema('critical-journal', raw.schemaId)
+    validatePayload(config, 'critical-journal', raw.schemaId, raw.payload, true)
     journal.push(freeze({ reference: journalRef, schemaId: raw.schemaId, sequence: raw.sequence, payload: raw.payload }))
     journalRef = previous
   }
@@ -337,13 +384,13 @@ function verifyView(root: WorkflowRoot, current: Prefix, owner: OwnerHead, confi
   let manifest: WorkflowCommitManifest | null = null
   let selectedComponents: WorkflowVerifiedComponent[] = []
   let manifestRef = current.manifest
-  const manifestIds = new Set<string>()
+  const manifestReferences = new Map<string, WorkflowRecordReference>()
   while (manifestRef) {
-    if (manifestIds.size >= MAX_LOCAL_RECORDS) workflowFail('capacity-exhausted')
+    if (manifestReferences.size >= MAX_LOCAL_RECORDS) workflowFail('capacity-exhausted')
     allowed(manifestRef)
     const identity = `${epochKey(manifestRef.producingEpoch)}:${manifestRef.id}`
-    if (manifestIds.has(identity)) workflowFail('unavailable')
-    manifestIds.add(identity)
+    if (manifestReferences.has(identity)) workflowFail('unavailable')
+    manifestReferences.set(identity, manifestRef)
     const raw = readReferenced(root, key, manifestRef, config.limits.controlBytes)
     keys(raw, ['format', 'binding', 'producingEpoch', 'sequence', 'stage', 'parent', 'journalPosition', 'components'])
     if (raw.format !== 'workflow-manifest/v1' || !bindingEqual(binding(raw.binding), bound) || !equal(epoch(raw.producingEpoch), manifestRef.producingEpoch) || !STAGES.includes(raw.stage as WorkflowStoreStage)) workflowFail('unavailable')
@@ -366,7 +413,8 @@ function verifyView(root: WorkflowRoot, current: Prefix, owner: OwnerHead, confi
       const component = readReferenced(root, key, ref, config.limits.componentBytes[ref.kind])
       keys(component, ['format', 'binding', 'producingEpoch', 'kind', 'schemaId', 'payload'])
       if (component.format !== 'workflow-component/v1' || !bindingEqual(binding(component.binding), bound) || !equal(epoch(component.producingEpoch), ref.producingEpoch) || component.kind !== ref.kind || component.schemaId !== ref.schemaId) workflowFail('unavailable')
-      validatePayload(config, ref.kind, ref.schemaId, component.payload)
+      selectSchema(ref.kind, ref.schemaId)
+      validatePayload(config, ref.kind, ref.schemaId, component.payload, true)
       return freeze({ reference: ref, payload: component.payload })
     })
     if (!manifest) {
@@ -375,8 +423,13 @@ function verifyView(root: WorkflowRoot, current: Prefix, owner: OwnerHead, confi
     }
     manifestRef = parent
   }
+  // Every inherited head must occur in the verified chains. Otherwise a new
+  // attempt could reset a chain and hide an earlier per-kind schema selection.
+  for (const marker of lineage.values()) for (const [ref, refs] of [[marker.parent?.journal, journalReferences], [marker.parent?.manifest, manifestReferences]] as const) {
+    if (ref && !equal(refs.get(`${epochKey(ref.producingEpoch)}:${ref.id}`), ref)) workflowFail('unavailable')
+  }
   validateWorkflowRoot(root)
-  return { prefix: current, marker: lineage.get(epochKey(current.attempt.producingEpoch))!, lineage, manifest, components: selectedComponents, journal }
+  return { schemas: Object.freeze(schemas), prefix: current, marker: lineage.get(epochKey(current.attempt.producingEpoch))!, lineage, manifest, components: selectedComponents, journal }
 }
 function runKeys(root: WorkflowRoot): string[] {
   if (!optionalDirectory(root, ['runs'])) return []
@@ -423,7 +476,7 @@ function verified(view: View): WorkflowStoreRead { return freeze({ status: 'veri
 
 /** Integrity-only read. A verified store is not a restored ledger or a source/project authorization. */
 export function readWorkflowStore(options: WorkflowStoreOptions, requestedBinding: WorkflowRunBinding): WorkflowStoreRead {
-  try { return readConfigured(options.storageDirectory, settings(options), requestedBinding) }
+  try { const config = settings(options); return readConfigured(config.storageDirectory, config, requestedBinding) }
   catch (error) { return Object.freeze({ status: 'unavailable', code: error instanceof WorkflowStoreError ? error.code : 'disk-failure' }) }
 }
 function readConfigured(storageDirectory: string, config: Settings, requestedBinding: WorkflowRunBinding): WorkflowStoreRead {
@@ -437,7 +490,7 @@ function readConfigured(storageDirectory: string, config: Settings, requestedBin
   } catch (error) { return Object.freeze({ status: 'unavailable', code: error instanceof WorkflowStoreError ? error.code : 'disk-failure' }) }
 }
 export async function openWorkflowStore(options: WorkflowStoreOptions): Promise<WorkflowStore> {
-  const config = settings(options), storageDirectory = options.storageDirectory
+  const config = settings(options), storageDirectory = config.storageDirectory
   const owner = await acquireWorkflowWriter(storageDirectory)
   let head: OwnerHead
   let rootForFence: WorkflowRoot
@@ -480,6 +533,7 @@ export async function openWorkflowStore(options: WorkflowStoreOptions): Promise<
       const bound = copyBinding(requested)
       return queueWorkflowWriter(owner, async guard => {
         const view = lookup(guard.root, head, bound, config)
+        assertWritableSchemas(view, config)
         if (!view && runKeys(guard.root).length >= MAX_RUNS) workflowFail('capacity-exhausted')
         const attemptNumber = (view?.prefix.attempt.producingEpoch.attempt ?? 0) + 1
         positive(attemptNumber, MAX_CHAIN)
@@ -509,6 +563,7 @@ export async function openWorkflowStore(options: WorkflowStoreOptions): Promise<
         const info = workflowAttemptInfo(owner, attempt), key = runKey(info.binding)
         const view = lookup(guard.root, head, info.binding, config)
         currentAttempt(view, info.epoch)
+        assertWritableSchemas(view, config)
         const items = captured.components.map(input => {
           keys(input, ['kind', 'payload'])
           if (!WORKFLOW_COMPONENT_KINDS.includes(input.kind) || (input.kind as string) === 'critical-journal') workflowFail('invalid-input')
@@ -541,6 +596,7 @@ export async function openWorkflowStore(options: WorkflowStoreOptions): Promise<
         const info = workflowAttemptInfo(owner, attempt), key = runKey(info.binding)
         const view = lookup(guard.root, head, info.binding, config)
         currentAttempt(view, info.epoch)
+        assertWritableSchemas(view, config)
         const schema = config.validators['critical-journal']
         if (!schema) workflowFail('invalid-input')
         const sequence = (view.journal.at(-1)?.sequence ?? 0) + 1
