@@ -26,6 +26,8 @@ import { packEvidence, makeDispatchGuard, type PackedContext, type PackedManifes
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { createQuestionEvidenceRegistry, type QuestionEvidenceSidecar } from './question-evidence.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { createGenerationQuestionSourceRecorder, type QuestionSourceAuthority, type QuestionSourceAuthorityInput, type QuestionSourceCapability } from './question-source.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { createModelGateway, type ModelCompletion, type ModelTransport } from './model-gateway.ts'
 // @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
 import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestPreparationInput, type PreparedGenerationRequest, type AcceptedGenerationQuestion } from './generation-request.ts'
@@ -60,6 +62,8 @@ export interface EvidenceGenerationAdapter {
   readonly contextProvider: ContextProvider
   metadata(): readonly EvidenceGenerationRequestMetadata[]
   finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
+  readonly sourceAuthority: QuestionSourceAuthority
+  sourceFor(question: QuestionItem): Promise<QuestionSourceCapability>
 }
 
 export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v5' as const
@@ -72,6 +76,14 @@ export interface EvidenceGenerationRequestMetadata {
   readonly manifest: PackedManifest
   readonly usage: ModelUsage | null
   readonly completion: 'completed' | 'failed' | 'pending'
+}
+
+// A recorder cannot be bootstrapped from copied service metadata. This token never leaves this adapter.
+const sourceRecorderOwners = new WeakMap<object, QuestionSourceAuthorityInput>()
+/** @internal Read-only check used by question-source; no owner-minting API is exported. */
+export function ownsGenerationSourceRecorder(owner: unknown, input: QuestionSourceAuthorityInput): boolean {
+  const captured = owner && typeof owner === 'object' ? sourceRecorderOwners.get(owner) : undefined
+  return !!captured && captured.spec === input.spec && captured.ledger === input.ledger && captured.snapshot === input.snapshot && captured.store === input.store && captured.signal === input.signal
 }
 
 interface GenerationGroup {
@@ -327,6 +339,10 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
   const groups = makeGroups(selected.ids, resolved, selected.bundles, selected.topics, Math.min(desired, remainingCalls), spec.granularity === 'fine')
   if (!groups.length) fail('budget-exhausted')
   const registry = createQuestionEvidenceRegistry(spec)
+  const sourceInput = Object.freeze({ spec, ledger, snapshot, store, signal })
+  const sourceOwner = Object.freeze({})
+  sourceRecorderOwners.set(sourceOwner, sourceInput)
+  const sourceRecorder = createGenerationQuestionSourceRecorder(sourceInput, sourceOwner)
   const preparedStates = new WeakMap<object, PreparedState>()
   const priorQuestionTexts: string[] = []
   const dispatchMetadata = new Map<string, { readonly stage: GenerationRequestPreparationInput['stage']; readonly manifest: PackedManifest; completion: EvidenceGenerationRequestMetadata['completion'] }>()
@@ -411,34 +427,94 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       )
       if (!Number.isSafeInteger(effectiveOutputTokens) || effectiveOutputTokens < 1) fail('budget-exhausted')
       const guard = makeDispatchGuard(state.packet)
-      const dispatchGuard = (messages: readonly import('../llm.ts').ChatMessage[]): void => {
-        if (state.registered) fail()
+      const assertDispatchCurrent = (messages: readonly import('../llm.ts').ChatMessage[]): void => {
         if (state.signal.aborted) fail('cancelled')
         if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
         guard(messages)
-        options.beforeRequest?.()
-        if (state.signal.aborted) fail('cancelled')
-        if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
+      }
+      const registerDispatch = (messages: readonly import('../llm.ts').ChatMessage[]): void => {
+        if (state.registered) fail()
+        assertDispatchCurrent(messages)
         registry.registerRequest(state.requestId, state.packet)
+        sourceRecorder.recordDispatch(state.requestId, state.packet, state.stage)
         dispatchMetadata.set(state.requestId, { stage: state.stage, manifest: state.packet.manifest, completion: 'pending' })
         state.registered = true
       }
+      // M07's guard is deliberately synchronous and repeatable at admission, intent and receipt fences.
+      const dispatchGuard = assertDispatchCurrent
       const actualTransport = input.transport ?? chatCompletionStream
       const transport: ModelTransport = async (activeProfile, messages, emit, gatewayOptions) => {
         const timeoutMs = options.timeoutMs === undefined ? gatewayOptions.timeoutMs : Math.min(options.timeoutMs, gatewayOptions.timeoutMs ?? options.timeoutMs)
         const maxOutputTokens = options.maxOutputTokens === undefined ? gatewayOptions.maxOutputTokens : Math.min(options.maxOutputTokens, gatewayOptions.maxOutputTokens ?? options.maxOutputTokens)
-        return actualTransport(activeProfile, messages, emit, {
-          signal: state.signal,
-          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-          ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-          ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
-          includeUsage: true,
-          beforeRequest: () => {
-            gatewayOptions.beforeRequest?.()
-            try { options.onRequest?.() } catch { /* request observers cannot affect dispatch */ }
-          },
-          onUsage: usage => { gatewayOptions.onUsage?.(usage) }
-        })
+        let active = true
+        let prefetchStarted = false
+        let prefetchViolation = false
+        type FinalFenceOptions = import('../llm.ts').CallOptions & { readonly beforeFetch?: () => void }
+        const callerFinalFence = (options as FinalFenceOptions).beforeFetch
+        const gatewayFinalFence = (gatewayOptions as FinalFenceOptions).beforeFetch
+        const assertPrefetchCurrent = (): void => {
+          if (!active || prefetchViolation) fail('model-failed')
+          assertDispatchCurrent(messages)
+        }
+        const afterAwait = async (): Promise<void> => {
+          assertPrefetchCurrent()
+          await snapshot.assertCurrent(signal)
+          assertPrefetchCurrent()
+        }
+        const registerAndNotify = (): void => {
+          assertPrefetchCurrent()
+          beforeFetch()
+          registerDispatch(messages)
+          try { options.onRequest?.() } catch { /* request observers cannot replace the gateway outcome */ }
+          beforeFetch()
+        }
+        const beforeFetch = (): void => {
+          assertPrefetchCurrent()
+          for (const fence of [callerFinalFence, gatewayFinalFence]) {
+            if (!fence) continue
+            const result: unknown = fence()
+            if (result !== undefined) {
+              void Promise.resolve(result).catch(() => {})
+              fail('model-failed')
+            }
+            assertPrefetchCurrent()
+          }
+        }
+        const admitGateway = (): void | Promise<void> => {
+          assertPrefetchCurrent()
+          const pending: unknown = gatewayOptions.beforeRequest?.()
+          if (pending && typeof (pending as PromiseLike<void>).then === 'function') {
+            return Promise.resolve(pending).then(async () => {
+              await afterAwait()
+              registerAndNotify()
+            })
+          }
+          registerAndNotify()
+        }
+        const beforeRequest = (): void | Promise<void> => {
+          if (prefetchStarted) { prefetchViolation = true; fail('model-failed') }
+          prefetchStarted = true
+          assertPrefetchCurrent()
+          const pending: unknown = options.beforeRequest?.()
+          const admitted = pending && typeof (pending as PromiseLike<void>).then === 'function'
+            ? Promise.resolve(pending).then(async () => { await afterAwait(); return admitGateway() })
+            : admitGateway()
+          // A broken custom transport may discard the returned Promise. It still fails closed without an unhandled rejection.
+          if (admitted) void admitted.catch(() => {})
+          return admitted
+        }
+        try {
+          return await actualTransport(activeProfile, messages, emit, {
+            signal: state.signal,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+            ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+            ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
+            includeUsage: true,
+            beforeRequest,
+            beforeFetch,
+            onUsage: usage => { gatewayOptions.onUsage?.(usage) }
+          } as FinalFenceOptions)
+        } finally { active = false }
       }
       const gateway = createModelGateway(spec, privateProfile, ledger, { transport })
       const forwardSettledUsage = (): void => {
@@ -453,6 +529,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       } catch (error) {
         const meta = dispatchMetadata.get(state.requestId)
         if (meta) meta.completion = 'failed'
+        sourceRecorder.failDispatch(state.requestId)
         forwardSettledUsage()
         try {
           const failedMeter = ledger.snapshot()
@@ -467,9 +544,11 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       const meter = ledger.snapshot()
       if (!completion.usage || !meter.usageComplete || meter.blocked || meter.overspend.inputTokens || meter.overspend.outputTokens || meter.overspend.readBytes || meter.reservations.some(item => item.state !== 'settled')) {
         if (completedMeta) completedMeta.completion = 'failed'
+        sourceRecorder.failDispatch(state.requestId)
         meteringFailed = true
         fail('budget-exhausted')
       }
+      sourceRecorder.completeDispatch(state.requestId)
       return completion.content
     },
 
@@ -483,6 +562,7 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
         if (error instanceof WorkflowError && (error.code === 'unknown-evidence' || error.code === 'invalid-argument')) throw new CitationValidationError()
         throw error
       }
+      sourceRecorder.capture(input.requestId, input.question as QuestionItem, (input.rawQuestion as { evidenceIds: string[] }).evidenceIds)
       const text = safeClipText(input.question.question.replace(/\s+/g, ' ').trim(), MAX_PRIOR_QUESTION_CHARS)
       if (text && !priorQuestionTexts.includes(text)) {
         priorQuestionTexts.push(text)
@@ -496,6 +576,8 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
     writerVariant,
     requestAdapter,
     contextProvider,
+    sourceAuthority: sourceRecorder.authority,
+    sourceFor: sourceRecorder.sourceFor,
     metadata(): readonly EvidenceGenerationRequestMetadata[] {
       const reservations = new Map(ledger.snapshot().reservations.map(item => [item.id, item]))
       const rows: EvidenceGenerationRequestMetadata[] = []
@@ -526,7 +608,9 @@ export async function createEvidenceGenerationAdapter(input: EvidenceGenerationA
       const questionCount = result.sections.reduce((sum, section) => sum + section.questions.length, 0)
       if (questionCount < spec.questionBudget.min || questionCount > spec.questionBudget.max) fail('invalid-argument')
       finalized = true
-      return registry.finalize(result)
+      const sidecar = registry.finalize(result)
+      sourceRecorder.finalize(sidecar)
+      return sidecar
     }
   })
 }
