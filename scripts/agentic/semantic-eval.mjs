@@ -23,6 +23,8 @@ import { createQuestionRevisionService, createSingleQuestionRevisionTarget, read
 import { fingerprintQuestion } from '../../electron/services/workflow/question-evidence.ts'
 import { estimateMessageTokens } from '../../shared/token-budget.ts'
 import { WorkflowError } from '../../electron/services/workflow/project-contract.ts'
+import { chatCompletionStream } from '../../electron/services/llm.ts'
+import nativeSemantic from '../evaluation/m09-semantic-native.cjs'
 
 const claims = new WeakMap()
 const HASH = /^[a-f0-9]{64}$/u
@@ -147,7 +149,11 @@ function claimIdentity(authorization) {
 }
 /** Claims are private process capabilities backed by exclusive fsynced disk records. */
 export async function claimSemanticExecution(input) {
+  return claimSemanticCore(input)
+}
+async function claimSemanticCore(input, nativeContext) {
   const source = await sourceForMode(input)
+  if (input.mode === 'real') check(nativeContext, 'semantic-native-context-required')
   const bundle = await loadSemanticPublicBundle(input.dataDirectory)
   validateSemanticExecutionPlan(bundle, input.plan, input.executionMap)
   const configuration = currentConfig(input)
@@ -391,8 +397,21 @@ async function allFiles(directory, relative = '') {
   }
   return files.sort()
 }
-/** Real mode fails closed here until native companion-L fetch semantics are integrated. */
+/** Ordinary caller entry remains synthetic-only even with a real disk claim. */
 export async function executeSemanticEvaluation(input) {
+  return executeSemanticCore(input)
+}
+/** Native context membership, private profile and fixed production transport only. */
+export async function executeNativeSemanticEvaluation(input) {
+  const contextDescriptor = input && typeof input === 'object' ? Object.getOwnPropertyDescriptor(input, 'context') : null
+  check(contextDescriptor && 'value' in contextDescriptor && contextDescriptor.enumerable && Reflect.ownKeys(input).length === 1 && [Object.prototype, null].includes(Object.getPrototypeOf(input)), 'semantic-native-context-required')
+  const native = nativeSemantic.consumeNativeSemanticContext(input.context)
+  const claim = await claimSemanticCore({ mode: 'real', repoRoot: native.manifest.repoRoot, dataDirectory: native.manifest.dataDirectory, profile: native.profile, currentProfile: native.currentProfile, plan: native.manifest.plan, executionMap: native.manifest.executionMap, authorization: native.authorization, claimDirectory: native.manifest.claimDirectory }, input.context)
+  const result = await executeSemanticCore({ mode: 'real', claim, outputDirectory: native.manifest.outputDirectory }, input.context)
+  const freezeBytes = await readSemanticFile(result.outputDirectory, 'execution-freeze.json')
+  return nativeSemantic.completeNativeSemanticExecution(input.context, result, freezeBytes)
+}
+async function executeSemanticCore(input, nativeContext) {
   const binding = claims.get(input?.claim)
   check(binding && !binding.consumed, 'semantic-claim-required')
   check(input.mode === binding.record.mode, 'semantic-claim-mode')
@@ -405,9 +424,10 @@ export async function executeSemanticEvaluation(input) {
     check(canonicalJson(await inspectSemanticSource(binding.repoRoot)) === canonicalJson(binding.source), 'semantic-source-changed')
     const latest = await binding.currentProfile()
     check(semanticHash(deriveSemanticConfiguration(latest)) === semanticHash(binding.configuration) && latest.apiKey === binding.profile.apiKey, 'semantic-current-profile-mismatch')
-    fail('semantic-native-fetch-integration-required')
+    check(nativeContext, 'semantic-native-fetch-integration-required')
   }
-  check(typeof input.transport === 'function', 'semantic-synthetic-transport-required')
+  const transport = input.mode === 'real' ? chatCompletionStream : input.transport
+  check(typeof transport === 'function', 'semantic-synthetic-transport-required')
   const startedRecord = { schemaVersion: 1, purpose: SEMANTIC_PURPOSE, mode: binding.record.mode, claimId: binding.record.claimId, authorizationHash: binding.record.authorizationHash, planHash: binding.plan.planHash }
   const started = await writeJson(binding.claimRoot, binding.record.claimId + '.started.json', startedRecord)
   const output = await safeNewOutput(input.outputDirectory)
@@ -438,7 +458,7 @@ export async function executeSemanticEvaluation(input) {
         projectRoot = await materializeProject(output, project, unit.projectId)
         projectRoots.set(unit.projectId, projectRoot)
       }
-      const result = await executeCase({ binding, unit, mapping, output, projectRoot, state, journal, transport: input.transport, signal })
+      const result = await executeCase({ binding, unit, mapping, output, projectRoot, state, journal, transport, signal })
       check(!binding.profile.apiKey || !canonicalJson(result).includes(binding.profile.apiKey), 'semantic-artifact-secret')
       const caseFile = await writeJson(output, `cases/${unit.unitId}.json`, result)
       artifacts.push(caseFile)
@@ -458,11 +478,16 @@ export async function executeSemanticEvaluation(input) {
   }
   const current = await loadSemanticPublicBundle(binding.dataDirectory).catch(() => null)
   if (!current || current.publicDataHash !== binding.bundle.publicDataHash) { sourceStable = false; state.sealed = true; state.sealReason = 'semantic-public-changed' }
+  if (binding.record.mode === 'real') {
+    const finalSource = await inspectSemanticSource(binding.repoRoot).catch(() => null)
+    if (!finalSource || canonicalJson(finalSource) !== canonicalJson(binding.source)) { sourceStable = false; state.sealed = true; state.sealReason = 'semantic-source-changed' }
+  }
   const journalSummary = journal.finish()
   const journalBytes = await readSemanticFile(output, 'critical.jsonl')
   artifacts.push({ path: 'critical.jsonl', sha256: sha256(journalBytes), bytes: journalBytes.length })
   const report = { schemaVersion: 1, purpose: SEMANTIC_PURPOSE, protocol: SEMANTIC_PROTOCOL, mode: binding.record.mode, source: binding.source, sourceHashMeaning: 'git-commit-tree-identity-v1', publicDataHash: binding.bundle.publicDataHash, planHash: binding.plan.planHash, executionMapHash: binding.executionMap.executionMapHash, configurationHash: binding.configuration.configurationHash, authorizationHash: binding.record.authorizationHash, claimId: binding.record.claimId, sourceStable, sealed: state.sealed, sealReason: state.sealReason, aggregate: state.aggregate, cases, journal: journalSummary, quality: 'not-evaluated' }
   artifacts.push(await writeJson(output, 'execution.json', report))
+  if (nativeContext) artifacts.push(await writeJson(output, 'native-provenance.json', nativeSemantic.createNativeSemanticProvenance(nativeContext, binding.record)))
   const fileNames = await allFiles(output)
   const committedArtifacts = []
   let totalBytes = 0
