@@ -39,14 +39,16 @@ function now(clock: () => number): number {
 export function beginControlledRun(options: ControlledRunOptions): ControlledRunSession {
   const startedAt = now(options.clock)
   const storage = claimWorkflowCancellationControl(options.control, options.spec)
-  const work = createAcceptedWorkRegistry()
-  const stages = work.createIssuer('coordinator-stage')
-  const observers = work.createIssuer('coordinator-observer')
+  const localWork = storage.work ? undefined : createAcceptedWorkRegistry()
+  const stages = localWork?.createIssuer('coordinator-stage')
+  const observers = localWork?.createIssuer('coordinator-observer')
+  const drainWork = () => storage.work ? storage.work.drain() : localWork!.drain()
   const terminalWork = createAcceptedWorkRegistry()
   const terminalObservers = terminalWork.createIssuer('coordinator-terminal-observer')
-  const controller = new AbortController()
+  const controller = storage.work ? undefined : new AbortController()
+  const signal = storage.work?.signal ?? controller!.signal
   const identity = Object.freeze({ runId: options.spec.runId, projectId: options.spec.projectId, snapshotId: options.spec.snapshotId })
-  const deadlineAt = startedAt + options.spec.budget.total.wallClockMs
+  const deadlineAt = startedAt + (storage.work?.remainingMs() ?? options.spec.budget.total.wallClockMs)
   let lastNow = startedAt
   let currentStage: RunStage = 'created'
   let closedReason: WorkflowCancellationOutcome | null = null
@@ -71,9 +73,9 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
   const sealAdmission = (reason: WorkflowCancellationOutcome): boolean => {
     if (closedReason || terminalStatus) return false
     closedReason = reason
-    work.seal()
+    localWork?.seal()
     storage.sealAdmission()
-    if (!controller.signal.aborted) controller.abort()
+    if (controller && !signal.aborted) controller.abort()
     if (deadlineTimer !== null) clearTimeout(deadlineTimer)
     deadlineTimer = null
     if (options.signal && externalAbort) options.signal.removeEventListener('abort', externalAbort)
@@ -85,7 +87,7 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
     let time: number
     try { time = monotonicNow(); storage.assertAvailable() } catch (error) { sealAdmission('failed'); kickResolution(); throw error }
     if (time >= deadlineAt) { sealAdmission('failed'); kickResolution(); throw lifecycleError('run-deadline-exceeded') }
-    if (controller.signal.aborted) { sealAdmission('cancelled'); kickResolution(); throw lifecycleError('run-cancelled') }
+    if (signal.aborted) { sealAdmission('cancelled'); kickResolution(); throw lifecycleError('run-cancelled') }
   }
   const event = (type: RunCoordinatorEvent['type'], status?: WorkflowCancellationOutcome): RunCoordinatorEvent => Object.freeze({ ...identity, sequence: ++sequence, type, stage: currentStage, ...(status ? { status } : {}) })
   const kickResolution = (): void => {
@@ -97,14 +99,14 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
     for (const observer of options.observers) {
       if (!observer) continue
       // run() registers before invoking; its lease includes the exact returned thenable.
-      const observed = observers.run(() => observer(emitted))
+      const observed = storage.work ? storage.work.runObserver(() => observer(emitted)) : observers!.run(() => observer(emitted))
       void observed.then(kickResolution, kickResolution)
     }
   }
   const resolveTerminal = async (): Promise<WorkflowCancellationResolution> => {
     // Always guard before reusing a shared resolution. A caller inside its own live
     // stage or observer gets self-wait, including when another caller is resolving.
-    await work.drain()
+    await drainWork()
     if (terminalStarted) await terminalWork.drain()
     if (accepted) return accepted
     if (resolution) return resolution
@@ -132,7 +134,7 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
   }
   const session: ControlledRunSession = Object.freeze({
     ...identity,
-    get signal() { return controller.signal },
+    get signal() { return signal },
     get terminalStatus() { return terminalStatus },
     get result() { return null },
     async execute<T>(stage: RunStage, operation: (context: RunStageContext) => Promise<T> | T): Promise<T> {
@@ -141,11 +143,11 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
       if (!options.canTransition(currentStage, stage) || typeof operation !== 'function') throw new TypeError('Invalid run stage transition')
       operationInFlight = true
       currentStage = stage
-      const operationResult = stages.run(async () => {
+      const executeStage = async () => {
         try {
           emitBusiness('stage-started')
           const context: RunStageContext = Object.freeze({
-            ...identity, signal: controller.signal, assertActive,
+            ...identity, signal, assertActive,
             commit<T>(_effect: () => T): T { throw new TypeError('controlled-run-commit-unavailable') }
           })
           assertActive()
@@ -159,7 +161,8 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
           sealAdmission('failed')
           throw error
         }
-      })
+      }
+      const operationResult = storage.work ? storage.work.runStage(executeStage) : stages!.run(executeStage)
       // The issuer releases its actual lease before this continuation can resolve.
       // Resolution therefore never waits for the execute() promise that called it.
       try { return await operationResult } finally { operationInFlight = false; kickResolution() }
@@ -171,7 +174,7 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
     resolveTerminal,
     async close(): Promise<void> {
       sealAdmission('cancelled')
-      await work.drain()
+      await drainWork()
       if (terminalStarted) await terminalWork.drain()
       if (!closing) closing = (async () => { await resolveTerminal(); await storage.close() })()
       return closing
@@ -185,6 +188,9 @@ export function beginControlledRun(options: ControlledRunOptions): ControlledRun
     }
   })
   options.activate(session)
+  // Claim checked the original ledger, but it may expire before assembly finishes.
+  // Close synchronously before publishing a business event or returning its signal.
+  if (storage.work && storage.work.remainingMs() <= 0) sealAdmission('failed')
   emitBusiness('stage-started')
   externalAbort = () => { session.cancel() }
   if (options.signal?.aborted) session.cancel()
