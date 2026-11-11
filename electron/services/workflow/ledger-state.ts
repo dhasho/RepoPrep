@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { RunSpec } from './run-spec.ts'
 import type { ModelStage, ModelUsage } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
@@ -23,7 +24,8 @@ export type LedgerModelState = 'reserved' | 'unknown-unsent' | 'dispatched' | 's
 export interface LedgerModelRecord {
   readonly id: string; readonly stage: ModelStage; readonly inputTokens: number; readonly outputTokens: number
   readonly contextChars: number | null; readonly state: LedgerModelState; readonly usage: ModelUsage | null
-  readonly semanticOperationHash: string | null
+  readonly semanticHash: string | null; readonly semanticOperationHash: string | null
+  readonly requestHash: string | null; readonly manifestHash: string | null
 }
 export interface LedgerReadRecord { readonly id: string; readonly reservedBytes: number; readonly state: 'reserved' | 'settled'; readonly actualBytes: number | null }
 export interface LedgerToolRecord { readonly id: string; readonly stage: ModelStage }
@@ -64,6 +66,10 @@ function list(value: unknown): unknown[] {
 function sum(a: number, b: number): number { return ledgerInteger(a + b) }
 function stage(value: unknown): ModelStage { if (typeof value !== 'string' || !STAGES.includes(value)) invalid(); return value as ModelStage }
 function sort<T extends { readonly id: string }>(values: T[]): readonly T[] { return Object.freeze(values.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) }
+/** Stable logical identity. Rendered inputs and output cap are separate immutable commitments. */
+export function hashSemanticModelOperation(spec: RunSpec, modelStage: ModelStage, semanticHash: string): string {
+  return createHash('sha256').update(JSON.stringify(['repoprep.workflow.model-operation.v1', spec.runId, spec.projectId, spec.snapshotId, fingerprintRunSpec(spec), stage(modelStage), text(semanticHash, HASH)])).digest('hex')
+}
 export function validateLedgerPosition(value: unknown): LedgerJournalPosition {
   const r = shape(value, ['sequence', 'hash'])
   return Object.freeze({ sequence: ledgerInteger(r.sequence), hash: text(r.hash, HASH) })
@@ -101,7 +107,7 @@ function parseLedgerState(spec: RunSpec, value: unknown): LedgerStateV1 {
   let input = 0; let output = 0; let read = 0; let estimated = 0; let usageTotal = 0
   let overInput = 0; let overOutput = 0; let overRead = 0
   const models = sort(list(r.models).map(value => {
-    const m = shape(value, ['id', 'stage', 'inputTokens', 'outputTokens', 'contextChars', 'state', 'usage', 'semanticOperationHash'])
+    const m = shape(value, ['id', 'stage', 'inputTokens', 'outputTokens', 'contextChars', 'state', 'usage', 'semanticHash', 'semanticOperationHash', 'requestHash', 'manifestHash'])
     const id = text(m.id, ID); claim(id)
     const inputTokens = ledgerInteger(m.inputTokens); const outputTokens = ledgerInteger(m.outputTokens)
     const contextChars = m.contextChars === null ? null : ledgerInteger(m.contextChars)
@@ -109,11 +115,19 @@ function parseLedgerState(spec: RunSpec, value: unknown): LedgerStateV1 {
     const state = m.state as LedgerModelState
     const usage = m.usage === null ? null : validateLedgerUsage(m.usage)
     if ((state === 'settled') !== (usage !== null)) invalid()
+    const modelStage = stage(m.stage)
+    const semanticHash = m.semanticHash === null ? null : text(m.semanticHash, HASH)
     const semanticOperationHash = m.semanticOperationHash === null ? null : text(m.semanticOperationHash, HASH)
-    if (semanticOperationHash !== null) { if (operations.has(semanticOperationHash)) invalid(); operations.add(semanticOperationHash) }
+    const requestHash = m.requestHash === null ? null : text(m.requestHash, HASH)
+    const manifestHash = m.manifestHash === null ? null : text(m.manifestHash, HASH)
+    if ([semanticOperationHash, requestHash, manifestHash].some(hash => (hash === null) !== (semanticHash === null))) invalid()
+    if (semanticOperationHash !== null) {
+      if (contextChars === null || semanticOperationHash !== hashSemanticModelOperation(spec, modelStage, semanticHash!) || operations.has(semanticOperationHash)) invalid()
+      operations.add(semanticOperationHash)
+    }
     input = sum(input, usage?.inputTokens ?? inputTokens); output = sum(output, usage?.outputTokens ?? outputTokens); estimated = sum(estimated, inputTokens); usageTotal = sum(usageTotal, usage?.totalTokens ?? 0)
     overInput = sum(overInput, Math.max(0, (usage?.inputTokens ?? 0) - inputTokens)); overOutput = sum(overOutput, Math.max(0, (usage?.outputTokens ?? 0) - outputTokens))
-    return Object.freeze({ id, stage: stage(m.stage), inputTokens, outputTokens, contextChars, state, usage, semanticOperationHash })
+    return Object.freeze({ id, stage: modelStage, inputTokens, outputTokens, contextChars, state, usage, semanticHash, semanticOperationHash, requestHash, manifestHash })
   }))
   const reads = sort(list(r.reads).map(value => {
     const v = shape(value, ['id', 'reservedBytes', 'state', 'actualBytes']); const id = text(v.id, ID); claim(id)
@@ -141,7 +155,7 @@ const MAX_METADATA_BYTES = Buffer.byteLength(JSON.stringify({
   diagnostics: { overspendInputTokens: MAX_NUMBER, overspendOutputTokens: MAX_NUMBER, overspendReadBytes: MAX_NUMBER, overspendAdmissions: MAX_NUMBER, doubleSettlements: MAX_NUMBER, unknownUsageTreatedAsZero: MAX_NUMBER },
   models: [], reads: [], tools: [], issuedIds: []
 }))
-const MAX_MODEL_BYTES = Buffer.byteLength(JSON.stringify({ id: 'a'.repeat(128), stage: 'investigation', inputTokens: MAX_NUMBER, outputTokens: MAX_NUMBER, contextChars: MAX_NUMBER, state: 'unknown-unsent', usage: { inputTokens: MAX_NUMBER, outputTokens: MAX_NUMBER, totalTokens: MAX_NUMBER }, semanticOperationHash: 'a'.repeat(64) })) + 1
+const MAX_MODEL_BYTES = Buffer.byteLength(JSON.stringify({ id: 'a'.repeat(128), stage: 'investigation', inputTokens: MAX_NUMBER, outputTokens: MAX_NUMBER, contextChars: MAX_NUMBER, state: 'unknown-unsent', usage: { inputTokens: MAX_NUMBER, outputTokens: MAX_NUMBER, totalTokens: MAX_NUMBER }, semanticHash: 'a'.repeat(64), semanticOperationHash: 'a'.repeat(64), requestHash: 'a'.repeat(64), manifestHash: 'a'.repeat(64) })) + 1
 const MAX_READ_BYTES = Buffer.byteLength(JSON.stringify({ id: 'a'.repeat(128), reservedBytes: MAX_NUMBER, state: 'reserved', actualBytes: MAX_NUMBER })) + 1
 const MAX_TOOL_BYTES = Buffer.byteLength(JSON.stringify({ id: 'a'.repeat(128), stage: 'investigation' })) + 1
 export function worstCaseLedgerBytes(counts: { readonly models: { readonly length: number }; readonly reads: { readonly length: number }; readonly tools: { readonly length: number }; readonly issuedIds: { readonly length: number } }): number {

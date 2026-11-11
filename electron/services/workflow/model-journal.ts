@@ -6,7 +6,7 @@ import type { LedgerBinding, LedgerJournalPosition, LedgerStateV1 } from './ledg
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { exportBudgetLedgerState, enableBudgetLedgerDurability } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { validateLedgerBinding, validateLedgerPosition } from './ledger-state.ts'
+import { hashSemanticModelOperation, validateLedgerBinding, validateLedgerPosition } from './ledger-state.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { WorkflowError } from './project-contract.ts'
 
@@ -14,7 +14,7 @@ export interface DurableOperationInput { readonly semanticHash: string; readonly
 export interface DurableModelContext {
   readonly runId: string; readonly projectId: string; readonly snapshotId: string
   readonly attemptId: string; readonly fence: number; readonly id: string; readonly stage: ModelStage
-  readonly semanticOperationHash: string; readonly requestHash: string; readonly manifestHash: string
+  readonly semanticHash: string; readonly semanticOperationHash: string; readonly requestHash: string; readonly manifestHash: string
   readonly inputTokens: number; readonly outputTokens: number; readonly contextChars: number
 }
 export type DurableModelEvent = Readonly<{
@@ -49,8 +49,8 @@ export function createDurableModelAdmission(spec: RunSpec, ledger: BudgetLedger,
     context(id: string, stage: ModelStage, messages: readonly ChatMessage[], operation: DurableOperationInput | undefined, inputTokens: number, outputTokens: number): DurableModelContext {
       if (!operation || ![Object.prototype, null].includes(Object.getPrototypeOf(operation)) || Reflect.ownKeys(operation).length !== 2 || !['semanticHash', 'manifestHash'].every(key => Object.hasOwn(Object.getOwnPropertyDescriptor(operation, key) ?? {}, 'value')) || typeof operation.semanticHash !== 'string' || typeof operation.manifestHash !== 'string' || !HASH.test(operation.semanticHash) || !HASH.test(operation.manifestHash)) throw new WorkflowError('invalid-argument')
       const requestHash = hashModelMessages(messages)
-      const semanticOperationHash = createHash('sha256').update(JSON.stringify([spec.runId, spec.projectId, spec.snapshotId, binding.configurationHash, stage, operation.semanticHash, requestHash, operation.manifestHash, outputTokens])).digest('hex')
-      return Object.freeze({ runId: spec.runId, projectId: spec.projectId, snapshotId: spec.snapshotId, attemptId, fence, id, stage, semanticOperationHash, requestHash, manifestHash: operation.manifestHash, inputTokens, outputTokens, contextChars: messages.reduce((sum, message) => sum + message.content.length, 0) })
+      const semanticOperationHash = hashSemanticModelOperation(spec, stage, operation.semanticHash)
+      return Object.freeze({ runId: spec.runId, projectId: spec.projectId, snapshotId: spec.snapshotId, attemptId, fence, id, stage, semanticHash: operation.semanticHash, semanticOperationHash, requestHash, manifestHash: operation.manifestHash, inputTokens, outputTokens, contextChars: messages.reduce((sum, message) => sum + message.content.length, 0) })
     },
     assertCurrent(context: DurableModelContext, messages: readonly ChatMessage[]): void {
       if (journal.attemptId !== attemptId || journal.fence !== fence || hashModelMessages(messages) !== context.requestHash) throw new WorkflowError('configuration-changed')

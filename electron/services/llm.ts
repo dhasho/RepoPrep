@@ -211,6 +211,8 @@ export interface CallOptions {
   includeUsage?: boolean
   /** Main-process admission guard. Unlike observers, rejection must prevent fetch. */
   beforeRequest?: () => void | Promise<void>
+  /** Pure synchronous, repeatable final fence. Runs after awaited admission and observers, immediately before fetch. */
+  beforeFetch?: () => void
   onUsage?: (usage: LlmUsage) => void
   onRequest?: () => void
 }
@@ -314,6 +316,15 @@ async function request(
     catch (error) { callbackFailed = true; callbackFailure = error; throw error }
     throwIfAborted()
     try { opts.onRequest?.() } catch { /* diagnostics cannot affect generation */ }
+    throwIfAborted()
+    try {
+      const finalGuard: unknown = opts.beforeFetch?.()
+      if (finalGuard !== undefined) {
+        // Fail synchronously; drain a malformed async guard only to prevent an unhandled rejection.
+        void Promise.resolve(finalGuard).catch(() => {})
+        throw new LlmRequestError('response')
+      }
+    } catch (error) { callbackFailed = true; callbackFailure = error; throw error }
     throwIfAborted()
     response = await fetch(url, {
       method: 'POST',

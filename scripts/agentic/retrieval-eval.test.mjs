@@ -449,3 +449,33 @@ test('guarded transport preserves synchronous admission hook return semantics', 
   } })
   assert.equal(await guarded({}, [], () => {}, { beforeRequest() {} }), 'synthetic output')
 })
+
+
+test('guarded transport checks the final synchronous fence before its journal and propagates it unchanged', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const events = []; let checks = 0
+  const beforeFetch = () => { checks++; events.push('fence') }
+  const guarded = createGuardedTransport({ collector, runId: 'final-fence', getReservation: () => ({ id: 'call-final', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+    assert.equal(options.beforeFetch, beforeFetch)
+    assert.equal(options.beforeRequest(), undefined)
+    options.beforeFetch(); events.push('HTTP')
+    options.onUsage({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+    return 'synthetic output'
+  } })
+  assert.equal(await guarded({}, [], () => {}, { beforeFetch }), 'synthetic output')
+  assert.equal(checks, 2)
+  assert.deepEqual(events, ['fence', 'request-admitted', 'fence', 'HTTP', 'provider-usage'])
+})
+
+test('guarded transport refuses stale or async final fences before journaling or HTTP', async () => {
+  for (const mode of ['revoked', 'async']) {
+    const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+    const events = []; let current = true
+    const guarded = createGuardedTransport({ collector, runId: 'final-' + mode, getReservation: () => ({ id: 'call-' + mode, estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+      await options.beforeRequest(); events.push('HTTP'); return 'forbidden'
+    } })
+    await assert.rejects(guarded({}, [], () => {}, { beforeRequest: async () => { await Promise.resolve(); current = false }, beforeFetch: mode === 'async' ? async () => { throw Error('SYNTHETIC_SECRET invalid final fence') } : () => { if (!current) throw Error('Static revoked fence.') } }))
+    assert.equal(events.includes('request-admitted'), false); assert.equal(events.includes('HTTP'), false)
+    assert.equal(collector.snapshot().admittedRequests, 0)
+  }
+})

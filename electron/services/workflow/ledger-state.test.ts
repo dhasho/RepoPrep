@@ -5,7 +5,7 @@ import { createRunSpec } from './run-spec.ts'
 // @ts-ignore TS5097 -- direct Node runner.
 import { createBudgetLedger, exportBudgetLedgerState, restoreBudgetLedger, sealBudgetLedger } from './budget-ledger.ts'
 // @ts-ignore TS5097 -- direct Node runner.
-import { createLedgerBinding, encodeLedgerState, decodeLedgerState, validateLedgerState, worstCaseLedgerBytes, LEDGER_STATE_MAX_BYTES } from './ledger-state.ts'
+import { createLedgerBinding, encodeLedgerState, decodeLedgerState, validateLedgerState, hashSemanticModelOperation, worstCaseLedgerBytes, LEDGER_STATE_MAX_BYTES } from './ledger-state.ts'
 import type { LedgerStateV1 } from './ledger-state.ts'
 const makeSpec = (ids = {}) => createRunSpec({ version: 1, runId: 'run-01', projectId: 'project-01', snapshotId: 'snapshot-01', strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: 'profile-01', model: 'synthetic', endpointFingerprint: 'a'.repeat(64), protocol: 'openai', contextWindowTokens: 49152, maxOutputTokens: 4096 }, promptVersion: 'prompt-v1', toolVersion: 'tool-v1', policyVersion: 'policy-v1', ...ids })
 const spec = makeSpec(); const binding = createLedgerBinding(spec, { sequence: 1, hash: 'b'.repeat(64) })
@@ -16,10 +16,11 @@ const restore = (value: unknown, extra = {}) => restoreBudgetLedger(spec, value,
 function initial(): LedgerStateV1 { return exportBudgetLedgerState(createBudgetLedger(spec, options), binding) }
 
 test('complete codec round-trip retains reads, tools, released IDs, partitions and immutable canonical data', () => {
-  const ledger = createBudgetLedger(spec, options)
+  // Historical ordinary rows, including released IDs, remain codec-compatible after activation.
+  const ledger = createBudgetLedger(spec, { ...options, durable: false })
   ledger.reserveModel({ id: 'released-model', stage: 'generation', inputTokens: 2, outputTokens: 2 }); ledger.releaseUnsent('released-model')
   ledger.reserveRead('released-read', 3); ledger.releaseRead('released-read')
-  ledger.reserveModel({ id: 'z-model', stage: 'generation', inputTokens: 10, outputTokens: 10, contextChars: 40, semanticOperationHash: 'c'.repeat(64) }); ledger.markDispatched('z-model'); ledger.settleModel('z-model', receipt())
+  ledger.reserveModel({ id: 'z-model', stage: 'generation', inputTokens: 10, outputTokens: 10, contextChars: 40, semanticHash: 'c'.repeat(64), semanticOperationHash: hashSemanticModelOperation(spec, 'generation', 'c'.repeat(64)), requestHash: 'd'.repeat(64), manifestHash: 'e'.repeat(64) }); ledger.markDispatched('z-model'); ledger.settleModel('z-model', receipt())
   ledger.reserveModel({ id: 'a-model', stage: 'review', inputTokens: 5, outputTokens: 7 })
   ledger.reserveRead('read-hold', 12); ledger.chargeRead('read-settled', 5); ledger.chargeTool('tool-1', 'review'); ledger.chargeTool('tool-2')
   const state = exportBudgetLedgerState(ledger, binding)
@@ -36,7 +37,7 @@ test('complete codec round-trip retains reads, tools, released IDs, partitions a
 
 test('unknown, unknown-unsent and intent recovery retain full holds and forbid paid work', () => {
   for (const kind of ['unknown', 'unknown-unsent', 'dispatched', 'reserved'] as const) {
-    const ledger = createBudgetLedger(spec, options)
+    const ledger = createBudgetLedger(spec, { ...options, durable: false })
     ledger.reserveModel({ id: 'held', stage: 'generation', inputTokens: 20, outputTokens: 30 })
     if (kind === 'dispatched' || kind === 'unknown') ledger.markDispatched('held')
     if (kind === 'unknown') ledger.settleModel('held', null)
@@ -73,7 +74,7 @@ test('strict schemas reject extra keys, accessors, hostile prototypes, sparse ar
 })
 
 test('primary records recompute totals; diagnostic safety floors cannot hide overspend or unknown budgets', () => {
-  const ledger = createBudgetLedger(spec, options)
+  const ledger = createBudgetLedger(spec, { ...options, durable: false })
   ledger.reserveModel({ id: 'over', stage: 'generation', inputTokens: 1, outputTokens: 1 }); ledger.markDispatched('over'); ledger.settleModel('over', receipt(2, 3))
   const state = exportBudgetLedgerState(ledger, binding)
   const forged = clone(state) as any; forged.diagnostics.overspendInputTokens = 0
@@ -116,7 +117,7 @@ test('byte and issued-ID ceilings are independent, bounded and checked before de
   assert.throws(() => decodeLedgerState(spec, Buffer.alloc(LEDGER_STATE_MAX_BYTES + 1)))
   const counts = { models: { length: 100_000 }, reads: { length: 0 }, tools: { length: 0 }, issuedIds: { length: 100_000 } }
   assert.ok(worstCaseLedgerBytes(counts) > 0)
-  assert.ok(worstCaseLedgerBytes(counts) <= LEDGER_STATE_MAX_BYTES, 'bounded maximum record and issued-ID storage fits under 64 MiB')
+  assert.ok(worstCaseLedgerBytes(counts) > LEDGER_STATE_MAX_BYTES, 'expanded model commitments may exhaust bytes before the independent issued-ID limit')
   // This exercises durable admission at the count boundary using released history, not paid calls.
   const state = { ...initial(), issuedIds: Array.from({ length: 100_000 }, (_, i) => 'released-' + i) }
   const ledger = restore(state)
@@ -155,4 +156,48 @@ test('binding preserves the full valid RunSpec policy-version range', () => {
   const longBinding = createLedgerBinding(longSpec, binding.journal)
   const state = exportBudgetLedgerState(createBudgetLedger(longSpec, options), longBinding)
   assert.equal(decodeLedgerState(longSpec, encodeLedgerState(longSpec, state)).binding.policyVersion, longSpec.policyVersion)
+})
+
+
+test('strict operation records retain separate immutable commitments and validate stable semantic identity', () => {
+  const ledger = createBudgetLedger(spec, options)
+  const commitment = { semanticHash: 'c'.repeat(64), semanticOperationHash: hashSemanticModelOperation(spec, 'generation', 'c'.repeat(64)), requestHash: 'd'.repeat(64), manifestHash: 'e'.repeat(64) }
+  ledger.reserveModel({ id: 'logical', stage: 'generation', inputTokens: 2, outputTokens: 3, contextChars: 10, ...commitment })
+  const state = decodeLedgerState(spec, encodeLedgerState(spec, exportBudgetLedgerState(ledger, binding)))
+  assert.deepEqual(Object.fromEntries(Object.keys(commitment).map(key => [key, (state.models[0] as any)[key]])), commitment)
+  assert.equal(Object.isFrozen(state.models[0]), true)
+  assert.equal(Object.hasOwn(ledger.snapshot().reservations[0], 'semanticHash'), false)
+  assert.equal(Object.hasOwn(ledger.snapshot().reservations[0], 'requestHash'), false)
+  for (const key of Object.keys(commitment)) {
+    const missing = clone(state) as any; delete missing.models[0][key]
+    assert.throws(() => validateLedgerState(spec, missing))
+    const partial = clone(state) as any; partial.models[0][key] = null
+    assert.throws(() => validateLedgerState(spec, partial))
+    const malformed = clone(state) as any; malformed.models[0][key] = 'unvalidated'
+    assert.throws(() => validateLedgerState(spec, malformed))
+  }
+  for (const changed of [{ semanticHash: 'f'.repeat(64) }, { semanticOperationHash: 'f'.repeat(64) }, { stage: 'review' }]) {
+    assert.throws(() => validateLedgerState(spec, { ...state, models: [{ ...state.models[0], ...changed }] }))
+  }
+  const duplicate = { ...state.models[0], id: 'other-uuid', requestHash: 'f'.repeat(64), manifestHash: 'f'.repeat(64), outputTokens: 1 }
+  assert.throws(() => validateLedgerState(spec, { ...state, models: [...state.models, duplicate], issuedIds: [...state.issuedIds, duplicate.id] }))
+  let invoked = false
+  const accessor = Object.defineProperty({ ...state.models[0] }, 'semanticHash', { enumerable: true, get() { invoked = true; return commitment.semanticHash } })
+  assert.throws(() => validateLedgerState(spec, { ...state, models: [accessor] })); assert.equal(invoked, false)
+  assert.throws(() => ledger.reserveModel({ id: 'partial', stage: 'generation', inputTokens: 1, outputTokens: 1, semanticOperationHash: commitment.semanticOperationHash }))
+})
+
+test('expanded worst-case byte capacity refuses an additional record before changing held accounting', () => {
+  const counts = (length: number) => ({ models: { length }, reads: { length: 0 }, tools: { length: 0 }, issuedIds: { length } })
+  const base = worstCaseLedgerBytes(counts(0)); const perRecord = worstCaseLedgerBytes(counts(1)) - base
+  const capacity = Math.floor((LEDGER_STATE_MAX_BYTES - base) / perRecord)
+  assert.ok(capacity > 0 && capacity < 100_000)
+  assert.ok(worstCaseLedgerBytes(counts(capacity)) <= LEDGER_STATE_MAX_BYTES)
+  const models = Array.from({ length: capacity }, (_, i) => ({ id: 'capacity-' + i, stage: 'generation' as const, inputTokens: 0, outputTokens: 0, contextChars: null, state: 'reserved' as const, usage: null, semanticHash: null, semanticOperationHash: null, requestHash: null, manifestHash: null }))
+  const state = { ...initial(), models, issuedIds: models.map(model => model.id) }
+  const ledger = restore(state)
+  assert.throws(() => ledger.markUnknownRecovery({ id: 'one-more', stage: 'generation', inputTokens: 1, outputTokens: 1 }), { code: 'budget-exhausted' })
+  assert.equal(ledger.snapshot().reservations.length, capacity)
+  assert.equal(ledger.snapshot().total.inputTokens, 0)
+  assert.throws(() => validateLedgerState(spec, { ...state, models: [...models, { ...models[0], id: 'one-more' }], issuedIds: [...state.issuedIds, 'one-more'] }))
 })

@@ -13,7 +13,7 @@ import { createLedgerBinding, decodeLedgerState, encodeLedgerState } from './led
 // @ts-ignore TS5097 -- direct Node runner.
 import { createModelGateway } from './model-gateway.ts'
 // @ts-ignore TS5097 -- direct Node runner.
-import { normalizeBaseUrl } from '../llm.ts'
+import { normalizeBaseUrl, chatCompletionStream } from '../llm.ts'
 // @ts-ignore TS5097 -- direct Node runner.
 import { WorkflowError } from './project-contract.ts'
 import type { DurableModelEvent, DurableModelJournal } from './model-journal.ts'
@@ -71,7 +71,7 @@ async function createHarness() {
   return { directory, events, journal, read, revoke() { current = false }, setFailure(kind: DurableModelEvent['kind'], after = false) { fail = kind; failAfterWrite = after }, pause(kind: DurableModelEvent['kind']) { waitFor = kind; pause = deferred(); entered = deferred(); return { entered: entered.promise, release: pause.resolve } } }
 }
 const complete = (gateway: ReturnType<typeof createModelGateway>, id = 'request-01', extra = {}) => gateway.complete({ id, stage: 'generation', messages, durableOperation: operation, ...extra })
-const settledTransport = (events: string[]): ModelTransport => async (_p, _m, _d, opts) => { await opts.beforeRequest!(); events.push('HTTP'); opts.onUsage!(usage); return 'synthetic output' }
+const settledTransport = (events: string[]): ModelTransport => async (_p, _m, _d, opts) => { await opts.beforeRequest!(); opts.beforeFetch?.(); events.push('HTTP'); opts.onUsage!(usage); return 'synthetic output' }
 const safeError = (error: unknown) => error instanceof WorkflowError && !/SYNTHETIC_SECRET|disk failure|synthetic private/.test(JSON.stringify(error))
 
 test('real journal flushes reservation and intent before HTTP, and receipt before settled return', async () => harness(async h => {
@@ -150,7 +150,7 @@ test('a crash after flushed intent restores unknown held work and rejects a fres
   const recovered = restoreBudgetLedger(spec, state, { ...ledgerOptions, authority: { binding: state.binding, assertCurrent() {} } })
   assert.equal(recovered.snapshot().reservations[0].state, 'unknown')
   assert.equal(recovered.snapshot().total.outputTokens, state.models[0].outputTokens)
-  assert.throws(() => recovered.reserveModel({ id: 'changed-uuid', stage: 'generation', inputTokens: 1, outputTokens: 1, semanticOperationHash: state.models[0].semanticOperationHash! }))
+  assert.throws(() => recovered.reserveModel({ id: 'changed-uuid', stage: 'generation', inputTokens: 1, outputTokens: 1, contextChars: 1, semanticHash: state.models[0].semanticHash!, semanticOperationHash: state.models[0].semanticOperationHash!, requestHash: state.models[0].requestHash!, manifestHash: state.models[0].manifestHash! }))
   assert.equal(h.events.includes('HTTP'), false)
 }))
 
@@ -175,8 +175,28 @@ test('semantic operation registry rejects a changed UUID after a complete usage 
   let http = 0
   const resumeJournal = { ...h.journal, binding: state.binding }
   const resumed = createModelGateway(spec, profile, recovered, { durability: resumeJournal, transport: async () => { http++; return 'forbidden' } })
-  await assert.rejects(complete(resumed, 'new-request-uuid'), safeError)
+  const committed = state.models[0]
+  assert.equal(committed.semanticHash, operation.semanticHash)
+  assert.equal(committed.requestHash, records.at(-1)!.event.context.requestHash)
+  assert.equal(committed.manifestHash, operation.manifestHash)
+  const variants = [
+    ['uuid-only', {}],
+    ['new-cap', { maxOutputTokens: 2048 }],
+    ['new-opaque-ids', { messages: [{ role: 'user' as const, content: 'same logical source rerendered with ev_fresh-uuid' }] }],
+    ['new-manifest', { durableOperation: { ...operation, manifestHash: 'e'.repeat(64) } }],
+    ['combined', { maxOutputTokens: 1024, messages: [{ role: 'user' as const, content: 'rerendered input ev_another-uuid' }], durableOperation: { ...operation, manifestHash: 'f'.repeat(64) } }]
+  ] as const
+  for (const [kind, changed] of variants) {
+    await assert.rejects(complete(gateway, 'live-' + kind, changed), safeError)
+    await assert.rejects(complete(resumed, 'restored-' + kind, changed), safeError)
+  }
   assert.equal(http, 0); assert.equal((await h.read()).length, records.length)
+  // A producer must explicitly authorize a distinct logical operation/version; UUIDs never mint it.
+  const explicit = createModelGateway(spec, profile, recovered, { durability: resumeJournal, transport: settledTransport(h.events) })
+  const distinct = { ...operation, semanticHash: createHash('sha256').update('program-authorized-format-retry-v2').digest('hex') }
+  assert.equal((await complete(explicit, 'explicit-format-v2', { durableOperation: distinct })).content, 'synthetic output')
+  await assert.rejects(complete(explicit, 'explicit-format-v2-new-uuid', { durableOperation: distinct, maxOutputTokens: 1024 }), safeError)
+  assert.equal((await h.read()).at(-1)!.state.models.length, 2)
 }))
 
 test('broken transports skipping or discarding the awaited hook cannot return unmetered content', async () => {
@@ -245,8 +265,7 @@ test('a durably written over-receipt preserves actual charges and blocks all fur
 
 test('durable operation metadata cannot silently downgrade to a non-durable gateway', async () => harness(async h => {
   const ledger = createBudgetLedger(spec, ledgerOptions); let http = 0
-  const gateway = createModelGateway(spec, profile, ledger, { transport: async () => { http++; return 'forbidden' } })
-  await assert.rejects(complete(gateway), safeError)
+  assert.throws(() => createModelGateway(spec, profile, ledger, { transport: async () => { http++; return 'forbidden' } }), safeError)
   const durable = createModelGateway(spec, profile, ledger, { durability: h.journal, transport: async () => { http++; return 'forbidden' } })
   await assert.rejects(durable.complete({ id: 'missing-operation', stage: 'generation', messages }), safeError)
   assert.equal(http, 0); assert.equal(ledger.snapshot().total.reservedRequests, 0)
@@ -272,4 +291,47 @@ test('concurrent gateways on one original ledger cannot overwrite an earlier dur
   const recovered = restoreBudgetLedger(spec, last, { ...ledgerOptions, authority: { binding: last.binding, assertCurrent() {} } })
   assert.equal(recovered.snapshot().usageComplete, true)
   assert.equal(recovered.snapshot().total.inputTokens, 10)
+}))
+
+
+test('final gateway fence prevents HTTP and source registration after outer post-admission awaits', async () => {
+  for (const mode of ['fence', 'expiry', 'source'] as const) await harness(async h => {
+    const original = globalThis.fetch; const entered = deferred(); const gate = deferred(); const controller = new AbortController()
+    let clock = 0; let sourceCurrent = true; let registrations = 0; let http = 0
+    globalThis.fetch = async () => { http++; throw Error('forbidden synthetic fetch') }
+    const ledger = createBudgetLedger(spec, { ...ledgerOptions, clock: () => clock })
+    const transport: ModelTransport = (p, m, emit, options) => chatCompletionStream(p, m, emit, {
+      ...options,
+      beforeRequest: async () => {
+        await options.beforeRequest!()
+        entered.resolve(); await gate.promise
+        // The source wrapper checks the same pure gate before its one-time registration.
+        options.beforeFetch!(); registrations++
+      }
+    })
+    try {
+      const gateway = createModelGateway(spec, profile, ledger, { durability: h.journal, transport })
+      const rejected = assert.rejects(complete(gateway, 'request-01', { signal: controller.signal, dispatchGuard() { if (!sourceCurrent) throw new WorkflowError('configuration-changed') } }), safeError)
+      await entered.promise
+      if (mode === 'fence') h.revoke()
+      if (mode === 'expiry') clock = spec.budget.total.wallClockMs
+      if (mode === 'source') sourceCurrent = false
+      gate.resolve(); await rejected
+      assert.equal(controller.signal.aborted, false)
+      assert.equal(registrations, 0); assert.equal(http, 0)
+      assert.equal(ledger.snapshot().blocked, true)
+    } finally { gate.resolve(); globalThis.fetch = original }
+  })
+})
+
+test('LLM final gateway fence prevents observer revocation from reaching HTTP', async () => harness(async h => {
+  const original = globalThis.fetch; const controller = new AbortController(); let http = 0
+  globalThis.fetch = async () => { http++; throw Error('forbidden synthetic fetch') }
+  try {
+    const ledger = createBudgetLedger(spec, ledgerOptions)
+    const transport: ModelTransport = (p, m, emit, options) => chatCompletionStream(p, m, emit, { ...options, onRequest() { h.revoke(); throw Error('ignored observer failure') } })
+    await assert.rejects(complete(createModelGateway(spec, profile, ledger, { durability: h.journal, transport }), 'request-01', { signal: controller.signal }), safeError)
+    assert.equal(controller.signal.aborted, false); assert.equal(http, 0)
+    assert.equal(ledger.snapshot().blocked, true)
+  } finally { globalThis.fetch = original }
 }))

@@ -1,7 +1,7 @@
 import type { RunSpec } from './run-spec.ts'
 import { performance } from 'node:perf_hooks'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { validateLedgerBinding, validateLedgerState, validateLedgerUsage, ledgerInteger, worstCaseLedgerBytes, LEDGER_STATE_MAX_BYTES } from './ledger-state.ts'
+import { hashSemanticModelOperation, validateLedgerBinding, validateLedgerState, validateLedgerUsage, ledgerInteger, worstCaseLedgerBytes, LEDGER_STATE_MAX_BYTES } from './ledger-state.ts'
 import type { LedgerBinding, LedgerStateV1, LedgerModelState } from './ledger-state.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { CONTEXT_CHAR_BUDGETS } from '../../../shared/context-budget.ts'
@@ -9,7 +9,7 @@ import { CONTEXT_CHAR_BUDGETS } from '../../../shared/context-budget.ts'
 import { WorkflowError } from './project-contract.ts'
 
 export type ModelStage = 'investigation' | 'generation' | 'review' | 'repair' | 'compensation'
-export interface ModelReservation { readonly id: string; readonly stage: ModelStage; readonly inputTokens: number; readonly outputTokens: number; readonly contextChars?: number; readonly semanticOperationHash?: string }
+export interface ModelReservation { readonly id: string; readonly stage: ModelStage; readonly inputTokens: number; readonly outputTokens: number; readonly contextChars?: number; readonly semanticHash?: string; readonly semanticOperationHash?: string; readonly requestHash?: string; readonly manifestHash?: string }
 export interface ModelUsage { readonly inputTokens: number; readonly outputTokens: number; readonly totalTokens: number }
 export interface BudgetLedgerOptions { readonly clock?: () => number; readonly utcClock?: () => number; readonly durable?: boolean }
 /** A program-owned store capability, never constructed from the decoded JSON.
@@ -17,7 +17,8 @@ export interface BudgetLedgerOptions { readonly clock?: () => number; readonly u
 export interface LedgerRecoveryAuthority { readonly binding: LedgerBinding; assertCurrent(): void; proveModelUnsent?(id: string): boolean; proveReadUnsent?(id: string): boolean }
 export interface BudgetLedgerRestoreOptions extends BudgetLedgerOptions { readonly authority: LedgerRecoveryAuthority }
 
-interface ModelEntry extends Omit<ModelReservation, 'contextChars' | 'semanticOperationHash'> { readonly contextChars: number | null; readonly semanticOperationHash: string | null; state: 'reserved' | 'unknown-unsent' | 'dispatched' | 'settled' | 'unknown'; usage: ModelUsage | null }
+type ModelCommitmentKeys = 'semanticHash' | 'semanticOperationHash' | 'requestHash' | 'manifestHash'
+interface ModelEntry extends Omit<ModelReservation, 'contextChars' | ModelCommitmentKeys> { readonly contextChars: number | null; readonly semanticHash: string | null; readonly semanticOperationHash: string | null; readonly requestHash: string | null; readonly manifestHash: string | null; state: 'reserved' | 'unknown-unsent' | 'dispatched' | 'settled' | 'unknown'; usage: ModelUsage | null }
 interface ReadEntry { readonly id: string; readonly reservedBytes: number; state: 'reserved' | 'settled'; actualBytes: number | null }
 interface ToolEntry { readonly id: string; readonly stage: ModelStage }
 
@@ -33,6 +34,12 @@ function integer(value: unknown): asserts value is number {
 }
 function validStage(value: unknown): asserts value is ModelStage {
   if (typeof value !== 'string' || !STAGES.includes(value as ModelStage)) throw new WorkflowError('invalid-argument')
+}
+function modelCommitment(spec: RunSpec, value: ModelReservation): Pick<ModelEntry, ModelCommitmentKeys> {
+  const keys = ['semanticHash', 'semanticOperationHash', 'requestHash', 'manifestHash'] as const
+  if (keys.every(key => value[key] === undefined)) return { semanticHash: null, semanticOperationHash: null, requestHash: null, manifestHash: null }
+  if (keys.some(key => typeof value[key] !== 'string' || !/^[a-f0-9]{64}$/.test(value[key]!)) || value.contextChars === undefined || value.semanticOperationHash !== hashSemanticModelOperation(spec, value.stage, value.semanticHash!)) throw new WorkflowError('invalid-argument')
+  return { semanticHash: value.semanticHash!, semanticOperationHash: value.semanticOperationHash!, requestHash: value.requestHash!, manifestHash: value.manifestHash! }
 }
 function add(a: number, b: number): number { const value = a + b; return Number.isSafeInteger(value) ? value : Number.MAX_SAFE_INTEGER }
 function usageReceipt(value: unknown): ModelUsage | null {
@@ -53,7 +60,7 @@ export interface BudgetLedgerSnapshot {
   readonly total: Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number; actualProviderUsage: Readonly<ModelUsage> | null; readBytes: number; toolCalls: number }>
   readonly remaining: Readonly<{ modelRequests: number; inputTokens: number; outputTokens: number; readBytes: number; toolCalls: number; investigationRequests: number; investigationInputTokens: number; investigationOutputTokens: number; investigationReadBytes: number; investigationToolCalls: number; investigationWallClockMs: number }>
   readonly byStage: Readonly<Record<ModelStage, Readonly<{ dispatchedRequests: number; reservedRequests: number; inputTokens: number; outputTokens: number; estimatedInputTokens: number }>>>
-  readonly reservations: readonly (Readonly<Omit<ModelEntry, 'semanticOperationHash'>> & Readonly<{ estimatedInputTokens: number }>)[]
+  readonly reservations: readonly (Readonly<Omit<ModelEntry, ModelCommitmentKeys>> & Readonly<{ estimatedInputTokens: number }>)[]
 }
 
 export interface BudgetLedger {
@@ -74,9 +81,13 @@ export interface BudgetLedger {
   snapshot(): BudgetLedgerSnapshot
 }
 
-interface LedgerInternals { readonly spec: RunSpec; enableDurability(): void; seal(): void; block(): void; retainUnknown(id: string, sent: boolean): void; export(binding: LedgerBinding, projection?: LedgerProjection): LedgerStateV1 }
+interface LedgerInternals { readonly spec: RunSpec; requiresDurableModelAdmission(): boolean; beginOrdinaryModelCompletion(): () => void; enableDurability(): void; seal(): void; block(): void; retainUnknown(id: string, sent: boolean): void; export(binding: LedgerBinding, projection?: LedgerProjection): LedgerStateV1 }
 export interface LedgerProjection { readonly id: string; readonly state: LedgerModelState; readonly usage: unknown | null }
 const internals = new WeakMap<BudgetLedger, LedgerInternals>()
+/** Internal gateway guard. The irreversible mode belongs to the genuine ledger, not a copied descriptor. */
+export function requiresDurableModelAdmission(ledger: BudgetLedger): boolean { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); return state.requiresDurableModelAdmission() }
+/** Internal gateway lease, held until the entire ordinary completion has settled or retained unknown. */
+export function beginOrdinaryModelCompletion(ledger: BudgetLedger): () => void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); return state.beginOrdinaryModelCompletion() }
 export function enableBudgetLedgerDurability(ledger: BudgetLedger): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.enableDurability() }
 export function sealBudgetLedger(ledger: BudgetLedger): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.seal() }
 export function blockBudgetLedger(ledger: BudgetLedger): void { const state = internals.get(ledger); if (!state) throw new WorkflowError('invalid-argument'); state.block() }
@@ -118,6 +129,7 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
   const utcNow = options.utcClock ?? Date.now
   const utcStarted = ledgerInteger(utcNow())
   let durable = options.durable ?? false
+  let ordinaryCompletions = 0
   const startedUtcMs = recovered?.time.startedUtcMs ?? utcStarted
   const expiresUtcMs = recovered?.time.expiresUtcMs ?? ledgerInteger(startedUtcMs + spec.budget.total.wallClockMs)
   let utcHighWaterMs = recovered?.time.utcHighWaterMs ?? utcStarted
@@ -153,10 +165,16 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
     elapsedHighWaterMs = Math.max(elapsedHighWaterMs, duration, durable ? utcHighWaterMs - startedUtcMs : 0)
     return elapsedHighWaterMs
   }
-  const ensureCodecCapacity = (kind?: 'models' | 'reads' | 'tools'): void => {
-    if (!durable) return
+  const ensureCodecCapacity = (kind?: 'models' | 'reads' | 'tools', activating = false): void => {
+    if (!durable && !activating) return
     const sizes = { models: { length: models.size + (kind === 'models' ? 1 : 0) }, reads: { length: reads.size + (kind === 'reads' ? 1 : 0) }, tools: { length: tools.size + (kind === 'tools' ? 1 : 0) }, issuedIds: { length: issuedIds.size + (kind ? 1 : 0) } }
     if (worstCaseLedgerBytes(sizes) > LEDGER_STATE_MAX_BYTES) throw new WorkflowError('budget-exhausted')
+  }
+  const enableDurability = (): void => {
+    // A live ordinary completion cannot retroactively acquire a durable intent or receipt.
+    if (!durable && ordinaryCompletions > 0) throw new WorkflowError('invalid-argument')
+    ensureCodecCapacity(undefined, true)
+    durable = true
   }
   const ensureTime = (stage?: ModelStage): void => {
     const duration = elapsed()
@@ -188,10 +206,12 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
     reserveModel(value) {
       validId(value?.id); validStage(value?.stage); integer(value?.inputTokens); integer(value?.outputTokens); if (value.contextChars !== undefined) integer(value.contextChars); unique(value.id)
       if (value.contextChars !== undefined && value.contextChars > CONTEXT_CHAR_BUDGETS[spec.granularity]) throw new WorkflowError('budget-exhausted')
-      if (value.semanticOperationHash !== undefined && (typeof value.semanticOperationHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.semanticOperationHash) || [...models.values()].some(entry => entry.semanticOperationHash === value.semanticOperationHash))) throw new WorkflowError('invalid-argument')
+      const commitment = modelCommitment(spec, value)
+      if (durable && commitment.semanticOperationHash === null) throw new WorkflowError('invalid-argument')
+      if (commitment.semanticOperationHash !== null && [...models.values()].some(entry => entry.semanticOperationHash === commitment.semanticOperationHash)) throw new WorkflowError('invalid-argument')
       ensureCodecCapacity('models')
       ensureModelCapacity(value.stage, value.inputTokens, value.outputTokens)
-      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, semanticOperationHash: value.semanticOperationHash ?? null, state: 'reserved', usage: null }
+      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, ...commitment, state: 'reserved', usage: null }
       models.set(value.id, entry)
       issuedIds.add(value.id)
       reservedRequests++; inputTokens += value.inputTokens; outputTokens += value.outputTokens
@@ -272,12 +292,13 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
       validId(value?.id); validStage(value?.stage); integer(value?.inputTokens); integer(value?.outputTokens); unique(value.id)
       if (value.contextChars !== undefined) integer(value.contextChars)
       if (value.contextChars !== undefined && value.contextChars > CONTEXT_CHAR_BUDGETS[spec.granularity]) throw new WorkflowError('budget-exhausted')
-      if (value.semanticOperationHash !== undefined && (typeof value.semanticOperationHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.semanticOperationHash) || [...models.values()].some(entry => entry.semanticOperationHash === value.semanticOperationHash))) throw new WorkflowError('invalid-argument')
+      const commitment = modelCommitment(spec, value)
+      if (commitment.semanticOperationHash !== null && [...models.values()].some(entry => entry.semanticOperationHash === commitment.semanticOperationHash)) throw new WorkflowError('invalid-argument')
       if (!Number.isSafeInteger(inputTokens + value.inputTokens) || !Number.isSafeInteger(outputTokens + value.outputTokens) || !Number.isSafeInteger(inputTokens + value.inputTokens + outputTokens + value.outputTokens)) throw new WorkflowError('invalid-argument')
       ensureCodecCapacity('models')
       blocked = true
       // Recovered sent work counts as an actual attempt, and its maximum reservation remains charged.
-      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, semanticOperationHash: value.semanticOperationHash ?? null, state: 'unknown', usage: null }
+      const entry: ModelEntry = { id: value.id, stage: value.stage, inputTokens: value.inputTokens, outputTokens: value.outputTokens, contextChars: value.contextChars ?? null, ...commitment, state: 'unknown', usage: null }
       models.set(value.id, entry); issuedIds.add(value.id); dispatchedRequests++
       inputTokens = add(inputTokens, value.inputTokens); outputTokens = add(outputTokens, value.outputTokens)
       if (value.stage === 'investigation') { investigationRequests++; investigationInput = add(investigationInput, value.inputTokens); investigationOutput = add(investigationOutput, value.outputTokens) }
@@ -314,7 +335,7 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
           investigationWallClockMs: Math.max(0, spec.budget.investigation.wallClockMs - elapsed())
         }),
         byStage: Object.freeze(byStage),
-        reservations: Object.freeze(modelEntries.map(({ semanticOperationHash: _operation, ...entry }) => Object.freeze({ ...entry, estimatedInputTokens: entry.inputTokens })))
+        reservations: Object.freeze(modelEntries.map(({ semanticHash: _semantic, semanticOperationHash: _operation, requestHash: _request, manifestHash: _manifest, ...entry }) => Object.freeze({ ...entry, estimatedInputTokens: entry.inputTokens })))
       })
     }
   }
@@ -335,7 +356,14 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
   }
   internals.set(ledger, {
     spec,
-    enableDurability() { durable = true; ensureCodecCapacity() },
+    requiresDurableModelAdmission() { return durable },
+    beginOrdinaryModelCompletion() {
+      if (durable) throw new WorkflowError('invalid-argument')
+      ordinaryCompletions++
+      let active = true
+      return () => { if (active) { active = false; ordinaryCompletions-- } }
+    },
+    enableDurability,
     seal() { terminalElapsedMs = elapsed(); blocked = true },
     block() { blocked = true },
     retainUnknown(id, sent) {
@@ -346,7 +374,7 @@ function createLedger(spec: RunSpec, options: BudgetLedgerOptions & { readonly a
     },
     export(binding, projection) {
       const checkedBinding = validateLedgerBinding(spec, binding)
-      durable = true; ensureCodecCapacity(); elapsed()
+      enableDurability(); elapsed()
       let projectedOverInput = 0; let projectedOverOutput = 0
       const records = [...models.values()].map(entry => {
         if (!projection || projection.id !== entry.id) return { ...entry }

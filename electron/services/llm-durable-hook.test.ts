@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 // @ts-ignore TS5097 -- direct Node runner.
-import { chatCompletion, chatCompletionStream } from './llm.ts'
+import { chatCompletion, chatCompletionStream, LlmRequestError } from './llm.ts'
 const messages = [{ role: 'user' as const, content: 'synthetic input' }]
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r }); return { promise, resolve } }
 for (const protocol of ['openai', 'anthropic'] as const) for (const stream of [false, true]) {
@@ -30,6 +30,45 @@ for (const protocol of ['openai', 'anthropic'] as const) for (const stream of [f
       await entered.promise; controller.abort(); gate.resolve(); await rejected
       assert.equal(calls, 0)
       await assert.rejects(call({ signal: controller.signal }))
+      assert.equal(calls, 0)
+    } finally { globalThis.fetch = original }
+  })
+  test(label + ' runs the final synchronous fence after observers without another await', async () => {
+    const original = globalThis.fetch; const events: string[] = []
+    globalThis.fetch = async () => { events.push('fetch'); return response() }
+    try {
+      const result = call({ beforeRequest() { events.push('admission') }, onRequest() { events.push('observer') }, beforeFetch() { events.push('fence') } })
+      assert.deepEqual(events, ['admission', 'observer', 'fence', 'fetch'])
+      assert.equal(await result, 'synthetic response')
+    } finally { globalThis.fetch = original }
+  })
+  test(label + ' rechecks live authorization after asynchronous preparation with the signal still alive', async () => {
+    const original = globalThis.fetch; const controller = new AbortController(); const gate = deferred(); const entered = deferred()
+    const failure = new Error('Static final fence failure.'); let current = true; let calls = 0
+    globalThis.fetch = async () => { calls++; return response() }
+    try {
+      const rejected = assert.rejects(call({ signal: controller.signal, beforeRequest: async () => { entered.resolve(); await gate.promise }, beforeFetch() { if (!current) throw failure } }), error => error === failure)
+      await entered.promise; current = false; gate.resolve(); await rejected
+      assert.equal(controller.signal.aborted, false); assert.equal(calls, 0)
+    } finally { globalThis.fetch = original }
+  })
+  test(label + ' prevents fetch when an observer revokes authorization or the final guard cancels', async () => {
+    const original = globalThis.fetch; let calls = 0
+    globalThis.fetch = async () => { calls++; return response() }
+    try {
+      const failure = new Error('Static final fence failure.'); let current = true
+      await assert.rejects(call({ onRequest() { current = false; throw Error('observer failure') }, beforeFetch() { if (!current) throw failure } }), error => error === failure)
+      const controller = new AbortController()
+      await assert.rejects(call({ signal: controller.signal, beforeFetch() { controller.abort() } }), { kind: 'cancelled' })
+      assert.equal(calls, 0)
+    } finally { globalThis.fetch = original }
+  })
+  test(label + ' rejects asynchronous and non-void final guards as authoritative failures before HTTP', async () => {
+    const original = globalThis.fetch; let calls = 0
+    globalThis.fetch = async () => { calls++; return response() }
+    const guards: (() => unknown)[] = [() => true, () => null, () => Promise.resolve(), async () => { throw Error('SYNTHETIC_SECRET invalid async fence') }]
+    try {
+      for (const beforeFetch of guards) await assert.rejects(call({ beforeFetch: beforeFetch as () => void }), error => error instanceof LlmRequestError && error.kind === 'response' && !JSON.stringify(error).includes('SYNTHETIC_SECRET'))
       assert.equal(calls, 0)
     } finally { globalThis.fetch = original }
   })

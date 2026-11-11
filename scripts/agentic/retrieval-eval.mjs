@@ -514,6 +514,11 @@ export function createGuardedTransport({ collector, runId, getReservation, appen
           throw error
         }
         const acceptDispatch = () => {
+          const finalGuard = options.beforeFetch?.()
+          if (finalGuard !== undefined) {
+            void Promise.resolve(finalGuard).catch(() => {})
+            throw new Error('invalid-final-guard')
+          }
           appendJournal({ type: 'request-admitted', runId, requestId: admission.requestId, estimatedInputTokens: admission.estimatedInputTokens, estimatedOutputTokens: admission.estimatedOutputTokens, contextChars: admission.contextChars })
         }
         try {
