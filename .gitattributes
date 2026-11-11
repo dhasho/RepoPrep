@@ -19,6 +19,7 @@ scripts/agentic/semantic-execution-validation.mjs text eol=lf
 scripts/agentic/semantic-review-score.mjs text eol=lf
 scripts/agentic/semantic-review.mjs text eol=lf
 scripts/agentic/verify.mjs text eol=lf
+scripts/evaluation/m09-semantic-child-framing.cjs text eol=lf
 scripts/evaluation/m09-semantic-io.cjs text eol=lf
 scripts/evaluation/m09-semantic-native.cjs text eol=lf
 scripts/evaluation/run-semantic-profile-entry.cjs text eol=lf

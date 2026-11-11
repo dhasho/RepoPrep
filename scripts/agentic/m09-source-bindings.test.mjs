@@ -29,7 +29,7 @@ async function sourceFixture(t, sources) {
 
 test('M09 real checkout passes exact source bindings with LF on all locked paths', async () => {
   const { lock } = await loadM09ScopedManifest(sourceRoot)
-  assert.equal(Object.keys(lock.m09.sourceFiles).length, 16)
+  assert.equal(Object.keys(lock.m09.sourceFiles).length, 17)
   for (const name of Object.keys(lock.m09.sourceFiles)) {
     const bytes = await readFile(path.join(sourceRoot, name))
     assert.equal(bytes.includes(13), false, name)

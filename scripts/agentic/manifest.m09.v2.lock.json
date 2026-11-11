@@ -13,7 +13,7 @@
       "scripts/agentic/checks/index.mjs": "360737b1014c85531a56c439ce72dd40f6fce8ed07f9d66f7062a1b8093d6f93",
       "scripts/agentic/checks/m09.mjs": "18ed4f3db7c0b2e31f0ed41a802284f1b67d60ac1806b7d0ec485f016932d8b5",
       "scripts/agentic/gate-runner.mjs": "d09291dba2bf1de7a9371d6944e0cfafa65ff43a45451b7ad007f5b5e6e0cb6a",
-      "scripts/agentic/m09-manifest.mjs": "2882e55083e5574cf3ad802ed47d20848d73b62f118b9ff87e3ea491d9a67e58",
+      "scripts/agentic/m09-manifest.mjs": "9548e49cab017c33b4df05b355883ae76168be5c119b9e77a8c72a9fe255e0e6",
       "scripts/agentic/m09-native-collaboration.mjs": "c84a82d27da09d9ce668e20168ed885bd05858ab963fc2e256cf256730977012",
       "scripts/agentic/m09-quality-host.mjs": "1534692325200591718c8efc8e7e683174efd52f2b4331c5dbb4bd2dfbb89531",
       "scripts/agentic/semantic-eval-contract.mjs": "999de27005ea7991aeb52ce193cc8824557e66ff1069dd09af88a14af1748e7b",
@@ -22,12 +22,13 @@
       "scripts/agentic/semantic-review-score.mjs": "6ec75485727d3e62d6a825871801f9aac9fbc4379149ae70c16e9fcd32c55b6d",
       "scripts/agentic/semantic-review.mjs": "86fef0e5a43709ebfc21ceb2191c89d4f9fe945530c19d3eaecfb9322f7a25f2",
       "scripts/agentic/verify.mjs": "8d55c6adac5edeff8e3324a82c70d6e396d4c8eb43a06d00999cbf90767a549f",
+      "scripts/evaluation/m09-semantic-child-framing.cjs": "8a54d7dffa7c98c398771aeef7e5dd1f919ea6f07dd4df8148e1d5f2654ce612",
       "scripts/evaluation/m09-semantic-io.cjs": "a64c2a9ded7b669e0d6c0dd9e05b9b00d23867ebffebcf76c19490333a208deb",
       "scripts/evaluation/m09-semantic-native.cjs": "316dabdc7fb61e334d419d6c9dfce2844f8c498aec74b96dd40e0172cd448f8a",
       "scripts/evaluation/run-semantic-profile-entry.cjs": "5aa431d4354bb7fedc60324e427c093f7f9323e469d54e9744be05ca2f8bcba0",
-      "scripts/evaluation/run-semantic-profile.cjs": "2bf6c34cb750df8a05bc0f7fcc7e15c37d01d4ba40a46f1c233493a0e8cf54c1"
+      "scripts/evaluation/run-semantic-profile.cjs": "15e06ea0b58ec4f3f5030555dcedfd4f5b89001bec39bc392e0cb733a32d607b"
     },
-    "sourceSha256": "77123b29e8f1d2f4f38396bcfd06c9e15da6df78927e7d20d23ab64feaf35130",
+    "sourceSha256": "470ff6baa4e314b92397574bb9736e0004505d63e6e305837cf12872adbf6ef9",
     "protocolSha256": "0f6f686fd98221d136fb095fe4bc9005a5363150fe40a3a6a934591ecca138c3",
     "assetDescriptorsSha256": "a78d42a3556756311c7f1c2b8efd3f93818496db2199aaf67842b79db916c87b"
   }

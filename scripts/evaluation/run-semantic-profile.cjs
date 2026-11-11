@@ -7,6 +7,7 @@ const crypto = require('node:crypto')
 const { spawn } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const io = require('./m09-semantic-io.cjs')
+const { createSemanticChildLineClassifier } = require('./m09-semantic-child-framing.cjs')
 const native = require('./m09-semantic-native.cjs')
 const { safeEnv, secureTemporaryDirectory } = require('./run-retrieval-profile.cjs')
 const CHECKOUT_ROOT = path.resolve(__dirname, '../..')
@@ -108,15 +109,20 @@ function cleanupSemanticRuntime(token) {
 function monitorSemanticChild(child, { manifest, validateConfiguration, onReady, timeoutMs = MAX_EXECUTION_MS }) {
   return new Promise((resolve, reject) => {
     let state = 'waiting-ready', ready = null, outcome = null, grant = null, failure = null, closed = false
-    let pending = Buffer.alloc(0), stdoutBytes = 0, stderrBytes = 0
+    let pending = Buffer.alloc(0), stdoutBytes = 0, stderrBytes = 0, stdoutPreambleLines = 0
+    const stdoutHash = crypto.createHash('sha256')
+    const lineClassifier = createSemanticChildLineClassifier()
     const stderrHash = crypto.createHash('sha256')
     const stop = code => {
-      if (failure) return
+      if (failure || closed) return
       failure = Object.assign(new Error(code), { code })
       try { child.stdin?.destroy() } catch {}
       if (!closed && child.pid) try { child.kill() } catch {}
     }
     const parseLine = line => {
+      const framing = lineClassifier.classify(line)
+      io.check(framing !== 'invalid-blank', 'semantic-native-handshake-invalid')
+      if (framing === 'preamble') { stdoutPreambleLines++; return }
       let message
       try { message = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(line)) } catch { io.fail('semantic-native-handshake-invalid') }
       io.check(Buffer.concat([line, Buffer.from('\n')]).equals(io.bytes(message)), 'semantic-native-handshake-invalid')
@@ -131,16 +137,17 @@ function monitorSemanticChild(child, { manifest, validateConfiguration, onReady,
       else io.fail('semantic-native-handshake-invalid')
     }
     child.stdout.on('data', chunk => {
+      if (closed) return
+      const raw = Buffer.from(chunk); stdoutBytes += raw.length; stdoutHash.update(raw)
       if (failure) return
       try {
-        const raw = Buffer.from(chunk); stdoutBytes += raw.length
         io.check(stdoutBytes <= MAX_PIPE_BYTES, 'semantic-native-handshake-invalid')
         pending = Buffer.concat([pending, raw])
         let newline
         while ((newline = pending.indexOf(10)) !== -1) { const line = pending.subarray(0, newline); pending = pending.subarray(newline + 1); parseLine(line) }
       } catch (error) { stop(io.safeCode(error, 'semantic-native-handshake-invalid')) }
     })
-    child.stderr.on('data', chunk => { const raw = Buffer.from(chunk); stderrBytes += raw.length; if (stderrBytes <= MAX_PIPE_BYTES) stderrHash.update(raw); else stop('semantic-native-child-failed') })
+    child.stderr.on('data', chunk => { if (closed) return; const raw = Buffer.from(chunk); stderrBytes += raw.length; if (stderrBytes <= MAX_PIPE_BYTES) stderrHash.update(raw); else stop('semantic-native-child-failed') })
     child.stdin.on('error', () => stop('semantic-native-child-closed'))
     child.stdout.on('error', () => stop('semantic-native-child-failed'))
     child.stderr.on('error', () => stop('semantic-native-child-failed'))
@@ -148,7 +155,7 @@ function monitorSemanticChild(child, { manifest, validateConfiguration, onReady,
     child.once('close', (code, signal) => {
       closed = true; clearTimeout(timeout); process.off('SIGINT', interrupted); process.off('SIGTERM', interrupted)
       if (!failure && (code !== 0 || signal || state !== 'outcome' || pending.length !== 0)) failure = Object.assign(new Error('semantic-native-child-closed'), { code: 'semantic-native-child-closed' })
-      const observed = { childClosed: true, closeCode: code, closeSignal: signal ?? null, stdoutBytes, stderrBytes, stderrSha256: stderrHash.digest('hex'), ready, grant, outcome }
+      const observed = { childClosed: true, closeCode: code, closeSignal: signal ?? null, stdoutBytes, stdoutSha256: stdoutHash.digest('hex'), stdoutPreambleLines, stderrBytes, stderrSha256: stderrHash.digest('hex'), ready, grant, outcome }
       if (failure) { Object.defineProperty(failure, 'observed', { value: Object.freeze(observed) }); reject(failure) }
       else resolve(io.frozen(observed))
     })
