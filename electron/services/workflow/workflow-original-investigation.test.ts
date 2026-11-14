@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import type { OriginalInvestigationRun, OriginalInvestigationRunOptions } from './workflow-ledger-journal.ts'
 import type { WorkflowStoreOptions } from './workflow-store.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { createOriginalInvestigationRun, WORKFLOW_LEDGER_STATE_SCHEMA_ID } from './workflow-ledger-journal.ts'
+import { createOriginalInvestigationRun, createWorkflowCancellationControl, classifyWorkflowLedger, WORKFLOW_LEDGER_STATE_SCHEMA_ID } from './workflow-ledger-journal.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { scanProject } from '../scanner.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
@@ -20,15 +20,21 @@ import { createRunSpec } from './run-spec.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { readWorkflowStore } from './workflow-store.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { createLedgerCriticalPayloadValidator, prepareLedgerCriticalSpec } from './ledger-critical-envelope.ts'
+import { LEDGER_CRITICAL_SCHEMA_ID, createLedgerCriticalPayloadValidator, prepareLedgerCriticalSpec } from './ledger-critical-envelope.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
-import { foldLedgerCriticalPrefix } from './ledger-critical-transitions.ts'
+import { LEDGER_CRITICAL_V2_SCHEMA_ID, createLedgerCriticalV2PayloadValidator, prepareLedgerCriticalV2Spec } from './ledger-critical-v2-envelope.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { foldLedgerCriticalV2Prefix } from './ledger-critical-v2-transitions.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { validateLedgerState } from './ledger-state.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { normalizeBaseUrl } from '../llm.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { hashModelMessages } from './model-journal.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { validateArchivedWorkflowLedger } from './workflow-ledger-archive.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createRunCoordinator } from './run-coordinator.ts'
 
 const secret = 'B03B1_SYNTHETIC_KEY_NEVER_PERSIST'
 const profile = { id: 'b03b1-profile', name: 'Synthetic only', baseUrl: 'https://b03b1.invalid/v1', apiKey: secret, model: 'synthetic', protocol: 'openai' as const, contextWindowTokens: 49_152, maxOutputTokens: 4_096 }
@@ -108,8 +114,8 @@ async function fixture(t: TestContext, settings: { rounds?: 2 | 3; read?: () => 
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>
 function verified(f: Fixture) {
-  const options: WorkflowStoreOptions = { storageDirectory: f.storageDirectory, validators: { 'critical-journal': createLedgerCriticalPayloadValidator(), ledger: { schemaId: WORKFLOW_LEDGER_STATE_SCHEMA_ID, validate(payload) { try { validateLedgerState(f.spec, payload); return true } catch { return false } } } } }
-  const view = readWorkflowStore(options, prepareLedgerCriticalSpec({ spec: f.spec }).binding)
+  const options: WorkflowStoreOptions = { storageDirectory: f.storageDirectory, validators: { 'critical-journal': createLedgerCriticalV2PayloadValidator(), ledger: { schemaId: WORKFLOW_LEDGER_STATE_SCHEMA_ID, validate(payload) { try { validateLedgerState(f.spec, payload); return true } catch { return false } } } } }
+  const view = readWorkflowStore(options, prepareLedgerCriticalV2Spec({ spec: f.spec }).binding)
   assert.equal(view.status, 'verified')
   if (view.status !== 'verified') throw Error('Expected actual verified W')
   for (const item of view.journal) {
@@ -118,7 +124,9 @@ function verified(f: Fixture) {
     const bytes = fs.readFileSync(physical[0]); assert.equal(bytes.length, item.reference.byteLength); assert.equal(hash(bytes), item.reference.sha256)
     assert.equal(bytes.includes(Buffer.from(secret)), false)
   }
-  const folded = foldLedgerCriticalPrefix(view.journal.map(item => ({ payload: item.payload, reference: item.reference })))
+  assert.ok(view.journal.length > 0)
+  assert.ok(view.journal.every(item => item.schemaId === LEDGER_CRITICAL_V2_SCHEMA_ID))
+  const folded = foldLedgerCriticalV2Prefix(view.journal.map(item => ({ payload: item.payload, reference: item.reference })))
   return { view, folded }
 }
 function gate(index: number, reject = false) {
@@ -145,7 +153,7 @@ test('I1 real original investigation folds model, tool and source receipts befor
   assert.equal(folded.state!.models.length, 3); assert.equal(folded.state!.tools.length, 1)
   assert.deepEqual(folded.state!.reads, [{ id: 'original-read:1', reservedBytes: Buffer.byteLength(source), state: 'settled', actualBytes: Buffer.byteLength(source) }])
   assert.equal(view.manifest, null)
-  const prepared = prepareLedgerCriticalSpec({ spec: f.spec })
+  const prepared = prepareLedgerCriticalV2Spec({ spec: f.spec })
   const reservations = view.journal.map(item => (item.payload as any).event).filter(event => event.kind === 'model' && event.model.kind === 'reservation')
   for (const [index, event] of reservations.entries()) {
     const context = event.model.context
@@ -287,4 +295,45 @@ test('I5 late raw read settlement drains during cancellation and retains acknowl
   const final = verified(f)
   assert.equal(final.folded.state!.reads[0].state, 'reserved')
   assert.equal(final.folded.state!.reads[0].actualBytes, null)
+})
+
+test('I7 actual W carries differing V1 and V2 specs in one root with exact archive reads and no spent V1 recreation', native, async t => {
+  const f = await fixture(t)
+  const v1Spec = Object.freeze({ ...f.spec, runId: f.spec.runId + '-legacy', projectId: f.spec.projectId + '-legacy', snapshotId: f.spec.snapshotId + '-legacy' })
+  const token = await createWorkflowCancellationControl({ storageDirectory: f.storageDirectory, spec: v1Spec })
+  const legacy = createRunCoordinator().begin(v1Spec, { cancellationControl: token })
+  assert.ok(legacy)
+  assert.equal(legacy.cancel(), true)
+  assert.deepEqual(await legacy.resolveTerminal(), { status: 'accepted', outcome: 'cancelled' })
+  await legacy.close()
+  await assert.rejects(createWorkflowCancellationControl({ storageDirectory: f.storageDirectory, spec: v1Spec }))
+
+  const run = await f.create()
+  assert.equal((await run.run()).phase, 'completed')
+  await run.close()
+
+  const readExactArchive = (spec: typeof f.spec, current: 'v1' | 'v2') => {
+    const options: WorkflowStoreOptions = {
+      storageDirectory: f.storageDirectory,
+      validators: {
+        'critical-journal': current === 'v1' ? createLedgerCriticalPayloadValidator() : createLedgerCriticalV2PayloadValidator(),
+        ledger: { schemaId: WORKFLOW_LEDGER_STATE_SCHEMA_ID, validateRead: validateArchivedWorkflowLedger, validate(payload) { try { validateLedgerState(spec, payload); return true } catch { return false } } }
+      },
+      historicalValidators: { 'critical-journal': [current === 'v1' ? createLedgerCriticalV2PayloadValidator() : createLedgerCriticalPayloadValidator()] }
+    }
+    const prepared = current === 'v1' ? prepareLedgerCriticalSpec({ spec }) : prepareLedgerCriticalV2Spec({ spec })
+    const view = readWorkflowStore(options, prepared.binding)
+    assert.equal(view.status, 'verified')
+    if (view.status !== 'verified') throw Error('Expected exact archived W view')
+    assert.equal(view.manifest?.stage, 'cancelled')
+    assert.ok(view.journal.length > 1)
+    assert.ok(view.journal.every(item => item.schemaId === (current === 'v1' ? LEDGER_CRITICAL_SCHEMA_ID : LEDGER_CRITICAL_V2_SCHEMA_ID)))
+    return view
+  }
+  const v1View = readExactArchive(v1Spec, 'v1')
+  const v2View = readExactArchive(f.spec, 'v2')
+  assert.ok(!v1View.journal.some(item => item.schemaId === LEDGER_CRITICAL_V2_SCHEMA_ID))
+  assert.ok(!v2View.journal.some(item => item.schemaId === LEDGER_CRITICAL_SCHEMA_ID))
+  assert.equal(classifyWorkflowLedger({ storageDirectory: f.storageDirectory, spec: v1Spec }).status, 'terminal')
+  assert.equal(classifyWorkflowLedger({ storageDirectory: f.storageDirectory, spec: f.spec }).status, 'terminal')
 })
