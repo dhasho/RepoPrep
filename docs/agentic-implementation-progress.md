@@ -271,3 +271,23 @@ B03b1 提交 `930e201023e397fcea3429daf332eff7d08361ad` 已经主代理审查并
 R6 revision 8 已经独立审查、真实生产 preflight 和一次性实际批准后执行，冻结候选仍为 `792685686c77604ea58b3bbef48edf56e5a100dd`。setup/readback 成功，实际测量越过 Electron 动态入口、bootstrap、私有合成 profile 解锁和 ready 阶段，随后 child 报 `semantic-native-handshake-invalid`。约 71.6 秒后实际子进程 SIGTERM close、父进程 exit 1；合成 HTTP 请求、外部 provider 请求和父证明写入均为 0。原批准、claim、日志和失败 runtime 全部保留，不重跑 R6，不当作正式 M09 质量证据。
 
 B03b2b 历史宿主上下文切片的 21 项定向检查通过；194 项更广回归为 191 通过、2 失败、1 跳过，两项已定位为 mixed-ledger decoder 顺序断言和 known-spec 空 anchor 诊断，正在最小修复，尚未整合或计整套通过。critical V2、新 run genesis、真实原始 plan/lineage、生成输出与 settled receipt 接受、成功终态、正式 M09、M10/M11/M13 仍未完成。最近完整 test:agentic 仍保留历史 1063 项的 1061 通过、1 失败、1 跳过，本轮未重跑全套。M08 和已接受 E3a R2 保持封存。没有页面设计/UI/renderer/preload/IPC/样式/资源/默认策略或发布变更，本轮外部模型请求为 0。
+
+
+## 中断后续接与共享上下文、继承管道修复（2026-11-14）
+
+本次续接核对主目录、全部工作树、最新本地提交与PR #2。主目录仍位于main，原有PLAN和设计建议的未提交内容指纹保持。实际实施分支从 `a2fabb9` 继续，模块实现与复核使用用户指定的GPT-6-Luna隔离工作树。
+
+原整合候选加保留的测试登记执行 `npm run test:agentic`，共1310项，其中1309通过、0失败、1项Windows平台条件跳过，真实退出0，日志保存在 `.validation/continuation-20261114/baseline-agentic.log`。Node/Electron与Web类型检查均通过。该完整回归对应续接基线。
+
+提交 `505bb9a` 将既有证据分组、脱敏摘要和上下文构造提取为共享实现，现有adapter复用同一逻辑。主代理对四个提取声明逐字核对等价，独立受影响回归45项通过。提交 `f0a673c` 使用继承fd0流接收父进程授权，沿用原严格单消息、EOF、字节上限和授权校验，58项入口回归及17个scoped源码实际字节绑定通过。两模块整合后定向回归139项通过，日志为 `.validation/continuation-20261114/integrated-context-and-entry.log`。
+
+V2真实host仍在完成实际W调查、取消和跨版本历史回归。新的原生合成验证准备使用独立候选与运行身份，旧R6失败和M08、E3a证据继续保留。正式M09质量、真实plan及生成接受、成功终态、完整M10/M11/M12/M13仍待验收。
+
+
+## V2原始调查宿主整合与构建验证（2026-11-15）
+
+提交 `b08aed5` 将显式原始调查入口固定到V2 genesis、实际记账和原取消生命周期。V1入口继续使用原版本，历史读取按各run实际首条schema和完整原始规格解析。作者84项受影响回归及新增同根不同规格的V1/V2持久化用例分别通过，Node/Web类型检查通过。独立Luna源码审查和主代理复核均无待处理finding。
+
+整合候选 `0a55df9` 的主代理复核运行真实原始调查及跨版本历史两项W用例，2/2通过、退出0，日志为 `.validation/continuation-20261114/integrated-v2-host.log`。构建及安全检查执行80项，77通过、0失败、3跳过；随后真实Electron冒烟记录 `VERDICT SMOKE-OK`、进程退出0及隔离fixture删除，日志为同目录 `integrated-security.log` 和 `integrated-smoke.log`。两模块整合后的Node/Web类型检查已退出0。
+
+下一模块在同一私有owner中复用共享分组和配额算法，计算、持久化并回读原始plan，随后接入生成结果接受和成功终态。新的本机合成native组合正在准备。正式质量与发布门禁继续待验收。
