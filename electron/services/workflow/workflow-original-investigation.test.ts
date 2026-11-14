@@ -35,6 +35,8 @@ import { hashModelMessages } from './model-journal.ts'
 import { validateArchivedWorkflowLedger } from './workflow-ledger-archive.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { createRunCoordinator } from './run-coordinator.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { hashOriginalPlanBinding, hashOriginalPlanMetadata } from './original-plan-metadata.ts'
 
 const secret = 'B03B1_SYNTHETIC_KEY_NEVER_PERSIST'
 const profile = { id: 'b03b1-profile', name: 'Synthetic only', baseUrl: 'https://b03b1.invalid/v1', apiKey: secret, model: 'synthetic', protocol: 'openai' as const, contextWindowTokens: 49_152, maxOutputTokens: 4_096 }
@@ -55,7 +57,7 @@ function files(directory: string): string[] {
     return entry.isDirectory() ? files(filename) : [filename]
   })
 }
-async function fixture(t: TestContext, settings: { rounds?: 2 | 3; read?: () => Promise<void>; step?: WorkflowStoreOptions['onDurableStep'] } = {}) {
+async function fixture(t: TestContext, settings: { rounds?: 2 | 3; read?: () => Promise<void>; step?: WorkflowStoreOptions['onDurableStep']; limits?: WorkflowStoreOptions['limits']; afterFinalTransport?: () => void } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'repoprep-b03b1-'))
   const root = path.join(directory, 'project'); fs.mkdirSync(root)
   fs.writeFileSync(path.join(root, 'sample.ts'), source)
@@ -79,11 +81,13 @@ async function fixture(t: TestContext, settings: { rounds?: 2 | 3; read?: () => 
     const finish = [{ type: 'select_evidence', selection: { selectedIds: user.evidenceIds, requiredBundles: [], unresolved: [] } }, { type: 'finish_investigation', unresolved: [] }]
     const actions = expenses === 1 ? [{ type: 'request_tools', tools: [{ actionId: 'read-source-1', tool: 'read_region', args: { fileId: user.files[0].fileId, startLine: 1, endLine: 3 } }] }]
       : expenses === 2 ? [topic, ...((settings.rounds ?? 2) === 2 ? finish : [])] : finish
+    if (expenses === 3) settings.afterFinalTransport?.()
     return JSON.stringify({ actions })
   }
   let service: OriginalInvestigationRun | undefined
-  const options: OriginalInvestigationRunOptions = { storageDirectory, spec, profile, snapshot, scan, transport, ...(settings.step ? { onDurableStep: settings.step } : {}) }
+  const options: OriginalInvestigationRunOptions = { storageDirectory, spec, profile, snapshot, scan, transport, ...(settings.step ? { onDurableStep: settings.step } : {}), ...(settings.limits ? { limits: settings.limits } : {}) }
   let restoreClock = () => {}
+  let advanceCapturedClock = (_milliseconds: number) => {}
   t.after(async () => {
     try {
       await service?.close()
@@ -101,13 +105,14 @@ async function fixture(t: TestContext, settings: { rounds?: 2 | 3; read?: () => 
     let utc = realUtcNow(), monotonic = performance.now()
     Date.now = () => utc
     Object.defineProperty(performance, 'now', { configurable: true, value: () => monotonic })
+    advanceCapturedClock = milliseconds => { utc += milliseconds; monotonic += milliseconds }
     restoreClock = () => {
       Date.now = realUtcNow
       if (monotonicDescriptor) Object.defineProperty(performance, 'now', monotonicDescriptor)
       else Reflect.deleteProperty(performance, 'now')
     }
   }
-  return { directory, root, storageDirectory, scan, snapshot, spec, requests, options,
+  return { directory, root, storageDirectory, scan, snapshot, spec, requests, options, advanceClock: (milliseconds: number) => advanceCapturedClock(milliseconds),
     counts: () => ({ reads, expenses }),
     async create(extra: Partial<OriginalInvestigationRunOptions> = {}) { service = await createOriginalInvestigationRun({ ...options, ...extra }); return service }
   }
@@ -149,11 +154,29 @@ test('I1 real original investigation folds model, tool and source receipts befor
   assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
   const { view, folded } = verified(f)
   const kinds = view.journal.map(item => { const event = (item.payload as any).event; return event.kind === 'model' ? event.model.kind : event.kind })
-  assert.deepEqual(kinds, ['created', 'reservation', 'intent', 'receipt', 'tool-charge', 'read-reservation', 'read-receipt', 'reservation', 'intent', 'receipt', 'reservation', 'intent', 'receipt'])
+  assert.deepEqual(kinds, ['created', 'reservation', 'intent', 'receipt', 'tool-charge', 'read-reservation', 'read-receipt', 'reservation', 'intent', 'receipt', 'reservation', 'intent', 'receipt', 'plan'])
   assert.equal(folded.state!.models.length, 3); assert.equal(folded.state!.tools.length, 1)
   assert.deepEqual(folded.state!.reads, [{ id: 'original-read:1', reservedBytes: Buffer.byteLength(source), state: 'settled', actualBytes: Buffer.byteLength(source) }])
   assert.equal(view.manifest, null)
   const prepared = prepareLedgerCriticalV2Spec({ spec: f.spec })
+  const planEntry = view.journal.at(-1)!
+  const planEnvelope = planEntry.payload as any
+  const plan = planEnvelope.lineage.plan
+  assert.equal(planEntry.schemaId, LEDGER_CRITICAL_V2_SCHEMA_ID)
+  assert.equal(plan.remainingModelRequests, f.spec.budget.total.maxModelRequests - 3)
+  assert.equal(plan.slots.length, 2)
+  assert.equal(plan.slots[0].ordinal, 1)
+  assert.equal(plan.slots[0].kind, 'global')
+  assert.equal(plan.slots[1].ordinal, 2)
+  assert.equal(plan.slots[1].kind, 'global')
+  assert.match(plan.slots[0].sourceGroupHash, /^[a-f0-9]{64}$/)
+  assert.notEqual(plan.slots[0].sourceGroupHash, plan.slots[1].sourceGroupHash)
+  assert.equal(plan.plannedTotal, plan.slots.reduce((sum: number, slot: { quota: number }) => sum + slot.quota, 0))
+  assert.equal(plan.bindingHash, hashOriginalPlanBinding(prepared.binding))
+  assert.equal(planEnvelope.event.planHash, hashOriginalPlanMetadata(plan, f.spec, prepared.binding))
+  const beforePlan = (view.journal.at(-2)!.payload as any).state
+  for (const key of ['models', 'reads', 'tools', 'issuedIds', 'diagnostics', 'blocked']) assert.deepEqual(planEnvelope.state[key], beforePlan[key])
+  for (const key of ['startedUtcMs', 'expiresUtcMs']) assert.equal(planEnvelope.state.time[key], beforePlan.time[key])
   const reservations = view.journal.map(item => (item.payload as any).event).filter(event => event.kind === 'model' && event.model.kind === 'reservation')
   for (const [index, event] of reservations.entries()) {
     const context = event.model.context
@@ -166,6 +189,7 @@ test('I1 real original investigation folds model, tool and source receipts befor
   const terminal = verified(f)
   assert.equal(terminal.folded.terminalOutcome, 'cancelled'); assert.equal(terminal.view.manifest?.stage, 'cancelled')
   assert.equal(terminal.folded.state!.reads.length, 1); assert.equal(terminal.folded.state!.models.length, 3)
+  assert.equal((terminal.view.journal.at(-1)!.payload as any).lineage.plan.contextHash, plan.contextHash)
 })
 
 for (const [index, expected] of [[2, { expenses: 0, reads: 0 }], [5, { expenses: 1, reads: 0 }], [6, { expenses: 1, reads: 0 }], [7, { expenses: 1, reads: 1 }]] as const) {
@@ -295,6 +319,79 @@ test('I5 late raw read settlement drains during cancellation and retains acknowl
   const final = verified(f)
   assert.equal(final.folded.state!.reads[0].state, 'reserved')
   assert.equal(final.folded.state!.reads[0].actualBytes, null)
+})
+
+test('I8 held plan flush waits for cancellation then keeps the exact persisted plan lineage', native, async t => {
+  const hold = gate(14); const f = await fixture(t, { rounds: 3, step: hold.step }); const run = await f.create()
+  let settled = false
+  const pending = run.run().then(value => { settled = true; return { value } }, error => { settled = true; return { error } })
+  try {
+    await hold.entered.promise
+    assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
+    assert.equal(run.cancel(), true)
+    await tick(); assert.equal(settled, false)
+  } finally { hold.release.resolve() }
+  assert.ok('error' in await pending)
+  await run.close()
+  const { view, folded } = verified(f)
+  const planRecords = view.journal.filter(item => (item.payload as any).event.kind === 'plan')
+  assert.equal(planRecords.length, 1)
+  assert.equal(folded.terminalOutcome, 'cancelled')
+  assert.equal((view.journal.at(-1)!.payload as any).lineage.plan.contextHash, (planRecords[0].payload as any).lineage.plan.contextHash)
+})
+
+test('I9 rejected plan flush never completes or dispatches another model request', native, async t => {
+  const fault = gate(14, true); const f = await fixture(t, { rounds: 3, step: fault.step }); const run = await f.create()
+  await assert.rejects(run.run())
+  assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
+  assert.equal(run.observe().phase, 'closed')
+  await run.close()
+  const { view } = verified(f)
+  assert.ok(view.journal.filter(item => (item.payload as any).event.kind === 'plan').length <= 1)
+})
+
+test('I10 changed source after the final synthetic response blocks plan creation', native, async t => {
+  let root = ''
+  const f = await fixture(t, { rounds: 3, afterFinalTransport: () => fs.writeFileSync(path.join(root, 'sample.ts'), source + '// stale before packing\n') })
+  root = f.root
+  const run = await f.create()
+  await assert.rejects(run.run())
+  assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
+  await run.close()
+  const { view } = verified(f)
+  assert.equal(view.journal.some(item => (item.payload as any).event.kind === 'plan'), false)
+})
+
+test('I11 tightened actual W record capacity refuses the plan without a retry or model dispatch', native, async t => {
+  const f = await fixture(t, { rounds: 3, limits: { componentBytes: { 'critical-journal': 7_000 } } })
+  const run = await f.create()
+  await assert.rejects(run.run())
+  assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
+  assert.equal(run.observe().phase, 'closed')
+  await run.close()
+  const { view } = verified(f)
+  assert.equal(view.journal.some(item => (item.payload as any).event.kind === 'plan'), false)
+})
+
+test('I12 original deadline expiring during actual plan flush blocks completion without resetting budget', native, async t => {
+  const hold = gate(14); const f = await fixture(t, { rounds: 3, step: hold.step }); const run = await f.create()
+  const pending = run.run().then(value => ({ value }), error => ({ error }))
+  try {
+    await hold.entered.promise
+    assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
+    f.advanceClock(f.spec.budget.total.wallClockMs + 1)
+  } finally { hold.release.resolve() }
+  const outcome = await pending
+  assert.ok('error' in outcome)
+  assert.equal(run.observe().phase, 'closed')
+  assert.deepEqual(f.counts(), { expenses: 3, reads: 1 })
+  await run.close()
+  const { view, folded } = verified(f)
+  const plans = view.journal.filter(item => (item.payload as any).event.kind === 'plan')
+  assert.ok(plans.length <= 1)
+  assert.ok(folded.terminalOutcome === null || folded.terminalOutcome === 'failed' || folded.terminalOutcome === 'cancelled')
+  assert.equal(folded.state!.models.length, 3)
+  assert.ok(folded.state!.time.elapsedHighWaterMs >= f.spec.budget.total.wallClockMs)
 })
 
 test('I7 actual W carries differing V1 and V2 specs in one root with exact archive reads and no spent V1 recreation', native, async t => {

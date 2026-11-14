@@ -52,11 +52,20 @@ import { WorkflowError } from './project-contract.ts'
 import { validateArchivedWorkflowLedger } from './workflow-ledger-archive.ts'
 
 import type { LedgerCriticalV2Cursor, LedgerCriticalV2Step } from './ledger-critical-v2-transitions.ts'
-import type { LedgerCriticalEnvelopeV2 } from './ledger-critical-v2-envelope.ts'
+import type { LedgerCriticalEnvelopeV2, LedgerCriticalEventV2, CriticalLineageV2 } from './ledger-critical-v2-envelope.ts'
+import type { OriginalPlanMetadata } from './original-plan-metadata.ts'
+import type { GenerationGroup } from './evidence-generation-context.ts'
+import type { BuiltContext } from '../context-builder.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { LEDGER_CRITICAL_V2_FORMAT, LEDGER_CRITICAL_V2_SCHEMA_ID, prepareLedgerCriticalV2Spec, ledgerCriticalV2Position, validateLedgerCriticalV2Envelope, createLedgerCriticalV2PayloadValidator } from './ledger-critical-v2-envelope.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { createLedgerCriticalV2Cursor, checkLedgerCriticalV2Transition, acceptLedgerCriticalV2Step, foldLedgerCriticalV2Prefix } from './ledger-critical-v2-transitions.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { makeEvidenceGenerationGroups, buildLegacyEvidenceContext } from './evidence-generation-context.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { planQuestionQuotas } from '../question-budget.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { hashOriginalPlanBinding, hashOriginalPlanMetadata, ORIGINAL_PLAN_RETRY_POLICY, ORIGINAL_PLAN_VERSION_COMMITMENTS } from './original-plan-metadata.ts'
 
 export const WORKFLOW_LEDGER_STATE_SCHEMA_ID = 'workflow-ledger-state-v1'
 export interface WorkflowLedgerJournalOptions {
@@ -114,31 +123,37 @@ function same(a: unknown, b: unknown): boolean {
 type HostCursor = LedgerCriticalCursor | LedgerCriticalV2Cursor
 type HostStep = LedgerCriticalStep | LedgerCriticalV2Step
 type HostEnvelope = LedgerCriticalEnvelopeV1 | LedgerCriticalEnvelopeV2
+type HostEvent = LedgerCriticalEvent | LedgerCriticalEventV2
 function criticalCodec(version: 'v1' | 'v2', source: { spec: unknown }) {
   if (version === 'v2') {
     const prepared = prepareLedgerCriticalV2Spec(source)
-    const emptyLineage = Object.freeze({ plan: null })
     return Object.freeze({ version, prepared, schemaId: LEDGER_CRITICAL_V2_SCHEMA_ID,
       validator: createLedgerCriticalV2PayloadValidator(), historical: createLedgerCriticalPayloadValidator(),
       create: (): HostCursor => createLedgerCriticalV2Cursor(prepared),
-      position: (context: unknown, event: LedgerCriticalEvent) => ledgerCriticalV2Position(prepared, context, event, emptyLineage),
-      envelope: (provenance: unknown, event: LedgerCriticalEvent, logicalPosition: LedgerJournalPosition, state: LedgerStateV1): HostEnvelope => validateLedgerCriticalV2Envelope({ format: LEDGER_CRITICAL_V2_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance, event, logicalPosition, state, lineage: emptyLineage }, prepared),
+      nextLineage: (cursor: HostCursor | null, event: LedgerCriticalEventV2, plan?: OriginalPlanMetadata): CriticalLineageV2 => Object.freeze({ plan: event.kind === 'plan' ? plan ?? null : (cursor as LedgerCriticalV2Cursor | null)?.lineage.plan ?? null }),
+      position: (context: unknown, event: LedgerCriticalEventV2, lineage?: unknown) => ledgerCriticalV2Position(prepared, context, event, lineage),
+      envelope: (provenance: unknown, event: LedgerCriticalEventV2, logicalPosition: LedgerJournalPosition, state: LedgerStateV1, lineage?: unknown): HostEnvelope => validateLedgerCriticalV2Envelope({ format: LEDGER_CRITICAL_V2_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance, event, logicalPosition, state, lineage }, prepared),
       validate: (payload: unknown): HostEnvelope => validateLedgerCriticalV2Envelope(payload, prepared),
       check: (cursor: HostCursor, envelope: HostEnvelope): HostStep => checkLedgerCriticalV2Transition(cursor as LedgerCriticalV2Cursor, envelope as LedgerCriticalEnvelopeV2),
       accept: (step: HostStep, reference: WorkflowRecordReference): HostCursor => acceptLedgerCriticalV2Step(step as LedgerCriticalV2Step, reference),
-      fold: (records: readonly { payload: unknown; reference: WorkflowRecordReference }[]): HostCursor => foldLedgerCriticalV2Prefix(records)
+      fold: (records: readonly { payload: unknown; reference: WorkflowRecordReference }[]): HostCursor => foldLedgerCriticalV2Prefix(records),
+      plan: (cursor: HostCursor): OriginalPlanMetadata | null => (cursor as LedgerCriticalV2Cursor).lineage.plan,
+      sameLineage: (left: HostCursor, right: HostCursor): boolean => same((left as LedgerCriticalV2Cursor).lineage, (right as LedgerCriticalV2Cursor).lineage)
     })
   }
   const prepared = prepareLedgerCriticalSpec(source)
   return Object.freeze({ version, prepared, schemaId: LEDGER_CRITICAL_SCHEMA_ID,
     validator: createLedgerCriticalPayloadValidator(), historical: createLedgerCriticalV2PayloadValidator(),
     create: (): HostCursor => createLedgerCriticalCursor(prepared),
-    position: (context: unknown, event: LedgerCriticalEvent) => ledgerCriticalPosition(prepared, context, event),
-    envelope: (provenance: unknown, event: LedgerCriticalEvent, logicalPosition: LedgerJournalPosition, state: LedgerStateV1): HostEnvelope => validateLedgerCriticalEnvelope({ format: LEDGER_CRITICAL_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance, event, logicalPosition, state }, prepared),
+    nextLineage: (_cursor: HostCursor | null, _event: LedgerCriticalEvent): null => null,
+    position: (context: unknown, event: LedgerCriticalEvent, _lineage?: unknown) => ledgerCriticalPosition(prepared, context, event),
+    envelope: (provenance: unknown, event: LedgerCriticalEvent, logicalPosition: LedgerJournalPosition, state: LedgerStateV1, _lineage?: unknown): HostEnvelope => validateLedgerCriticalEnvelope({ format: LEDGER_CRITICAL_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance, event, logicalPosition, state }, prepared),
     validate: (payload: unknown): HostEnvelope => validateLedgerCriticalEnvelope(payload, prepared),
     check: (cursor: HostCursor, envelope: HostEnvelope): HostStep => checkLedgerCriticalTransition(cursor as LedgerCriticalCursor, envelope as LedgerCriticalEnvelopeV1),
     accept: (step: HostStep, reference: WorkflowRecordReference): HostCursor => acceptLedgerCriticalStep(step as LedgerCriticalStep, reference),
-    fold: (records: readonly { payload: unknown; reference: WorkflowRecordReference }[]): HostCursor => foldLedgerCriticalPrefix(records)
+    fold: (records: readonly { payload: unknown; reference: WorkflowRecordReference }[]): HostCursor => foldLedgerCriticalPrefix(records),
+    plan: (_cursor: HostCursor): null => null,
+    sameLineage: (_left: HostCursor, _right: HostCursor): boolean => true
   })
 }
 type CriticalCodec = ReturnType<typeof criticalCodec>
@@ -364,8 +379,22 @@ export interface OriginalInvestigationRun {
 // All opt-in original investigation services share actual project/run exclusion.
 const originalInvestigationCoordinator = createRunCoordinator()
 // Private investigation material only; it conveys no generation or terminal proof.
-const completedInvestigations = new WeakMap<object, Readonly<{ result: InvestigationResult; store: WorkflowEvidenceStore; tail: WorkflowRecordReference }>>()
+const completedInvestigations = new WeakMap<object, Readonly<{
+  result: InvestigationResult
+  store: WorkflowEvidenceStore
+  tail: WorkflowRecordReference
+  plan: OriginalPlanMetadata
+  groups: readonly GenerationGroup[]
+  context: BuiltContext
+  quotas: ReturnType<typeof planQuestionQuotas>
+}>>()
 function commitment(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex') }
+function planCanonical(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(planCanonical).join(',') + ']'
+  if (value !== null && typeof value === 'object') return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + planCanonical((value as Record<string, unknown>)[key])).join(',') + '}'
+  return JSON.stringify(value) ?? 'null'
+}
+function planDigest(domain: string, value: unknown): string { return createHash('sha256').update(planCanonical([domain, value]), 'utf8').digest('hex') }
 
 /** Explicit opt-in main-program entry. No ordinary run or default caller is changed. */
 export async function createOriginalInvestigationRun(input: OriginalInvestigationRunOptions): Promise<OriginalInvestigationRun> {
@@ -435,6 +464,8 @@ export async function createOriginalInvestigationRun(input: OriginalInvestigatio
   const controlled = session
   let phase: OriginalInvestigationObservation['phase'] = 'ready'
   let invoked = false, decisionOrdinal = 0
+  let completedResult: InvestigationResult | undefined
+  let completedRecords: readonly import('./project-contract.ts').EvidenceRecord[] | undefined
   let operationQueue: Promise<unknown> = Promise.resolve()
   let statistics = { decisions: 0, toolRequests: 0, selectedEvidenceCount: 0, topicCount: 0 }
   const observe = (): Readonly<OriginalInvestigationObservation> => Object.freeze({ phase, generationAdmission: 'unavailable', terminalSupport: 'cancellation-only', terminalStatus: controlled.terminalStatus as WorkflowCancellationOutcome | null, ...statistics })
@@ -500,8 +531,69 @@ export async function createOriginalInvestigationRun(input: OriginalInvestigatio
           if (records.length !== result.selection.selectedIds.length || !created.tail()) throw new WorkflowError('unknown-evidence')
           const meter = ledger.snapshot()
           if (!meter.usageComplete || meter.blocked || meter.reservations.some(row => row.state !== 'settled')) throw new WorkflowError('budget-exhausted')
-          completedInvestigations.set(token, Object.freeze({ result, store, tail: created.tail()! }))
+          completedResult = result
+          completedRecords = Object.freeze([...records])
           statistics = { ...statistics, selectedEvidenceCount: records.length, topicCount: result.topics.length }
+        })
+        await controlled.execute('packing', async () => {
+          await assertCurrent()
+          const result = completedResult, records = completedRecords
+          if (!result || !records) throw new WorkflowError('unknown-evidence')
+          ledger.assertCanContinue()
+          const remainingModelRequests = ledger.snapshot().remaining.modelRequests
+          if (remainingModelRequests < 1) throw new WorkflowError('budget-exhausted')
+          const desired = prepared.spec.granularity === 'coarse' ? 1 : prepared.spec.granularity === 'medium' ? 2 : 4
+          const groups = makeEvidenceGenerationGroups(result.selection.selectedIds, records, result.selection.requiredBundles, result.topics, Math.min(desired, remainingModelRequests), prepared.spec.granularity === 'fine')
+          if (!groups.length) throw new WorkflowError('budget-exhausted')
+          const context = buildLegacyEvidenceContext(scan, snapshot.files.map(file => file.relPath), records, groups)
+          await assertCurrent()
+          const quotas = planQuestionQuotas(prepared.spec.granularity, context.batches.map(batch => ({ label: batch.label, weight: batch.weight, kind: batch.kind })))
+          if (quotas.quotas.length !== groups.length) throw new WorkflowError('unknown-evidence')
+          const snapshotDescription = {
+            scan,
+            snapshot: { projectId: snapshot.projectId, snapshotId: snapshot.snapshotId, policyVersion: snapshot.policyVersion, files: snapshot.files, summary: snapshot.summary }
+          }
+          const evidenceDescription = records.map(record => ({
+            id: record.id, snapshotId: record.snapshotId, fileId: record.fileId, relPath: record.relPath,
+            originalRange: record.originalRange, displayRange: record.displayRange, contentHash: record.contentHash,
+            text: record.text, sourceKind: record.sourceKind, readStatus: record.readStatus, parseStatus: record.parseStatus,
+            omission: record.omission, transformationVersion: record.transformationVersion, redactionSummary: record.redactionSummary ?? null
+          }))
+          const slots = quotas.quotas.map((quota, index) => Object.freeze({
+            ordinal: index + 1, kind: quota.kind, weight: quota.weight, quota: quota.quota,
+            sourceGroupHash: planDigest('repoprep.workflow.original-plan-source-group.v1', {
+              ordinal: index + 1, ids: groups[index].ids,
+              evidence: groups[index].files.map(record => ({
+                id: record.id, snapshotId: record.snapshotId, fileId: record.fileId, relPath: record.relPath,
+                originalRange: record.originalRange, displayRange: record.displayRange, contentHash: record.contentHash,
+                text: record.text, sourceKind: record.sourceKind, readStatus: record.readStatus, parseStatus: record.parseStatus,
+                omission: record.omission, transformationVersion: record.transformationVersion
+              })),
+              topics: groups[index].topics, requiredBundles: groups[index].bundles
+            })
+          }))
+          const plan: OriginalPlanMetadata = {
+            version: 1,
+            bindingHash: hashOriginalPlanBinding(prepared.binding),
+            runSpecHash: prepared.binding.runSpecHash,
+            configHash: prepared.binding.configHash,
+            objectiveHash: planDigest('repoprep.workflow.original-plan-objective.v1', objective),
+            snapshotHash: planDigest('repoprep.workflow.original-plan-snapshot.v1', snapshotDescription),
+            evidenceHash: planDigest('repoprep.workflow.original-plan-evidence.v1', evidenceDescription),
+            investigationHash: planDigest('repoprep.workflow.original-plan-investigation.v1', result),
+            contextHash: planDigest('repoprep.workflow.original-plan-context.v1', context),
+            versions: ORIGINAL_PLAN_VERSION_COMMITMENTS,
+            writerVariant: 'topic-cards',
+            questionBudget: prepared.spec.questionBudget,
+            remainingModelRequests,
+            plannedTotal: quotas.total,
+            slots,
+            retry: ORIGINAL_PLAN_RETRY_POLICY
+          }
+          const persisted = await created.persistPlan(plan)
+          await assertCurrent()
+          if (!same(created.tail(), persisted.tail) || !same(persisted.plan, plan)) throw new WorkflowError('unreadable')
+          completedInvestigations.set(token, Object.freeze({ result, store, tail: persisted.tail, plan: persisted.plan, groups: Object.freeze(groups), context, quotas }))
         })
         controlled.assertActive()
         phase = 'completed'
@@ -533,7 +625,7 @@ export function claimWorkflowCancellationControl(token: WorkflowCancellationCont
   return owner.storage
 }
 
-async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage; source: AwaitedToolAccounting; tail(): WorkflowRecordReference | null }> {
+async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage; source: AwaitedToolAccounting; tail(): WorkflowRecordReference | null; persistPlan(plan: OriginalPlanMetadata): Promise<Readonly<{ plan: OriginalPlanMetadata; tail: WorkflowRecordReference }>> }> {
   const prepared = codec.prepared
   let store: WorkflowStore | undefined
   let revoke: (() => boolean) | undefined
@@ -555,6 +647,7 @@ async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, l
     let fixedOutcome: WorkflowCancellationOutcome | null = null
     let accepted: WorkflowCancellationResolution | null = null
     let unresolved: { step: HostStep; bytes: Buffer } | null = null
+    let planIssued = false
     const poison = (): void => {
       work?.seal()
       if (!controlled) revoke!()
@@ -572,7 +665,7 @@ async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, l
       const c = scalars(context, contextKeys)
       if (c.runId !== prepared.spec.runId || c.projectId !== prepared.spec.projectId || c.snapshotId !== prepared.spec.snapshotId || c.attemptId !== info.epoch.attemptId || c.fence !== info.epoch.owner) throw new WorkflowError('configuration-changed')
     }
-    const enqueue = (event: LedgerCriticalEvent, buildState: (position: LedgerJournalPosition) => LedgerStateV1, metadata = false): Promise<LedgerJournalPosition> => {
+    const enqueue = (event: HostEvent, buildState: (position: LedgerJournalPosition) => LedgerStateV1, metadata = false, plan?: OriginalPlanMetadata): Promise<LedgerJournalPosition> => {
       const task = queue.then(async () => {
         try {
           assertOwned(metadata)
@@ -583,9 +676,26 @@ async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, l
             assertOwned(metadata)
             if (built || unresolved || !same(context.binding, prepared.binding) || !same(context.producingEpoch, info.epoch) || context.sequence !== cursor.logicalPosition.sequence + 1 || !same(context.previous, cursor.reference)) unavailable()
             built = true
-            const position = codec.position(context, event)
+            let lineage: unknown
+            let position: LedgerJournalPosition
+            let envelope: HostEnvelope
+            if (codec.version === 'v1') {
+              if (event.kind === 'plan') invalid()
+              const versionedEvent = event as LedgerCriticalEvent
+              lineage = codec.nextLineage(cursor, versionedEvent)
+              position = codec.position(context, versionedEvent, lineage)
+            } else {
+              const versionedEvent = event as LedgerCriticalEventV2
+              lineage = codec.nextLineage(cursor, versionedEvent, plan)
+              position = codec.position(context, versionedEvent, lineage)
+            }
             const state = buildState(position)
-            const envelope = codec.envelope(context, event, position, state)
+            if (codec.version === 'v1') {
+              envelope = codec.envelope(context, event as LedgerCriticalEvent, position, state, lineage)
+            } else {
+              const versionedEvent = event as LedgerCriticalEventV2
+              envelope = codec.envelope(context, versionedEvent, position, state, lineage)
+            }
             step = codec.check(cursor, envelope)
             // W's complete outer encoding, never just its logical marker or payload.
             bytes = Buffer.from(JSON.stringify({ format: 'workflow-journal/v1', binding: context.binding, producingEpoch: context.producingEpoch, kind: 'critical-journal', schemaId: codec.schemaId, payload: envelope, sequence: context.sequence, previous: context.previous }))
@@ -655,13 +765,23 @@ async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, l
         unresolved = null
         binding = createLedgerBinding(prepared.spec, cursor.logicalPosition)
       }
-      if (!same(cursor.reference, folded.reference) || !same(cursor.logicalPosition, folded.logicalPosition) || !same(cursor.state, folded.state) || cursor.terminalOutcome !== folded.terminalOutcome) unavailable()
+      if (!same(cursor.reference, folded.reference) || !same(cursor.logicalPosition, folded.logicalPosition) || !same(cursor.state, folded.state) || cursor.terminalOutcome !== folded.terminalOutcome || !codec.sameLineage(cursor, folded)) unavailable()
       // This original live ledger must still agree. A fresh/restored ledger is never substituted.
       const live = exportBudgetLedgerState(ledger, binding), disk = folded.state
       const accounting = (state: LedgerStateV1) => ({ models: state.models, reads: state.reads, tools: state.tools, issuedIds: state.issuedIds, diagnostics: state.diagnostics, blocked: state.blocked, startedUtcMs: state.time.startedUtcMs, expiresUtcMs: state.time.expiresUtcMs, terminalElapsedMs: state.time.terminalElapsedMs })
       if (!same(accounting(live), accounting(disk)) || live.time.utcHighWaterMs < disk.time.utcHighWaterMs || live.time.elapsedHighWaterMs < disk.time.elapsedHighWaterMs || disk.time.terminalElapsedMs !== null && !same(live.time, disk.time)) unavailable()
       if (folded.terminalOutcome !== null && folded.terminalOutcome !== fixedOutcome) unavailable()
       return { view, folded }
+    }
+    const persistPlan = async (plan: OriginalPlanMetadata): Promise<Readonly<{ plan: OriginalPlanMetadata; tail: WorkflowRecordReference }>> => {
+      if (!controlled || !work || codec.version !== 'v2' || planIssued) invalid()
+      planIssued = true
+      await enqueue({ kind: 'plan', planHash: hashOriginalPlanMetadata(plan, prepared.spec, prepared.binding) }, position => exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position)), false, plan)
+      const current = readReconciled()
+      const latest = current.view.journal.at(-1)
+      const persistedPlan = codec.plan(current.folded)
+      if (!latest || current.folded.terminalOutcome !== null || (latest.payload as HostEnvelope).event.kind !== 'plan' || !persistedPlan || !same(persistedPlan, plan) || !current.folded.reference) unavailable()
+      return Object.freeze({ plan: persistedPlan, tail: current.folded.reference })
     }
     const acceptTerminal = (current: ReturnType<typeof readReconciled>): WorkflowCancellationResolution | null => {
       const { view, folded } = current, manifest = view.manifest
@@ -761,7 +881,7 @@ async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, l
         })
       }
     })
-    return { session, storage, source, tail: () => cursor.reference }
+    return { session, storage, source, tail: () => cursor.reference, persistPlan }
   } catch (error) {
     work?.seal()
     revoke?.()
