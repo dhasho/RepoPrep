@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('node:path')
 const { isMainThread } = require('node:worker_threads')
 const io = require('./m09-semantic-io.cjs')
@@ -12,18 +13,29 @@ function args(argv) {
 function report(message) { process.stdout.write(io.bytes(message)) }
 async function continueNative(token) {
   const { app } = require('electron')
+  let input
   try {
     const ready = await native.prepareNativeSemanticContext(token)
-    // Install the input receiver before publishing ready. It requires EOF.
-    const pendingGrant = io.oneMessage(process.stdin, { timeoutMs: 60000 })
+    // Electron's stdin wrapper can be a contentless Readable on Windows even
+    // when the inherited fd is a working pipe. Keep the same strict EOF parser.
+    input = fs.createReadStream(null, { fd: 0, autoClose: false })
+    // oneMessage owns failures while pending; retain a sink for destroy/late
+    // errors after that receiver removes its listeners. No error text is kept.
+    input.on('error', () => {})
+    const pendingGrant = io.oneMessage(input, { timeoutMs: 60000 })
+    // Publishing ready can itself fail; observe a later receiver rejection too.
+    void pendingGrant.catch(() => {})
     report(ready)
     const grant = await pendingGrant
+    input.destroy()
+    input = undefined
     await native.acceptNativeSemanticGrant(token, grant)
     const { executeNativeSemanticEvaluation } = await import('../agentic/semantic-eval.mjs')
     const outcome = await executeNativeSemanticEvaluation({ context: token })
     report(outcome)
     app.exit(0)
   } catch (error) {
+    input?.destroy()
     report({ type: 'semantic-error', code: io.safeCode(error, 'semantic-native-execution-failed') })
     app.exit(1)
   }
