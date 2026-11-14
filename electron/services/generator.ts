@@ -28,10 +28,10 @@ export { capSectionsToMax, collectReferencedTerms, pruneGlossary } from './gener
 import type { ScanResult } from './scanner'
 import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
-import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
+import { CitationValidationError, type GenerationRequestAcceptanceMode, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
 import { WorkflowError } from './workflow/project-contract'
 import { GenerationOutputError, type GenerationOutputFailureReason, type GenerationOutputRejection } from './generation-output-error'
-import { normalizeParsed, validateCheckpointBatch, type ParsedGenerationBatch } from './generation-output-policy'
+import { inspectGenerationOutputText, normalizeParsed, validateCheckpointBatch, type ParsedGenerationBatch } from './generation-output-policy'
 export { normalizeParsed } from './generation-output-policy'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
@@ -349,6 +349,7 @@ async function callForJson(
   onRequestTruncation: () => void,
   inputTokenBudget: number,
   requestAdapter: GenerationRequestAdapter | undefined,
+  acceptanceMode: GenerationRequestAcceptanceMode,
   requestStage: GenerationRequestStage,
   batchIndex: number,
   batchLabel: string,
@@ -362,6 +363,7 @@ async function callForJson(
   },
   streaming: StreamingBatchState
 ): Promise<ParsedBatch> {
+  const completeResponseMode = Boolean(requestAdapter && acceptanceMode === 'complete-response')
   let lastError = ''
   let previousReply = ''
   const rejections: GenerationOutputRejection[] = []
@@ -404,6 +406,7 @@ async function callForJson(
     let formatFailureReason: GenerationOutputFailureReason | undefined
     let receivedChars = 0
     let lastPreviewSent = 0
+    let deltaPreviewFailed = false
     const emitPreview = (force = false): void => {
       if (signal.aborted) return
       const now = Date.now()
@@ -411,11 +414,14 @@ async function callForJson(
       lastPreviewSent = now
       streaming.preview(parser.preview())
     }
-    const accept = async (fragment: StreamedInterviewQuestion): Promise<void> => {
+    const accept = async (
+      fragment: StreamedInterviewQuestion,
+      metadata: Pick<ParsedBatch, 'projectSummary' | 'glossary'> = parser.metadata()
+    ): Promise<void> => {
       if (signal.aborted) throw new LlmRequestError('cancelled')
       let normalized: ParsedBatch
       try {
-        normalized = normalizeParsed({ ...parser.metadata(), sections: [{ ...fragment.section, questions: [fragment.question] }] })
+        normalized = normalizeParsed({ ...metadata, sections: [{ ...fragment.section, questions: [fragment.question] }] })
       } catch { return } // Invalid objects do not become completed questions.
       const section = normalized.sections[0]
       const question = section.questions[0]
@@ -446,11 +452,16 @@ async function callForJson(
         receivedChars += delta.length
         let fragments: StreamedInterviewQuestion[] = []
         let citationFailureThisChunk = false
-        if (formatFailure === undefined) {
+        if (completeResponseMode) {
+          if (!deltaPreviewFailed) {
+            try { fragments = parser.push(delta) }
+            catch { deltaPreviewFailed = true; parser.drain(); streaming.preview(undefined) }
+          }
+        } else if (formatFailure === undefined) {
           try { fragments = parser.push(delta) }
           catch (error) { formatFailure = error; formatFailureReason = 'json-syntax'; fragments = parser.drain(); streaming.preview(undefined) }
         }
-        for (const fragment of fragments) {
+        for (const fragment of completeResponseMode ? [] : fragments) {
           if (citationFailureThisChunk) break
           try { await accept(fragment) }
           catch (error) {
@@ -533,14 +544,42 @@ async function callForJson(
     }
     let parsed: ParsedBatch
     try {
-      if (formatFailure !== undefined) throw formatFailure
-      let raw: unknown
-      try { raw = parser.finish() }
-      catch (error) { formatFailureReason = 'json-syntax'; throw error }
-      try { parsed = normalizeParsed(raw, true) }
-      catch (error) { formatFailureReason = 'normalized-structure-invalid'; throw error }
-      try { validateCheckpointBatch(parsed) }
-      catch (error) { formatFailureReason = 'checkpoint-invalid'; throw error }
+      if (completeResponseMode) {
+        const inspection = inspectGenerationOutputText(reply)
+        if (inspection.kind === 'format-failure') {
+          formatFailureReason = inspection.reason
+          throw new Error('模型完整输出格式无效。')
+        }
+        parsed = inspection.batch
+        const metadata = { projectSummary: parsed.projectSummary, glossary: parsed.glossary }
+        for (const candidate of inspection.closed) {
+          try {
+            await accept({
+              sectionIndex: candidate.sectionIndex,
+              questionIndex: candidate.questionIndex,
+              section: candidate.section,
+              question: candidate.rawQuestion
+            }, metadata)
+          } catch (error) {
+            if (error instanceof CitationValidationError) {
+              formatFailure = error
+              formatFailureReason = 'citation-invalid'
+              break
+            }
+            throw error
+          }
+        }
+        if (formatFailure !== undefined) throw formatFailure
+      } else {
+        if (formatFailure !== undefined) throw formatFailure
+        let raw: unknown
+        try { raw = parser.finish() }
+        catch (error) { formatFailureReason = 'json-syntax'; throw error }
+        try { parsed = normalizeParsed(raw, true) }
+        catch (error) { formatFailureReason = 'normalized-structure-invalid'; throw error }
+        try { validateCheckpointBatch(parsed) }
+        catch (error) { formatFailureReason = 'checkpoint-invalid'; throw error }
+      }
       if (!batchQuestionCount(parsed) && !batchQuestionCount(streaming.current)) {
         formatFailureReason = 'empty-output'
         throw new Error('模型输出中没有有效的问题')
@@ -600,6 +639,11 @@ function fitMessages(
 
 export async function generateInterview(params: GenerateParams): Promise<InterviewResult> {
   const { scan, granularity, roleFocus, profile, signal, onProgress } = params
+  const acceptanceModeValue: unknown = params.requestAdapter?.acceptanceMode
+  if (acceptanceModeValue !== undefined && acceptanceModeValue !== 'streaming' && acceptanceModeValue !== 'complete-response') {
+    throw new Error('生成请求策略无效。')
+  }
+  const acceptanceMode: GenerationRequestAcceptanceMode = acceptanceModeValue === 'complete-response' ? acceptanceModeValue : 'streaming'
   const startedAt = Date.now()
   const counters = {
     estimated: 0, requests: 0, repairs: 0, compensationRequests: 0, compensationPending: 0,
@@ -960,6 +1004,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           markRequestTruncation,
           tokenBudget.inputTokens,
           params.requestAdapter,
+          acceptanceMode,
           extraInstruction ? 'compensation' : 'generation',
           index,
           built.batches[index].label,
