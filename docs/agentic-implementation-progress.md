@@ -291,3 +291,14 @@ V2真实host仍在完成实际W调查、取消和跨版本历史回归。新的�
 整合候选 `0a55df9` 的主代理复核运行真实原始调查及跨版本历史两项W用例，2/2通过、退出0，日志为 `.validation/continuation-20261114/integrated-v2-host.log`。构建及安全检查执行80项，77通过、0失败、3跳过；随后真实Electron冒烟记录 `VERDICT SMOKE-OK`、进程退出0及隔离fixture删除，日志为同目录 `integrated-security.log` 和 `integrated-smoke.log`。两模块整合后的Node/Web类型检查已退出0。
 
 下一模块在同一私有owner中复用共享分组和配额算法，计算、持久化并回读原始plan，随后接入生成结果接受和成功终态。新的本机合成native组合正在准备。正式质量与发布门禁继续待验收。
+
+
+## 一次性原始plan、完成响应接受和R7合成验证（2026-11-15）
+
+原owner计划模块 `7c84ea6` 已经主代理与独立Luna审查整合。真实调查后复用原Store、共享分组/上下文/配额，并在同一原始账本与W队列提交一次plan、核验完整outer ack和真实prefix回读。后继取消/失败沿用该lineage。作者I1、I8–I12实际W与100项V1/V2相邻回归通过，主代理在整合候选上另执行正常plan提交及期限失效两项，2/2、退出0。
+
+完成响应接受模式 `0c16bbb` 已整合。显式complete-response策略先取得成功完成的真实body，再复用完整输出检查与既有逐题来源、去重及配额逻辑。主代理独立20项入口回归通过，整合后题量164项、恢复46项、IPC274项均退出0。原owner实际durable生成接线继续实施，结果成功manifest仍待接入。
+
+R7在冻结候选 `f0a673c` 上由主代理完成真实Electron本机合成验证，100个公开样本、120次loopback请求、外部provider及用户profile读取均为0，父子进程退出0。Native child实际close后生成唯一父证明，同host接受，detached与伪造证明拒绝，耗时262235毫秒。质量标记为not-evaluated，formalM09Evidence为false。根目录验证工件为 `.validation/continuation-20261114/r7-root-preflight.json` 与 `r7-root-result.json`，原worktree完整报告及失败历史继续保留。
+
+R7的Local State在bootstrap后被替换，触发旧清理保护并保留约10.8MB运行材料，launcher runtime包含在support目录统计中。修复 `6ae05ba` 允许已关闭、真实owned runtime中该特定可变缓存重新检查当前普通文件身份，settings、目录、链接、未知项和活跃owner继续受到原检查。主代理实际文件系统回归6/6通过，17个源码字节绑定及整合后的124项M09边界回归通过。原R7源码和产物保持其历史归属。
