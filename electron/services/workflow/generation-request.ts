@@ -3,6 +3,7 @@ import type { ChatMessage, CallOptions } from '../llm'
 import type { RenderedSelection } from '../context-builder'
 
 export type GenerationRequestStage = 'generation' | 'repair' | 'compensation'
+export type GenerationRequestAcceptanceMode = 'streaming' | 'complete-response'
 
 export interface GenerationRequestPreparationInput {
   requestId: string
@@ -35,6 +36,8 @@ export interface AcceptedGenerationQuestion {
 
 export interface GenerationRequestAdapter {
   id: string
+  /** Optional internal policy: defer accepted-question callbacks until the full response is validated. */
+  acceptanceMode?: GenerationRequestAcceptanceMode
   prepare(input: GenerationRequestPreparationInput): PreparedGenerationRequest | Promise<PreparedGenerationRequest>
   complete(
     prepared: PreparedGenerationRequest,

@@ -426,6 +426,127 @@ test('request adapter captures raw citation fields after normalization and repai
   assert.equal(result.generationDiagnostics?.usageComplete, true, 'citation format failure drains the stream and retains its usage receipt')
 })
 
+function completeResponseBody(projectSummary: string, questions: ReturnType<typeof makeQuestion>[]): string {
+  return JSON.stringify({ projectSummary, sections: [{ title: 'Complete response', summary: projectSummary, questions }], glossary: { PersistedTerm: projectSummary } })
+}
+
+test('complete-response mode does not accept streamed candidates when completion rejects', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: unknown[] = []
+  const body = completeResponseBody('delta', [makeQuestion(1)])
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-rejected', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(body); throw new Error('synthetic completion rejected') },
+    acceptQuestion(input) { accepted.push(input) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), /synthetic completion rejected/u)
+  assert.deepEqual(accepted, [])
+})
+
+test('complete-response mode ignores a valid streamed prefix when the complete body is malformed', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: unknown[] = []
+  const prefix = completeResponseBody('delta prefix', [makeQuestion(1)])
+  const malformed = prefix + ' trailing bytes'
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-malformed', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(prefix); return malformed },
+    acceptQuestion(input) { accepted.push(input) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), (error: unknown) => {
+    assert.ok(error instanceof GenerationOutputError)
+    assert.deepEqual(error.rejections.map(item => item.reason), ['json-syntax', 'json-syntax'])
+    return true
+  })
+  assert.deepEqual(accepted, [])
+})
+
+test('complete-response mode accepts only the returned body and its root metadata', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: Array<{ rawQuestion: unknown; question: Question }> = []
+  let completionResolved = false
+  const delta = completeResponseBody('delta metadata', [makeQuestion(1)])
+  const returnedQuestion = { ...makeQuestion(2), evidenceIds: ['complete-body-id'] }
+  const returned = completeResponseBody('completed body metadata', [returnedQuestion])
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-authoritative', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(delta); completionResolved = true; return returned },
+    acceptQuestion(input) { assert.equal(completionResolved, true); accepted.push(input as typeof accepted[number]) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  const result = await generateInterview({ ...params, requestAdapter: adapter })
+  assert.equal(result.projectSummary, 'completed body metadata')
+  assert.deepEqual(questionList(result).map(question => question.question), [returnedQuestion.question])
+  assert.equal(accepted.length, 1)
+  assert.deepEqual(accepted[0].rawQuestion, returnedQuestion)
+  assert.equal(accepted[0].question.question, returnedQuestion.question)
+})
+
+test('complete-response acceptance occurs after completion and retains quota and duplicate filtering', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: string[] = []
+  let completionResolved = false
+  const questions = [makeQuestion(1), makeQuestion(1), ...Array.from({ length: 19 }, (_, index) => makeQuestion(index + 2))]
+  const body = completeResponseBody('complete', questions)
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-quota', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) {
+      await onDelta(body)
+      assert.deepEqual(accepted, [])
+      completionResolved = true
+      return body
+    },
+    acceptQuestion({ question }) { assert.equal(completionResolved, true); accepted.push(question.question) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  const result = await generateInterview({ ...params, requestAdapter: adapter })
+  assert.equal(accepted.length, 20)
+  assert.equal(new Set(accepted).size, 20)
+  assert.equal(questionList(result).length, 20)
+})
+
+test('complete-response cancellation between completion and acceptance blocks candidates', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const controller = new AbortController()
+  const accepted: unknown[] = []
+  const body = completeResponseBody('complete', [makeQuestion(1)])
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-cancel', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(body); controller.abort(); return body },
+    acceptQuestion(input) { accepted.push(input) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan, { signal: controller.signal })
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), /取消/u)
+  assert.deepEqual(accepted, [])
+})
+
+test('unknown request acceptance mode is rejected before adapter preparation', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  let prepared = 0
+  const adapter = {
+    id: 'complete-response-unknown', acceptanceMode: 'unknown',
+    prepare() { prepared++; throw new Error('must not prepare') },
+    complete() { throw new Error('must not complete') },
+    acceptQuestion() {}
+  } as unknown as GenerationRequestAdapter
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), /请求策略无效/u)
+  assert.equal(prepared, 0)
+})
+
 test('two rejected citation responses are classified at the adapter boundary', { timeout: 60_000 }, async (t) => {
   const root = await makeProject(t)
   const scan = await scanProject(root)
