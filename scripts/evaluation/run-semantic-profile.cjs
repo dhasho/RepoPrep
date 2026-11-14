@@ -62,17 +62,31 @@ function cleanupSemanticRuntime(token) {
   io.check(owner && !owner.active && owner.closed, 'semantic-native-cleanup-preserved')
   io.check(io.samePath(path.dirname(owner.root), owner.parent) && /^repoprep-m09-semantic-[A-Za-z0-9]+$/u.test(path.basename(owner.root)) && io.sameIdentity(io.directory(owner.root), owner.identity), 'semantic-native-runtime-unsafe')
   const allowed = new Set(['entry.cjs', 'control.json', 'grant.json', 'outcome.json', 'bootstrap.json'])
+  const directoryIdentities = new Map([[path.resolve(owner.root).toLowerCase(), owner.identity]])
+  const stagedFileSizeLimits = new Map()
+  const retainDirectoryIdentity = (directory, identity) => directoryIdentities.set(path.resolve(directory).toLowerCase(), identity)
   if (fs.existsSync(path.join(owner.root, 'bootstrap.json'))) {
     const record = io.json(path.join(owner.root, 'bootstrap.json'))
     io.exact(record, ['schemaVersion', 'parentNonce', 'runtimeRoot', 'runtimeIdentity', 'paths', 'files'])
     io.check(record.schemaVersion === 1 && HASH.test(record.parentNonce) && io.within(owner.root, record.runtimeRoot) && io.samePath(path.dirname(record.runtimeRoot), owner.root) && /^m09-profile-[a-f0-9]{48}$/u.test(path.basename(record.runtimeRoot)) && io.sameIdentity(io.directory(record.runtimeRoot), record.runtimeIdentity), 'semantic-native-runtime-unsafe')
+    retainDirectoryIdentity(record.runtimeRoot, record.runtimeIdentity)
     io.exact(record.paths, ['userData', 'sessionData', 'cache', 'crashDumps'])
     const expected = { userData: 'user-data', sessionData: 'session-data', cache: 'cache', crashDumps: 'crash-dumps' }
-    for (const [key, leaf] of Object.entries(expected)) { const item = record.paths[key]; io.exact(item, ['path', 'identity']); io.check(io.samePath(item.path, path.join(record.runtimeRoot, leaf)) && io.sameIdentity(io.directory(item.path), item.identity), 'semantic-native-runtime-unsafe') }
+    for (const [key, leaf] of Object.entries(expected)) { const item = record.paths[key]; io.exact(item, ['path', 'identity']); io.check(io.samePath(item.path, path.join(record.runtimeRoot, leaf)) && io.sameIdentity(io.directory(item.path), item.identity), 'semantic-native-runtime-unsafe'); retainDirectoryIdentity(item.path, item.identity) }
     io.check(Array.isArray(record.files) && record.files.length === 2 && record.files.map(item => item.relative).join('|') === 'user-data/settings.json|session-data/Local State', 'semantic-native-cleanup-preserved')
     const expectedChildren = { userData: ['settings.json'], sessionData: ['Local State'], cache: [], crashDumps: [] }
     for (const [key, children] of Object.entries(expectedChildren)) io.check(io.canonical(fs.readdirSync(record.paths[key].path).sort()) === io.canonical(children), 'semantic-native-cleanup-preserved')
-    for (const item of record.files) { io.exact(item, ['relative', 'identity']); io.check(io.sameIdentity(io.file(path.join(record.runtimeRoot, ...item.relative.split('/')), 4 * 1024 * 1024).identity, item.identity), 'semantic-native-cleanup-preserved') }
+    stagedFileSizeLimits.set(path.resolve(record.paths.userData.path, 'settings.json').toLowerCase(), 4 * 1024 * 1024)
+    stagedFileSizeLimits.set(path.resolve(record.paths.sessionData.path, 'Local State').toLowerCase(), 4 * 1024 * 1024)
+    for (const item of record.files) {
+      io.exact(item, ['relative', 'identity'])
+      io.exact(item.identity, ['dev', 'ino'])
+      io.check(typeof item.identity.dev === 'string' && /^[1-9][0-9]*$/u.test(item.identity.dev) && typeof item.identity.ino === 'string' && /^[1-9][0-9]*$/u.test(item.identity.ino), 'semantic-native-cleanup-preserved')
+      const filename = path.join(record.runtimeRoot, ...item.relative.split('/'))
+      const current = io.file(filename, 4 * 1024 * 1024)
+      if (item.relative === 'user-data/settings.json') io.check(io.sameIdentity(current.identity, item.identity), 'semantic-native-cleanup-preserved')
+      else io.check(item.relative === 'session-data/Local State' && io.samePath(path.dirname(filename), record.paths.sessionData.path) && io.sameIdentity(io.directory(record.paths.sessionData.path), record.paths.sessionData.identity), 'semantic-native-cleanup-preserved')
+    }
     io.check(fs.readdirSync(record.runtimeRoot).every(name => Object.values(expected).includes(name)), 'semantic-native-cleanup-preserved')
     allowed.add(path.basename(record.runtimeRoot))
   }
@@ -95,8 +109,14 @@ function cleanupSemanticRuntime(token) {
   // io.file/directory check native reparse tags and captured identity immediately
   // before each individual removal; no recursive deletion follows untrusted links.
   for (const entry of [...entries].reverse()) {
-    const current = entry.directory ? io.directory(entry.filename) : io.file(entry.filename, 2 * 1024 * 1024 * 1024).identity
+    const current = entry.directory ? io.directory(entry.filename) : io.file(entry.filename, stagedFileSizeLimits.get(path.resolve(entry.filename).toLowerCase()) ?? 2 * 1024 * 1024 * 1024).identity
     io.check(io.sameIdentity(current, entry.identity) && io.sameIdentity(io.directory(owner.root), owner.identity), 'semantic-native-runtime-unsafe')
+    if (entry.directory) {
+      const expectedIdentity = directoryIdentities.get(path.resolve(entry.filename).toLowerCase())
+      if (expectedIdentity) io.check(io.sameIdentity(current, expectedIdentity), 'semantic-native-runtime-unsafe')
+    }
+    const expectedParentIdentity = directoryIdentities.get(path.resolve(path.dirname(entry.filename)).toLowerCase())
+    if (expectedParentIdentity) io.check(io.sameIdentity(io.directory(path.dirname(entry.filename)), expectedParentIdentity), 'semantic-native-runtime-unsafe')
     entry.directory ? fs.rmdirSync(entry.filename) : fs.unlinkSync(entry.filename)
   }
   io.check(io.sameIdentity(io.directory(owner.root), owner.identity), 'semantic-native-runtime-unsafe')
