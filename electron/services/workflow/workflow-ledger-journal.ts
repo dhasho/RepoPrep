@@ -51,6 +51,13 @@ import { WorkflowError } from './project-contract.ts'
 // @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
 import { validateArchivedWorkflowLedger } from './workflow-ledger-archive.ts'
 
+import type { LedgerCriticalV2Cursor, LedgerCriticalV2Step } from './ledger-critical-v2-transitions.ts'
+import type { LedgerCriticalEnvelopeV2 } from './ledger-critical-v2-envelope.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { LEDGER_CRITICAL_V2_FORMAT, LEDGER_CRITICAL_V2_SCHEMA_ID, prepareLedgerCriticalV2Spec, ledgerCriticalV2Position, validateLedgerCriticalV2Envelope, createLedgerCriticalV2PayloadValidator } from './ledger-critical-v2-envelope.ts'
+// @ts-ignore TS5097 -- direct Node tests execute explicit TypeScript module paths.
+import { createLedgerCriticalV2Cursor, checkLedgerCriticalV2Transition, acceptLedgerCriticalV2Step, foldLedgerCriticalV2Prefix } from './ledger-critical-v2-transitions.ts'
+
 export const WORKFLOW_LEDGER_STATE_SCHEMA_ID = 'workflow-ledger-state-v1'
 export interface WorkflowLedgerJournalOptions {
   readonly storageDirectory: string
@@ -102,11 +109,51 @@ function same(a: unknown, b: unknown): boolean {
   }
   return canonical(a) === canonical(b)
 }
-function captureOptions(input: WorkflowLedgerJournalOptions, write: boolean) {
+// Fixed module-private version choice. No caller codec/validator or continuing
+// session can change this selection after genesis. Tokens stay version-native.
+type HostCursor = LedgerCriticalCursor | LedgerCriticalV2Cursor
+type HostStep = LedgerCriticalStep | LedgerCriticalV2Step
+type HostEnvelope = LedgerCriticalEnvelopeV1 | LedgerCriticalEnvelopeV2
+function criticalCodec(version: 'v1' | 'v2', source: { spec: unknown }) {
+  if (version === 'v2') {
+    const prepared = prepareLedgerCriticalV2Spec(source)
+    const emptyLineage = Object.freeze({ plan: null })
+    return Object.freeze({ version, prepared, schemaId: LEDGER_CRITICAL_V2_SCHEMA_ID,
+      validator: createLedgerCriticalV2PayloadValidator(), historical: createLedgerCriticalPayloadValidator(),
+      create: (): HostCursor => createLedgerCriticalV2Cursor(prepared),
+      position: (context: unknown, event: LedgerCriticalEvent) => ledgerCriticalV2Position(prepared, context, event, emptyLineage),
+      envelope: (provenance: unknown, event: LedgerCriticalEvent, logicalPosition: LedgerJournalPosition, state: LedgerStateV1): HostEnvelope => validateLedgerCriticalV2Envelope({ format: LEDGER_CRITICAL_V2_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance, event, logicalPosition, state, lineage: emptyLineage }, prepared),
+      validate: (payload: unknown): HostEnvelope => validateLedgerCriticalV2Envelope(payload, prepared),
+      check: (cursor: HostCursor, envelope: HostEnvelope): HostStep => checkLedgerCriticalV2Transition(cursor as LedgerCriticalV2Cursor, envelope as LedgerCriticalEnvelopeV2),
+      accept: (step: HostStep, reference: WorkflowRecordReference): HostCursor => acceptLedgerCriticalV2Step(step as LedgerCriticalV2Step, reference),
+      fold: (records: readonly { payload: unknown; reference: WorkflowRecordReference }[]): HostCursor => foldLedgerCriticalV2Prefix(records)
+    })
+  }
+  const prepared = prepareLedgerCriticalSpec(source)
+  return Object.freeze({ version, prepared, schemaId: LEDGER_CRITICAL_SCHEMA_ID,
+    validator: createLedgerCriticalPayloadValidator(), historical: createLedgerCriticalV2PayloadValidator(),
+    create: (): HostCursor => createLedgerCriticalCursor(prepared),
+    position: (context: unknown, event: LedgerCriticalEvent) => ledgerCriticalPosition(prepared, context, event),
+    envelope: (provenance: unknown, event: LedgerCriticalEvent, logicalPosition: LedgerJournalPosition, state: LedgerStateV1): HostEnvelope => validateLedgerCriticalEnvelope({ format: LEDGER_CRITICAL_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance, event, logicalPosition, state }, prepared),
+    validate: (payload: unknown): HostEnvelope => validateLedgerCriticalEnvelope(payload, prepared),
+    check: (cursor: HostCursor, envelope: HostEnvelope): HostStep => checkLedgerCriticalTransition(cursor as LedgerCriticalCursor, envelope as LedgerCriticalEnvelopeV1),
+    accept: (step: HostStep, reference: WorkflowRecordReference): HostCursor => acceptLedgerCriticalStep(step as LedgerCriticalStep, reference),
+    fold: (records: readonly { payload: unknown; reference: WorkflowRecordReference }[]): HostCursor => foldLedgerCriticalPrefix(records)
+  })
+}
+type CriticalCodec = ReturnType<typeof criticalCodec>
+function codecForSchema(schemaId: string, spec: RunSpec): CriticalCodec {
+  if (schemaId === LEDGER_CRITICAL_SCHEMA_ID) return criticalCodec('v1', { spec })
+  if (schemaId === LEDGER_CRITICAL_V2_SCHEMA_ID) return criticalCodec('v2', { spec })
+  return unavailable()
+}
+
+function captureOptions(input: WorkflowLedgerJournalOptions, write: boolean, version: 'v1' | 'v2' = 'v1') {
   const data = fields(input, write ? ['storageDirectory', 'spec', 'limits', 'onDurableStep'] : ['storageDirectory', 'spec'], ['storageDirectory', 'spec'])
   if (typeof data.storageDirectory !== 'string' || !data.storageDirectory.length) invalid()
   // A0 canonicalization happens once, before acquiring an asynchronous W owner.
-  const prepared = prepareLedgerCriticalSpec({ spec: data.spec })
+  const codec = criticalCodec(version, { spec: data.spec })
+  const prepared = codec.prepared
   let limits: WorkflowStoreLimits | undefined
   if (data.limits !== undefined) {
     const copy = fields(data.limits, ['aggregateBytes', 'runBytes', 'controlBytes', 'maxEntries', 'componentBytes'], [])
@@ -120,26 +167,26 @@ function captureOptions(input: WorkflowLedgerJournalOptions, write: boolean) {
   }
   if (data.onDurableStep !== undefined && typeof data.onDurableStep !== 'function') invalid()
   const options: WorkflowStoreOptions = {
-    storageDirectory: data.storageDirectory, validators: validators(prepared, write),
+    storageDirectory: data.storageDirectory, validators: validators(codec, write), historicalValidators: Object.freeze({ 'critical-journal': Object.freeze([codec.historical]) }),
     ...(limits === undefined ? {} : { limits }),
     ...(data.onDurableStep === undefined ? {} : { onDurableStep: data.onDurableStep as WorkflowStoreOptions['onDurableStep'] })
   }
-  return { prepared, options }
+  return { prepared, options, codec }
 }
-function validators(prepared: PreparedCriticalSpec, archivedReads: boolean): WorkflowStoreOptions['validators'] {
+function validators(codec: CriticalCodec, archivedReads: boolean): WorkflowStoreOptions['validators'] {
   return Object.freeze({
-    'critical-journal': createLedgerCriticalPayloadValidator(),
+    'critical-journal': codec.validator,
     ledger: Object.freeze({ schemaId: WORKFLOW_LEDGER_STATE_SCHEMA_ID, ...(archivedReads ? { validateRead: validateArchivedWorkflowLedger } : {}), validate(payload: unknown): boolean {
-      try { validateLedgerState(prepared.spec, payload); return true } catch { return false }
+      try { validateLedgerState(codec.prepared.spec, payload); return true } catch { return false }
     } })
   })
 }
 
 /** New logical runs only. This component grants storage/accounting, not project or provider permission. */
 export function createWorkflowLedgerJournal(input: WorkflowLedgerJournalOptions): Promise<WorkflowLedgerJournalSession> {
-  const { prepared, options } = captureOptions(input, true)
+  const { prepared, options, codec } = captureOptions(input, true)
   const ledger = createBudgetLedger(prepared.spec, { durable: true })
-  return initialize(prepared, options, ledger, false).then(value => value.session)
+  return initialize(codec, options, ledger, false).then(value => value.session)
 }
 
 declare const cancellationBrand: unique symbol
@@ -168,6 +215,7 @@ interface CancellationStorage {
 }
 interface CancellationOwner {
   readonly originalSpecJson: string
+  readonly codecVersion: 'v1' | 'v2'
   // Retain the original A2a session too; none of its raw references leave this module.
   readonly session: WorkflowLedgerJournalSession
   readonly storage: CancellationStorage
@@ -185,11 +233,11 @@ const pendingResolution: WorkflowCancellationResolution = Object.freeze({ status
 
 /** Creates its own genuine A2a run before exposing the opaque cancellation-only token. */
 export function createWorkflowCancellationControl(input: WorkflowLedgerJournalOptions): Promise<WorkflowCancellationControl> {
-  const { prepared, options } = captureOptions(input, true)
+  const { prepared, options, codec } = captureOptions(input, true)
   const ledger = createBudgetLedger(prepared.spec, { durable: true })
-  return initialize(prepared, options, ledger, true).then(created => {
+  return initialize(codec, options, ledger, true).then(created => {
     const token = Object.freeze({}) as WorkflowCancellationControl
-    cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, session: created.session, storage: created.storage, claimed: false, closing: false })
+    cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, codecVersion: codec.version, session: created.session, storage: created.storage, claimed: false, closing: false })
     return token
   })
 }
@@ -260,17 +308,17 @@ export async function createWorkflowOriginalRun(input: OriginalWorkflowRunOption
   const { token } = await createOriginalOwner(data)
   return Object.freeze({ cancellationControl: token, observe() { return originalRunObservation }, closeUnclaimed() { return closeWorkflowCancellationControl(token) } })
 }
-async function createOriginalOwner(data: Record<string, unknown>) {
+async function createOriginalOwner(data: Record<string, unknown>, version: 'v1' | 'v2' = 'v1') {
   if (data.transport !== undefined && typeof data.transport !== 'function') invalid()
-  const { prepared, options } = captureOptions({
+  const { prepared, options, codec } = captureOptions({
     storageDirectory: data.storageDirectory as string, spec: data.spec,
     ...(data.limits === undefined ? {} : { limits: data.limits as WorkflowStoreLimits }),
     ...(data.onDurableStep === undefined ? {} : { onDurableStep: data.onDurableStep as WorkflowStoreOptions['onDurableStep'] })
-  }, true)
+  }, true, version)
   const profile = captureOriginalProfile(data.profile, prepared.spec)
   const ledger = createBudgetLedger(prepared.spec, { durable: true })
   const work = originalRunWork(ledger, prepared.spec)
-  const created = await initialize(prepared, options, ledger, true, work.control)
+  const created = await initialize(codec, options, ledger, true, work.control)
   try {
     // Gateway construction performs its own original configuration/durability guard.
     const gatewayOptions = { durability: created.session.journal, ...(data.transport === undefined ? {} : { transport: data.transport as ModelTransport }) }
@@ -282,7 +330,7 @@ async function createOriginalOwner(data: Record<string, unknown>) {
     // Storage initialization consumes the original allowance too; never restart it.
     ledger.assertCanContinue()
     const token = Object.freeze({}) as WorkflowCancellationControl
-    cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, session: created.session, storage: created.storage, originalBusiness, claimed: false, closing: false })
+    cancellationOwners.set(token, { originalSpecJson: prepared.originalSpecJson, codecVersion: codec.version, session: created.session, storage: created.storage, originalBusiness, claimed: false, closing: false })
     return { token, prepared, ledger, work, originalBusiness, created }
 
   } catch (error) {
@@ -324,7 +372,7 @@ export async function createOriginalInvestigationRun(input: OriginalInvestigatio
   const data = fields(input, ['storageDirectory', 'spec', 'limits', 'onDurableStep', 'profile', 'transport', 'scan', 'snapshot', 'objective'], ['storageDirectory', 'spec', 'profile', 'scan', 'snapshot'])
   const scan = data.scan as ScanResult, snapshot = data.snapshot as WorkflowProjectSnapshot
   if (!snapshotMatchesScan(snapshot, scan)) throw new WorkflowError('stale-snapshot')
-  const preflight = prepareLedgerCriticalSpec({ spec: data.spec }).spec
+  const preflight = prepareLedgerCriticalV2Spec({ spec: data.spec }).spec
   if (preflight.strategy !== 'agentic' || preflight.strategyVersion !== 'agentic-v1' || preflight.promptVersion !== INVESTIGATION_PROMPT_VERSION || preflight.toolVersion !== 'read-tools-v1' || preflight.policyVersion !== snapshot.policyVersion || preflight.projectId !== snapshot.projectId || preflight.snapshotId !== snapshot.snapshotId) throw new WorkflowError('configuration-changed')
   const objective = data.objective === undefined ? `Explore ${preflight.roleFocus} mechanisms at ${preflight.granularity} depth for interview preparation.` : data.objective
   if (typeof objective !== 'string' || !objective.length || objective.length > 800 || objective.includes('\0')) invalid()
@@ -376,7 +424,7 @@ export async function createOriginalInvestigationRun(input: OriginalInvestigatio
   }
   // Calling the owner captures spec, profile and options synchronously before its
   // first await. Snapshot currentness is then checked before claiming any work.
-  const original = await createOriginalOwner({ ...data, transport })
+  const original = await createOriginalOwner({ ...data, transport }, 'v2')
   const { prepared, ledger, work, created, originalBusiness, token } = original
   let session: ControlledRunSession | null = null
   try {
@@ -479,13 +527,14 @@ export function closeWorkflowCancellationControl(token: WorkflowCancellationCont
 /** @internal Real coordinator consumer; no raw ledger, journal, W owner or attempt is returned. */
 export function claimWorkflowCancellationControl(token: WorkflowCancellationControl, spec: RunSpec): CancellationStorage {
   const owner = token && typeof token === 'object' ? cancellationOwners.get(token) : undefined
-  if (!owner || owner.claimed || owner.closing || prepareLedgerCriticalSpec({ spec }).originalSpecJson !== owner.originalSpecJson) invalid()
+  if (!owner || owner.claimed || owner.closing || criticalCodec(owner.codecVersion, { spec }).prepared.originalSpecJson !== owner.originalSpecJson) invalid()
   owner.storage.assertAvailable()
   owner.claimed = true
   return owner.storage
 }
 
-async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage; source: AwaitedToolAccounting; tail(): WorkflowRecordReference | null }> {
+async function initialize(codec: CriticalCodec, options: WorkflowStoreOptions, ledger: BudgetLedger, controlled: boolean, work?: OriginalRunWork): Promise<{ session: WorkflowLedgerJournalSession; storage: CancellationStorage; source: AwaitedToolAccounting; tail(): WorkflowRecordReference | null }> {
+  const prepared = codec.prepared
   let store: WorkflowStore | undefined
   let revoke: (() => boolean) | undefined
   try {
@@ -498,14 +547,14 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
     revoke = () => { work?.seal(); active = false; blockBudgetLedger(ledger); return owned.finishAttempt(attempt) }
     let info: WorkflowAttemptInfo = owned.assertCurrent(attempt)
     if (!same(info.binding, prepared.binding) || info.epoch.attempt !== 1) unavailable()
-    let cursor = createLedgerCriticalCursor(prepared)
+    let cursor = codec.create()
     let binding: LedgerBinding = createLedgerBinding(prepared.spec, prepared.genesis)
     let queue: Promise<unknown> = Promise.resolve()
     let closing: Promise<void> | undefined
     let metadataActive = false
     let fixedOutcome: WorkflowCancellationOutcome | null = null
     let accepted: WorkflowCancellationResolution | null = null
-    let unresolved: { step: LedgerCriticalStep; bytes: Buffer } | null = null
+    let unresolved: { step: HostStep; bytes: Buffer } | null = null
     const poison = (): void => {
       work?.seal()
       if (!controlled) revoke!()
@@ -527,25 +576,25 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       const task = queue.then(async () => {
         try {
           assertOwned(metadata)
-          let step: LedgerCriticalStep | undefined
+          let step: HostStep | undefined
           let bytes: Buffer | undefined
           let built = false
           const ack = await owned.appendJournal(attempt, context => {
             assertOwned(metadata)
             if (built || unresolved || !same(context.binding, prepared.binding) || !same(context.producingEpoch, info.epoch) || context.sequence !== cursor.logicalPosition.sequence + 1 || !same(context.previous, cursor.reference)) unavailable()
             built = true
-            const position = ledgerCriticalPosition(prepared, context, event)
+            const position = codec.position(context, event)
             const state = buildState(position)
-            const envelope = validateLedgerCriticalEnvelope({ format: LEDGER_CRITICAL_FORMAT, originalSpecJson: prepared.originalSpecJson, provenance: context, event, logicalPosition: position, state }, prepared)
-            step = checkLedgerCriticalTransition(cursor, envelope)
+            const envelope = codec.envelope(context, event, position, state)
+            step = codec.check(cursor, envelope)
             // W's complete outer encoding, never just its logical marker or payload.
-            bytes = Buffer.from(JSON.stringify({ format: 'workflow-journal/v1', binding: context.binding, producingEpoch: context.producingEpoch, kind: 'critical-journal', schemaId: LEDGER_CRITICAL_SCHEMA_ID, payload: envelope, sequence: context.sequence, previous: context.previous }))
+            bytes = Buffer.from(JSON.stringify({ format: 'workflow-journal/v1', binding: context.binding, producingEpoch: context.producingEpoch, kind: 'critical-journal', schemaId: codec.schemaId, payload: envelope, sequence: context.sequence, previous: context.previous }))
             unresolved = { step, bytes }
             return envelope
           })
           assertOwned(metadata)
           if (!built || !step || !bytes || !ackMatches(ack, step, bytes)) unavailable()
-          cursor = acceptLedgerCriticalStep(step, ack.reference)
+          cursor = codec.accept(step, ack.reference)
           unresolved = null
           binding = createLedgerBinding(prepared.spec, cursor.logicalPosition)
           return step.logicalPosition
@@ -554,7 +603,7 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       queue = task.catch(() => {})
       return task
     }
-    const ackMatches = (ack: WorkflowVerifiedJournal, step: LedgerCriticalStep, bytes: Buffer): boolean => ack.schemaId === LEDGER_CRITICAL_SCHEMA_ID && ack.sequence === step.logicalPosition.sequence && same(ack.payload, step.envelope) && same(ack.reference.producingEpoch, step.envelope.provenance.producingEpoch) && ack.reference.id === 'j-' + String(ack.sequence).padStart(12, '0') && ack.reference.byteLength === bytes.length && ack.reference.sha256 === createHash('sha256').update(bytes).digest('hex')
+    const ackMatches = (ack: WorkflowVerifiedJournal, step: HostStep, bytes: Buffer): boolean => ack.schemaId === codec.schemaId && ack.sequence === step.logicalPosition.sequence && same(ack.payload, step.envelope) && same(ack.reference.producingEpoch, step.envelope.provenance.producingEpoch) && ack.reference.id === 'j-' + String(ack.sequence).padStart(12, '0') && ack.reference.byteLength === bytes.length && ack.reference.sha256 === createHash('sha256').update(bytes).digest('hex')
     await enqueue({ kind: 'created', genesis: prepared.genesis }, position => exportBudgetLedgerState(ledger, createLedgerBinding(prepared.spec, position)))
     const journal: DurableModelJournal = Object.freeze({
       get binding() { return binding }, attemptId: info.epoch.attemptId, fence: info.epoch.owner, assertCurrent,
@@ -591,18 +640,18 @@ async function initialize(prepared: PreparedCriticalSpec, options: WorkflowStore
       if (closing) unavailable()
       const view = owned.readOwned(prepared.binding)
       if (view.status !== 'verified' || !same(view.binding, prepared.binding) || !view.journal.length) unavailable()
-      const records: { payload: LedgerCriticalEnvelopeV1; reference: WorkflowRecordReference }[] = []
+      const records: { payload: HostEnvelope; reference: WorkflowRecordReference }[] = []
       for (const item of view.journal) {
-        const envelope = validateLedgerCriticalEnvelope(item.payload, prepared)
-        if (item.schemaId !== LEDGER_CRITICAL_SCHEMA_ID || item.sequence !== records.length + 1 || item.reference.id !== 'j-' + String(item.sequence).padStart(12, '0') || envelope.provenance.sequence !== item.sequence || !same(envelope.provenance.binding, prepared.binding) || !same(envelope.provenance.producingEpoch, item.reference.producingEpoch) || !same(envelope.provenance.previous, records.at(-1)?.reference ?? null)) unavailable()
+        const envelope = codec.validate(item.payload)
+        if (item.schemaId !== codec.schemaId || item.sequence !== records.length + 1 || item.reference.id !== 'j-' + String(item.sequence).padStart(12, '0') || envelope.provenance.sequence !== item.sequence || !same(envelope.provenance.binding, prepared.binding) || !same(envelope.provenance.producingEpoch, item.reference.producingEpoch) || !same(envelope.provenance.previous, records.at(-1)?.reference ?? null)) unavailable()
         records.push({ payload: envelope, reference: item.reference })
       }
-      const folded = foldLedgerCriticalPrefix(records.map(item => ({ payload: item.payload, reference: item.reference })))
+      const folded = codec.fold(records.map(item => ({ payload: item.payload, reference: item.reference })))
       const latest = view.journal.at(-1)!
       if (!folded.state || !folded.reference || !same(folded.reference, latest.reference)) unavailable()
       if (unresolved) {
         if (!ackMatches(latest, unresolved.step, unresolved.bytes)) unavailable()
-        cursor = acceptLedgerCriticalStep(unresolved.step, latest.reference)
+        cursor = codec.accept(unresolved.step, latest.reference)
         unresolved = null
         binding = createLedgerBinding(prepared.spec, cursor.logicalPosition)
       }
@@ -750,14 +799,15 @@ export function classifyWorkflowLedger(input: Pick<WorkflowLedgerJournalOptions,
       if (view.manifest) return Object.freeze({ status: 'manifest-mismatch', reason: 'anchor' })
       return Object.freeze({ status: 'initialized-without-created', binding: view.binding, currentEpoch: view.currentEpoch })
     }
-    const records: { payload: LedgerCriticalEnvelopeV1; reference: WorkflowRecordReference }[] = []
+    const codec = codecForSchema(view.journal[0].schemaId, prepared.spec)
+    const records: { payload: HostEnvelope; reference: WorkflowRecordReference }[] = []
     for (const item of view.journal) {
-      const envelope = validateLedgerCriticalEnvelope(item.payload, prepared)
-      if (item.schemaId !== LEDGER_CRITICAL_SCHEMA_ID || item.sequence !== records.length + 1 || item.reference.id !== 'j-' + String(item.sequence).padStart(12, '0') || envelope.provenance.sequence !== item.sequence || !same(envelope.provenance.binding, view.binding) || !same(envelope.provenance.producingEpoch, item.reference.producingEpoch) || !same(envelope.provenance.previous, records.at(-1)?.reference ?? null)) unavailable()
+      const envelope = codec.validate(item.payload)
+      if (item.schemaId !== codec.schemaId || item.sequence !== records.length + 1 || item.reference.id !== 'j-' + String(item.sequence).padStart(12, '0') || envelope.provenance.sequence !== item.sequence || !same(envelope.provenance.binding, view.binding) || !same(envelope.provenance.producingEpoch, item.reference.producingEpoch) || !same(envelope.provenance.previous, records.at(-1)?.reference ?? null)) unavailable()
       records.push({ payload: envelope, reference: item.reference })
     }
     // A1 deliberately accepts exact fresh projections, not W views with extra metadata.
-    const cursor: LedgerCriticalCursor = foldLedgerCriticalPrefix(records.map(item => ({ payload: item.payload, reference: item.reference })))
+    const cursor = codec.fold(records.map(item => ({ payload: item.payload, reference: item.reference })))
     const latest = view.journal.at(-1)!
     if (!cursor.state || !cursor.reference || !same(cursor.reference, latest.reference) || cursor.logicalPosition.sequence !== latest.sequence) unavailable()
     let manifestAnchor: ClassifiedPrefix['manifestAnchor'] = null
@@ -765,7 +815,7 @@ export function classifyWorkflowLedger(input: Pick<WorkflowLedgerJournalOptions,
       const manifest = view.manifest
       const index = records.findIndex(item => same(item.reference, manifest.journalPosition))
       if (index < 0) return Object.freeze({ status: 'manifest-mismatch', reason: 'anchor' })
-      const anchored = foldLedgerCriticalPrefix(records.slice(0, index + 1).map(item => ({ payload: item.payload, reference: item.reference })))
+      const anchored = codec.fold(records.slice(0, index + 1).map(item => ({ payload: item.payload, reference: item.reference })))
       const ledger = view.components.filter(item => item.reference.kind === 'ledger')
       if (ledger.length !== 1 || ledger[0].reference.schemaId !== WORKFLOW_LEDGER_STATE_SCHEMA_ID || !same(ledger[0].payload, anchored.state)) return Object.freeze({ status: 'manifest-mismatch', reason: 'ledger' })
       const terminal = ['completed', 'cancelled', 'failed'].includes(manifest.stage)
