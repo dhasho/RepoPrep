@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "protocol": "agent-review-v1",
+  "kind": "subagent",
+  "model": "gpt-6-luna",
+  "authorization": {
+    "source": "explicit-user-message",
+    "date": "2026-11-06",
+    "scope": "Task authoring, annotation, independent blind reviewers and adjudicator may be subagents; no human requirement."
+  },
+  "author": {
+    "id": "agent-dataset-author",
+    "taskName": "/root/dataset_author",
+    "commits": [
+      "a24d854e950a609dc97a40009dead4e4c188e255",
+      "d44cc57bd951c28553da8f829c36a0d12191b304"
+    ]
+  },
+  "reviewers": [
+    {
+      "id": "agent-review-a",
+      "taskName": "/root/reviewer_a",
+      "commit": "a19289d56e66a6f14464196e769c27d6d8ad1887",
+      "inheritedContext": "none"
+    },
+    {
+      "id": "agent-review-b",
+      "taskName": "/root/reviewer_b",
+      "commit": "b8d504c500d0db83a677d1ab2b6bfc65b67b2656",
+      "inheritedContext": "none"
+    }
+  ],
+  "adjudicator": {
+    "id": "agent-adjudicator",
+    "taskName": "/root/adjudicator",
+    "inheritedContext": "none"
+  },
+  "holdoutAnnotator": {
+    "id": "agent-holdout-annotator",
+    "taskName": "/root/holdout_annotator",
+    "inheritedContext": "none",
+    "implementationContextProvided": false
+  },
+  "inputScope": {
+    "reviewers": [
+      "reviews/v1/blind-packet.json"
+    ],
+    "authorLabelsProvidedToReviewers": false,
+    "peerReviewProvidedToReviewers": false
+  },
+  "limitation": "Separate contexts of the same model can have correlated errors; this is agent review, not human review."
+}

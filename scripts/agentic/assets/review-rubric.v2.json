@@ -1,0 +1,61 @@
+{
+  "rubricVersion": 2,
+  "status": "method-frozen-agent-review-authorized",
+  "blindReview": {
+    "independentReviewersRequired": 2,
+    "hideStrategyLabels": true,
+    "reviewAllPrimaryAnswersAndFollowups": true,
+    "thirdAdjudicatorOnAnyDisagreement": true,
+    "reviewerIdentities": null,
+    "adjudicationRecords": null,
+    "reviewerKind": "independent-subagent",
+    "model": "gpt-6-luna",
+    "protocol": "agent-review-v1",
+    "hideAuthorLabels": true,
+    "inheritImplementationContext": false,
+    "limitation": "Same-model reviewers can share correlated errors; this is not human review."
+  },
+  "materialError": {
+    "unit": "answer",
+    "positiveWhen": "At least one factual claim materially contradicts the supplied source evidence, invents unsupported project behavior, or omits a condition in a way that makes the answer misleading.",
+    "rate": "answers with one or more material errors / all reviewed answers",
+    "countErrorCategoriesSeparately": true
+  },
+  "coreFactCoverage": {
+    "unit": "pre-registered composite fact",
+    "coveredWhen": "Every required element of that composite fact is present and supported; partial mention does not count.",
+    "rate": "fully covered composite facts / all frozen composite facts"
+  },
+  "topicValue": {
+    "scale": {
+      "minimum": 1,
+      "maximum": 5,
+      "anchors": {
+        "1": "poor",
+        "3": "adequate",
+        "5": "excellent"
+      }
+    },
+    "dimensions": [
+      {
+        "id": "relevance",
+        "definition": "How directly the question serves the frozen interview objective."
+      },
+      {
+        "id": "mechanism-depth",
+        "definition": "How well it tests mechanisms and tradeoffs instead of recall alone."
+      },
+      {
+        "id": "evidence-specificity",
+        "definition": "How specifically the question is grounded in the frozen repository evidence."
+      },
+      {
+        "id": "follow-up-progression",
+        "definition": "How naturally follow-up questions deepen or qualify the primary question."
+      }
+    ],
+    "mean": "Arithmetic mean of all four dimension scores across reviewed question sets"
+  },
+  "labels": null,
+  "labelStatus": "not-materialized; this rubric does not contain fabricated sample labels"
+}

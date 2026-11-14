@@ -10,6 +10,14 @@ import path from 'node:path'
 import { scanProject } from './scanner.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import { generateInterview } from './generator.ts'
+// @ts-ignore direct Node tests need explicit runtime extensions.
+import { GenerationOutputError } from './generation-output-error.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
+import { chatCompletionStream } from './llm.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
+import { CitationValidationError, type GenerationRequestAdapter } from './workflow/generation-request.ts'
+// @ts-ignore TS5097 -- direct Node tests require explicit runtime extensions.
+import type { RenderedSelection } from './context-builder.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
 import type { GenerationCheckpoint } from '../../shared/generation-checkpoint.ts'
 // @ts-ignore TS5097 -- extension is required by the direct Node test runner.
@@ -76,6 +84,10 @@ function finishFrame(reason: string): Uint8Array {
 }
 
 function doneFrame(): Uint8Array { return encoder.encode('data: [DONE]\n\n') }
+
+function usageFrame(): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } })}\n\n`)
+}
 
 function streamResponse(chunks: Uint8Array[], options: { close?: boolean; onCancel?: () => void } = {}): { response: Response; wasCancelled: () => boolean } {
   let cancelled = false
@@ -179,6 +191,32 @@ test('cancellation from progress after question two preserves two and cancels th
     assert.equal(savedQuestions(checkpoint).some((question) => question.question.includes('late delta')), false)
     assert.equal(wasCancelled?.(), true, 'the underlying stream reader must be canceled')
     assert.equal(response?.body?.locked, false, 'the response reader lock must be released')
+  })
+})
+
+test('two malformed JSON responses retain a finite typed diagnosis and both usage receipts', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  let diagnostics: InterviewResult['generationDiagnostics'] | undefined
+  await withFetch((_prompt, _call) => streamResponse([
+    deltaFrame('not-json'), finishFrame('stop'), usageFrame(), doneFrame()
+  ]), async (calls) => {
+    let failure: unknown
+    try {
+      await generateInterview({ ...generationParams(scan), onDiagnostics: (value) => { diagnostics = value } })
+    } catch (error) { failure = error }
+    assert.ok(failure instanceof GenerationOutputError)
+    assert.match((failure as Error).message, /^模型两次均未返回合法 JSON：/u)
+    assert.deepEqual((failure as GenerationOutputError).rejections.map(({ reason, attempt, stage, batchIndex }) => ({ reason, attempt, stage, batchIndex })), [
+      { reason: 'json-syntax', attempt: 1, stage: 'generation', batchIndex: 0 },
+      { reason: 'json-syntax', attempt: 2, stage: 'repair', batchIndex: 0 }
+    ])
+    assert.equal(calls.length, 2)
+    assert.equal(diagnostics?.requestCount, 2)
+    assert.equal(diagnostics?.usageComplete, true)
+    assert.deepEqual(diagnostics?.actualUsage, { inputTokens: 20, outputTokens: 8, totalTokens: 28 })
+    const serialized = JSON.stringify(failure)
+    assert.doesNotMatch(serialized, /not-json|SYNTHETIC_STREAM_KEY/u)
   })
 })
 
@@ -333,4 +371,309 @@ test('a legacy v1 checkpoint with an old fingerprint is rejected before a reques
   })
   assert.equal(saves, 0)
   assert.deepEqual(legacy, original, 'rejected legacy checkpoint must remain untouched')
+})
+
+test('request adapter captures raw citation fields after normalization and repairs only the rejected question', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const stages: string[] = []
+  const accepted: Array<{ requestId: string; rawQuestion: unknown; id: string }> = []
+  const dispatchedMessages: string[][] = []
+  const preparedSnapshots: string[][] = []
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-request-adapter',
+    prepare(input) {
+      stages.push(input.stage)
+      const messages = input.buildMessages('PACKED_CONTEXT_SENTINEL')
+      preparedSnapshots.push(messages.map((message) => message.content))
+      return { requestId: input.requestId, stage: input.stage, messages, dispatch: { synthetic: true } }
+    },
+    async complete(prepared, onDelta, options) {
+      const messages = [...prepared.messages]
+      dispatchedMessages.push(messages.map((message) => message.content))
+      assert.deepEqual(dispatchedMessages.at(-1), preparedSnapshots[dispatchedMessages.length - 1], 'the prepared packet must not be refitted or rewritten before completion')
+      return chatCompletionStream(profile, messages, onDelta, options)
+    },
+    acceptQuestion({ requestId, rawQuestion, question }) {
+      if (typeof rawQuestion === 'object' && rawQuestion !== null && 'evidenceIds' in rawQuestion &&
+        Array.isArray((rawQuestion as { evidenceIds?: unknown }).evidenceIds) && (rawQuestion as { evidenceIds: unknown[] }).evidenceIds.includes('unpacked-id')) {
+        throw new CitationValidationError()
+      }
+      accepted.push({ requestId, rawQuestion, id: question.id })
+    }
+  }
+  const rawBad = { ...makeQuestion(1), evidenceIds: ['unpacked-id'], ignoredRawField: 'preserved only for validation' }
+  const repaired = Array.from({ length: 20 }, (_, index) => ({ ...makeQuestion(index + 1), evidenceIds: ['packed-id'], ignoredRawField: `raw-${index + 1}` }))
+
+  const result = await withFetch((_prompt, call) => {
+    const content = call === 1 ? fullRoot([rawBad]) : fullRoot(repaired, { PersistedTerm: 'A synthetic definition.' })
+    return streamResponse([deltaFrame(content), finishFrame('stop'), usageFrame(), doneFrame()])
+  }, async (calls) => {
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+    const output = await generateInterview({ ...params, requestAdapter: adapter })
+    assert.equal(calls.length, 2)
+    assert.deepEqual(stages, ['generation', 'repair'])
+    assert.ok(dispatchedMessages.every((messages) => messages.some((message) => message.includes('PACKED_CONTEXT_SENTINEL'))), 'prepared packet context must reach dispatch without refitting')
+    return output
+  })
+
+  const finalQuestions = questionList(result)
+  assert.equal(finalQuestions.length, 20)
+  assert.equal(accepted.length, 20, 'the invalid citation is rejected before acceptance')
+  assert.ok(accepted.every((item) => typeof item.rawQuestion === 'object' && item.rawQuestion !== null && 'evidenceIds' in item.rawQuestion))
+  assert.deepEqual(finalQuestions.map((question) => question.id), accepted.map((item) => item.id), 'program-created IDs survive normalization and final assembly')
+  assert.equal(result.generationDiagnostics?.requestCount, 2)
+  assert.equal(result.generationDiagnostics?.usageComplete, true, 'citation format failure drains the stream and retains its usage receipt')
+})
+
+function completeResponseBody(projectSummary: string, questions: ReturnType<typeof makeQuestion>[]): string {
+  return JSON.stringify({ projectSummary, sections: [{ title: 'Complete response', summary: projectSummary, questions }], glossary: { PersistedTerm: projectSummary } })
+}
+
+test('complete-response mode does not accept streamed candidates when completion rejects', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: unknown[] = []
+  const body = completeResponseBody('delta', [makeQuestion(1)])
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-rejected', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(body); throw new Error('synthetic completion rejected') },
+    acceptQuestion(input) { accepted.push(input) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), /synthetic completion rejected/u)
+  assert.deepEqual(accepted, [])
+})
+
+test('complete-response mode ignores a valid streamed prefix when the complete body is malformed', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: unknown[] = []
+  const prefix = completeResponseBody('delta prefix', [makeQuestion(1)])
+  const malformed = prefix + ' trailing bytes'
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-malformed', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(prefix); return malformed },
+    acceptQuestion(input) { accepted.push(input) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), (error: unknown) => {
+    assert.ok(error instanceof GenerationOutputError)
+    assert.deepEqual(error.rejections.map(item => item.reason), ['json-syntax', 'json-syntax'])
+    return true
+  })
+  assert.deepEqual(accepted, [])
+})
+
+test('complete-response mode accepts only the returned body and its root metadata', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: Array<{ rawQuestion: unknown; question: Question }> = []
+  let completionResolved = false
+  const delta = completeResponseBody('delta metadata', [makeQuestion(1)])
+  const returnedQuestion = { ...makeQuestion(2), evidenceIds: ['complete-body-id'] }
+  const returned = completeResponseBody('completed body metadata', [returnedQuestion])
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-authoritative', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(delta); completionResolved = true; return returned },
+    acceptQuestion(input) { assert.equal(completionResolved, true); accepted.push(input as typeof accepted[number]) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  const result = await generateInterview({ ...params, requestAdapter: adapter })
+  assert.equal(result.projectSummary, 'completed body metadata')
+  assert.deepEqual(questionList(result).map(question => question.question), [returnedQuestion.question])
+  assert.equal(accepted.length, 1)
+  assert.deepEqual(accepted[0].rawQuestion, returnedQuestion)
+  assert.equal(accepted[0].question.question, returnedQuestion.question)
+})
+
+test('complete-response acceptance occurs after completion and retains quota and duplicate filtering', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const accepted: string[] = []
+  let completionResolved = false
+  const questions = [makeQuestion(1), makeQuestion(1), ...Array.from({ length: 19 }, (_, index) => makeQuestion(index + 2))]
+  const body = completeResponseBody('complete', questions)
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-quota', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) {
+      await onDelta(body)
+      assert.deepEqual(accepted, [])
+      completionResolved = true
+      return body
+    },
+    acceptQuestion({ question }) { assert.equal(completionResolved, true); accepted.push(question.question) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  const result = await generateInterview({ ...params, requestAdapter: adapter })
+  assert.equal(accepted.length, 20)
+  assert.equal(new Set(accepted).size, 20)
+  assert.equal(questionList(result).length, 20)
+})
+
+test('complete-response cancellation between completion and acceptance blocks candidates', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const controller = new AbortController()
+  const accepted: unknown[] = []
+  const body = completeResponseBody('complete', [makeQuestion(1)])
+  const adapter: GenerationRequestAdapter = {
+    id: 'complete-response-cancel', acceptanceMode: 'complete-response',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPLETE_RESPONSE_CONTEXT') } },
+    async complete(_prepared, onDelta) { await onDelta(body); controller.abort(); return body },
+    acceptQuestion(input) { accepted.push(input) }
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan, { signal: controller.signal })
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), /取消/u)
+  assert.deepEqual(accepted, [])
+})
+
+test('unknown request acceptance mode is rejected before adapter preparation', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  let prepared = 0
+  const adapter = {
+    id: 'complete-response-unknown', acceptanceMode: 'unknown',
+    prepare() { prepared++; throw new Error('must not prepare') },
+    complete() { throw new Error('must not complete') },
+    acceptQuestion() {}
+  } as unknown as GenerationRequestAdapter
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), /请求策略无效/u)
+  assert.equal(prepared, 0)
+})
+
+test('two rejected citation responses are classified at the adapter boundary', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-rejecting-citation-adapter',
+    prepare(input) { return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('PACKED_CONTEXT_SENTINEL') } },
+    complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+    acceptQuestion() { throw new CitationValidationError() }
+  }
+  const question = { ...makeQuestion(1), evidenceIds: ['unknown-id'] }
+  let diagnostics: InterviewResult['generationDiagnostics'] | undefined
+  await withFetch(() => streamResponse([
+    deltaFrame(fullRoot([question])), finishFrame('stop'), usageFrame(), doneFrame()
+  ]), async (calls) => {
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan, { onDiagnostics: (value) => { diagnostics = value } })
+    await assert.rejects(generateInterview({ ...params, requestAdapter: adapter }), (error: unknown) => {
+      assert.ok(error instanceof GenerationOutputError)
+      assert.match(error.message, /^模型两次均未返回合法 JSON：/u)
+      assert.deepEqual(error.rejections.map(({ reason, attempt }) => ({ reason, attempt })), [
+        { reason: 'citation-invalid', attempt: 1 }, { reason: 'citation-invalid', attempt: 2 }
+      ])
+      return true
+    })
+    assert.equal(calls.length, 2)
+    assert.equal(diagnostics?.usageComplete, true)
+    assert.equal(diagnostics?.requestCount, 2)
+  })
+})
+
+test('request adapter cancellation does not become a format repair', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const controller = new AbortController()
+  const stages: string[] = []
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-cancel-adapter',
+    prepare(input) {
+      stages.push(input.stage)
+      return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('CANCEL_CONTEXT') }
+    },
+    complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+    acceptQuestion() {}
+  }
+  const questions = [makeQuestion(1), makeQuestion(2)]
+
+  await withFetch(() => streamResponse([deltaFrame(fullRoot(questions)), finishFrame('stop'), usageFrame(), doneFrame()], { close: false }), async (calls) => {
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan, { signal: controller.signal, onProgress: (_step, detail) => { if (detail?.includes('已校验 1/')) controller.abort() } })
+    await assert.rejects(generateInterview({
+      ...params,
+      requestAdapter: adapter
+    }), /取消/)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(stages, ['generation'])
+  })
+})
+
+test('request adapter marks bounded follow-up calls as compensation', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const stages: string[] = []
+  const adapter: GenerationRequestAdapter = {
+    id: 'synthetic-compensation-adapter',
+    prepare(input) {
+      stages.push(input.stage)
+      return { requestId: input.requestId, stage: input.stage, messages: input.buildMessages('COMPENSATION_CONTEXT') }
+    },
+    complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+    acceptQuestion() {}
+  }
+  const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+  let nextQuestion = 2
+
+  const result = await withFetch((prompt, call) => {
+    const quota = countQuota(prompt) ?? 1
+    const questions = call === 1 ? [makeQuestion(1)] : Array.from({ length: quota }, () => makeQuestion(nextQuestion++))
+    return streamResponse([deltaFrame(fullRoot(questions)), finishFrame('stop'), usageFrame(), doneFrame()])
+  }, async (calls) => {
+    const output = await generateInterview({ ...params, requestAdapter: adapter })
+    assert.ok(calls.length >= 2)
+    return output
+  })
+
+  assert.equal(stages[0], 'generation')
+  assert.ok(stages.includes('compensation'))
+  assert.equal(questionList(result).length, 15)
+})
+
+test('request adapter observations use its prepared selection and omit fabricated selection when absent', { timeout: 60_000 }, async (t) => {
+  const root = await makeProject(t)
+  const scan = await scanProject(root)
+  const selection: RenderedSelection = {
+    filePaths: ['packed-only.ts'],
+    selectedRegions: 3,
+    providedChars: 500,
+    sourceSelections: [{ relPath: 'packed-only.ts', wholeFile: true, regions: [{ start: 1, end: 8, complete: true }] }]
+  }
+  const questions = Array.from({ length: 20 }, (_, index) => makeQuestion(index + 1))
+  const run = async (preparedSelection?: RenderedSelection) => {
+    const observed: RenderedSelection[] = []
+    const { checkpoint: _checkpoint, ...params } = generationParams(scan)
+    const adapter: GenerationRequestAdapter = {
+      id: 'synthetic-selection-adapter',
+      prepare(input) {
+        const messages = input.buildMessages('PACKED_CONTEXT')
+        return {
+          requestId: input.requestId,
+          stage: input.stage,
+          messages,
+          ...(preparedSelection ? { selection: preparedSelection } : {})
+        }
+      },
+      complete(prepared, onDelta, options) { return chatCompletionStream(profile, [...prepared.messages], onDelta, options) },
+      acceptQuestion() {}
+    }
+    const result = await withFetch(() => streamResponse([deltaFrame(fullRoot(questions)), finishFrame('stop'), usageFrame(), doneFrame()]), async () =>
+      generateInterview({ ...params, requestAdapter: adapter, onContextDispatch: (value) => observed.push(value) })
+    )
+    return { result, observed }
+  }
+
+  const packed = await run(selection)
+  assert.equal(packed.result.generationDiagnostics?.selectedFiles, 1)
+  assert.equal(packed.result.generationDiagnostics?.selectedRegions, 3)
+  assert.deepEqual(packed.observed, [selection], 'callbacks report the actual prepared selection, not the legacy context render')
+
+  const withoutSelection = await run()
+  assert.equal(withoutSelection.result.generationDiagnostics?.selectedFiles, 0)
+  assert.equal(withoutSelection.result.generationDiagnostics?.selectedRegions, 0)
+  assert.deepEqual(withoutSelection.observed, [], 'an adapter without selection metadata does not fabricate source observations')
 })

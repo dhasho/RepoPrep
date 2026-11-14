@@ -1,0 +1,481 @@
+import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import test from 'node:test'
+import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
+import { spawnSync } from 'node:child_process'
+import { recomputeRetrievalMetrics, verifyRetrievalReport, runRetrievalEvaluation, verifyProfileBinding, evaluationConfigFingerprint, evaluationRunConfigFingerprint, createGlobalBudgetCollector, createGuardedTransport, createOneShotAuthorizationClaim, createRetrievalRunSpec, loadRetrievalBundle, validateRetrievalBundle, sanitizeModelFailure, RETRIEVAL_LIMITS } from './retrieval-eval.mjs'
+import { normalizeBaseUrl } from '../../electron/services/llm.ts'
+import { createBudgetLedger } from '../../electron/services/workflow/budget-ledger.ts'
+import { createModelGateway } from '../../electron/services/workflow/model-gateway.ts'
+import { createRunSpec } from '../../electron/services/workflow/run-spec.ts'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const bundle = await loadRetrievalBundle(path.join(root, 'scripts/agentic/datasets/v1'))
+assert.equal(validateRetrievalBundle(bundle).valid, true)
+assert.deepEqual(Object.keys(bundle), ['projects', 'retrievalTasks', 'retrievalLabels'])
+const projects = new Map(bundle.projects.projects.map(project => [project.id, project]))
+
+function evaluatorOnlyEvidence(taskId) {
+  const task = bundle.retrievalTasks.tasks.find(item => item.id === taskId)
+  const project = projects.get(task.projectId)
+  const label = bundle.retrievalLabels.labels.find(item => item.taskId === taskId)
+  const refs = label.requiredEvidenceGroups.flatMap(group => group.allOf)
+  return refs.map((ref, index) => {
+    const source = project.files.find(file => file.path === ref.path).content
+    const content = source.split('\n').slice(ref.startLine - 1, ref.endLine).join('\n')
+    const hex = createHash('sha256').update(`${taskId}-${index}`).digest('hex')
+    const id = `ev_${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+    return { id, path: ref.path, startLine: ref.startLine, endLine: ref.endLine, contentHash: createHash('sha256').update(content).digest('hex'), sourceKind: 'code', readStatus: 'complete', parseStatus: task.indexMode === 'unavailable' ? 'unavailable' : 'parsed', omission: 'none' }
+  })
+}
+
+function completeReceipt() {
+  return { requests: 1, providerUsage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 }, knownProviderUsage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 }, chargedTokens: { inputTokens: 10, outputTokens: 10 }, usageComplete: true, readBytes: 100, elapsedMs: 100, readRequests: 4, repeatedReads: 0, invalidToolExecutions: 0, overspend: { inputTokens: 0, outputTokens: 0, readBytes: 0 }, blocked: false, reservations: [{ id: 'inv-00000000-0000-4000-8000-000000000000', stage: 'investigation', state: 'settled', reservedInputTokens: 20, reservedOutputTokens: 2000, contextChars: 80, usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } }] }
+}
+
+function syntheticReport() {
+  const provider = { endpointFingerprint: 'a'.repeat(64), model: 'synthetic-model', protocol: 'openai', temperature: 0.4, reasoningEffort: null, contextWindowTokens: 49152, maxOutputTokensPerRequest: 2000 }
+  return { schemaVersion: 1, mode: 'synthetic', purpose: 'm06-retrieval-v1', provider, configurationFingerprint: evaluationConfigFingerprint(provider), runs: bundle.retrievalTasks.tasks.flatMap(task => [1, 2].map(repeat => { const evidence = evaluatorOnlyEvidence(task.id); return { taskId: task.id, repeat, status: 'completed', stopReason: 'finished', condition: { indexMode: task.indexMode, indexStatus: task.indexMode === 'unavailable' ? 'unavailable' : 'available' }, retrievedEvidence: evidence, selectedEvidence: evidence, runConfigFingerprint: evaluationRunConfigFingerprint(task, provider), receipt: completeReceipt() } })) }
+}
+
+test('recomputes coverage from selected source ranges and rejects synthetic mode as a real gate report', () => {
+  const report = syntheticReport()
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.runCount, 40)
+  assert.equal(metrics.uniqueCells, 40)
+  assert.equal(metrics.completeEvidenceTaskRate, 1)
+  assert.equal(metrics.usageComplete, true)
+  const verified = verifyRetrievalReport(report, bundle)
+  assert.equal(verified.valid, false)
+  assert.ok(verified.issues.includes('report-not-real'))
+})
+
+test('partial, duplicated, malformed, or over-budget receipts cannot pass the frozen matrix', () => {
+  const report = syntheticReport()
+  report.runs.pop()
+  report.runs.push({ ...report.runs[0], selectedEvidence: [] })
+  report.runs[1] = { ...report.runs[1], receipt: { ...completeReceipt(), requests: 4, repeatedReads: 40 } }
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.runCount, 40)
+  assert.ok(metrics.uniqueCells < 40)
+  assert.ok(metrics.completeEvidenceTaskRate < 1)
+  assert.equal(metrics.usageComplete, false)
+  assert.ok(metrics.limitViolations > 0)
+  assert.ok(metrics.repeatedReadRate > RETRIEVAL_LIMITS.repeats)
+  const truncated = syntheticReport()
+  truncated.runs.pop()
+  assert.equal(recomputeRetrievalMetrics(truncated, bundle).completeEvidenceTaskRate, 39 / 40)
+})
+
+test('incomplete usage keeps exact totals unknown and reports settled usage plus conservative charges', () => {
+  const report = syntheticReport()
+  const receipt = completeReceipt()
+  receipt.requests = 2
+  receipt.providerUsage = null
+  receipt.usageComplete = false
+  receipt.knownProviderUsage = { inputTokens: 846, outputTokens: 401, totalTokens: 1247 }
+  receipt.chargedTokens = { inputTokens: 18000, outputTokens: 4000 }
+  receipt.reservations[0] = { ...receipt.reservations[0], reservedInputTokens: 1000, usage: { inputTokens: 846, outputTokens: 401, totalTokens: 1247 } }
+  receipt.reservations.push({ id: 'inv-00000000-0000-4000-8000-000000000001', stage: 'investigation', state: 'unknown', reservedInputTokens: 9000, reservedOutputTokens: 2000, contextChars: 120, usage: null })
+  report.runs[0].receipt = receipt
+
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.usageComplete, false)
+  assert.equal(metrics.inputTokens, null)
+  assert.equal(metrics.outputTokens, null)
+  assert.equal(metrics.knownInputTokens, 1236)
+  assert.equal(metrics.knownOutputTokens, 791)
+  assert.equal(metrics.unknownRequests, 1)
+  assert.equal(metrics.chargedInputTokens, 18390)
+  assert.equal(metrics.chargedOutputTokens, 4390)
+  assert.ok(verifyRetrievalReport(report, bundle).issues.includes('receipt-or-limit-invalid'))
+})
+
+test('settled usage survives failed output when retrieval diagnostics are unavailable', () => {
+  const report = syntheticReport()
+  for (const cell of report.runs.slice(1)) {
+    cell.receipt.providerUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+    cell.receipt.knownProviderUsage = { ...cell.receipt.providerUsage }
+    cell.receipt.chargedTokens = { inputTokens: 0, outputTokens: 0 }
+    cell.receipt.reservations[0].reservedInputTokens = 0
+    cell.receipt.reservations[0].reservedOutputTokens = 0
+    cell.receipt.reservations[0].usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+  }
+  const receipt = completeReceipt()
+  receipt.requests = 2
+  receipt.providerUsage = { inputTokens: 2184, outputTokens: 2452, totalTokens: 4636 }
+  receipt.knownProviderUsage = { ...receipt.providerUsage }
+  receipt.chargedTokens = { inputTokens: 2184, outputTokens: 2452 }
+  receipt.reservations = [
+    { ...receipt.reservations[0], id: 'inv-00000000-0000-4000-8000-000000000010', reservedInputTokens: 1000, usage: { inputTokens: 839, outputTokens: 452, totalTokens: 1291 } },
+    { ...receipt.reservations[0], id: 'inv-00000000-0000-4000-8000-000000000011', reservedInputTokens: 1500, usage: { inputTokens: 1345, outputTokens: 2000, totalTokens: 3345 } }
+  ]
+  receipt.readRequests = null
+  receipt.repeatedReads = null
+  receipt.invalidToolExecutions = null
+  report.runs[0] = { ...report.runs[0], status: 'failed', stopReason: 'error', receipt }
+
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.matrixComplete, true)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.inputTokens, 2184)
+  assert.equal(metrics.outputTokens, 2452)
+  assert.equal(metrics.diagnosticsComplete, false)
+  assert.equal(metrics.invalidToolExecution, null)
+  assert.equal(metrics.repeatedReadRate, null)
+  assert.equal(metrics.invalidEvidence, 0)
+  assert.equal(metrics.limitViolations, 0)
+  assert.equal(metrics.limitsComplete, true)
+  assert.ok(verifyRetrievalReport(report, bundle).issues.includes('diagnostics-incomplete-or-evidence-invalid'))
+})
+
+test('complete synthetic matrix has independent receipt, diagnostic, and cap validation', () => {
+  const report = syntheticReport()
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.matrixComplete, true)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.diagnosticsComplete, true)
+  assert.equal(metrics.limitsComplete, true)
+  assert.equal(metrics.invalidToolExecution, 0)
+  assert.equal(metrics.invalidEvidence, 0)
+  assert.equal(metrics.limitViolations, 0)
+})
+
+test('one fully receipted budget-exhausted cell stays failed without inventing evidence or invalid-tool counts', () => {
+  const report = syntheticReport()
+  report.runs[0] = {
+    ...report.runs[0],
+    status: 'limit-reached',
+    stopReason: 'budget-exhausted',
+    failure: { code: 'budget-exhausted', modelFailure: { kind: 'response', finishReason: 'length' } }
+  }
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.matrixComplete, true)
+  assert.equal(metrics.completeEvidenceTaskRate, 39 / 40)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.diagnosticsComplete, true)
+  assert.equal(metrics.invalidToolExecution, 0)
+  assert.equal(metrics.invalidEvidence, 0)
+  assert.equal(metrics.limitViolations, 0)
+  assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('evidence-coverage-below-threshold'))
+  assert.equal(report.runs[0].status, 'limit-reached')
+  assert.deepEqual(report.runs[0].failure, { code: 'budget-exhausted', modelFailure: { kind: 'response', finishReason: 'length' } })
+})
+
+test('incomplete matrix reports missing cells without labeling them duplicate', () => {
+  const report = syntheticReport()
+  report.runs.pop()
+  const verified = verifyRetrievalReport(report, bundle)
+  assert.ok(verified.issues.includes('run-matrix-incomplete'))
+  assert.ok(!verified.issues.includes('run-matrix-duplicate'))
+})
+
+test('unavailable failed-run evidence stays null and does not break aggregate accounting', () => {
+  const report = syntheticReport()
+  report.runs[0] = { ...report.runs[0], retrievedEvidence: null, retrievedCount: null, selectedEvidence: null, selectedCount: null }
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.equal(metrics.usageComplete, true)
+  assert.equal(metrics.inputTokens, 400)
+  assert.equal(metrics.invalidEvidence, null)
+  assert.equal(metrics.diagnosticsComplete, false)
+})
+
+test('model failure diagnostics retain only allowlisted scalar metadata', () => {
+  assert.deepEqual(sanitizeModelFailure({ kind: 'http', httpStatus: 429, finishReason: 'length', message: 'secret', body: 'private' }), { kind: 'http', httpStatus: 429, finishReason: 'length' })
+  assert.deepEqual(sanitizeModelFailure({ kind: 'response', responseLimit: 'stream-bytes', body: 'private' }), { kind: 'response', responseLimit: 'stream-bytes' })
+  assert.equal(sanitizeModelFailure({ kind: 'unknown', httpStatus: 429 }), null)
+  assert.deepEqual(sanitizeModelFailure({ kind: 'network', httpStatus: 999, finishReason: 'secret' }), { kind: 'network' })
+})
+
+test('verifier binds selected metadata to retrieved metadata and enforces unavailable index conditions', () => {
+  const report = syntheticReport()
+  const first = report.runs[0]
+  first.selectedEvidence[0] = { ...first.selectedEvidence[0], path: 'redirected.ts' }
+  const indexFailure = report.runs.find(cell => bundle.retrievalTasks.tasks.find(task => task.id === cell.taskId)?.indexMode === 'unavailable')
+  indexFailure.condition.indexStatus = 'available'
+  indexFailure.retrievedEvidence.forEach(item => { item.parseStatus = 'parsed' })
+  const metrics = recomputeRetrievalMetrics(report, bundle)
+  assert.ok(metrics.invalidEvidence > 0)
+  assert.ok(metrics.completeEvidenceTaskRate < 1)
+})
+
+test('real runner blocks missing authorization before reading or invoking a profile', async () => {
+  let touched = false
+  const profile = new Proxy({}, { get() { touched = true; throw new Error('must-not-touch-profile') } })
+  await assert.rejects(runRetrievalEvaluation({ repoRoot: root, outputDir: path.join(root, '.validation/agentic/unused'), profile }), /authorization-required/)
+  assert.equal(touched, false)
+})
+
+test('profile binding uses synthetic metadata and limits only an in-memory clone', () => {
+  const profile = { id: 'synthetic-profile', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const auth = { endpointFingerprint, model: profile.model, protocol: profile.protocol, temperature: 0.4, reasoningEffort: null, contextWindowTokens: profile.contextWindowTokens, maxOutputTokens: 2000 }
+  const clone = verifyProfileBinding(profile, auth)
+  assert.equal(clone.maxOutputTokens, RETRIEVAL_LIMITS.perRequestOutputTokens)
+  assert.equal(profile.maxOutputTokens, undefined)
+  assert.throws(() => verifyProfileBinding({ ...profile, baseUrl: 'https://other.invalid/v1' }, auth), /profile-binding-mismatch/)
+  assert.equal(verifyProfileBinding(profile, { ...auth, maxOutputTokens: 6000 }).maxOutputTokens, 6000)
+  assert.throws(() => verifyProfileBinding(profile, { ...auth, maxOutputTokens: 3000 }), /authorization-invalid/)
+})
+
+test('authorized per-request cap binds run specs and report verification without changing defaults', () => {
+  const task = bundle.retrievalTasks.tasks[0]
+  const profile = { id: 'synthetic-profile', baseUrl: 'https://provider.invalid/v1', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152 }
+  const snapshot = { projectId: task.projectId, snapshotId: 'synthetic-snapshot' }
+  const defaultSpec = createRetrievalRunSpec(task, profile, snapshot, 'default-cap')
+  const authorizedSpec = createRetrievalRunSpec(task, profile, snapshot, 'authorized-cap', 6000)
+  assert.equal(defaultSpec.model.maxOutputTokens, 2000)
+  assert.equal(authorizedSpec.model.maxOutputTokens, 6000)
+  assert.equal(defaultSpec.promptVersion, 'workflow-prompt-v2')
+  assert.equal(createRetrievalRunSpec(task, profile, snapshot, 'historical-prompt', 6000, 'workflow-prompt-v1').promptVersion, 'workflow-prompt-v1')
+  assert.throws(() => createRetrievalRunSpec(task, profile, snapshot, 'invalid-cap', 3000), /authorization-invalid/)
+  assert.throws(() => createRetrievalRunSpec(task, profile, snapshot, 'invalid-prompt', 6000, 'workflow-prompt-v9'), /authorization-invalid/)
+
+  const report = syntheticReport()
+  const priorDefaultFingerprint = evaluationConfigFingerprint(report.provider)
+  assert.equal(priorDefaultFingerprint, '20311e23167f5aef96b02eb8c4f8ab9f7a7f29d0bb0b332718dfca39205009b8')
+  report.provider = { ...report.provider, maxOutputTokensPerRequest: 6000 }
+  report.configurationFingerprint = evaluationConfigFingerprint(report.provider)
+  report.runs = report.runs.map(cell => ({ ...cell, runConfigFingerprint: evaluationRunConfigFingerprint(bundle.retrievalTasks.tasks.find(item => item.id === cell.taskId), report.provider) }))
+  assert.notEqual(report.configurationFingerprint, priorDefaultFingerprint)
+  assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
+  assert.ok(verifyRetrievalReport(report, bundle, { provider: { maxOutputTokens: 2000 } }).issues.includes('provider-authorization-mismatch'))
+  const legacySixKProvider = { ...report.provider }
+  const sixKLegacyFingerprint = evaluationConfigFingerprint(legacySixKProvider)
+  report.provider = { ...report.provider, investigationPromptVersion: 'workflow-prompt-v2' }
+  report.configurationFingerprint = evaluationConfigFingerprint(report.provider)
+  report.runs = report.runs.map(cell => ({ ...cell, runConfigFingerprint: evaluationRunConfigFingerprint(bundle.retrievalTasks.tasks.find(item => item.id === cell.taskId), report.provider) }))
+  assert.notEqual(report.configurationFingerprint, sixKLegacyFingerprint)
+  assert.notEqual(report.runs[0].runConfigFingerprint, evaluationRunConfigFingerprint(task, legacySixKProvider))
+  assert.ok(!verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
+
+  const unknownPromptReport = { ...report, provider: { ...report.provider, investigationPromptVersion: 'workflow-prompt-v9' } }
+  unknownPromptReport.configurationFingerprint = evaluationConfigFingerprint(unknownPromptReport.provider)
+  assert.ok(verifyRetrievalReport(unknownPromptReport, bundle).issues.includes('provider-binding-invalid'))
+
+  const receipt = report.runs[0].receipt
+  receipt.providerUsage = { inputTokens: 10, outputTokens: 2501, totalTokens: 2511 }
+  receipt.knownProviderUsage = { ...receipt.providerUsage }
+  receipt.chargedTokens = { inputTokens: 10, outputTokens: 2501 }
+  receipt.reservations[0].reservedOutputTokens = 3000
+  receipt.reservations[0].usage = { inputTokens: 10, outputTokens: 2501, totalTokens: 2511 }
+  assert.equal(recomputeRetrievalMetrics(report, bundle).limitViolations, 0)
+
+  report.provider = { ...report.provider, maxOutputTokensPerRequest: 3000 }
+  assert.ok(verifyRetrievalReport(report, bundle).issues.includes('provider-binding-invalid'))
+  report.provider = { ...report.provider, maxOutputTokensPerRequest: 2000 }
+  report.configurationFingerprint = evaluationConfigFingerprint(report.provider)
+  report.runs = report.runs.map(cell => ({ ...cell, runConfigFingerprint: evaluationRunConfigFingerprint(bundle.retrievalTasks.tasks.find(item => item.id === cell.taskId), report.provider) }))
+  assert.ok(recomputeRetrievalMetrics(report, bundle).limitViolations > 0)
+})
+
+test('guarded default transport calls the M05 guard once and makes one mocked .invalid fetch', async () => {
+  const profile = { id: 'synthetic-profile', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152, maxOutputTokens: 2000 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const spec = createRunSpec({ version: 1, runId: 'test-run', projectId: 'test-project', snapshotId: 'test-snapshot', strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, endpointFingerprint, model: profile.model, protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152, maxOutputTokens: 2000 }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { maxModelRequests: 3, inputTokens: 128000, outputTokens: 10000, readBytes: 2 * 1024 * 1024, wallClockMs: 180000 } })
+  const ledger = createBudgetLedger(spec)
+  const collector = createGlobalBudgetCollector({ maxRequests: 3, maxInputTokens: 18000, maxOutputTokens: 6000 })
+  const events = []
+  const journal = []
+  let dispatches = 0, fetches = 0
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    fetches++
+    assert.match(String(input), /^https:\/\/provider\.invalid\//u)
+    assert.equal(init.method, 'POST')
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"actions":[]}' } }], usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  try {
+    const guarded = createGuardedTransport({ collector, runId: 'test-run', getReservation: () => ledger.snapshot().reservations.find(item => item.state === 'reserved' && item.stage === 'investigation'), appendJournal: event => journal.push(event) })
+    const gateway = createModelGateway(spec, profile, ledger, { transport: guarded, trace: event => { events.push(event); if (event.type === 'dispatched') dispatches++ } })
+    const completion = await gateway.complete({ id: 'decision-1', stage: 'investigation', messages: [{ role: 'user', content: 'synthetic test only' }] })
+    assert.equal(completion.content, '{"actions":[]}')
+    assert.deepEqual(completion.usage, { inputTokens: 7, outputTokens: 3, totalTokens: 10 })
+    assert.equal(dispatches, 1)
+    assert.equal(fetches, 1)
+    assert.equal(collector.snapshot().admittedRequests, 1)
+    assert.equal(collector.snapshot().reservedInputTokens, 0)
+    assert.equal(collector.snapshot().actualInputTokens, 7)
+    assert.deepEqual(journal.map(event => event.type), ['request-admitted', 'provider-usage'])
+  } finally { globalThis.fetch = priorFetch }
+})
+
+test('actual retrieval RunSpec admits the first investigation request in every granularity', async () => {
+  const profile = { id: 'synthetic-profile', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152, maxOutputTokens: 2000 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const priorFetch = globalThis.fetch
+  let fetchCount = 0
+  globalThis.fetch = async (input, init) => {
+    fetchCount++
+    assert.match(String(input), /^https:\/\/provider\.invalid\//u)
+    assert.equal(init.method, 'POST')
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"actions":[]}' } }], usage: { prompt_tokens: 9, completion_tokens: 2, total_tokens: 11 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
+  try {
+    for (const granularity of ['coarse', 'medium', 'fine']) {
+      const task = { id: `budget-${granularity}`, projectId: 'budget-project', objective: 'synthetic test objective', roleFocus: 'backend', granularity, indexMode: 'normal' }
+      const snapshot = { projectId: task.projectId, snapshotId: `snapshot-${granularity}` }
+      const spec = createRetrievalRunSpec(task, profile, snapshot, `run-${granularity}`)
+      const sixKSpec = createRetrievalRunSpec(task, profile, snapshot, `run-${granularity}-six-k`, 6000)
+      assert.equal(spec.model.maxOutputTokens, 2000)
+      assert.equal(sixKSpec.model.maxOutputTokens, 6000)
+      assert.equal(spec.budget.total.inputTokens, 128_000)
+      assert.equal(spec.budget.total.outputTokens, 65_536)
+      assert.equal(spec.budget.total.wallClockMs, 600_000)
+      assert.equal(spec.budget.investigation.maxModelRequests, 3)
+      assert.equal(spec.budget.investigation.maxToolCalls, 8)
+      assert.equal(spec.budget.investigation.inputTokens, 18_000)
+      assert.equal(spec.budget.investigation.outputTokens, 6_000)
+      assert.equal(spec.budget.investigation.readBytes, 2 * 1024 * 1024)
+      assert.equal(spec.budget.investigation.wallClockMs, 180_000)
+      const ledger = createBudgetLedger(spec)
+      const collector = createGlobalBudgetCollector({ maxRequests: 120, maxInputTokens: 720_000, maxOutputTokens: 240_000 })
+      const guarded = createGuardedTransport({ collector, runId: spec.runId, getReservation: () => ledger.snapshot().reservations.find(item => item.state === 'reserved' && item.stage === 'investigation'), appendJournal: () => {} })
+      const gateway = createModelGateway(spec, profile, ledger, { transport: guarded })
+      const completion = await gateway.complete({ id: `decision-${granularity}`, stage: 'investigation', messages: [{ role: 'user', content: 'synthetic only' }] })
+      assert.equal(completion.content, '{"actions":[]}')
+      assert.equal(ledger.snapshot().total.dispatchedRequests, 1)
+      assert.equal(collector.snapshot().admittedRequests, 1)
+    }
+    assert.equal(fetchCount, 3)
+  } finally { globalThis.fetch = priorFetch }
+})
+
+test('global collector refunds known reservations and blocks unknown usage without treating it as zero', () => {
+  const known = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const first = known.admit('run-1', { id: 'call-1', estimatedInputTokens: 80, outputTokens: 60, contextChars: 200 })
+  known.settle(first, { inputTokens: 10, outputTokens: 20, totalTokens: 30 })
+  assert.equal(known.snapshot().reservedInputTokens, 0)
+  assert.equal(known.snapshot().actualInputTokens, 10)
+  const second = known.admit('run-2', { id: 'call-2', estimatedInputTokens: 90, outputTokens: 80, contextChars: 240 })
+  assert.equal(second.estimatedInputTokens, 90)
+
+  const unknown = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const paidUnknown = unknown.admit('run-1', { id: 'call-unknown', estimatedInputTokens: 70, outputTokens: 50, contextChars: 140 })
+  unknown.markUnknown(paidUnknown)
+  assert.equal(unknown.snapshot().actualInputTokens, 0)
+  assert.equal(unknown.snapshot().reservedInputTokens, 70)
+  assert.equal(unknown.snapshot().blocked, true)
+  assert.throws(() => unknown.admit('run-2', { id: 'call-2', estimatedInputTokens: 1, outputTokens: 1 }))
+})
+
+test('missing usage blocks the controller transport immediately and does not admit a second attempt', async () => {
+  const profile = { id: 'synthetic-profile', name: 'Synthetic', baseUrl: 'https://provider.invalid/v1', apiKey: 'SYNTHETIC_ONLY', model: 'synthetic-model', protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152, maxOutputTokens: 2000 }
+  const endpointFingerprint = createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex')
+  const spec = createRunSpec({ version: 1, runId: 'unknown-run', projectId: 'test-project', snapshotId: 'test-snapshot', strategy: 'agentic', strategyVersion: 'agentic-v1', roleFocus: 'backend', granularity: 'fine', model: { profileId: profile.id, endpointFingerprint, model: profile.model, protocol: 'openai', temperature: 0.4, contextWindowTokens: 49152, maxOutputTokens: 2000 }, promptVersion: 'workflow-prompt-v1', toolVersion: 'read-tools-v1', policyVersion: 'read-policy-v1', budget: { maxModelRequests: 3, inputTokens: 128000, outputTokens: 10000, readBytes: 2 * 1024 * 1024, wallClockMs: 180000 } })
+  const ledger = createBudgetLedger(spec), collector = createGlobalBudgetCollector({ maxRequests: 3, maxInputTokens: 18000, maxOutputTokens: 6000 })
+  let transportAttempts = 0
+  const guarded = createGuardedTransport({ collector, runId: 'unknown-run', getReservation: () => ledger.snapshot().reservations.find(item => item.state === 'reserved' && item.stage === 'investigation'), appendJournal: () => {}, transport: async (_profile, _messages, _onDelta, options) => { transportAttempts++; options.beforeRequest(); return 'synthetic response without usage' } })
+  const gateway = createModelGateway(spec, profile, ledger, { transport: guarded })
+  await assert.rejects(gateway.complete({ id: 'decision-1', stage: 'investigation', messages: [{ role: 'user', content: 'synthetic only' }] }))
+  assert.equal(collector.snapshot().blocked, true)
+  assert.ok(collector.snapshot().reservedInputTokens > 0)
+  await assert.rejects(gateway.complete({ id: 'decision-2', stage: 'investigation', messages: [{ role: 'user', content: 'must not send' }] }))
+  assert.equal(transportAttempts, 1)
+  assert.equal(collector.snapshot().admittedRequests, 1)
+})
+
+test('authorization claims are atomic and one-shot, including interrupted runs', async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'm06-claim-test-'))
+  const claimsDir = path.join(temp, 'claims')
+  await mkdir(claimsDir)
+  const binding = { reference: 'offline-approval', sourceCommit: 'a'.repeat(40), retrievalDataHash: 'b'.repeat(64) }
+  try {
+    const first = await createOneShotAuthorizationClaim(claimsDir, binding)
+    assert.equal(first.reference, binding.reference)
+    await assert.rejects(createOneShotAuthorizationClaim(claimsDir, binding), error => error?.code === 'EEXIST')
+  } finally { await rm(temp, { recursive: true, force: true }) }
+})
+
+test('sanitized child environment can secure a private temp directory without username variables', async () => {
+  const launcherPath = path.join(root, 'scripts/evaluation/run-retrieval-profile.cjs')
+  const { safeEnv } = createRequire(import.meta.url)(launcherPath)
+  const environment = safeEnv({ ...process.env, API_KEY: 'SYNTHETIC_SECRET', NODE_OPTIONS: '--require unexpected', ELECTRON_RUN_AS_NODE: '1' })
+  for (const key of ['API_KEY', 'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE', 'USERNAME', 'USERDOMAIN']) assert.equal(Object.hasOwn(environment, key), false)
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'm06-runtime-acl-'))
+  try {
+    const child = spawnSync(process.execPath, ['-e', 'require(process.argv[1]).secureTemporaryDirectory(process.argv[2]);process.stdout.write("secured")', launcherPath, folder], { env: environment, encoding: 'utf8', windowsHide: true })
+    assert.equal(child.status, 0, 'private-runtime preparation must work in the actual sanitized child environment')
+    assert.equal(child.stdout, 'secured')
+  } finally {
+    assert.equal(path.dirname(path.resolve(folder)), path.resolve(os.tmpdir()))
+    assert.match(path.basename(folder), /^m06-runtime-acl-/u)
+    await rm(folder, { recursive: true, force: true })
+  }
+})
+
+
+test('guarded transport awaits asynchronous upstream admission before journaling and HTTP', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const events = []; let release, enter
+  const gate = new Promise(resolve => { release = resolve })
+  const entered = new Promise(resolve => { enter = resolve })
+  const guarded = createGuardedTransport({ collector, runId: 'async-guard', getReservation: () => ({ id: 'call-async', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+    await options.beforeRequest()
+    events.push('HTTP')
+    options.onUsage({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+    return 'synthetic output'
+  } })
+  const pending = guarded({}, [], () => {}, { beforeRequest: async () => { events.push('guard'); enter(); await gate; events.push('flushed') } })
+  await entered
+  assert.deepEqual(events, ['guard'])
+  release()
+  assert.equal(await pending, 'synthetic output')
+  assert.deepEqual(events, ['guard', 'flushed', 'request-admitted', 'HTTP', 'provider-usage'])
+})
+
+test('guarded transport propagates asynchronous admission rejection before HTTP', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const events = []; const failure = new Error('Static admission failure.')
+  const guarded = createGuardedTransport({ collector, runId: 'async-reject', getReservation: () => ({ id: 'call-reject', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+    await options.beforeRequest(); events.push('HTTP'); return 'forbidden'
+  } })
+  await assert.rejects(guarded({}, [], () => {}, { beforeRequest: async () => { await Promise.resolve(); throw failure } }), error => error === failure)
+  assert.equal(events.includes('HTTP'), false)
+  assert.equal(events.includes('request-admitted'), false)
+  assert.equal(collector.snapshot().admittedRequests, 0)
+})
+
+test('guarded transport preserves synchronous admission hook return semantics', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const guarded = createGuardedTransport({ collector, runId: 'sync-guard', getReservation: () => ({ id: 'call-sync', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal() {}, transport: async (_p, _m, _d, options) => {
+    assert.equal(options.beforeRequest(), undefined)
+    options.onUsage({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+    return 'synthetic output'
+  } })
+  assert.equal(await guarded({}, [], () => {}, { beforeRequest() {} }), 'synthetic output')
+})
+
+
+test('guarded transport checks the final synchronous fence before its journal and propagates it unchanged', async () => {
+  const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+  const events = []; let checks = 0
+  const beforeFetch = () => { checks++; events.push('fence') }
+  const guarded = createGuardedTransport({ collector, runId: 'final-fence', getReservation: () => ({ id: 'call-final', estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+    assert.equal(options.beforeFetch, beforeFetch)
+    assert.equal(options.beforeRequest(), undefined)
+    options.beforeFetch(); events.push('HTTP')
+    options.onUsage({ inputTokens: 2, outputTokens: 1, totalTokens: 3 })
+    return 'synthetic output'
+  } })
+  assert.equal(await guarded({}, [], () => {}, { beforeFetch }), 'synthetic output')
+  assert.equal(checks, 2)
+  assert.deepEqual(events, ['fence', 'request-admitted', 'fence', 'HTTP', 'provider-usage'])
+})
+
+test('guarded transport refuses stale or async final fences before journaling or HTTP', async () => {
+  for (const mode of ['revoked', 'async']) {
+    const collector = createGlobalBudgetCollector({ maxRequests: 2, maxInputTokens: 100, maxOutputTokens: 100 })
+    const events = []; let current = true
+    const guarded = createGuardedTransport({ collector, runId: 'final-' + mode, getReservation: () => ({ id: 'call-' + mode, estimatedInputTokens: 10, outputTokens: 10, contextChars: 20 }), appendJournal: event => events.push(event.type), transport: async (_p, _m, _d, options) => {
+      await options.beforeRequest(); events.push('HTTP'); return 'forbidden'
+    } })
+    await assert.rejects(guarded({}, [], () => {}, { beforeRequest: async () => { await Promise.resolve(); current = false }, beforeFetch: mode === 'async' ? async () => { throw Error('SYNTHETIC_SECRET invalid final fence') } : () => { if (!current) throw Error('Static revoked fence.') } }))
+    assert.equal(events.includes('request-admitted'), false); assert.equal(events.includes('HTTP'), false)
+    assert.equal(collector.snapshot().admittedRequests, 0)
+  }
+})

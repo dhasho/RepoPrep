@@ -16,6 +16,17 @@
 | 命令 | 覆盖范围 |
 | --- | --- |
 | `npm run typecheck` | 对 Node/Electron 与 Web 两套 TypeScript 配置执行 `tsc --noEmit`。 |
+| `npm run test:agentic` | 运行契约、metadata trace、静态生成等价性、来源能力、语义审查/修订、持久账本/关键状态、原始运行恢复、工作登记、隔离存储及加密配置快照的回归与门禁 runner 自测；只使用合成数据，不调用真实模型。Windows 快照测试需要本机文件锁和 PowerShell 原生路径守卫；平台不支持项须报告，不能代替 M09/M10/M11 真实门禁。 |
+| `npm run test:agentic:holdout` | 核对固定公开源码与48条事实范围、链接及哈希变更拒绝；需要本地主工作树 `.validation/agentic-holdout-sources/` 下四个固定 SHA 的干净仓库，不自动下载或运行项目代码。 |
+| `npm run verify:agentic:p0` | 校验20/12/80/20任务矩阵、源码与标签哈希、两份独立代理评审、全部分歧裁定和保留集冻结；输出 P0 新报告。当前协议见 `docs/adr/agentic-subagent-evaluation.md`。 |
+| `npm run verify:agentic:m01` | 执行冻结的 M01 必需断言并输出带源码/配置/资产哈希的新报告。 |
+| `npm run verify:agentic:m07` | 12类确定性装配检查，含必需组合冲突、字符/token边界、源码上下文完整装入及最终dispatch阻断。 |
+| `npm run eval:agentic:retrieval:real -- --authorization <local-json> --output <new-local-directory>` | 需独立授权的真实M06检索测量；完整40格矩阵、最多120请求，缺授权先阻断、不读取保存凭据。只写本地忽略目录，不自动重试未知付费调用。 |
+| `npm run verify:agentic:m06 -- --mode real --report-file <report.json> --authorization-file <local-json>` | 只复核已完成真实报告和逐请求/逐运行持久化记录；不调用模型、不相信报告自报通过状态。 |
+| `npm run verify:agentic:m08 -- --mode real --source-root <frozen-checkout> --report-file <generation-evaluation.json> --authorization-file <local-json>` | 只读复核固定48格的真实运行、原始sidecar/收据日志、实际源码/授权绑定及独立盲评裁定；输出新的门禁报告，不读取凭据或调用模型。缺格、未知usage、缺评审或质量不达标均非0。 |
+| `npm run prepare:agentic:m08:review -- --source-root <frozen-checkout> --report-file <generation-evaluation.json> --authorization-file <local-json>` | 对完整真实M08运行执行同一只读验证后，独占创建报告目录下的 `review/`，输出盲评包、私有映射、冻结rubric和未评分模板；请求数为0，quality保持pending。 |
+| `npm run test:agentic:m08:review-preparation` | 检查准备CLI参数、递归答案单元模板覆盖和缺授权时不产生输出；只使用合成数据。 |
+| `npm run verify:agentic:m02` 至 `npm run verify:agentic:m13` | 已注册的失败关闭入口；未实现的检查及资产输出 incomplete/非 0。M06/M08/M09/M13 的 `-- --mode real` 无授权时输出 blocked/非 0，不回退合成响应。 |
 | `npm run test:ipc` | IPC schema、调用方权限、handler 防护与安全结果测试，OpenAI/Claude 格式、流式响应和本地合成模型生成链路。 |
 | `npm run test:recovery` | 增量 JSON 解析、逐题原子保存、取消与断流恢复，以及真实 SSE 跨进程续传；使用本地合成模型，不调用真实服务。 |
 | `npm run test:lib` | 设置保存、服务商预设、扫描滑条、模型探测及导航等纯逻辑测试。 |

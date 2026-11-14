@@ -1,0 +1,512 @@
+import { createHash } from 'node:crypto'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { Granularity, InterviewResult, LlmProfile, QuestionItem, RoleFocus } from '../../../shared/types.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { assertInterviewResultContract } from '../../../shared/result-contract.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { CONTEXT_CHAR_BUDGETS, safeClipText } from '../../../shared/context-budget.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { ScanResult } from '../scanner.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { BuiltContext, RenderedSelection } from '../context-builder.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { ContextProvider } from './context-provider.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { BudgetLedger, ModelStage, ModelUsage } from './budget-ledger.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { WorkflowEvidenceStore, WorkflowProjectSnapshot, EvidenceRecord } from './project-contract.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { SelectionPlan, TopicCard } from './investigation-contract.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import type { RunSpec } from './run-spec.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { packEvidence, makeDispatchGuard, type PackedContext, type PackedManifest } from './evidence-packer.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { createQuestionEvidenceRegistry, type QuestionEvidenceSidecar } from './question-evidence.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { createGenerationQuestionSourceRecorder, type QuestionSourceAuthority, type QuestionSourceAuthorityInput, type QuestionSourceCapability } from './question-source.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { createModelGateway, type ModelCompletion, type ModelTransport } from './model-gateway.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { CitationValidationError, type GenerationRequestAdapter, type GenerationRequestPreparationInput, type PreparedGenerationRequest, type AcceptedGenerationQuestion } from './generation-request.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { snapshotMatchesScan } from './snapshot-adapter.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { normalizeBaseUrl } from '../llm.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { chatCompletionStream } from '../llm.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { WorkflowError } from './project-contract.ts'
+// @ts-ignore TS5097 -- Node tests execute TypeScript modules with explicit extensions.
+import { buildLegacyEvidenceContext, makeEvidenceGenerationGroups } from './evidence-generation-context.ts'
+
+export interface EvidenceGenerationAdapterInput {
+  readonly spec: RunSpec
+  readonly scan: ScanResult
+  readonly snapshot: WorkflowProjectSnapshot
+  readonly store: WorkflowEvidenceStore
+  readonly selection: SelectionPlan
+  readonly topics: readonly TopicCard[]
+  readonly ledger: BudgetLedger
+  readonly profile: LlmProfile
+  readonly signal: AbortSignal
+  readonly transport?: ModelTransport
+  /** Private evaluation-only writer switch; omitted means the candidate writer. */
+  readonly writerVariant?: EvidenceGenerationWriterVariant
+}
+
+export interface EvidenceGenerationAdapter {
+  readonly writerVersion: typeof EVIDENCE_GENERATION_WRITER_VERSION
+  readonly writerVariant: EvidenceGenerationWriterVariant
+  readonly requestAdapter: GenerationRequestAdapter
+  readonly contextProvider: ContextProvider
+  metadata(): readonly EvidenceGenerationRequestMetadata[]
+  finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar>
+  readonly sourceAuthority: QuestionSourceAuthority
+  sourceFor(question: QuestionItem): Promise<QuestionSourceCapability>
+}
+
+export const EVIDENCE_GENERATION_WRITER_VERSION = 'm08-evidence-writer-v5' as const
+export const EVIDENCE_GENERATION_WRITER_VARIANTS = Object.freeze({ topicCards: 'topic-cards', staticControl: 'static-control' } as const)
+export type EvidenceGenerationWriterVariant = typeof EVIDENCE_GENERATION_WRITER_VARIANTS[keyof typeof EVIDENCE_GENERATION_WRITER_VARIANTS]
+
+export interface EvidenceGenerationRequestMetadata {
+  readonly requestId: string
+  readonly stage: GenerationRequestPreparationInput['stage']
+  readonly manifest: PackedManifest
+  readonly usage: ModelUsage | null
+  readonly completion: 'completed' | 'failed' | 'pending'
+}
+
+// A recorder cannot be bootstrapped from copied service metadata. This token never leaves this adapter.
+const sourceRecorderOwners = new WeakMap<object, QuestionSourceAuthorityInput>()
+/** @internal Read-only check used by question-source; no owner-minting API is exported. */
+export function ownsGenerationSourceRecorder(owner: unknown, input: QuestionSourceAuthorityInput): boolean {
+  const captured = owner && typeof owner === 'object' ? sourceRecorderOwners.get(owner) : undefined
+  return !!captured && captured.spec === input.spec && captured.ledger === input.ledger && captured.snapshot === input.snapshot && captured.store === input.store && captured.signal === input.signal
+}
+
+interface PreparedState {
+  readonly requestId: string
+  readonly stage: GenerationRequestPreparationInput['stage']
+  readonly packet: PackedContext
+  readonly signal: AbortSignal
+  registered: boolean
+  consumed: boolean
+}
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const EVIDENCE_ID = /^ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const MAX_SELECTED_IDS = 400
+const MAX_REQUIRED_BUNDLES = 40
+const MAX_BUNDLE_EVIDENCE_IDS = 100
+const MAX_TOPICS = 40
+const MAX_TOPIC_REFS = 100
+const MAX_TOPIC_ID_CHARS = 64
+const MAX_TOPIC_TITLE_CHARS = 160
+const MAX_TOPIC_DETAIL_CHARS = 500
+const MAX_TOPIC_LIST_ITEMS = 20
+const MAX_TOPIC_LIST_TEXT_CHARS = 240
+// M06 bounds each unresolved list to 40 entries, but its terminal controller unions
+// the selection and finish lists, so the actual returned selection can contain 80.
+const MAX_UNRESOLVED_ITEMS = 80
+const MAX_UNRESOLVED_TEXT_CHARS = 240
+const MAX_PRIOR_QUESTIONS = 12
+const MAX_PRIOR_QUESTION_CHARS = 180
+const MAX_METADATA_BYTES = 4 * 1024 * 1024
+
+function fail(code: ConstructorParameters<typeof WorkflowError>[0] = 'invalid-argument'): never { throw new WorkflowError(code) }
+function boundedText(value: unknown, maxChars: number): value is string { return typeof value === 'string' && value.length >= 1 && value.length <= maxChars && !value.includes('\0') }
+function boundedTextList(value: unknown, maxCount: number, maxChars: number): value is readonly string[] { return Array.isArray(value) && value.length <= maxCount && value.every(item => boundedText(item, maxChars)) }
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
+    Object.freeze(value)
+  }
+  return value
+}
+function json(value: unknown): string { return JSON.stringify(value) }
+function sha256(value: string): string { return createHash('sha256').update(value, 'utf8').digest('hex') }
+function endpointFingerprint(profile: LlmProfile): string {
+  try { return createHash('sha256').update(normalizeBaseUrl(profile.baseUrl)).digest('hex') }
+  catch { fail('configuration-changed') }
+}
+function assertHealthyLedger(ledger: BudgetLedger): void {
+  const meter = ledger.snapshot()
+  if (!meter.usageComplete || meter.blocked || meter.overspend.inputTokens || meter.overspend.outputTokens || meter.overspend.readBytes || meter.reservations.some(item => item.state !== 'settled')) fail('budget-exhausted')
+}
+function assertProfile(spec: RunSpec, profile: LlmProfile): void {
+  if (!profile || profile.id !== spec.model.profileId || profile.model !== spec.model.model || endpointFingerprint(profile) !== spec.model.endpointFingerprint || (profile.protocol ?? 'openai') !== (spec.model.protocol ?? 'openai') || profile.reasoningEffort !== spec.model.reasoningEffort || (profile.temperature ?? 0.4) !== (spec.model.temperature ?? 0.4) || profile.contextWindowTokens !== spec.model.contextWindowTokens || profile.maxOutputTokens !== spec.model.maxOutputTokens || typeof profile.apiKey !== 'string') fail('configuration-changed')
+}
+function freezeProfile(profile: LlmProfile): LlmProfile {
+  return Object.freeze({
+    id: profile.id, name: profile.name, baseUrl: profile.baseUrl, apiKey: profile.apiKey, model: profile.model,
+    ...(profile.protocol !== undefined ? { protocol: profile.protocol } : {}),
+    ...(profile.reasoningEffort !== undefined ? { reasoningEffort: profile.reasoningEffort } : {}),
+    ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
+    ...(profile.contextWindowTokens !== undefined ? { contextWindowTokens: profile.contextWindowTokens } : {}),
+    ...(profile.maxOutputTokens !== undefined ? { maxOutputTokens: profile.maxOutputTokens } : {})
+  })
+}
+
+function validateSelection(selection: SelectionPlan, topics: readonly TopicCard[]): { ids: string[]; bundles: Array<{ id: string; evidenceIds: string[] }>; topics: TopicCard[]; unresolved: string[] } {
+  if (!selection || !Array.isArray(selection.selectedIds) || selection.selectedIds.length < 1 || selection.selectedIds.length > MAX_SELECTED_IDS || !Array.isArray(selection.requiredBundles) || selection.requiredBundles.length > MAX_REQUIRED_BUNDLES || !boundedTextList(selection.unresolved, MAX_UNRESOLVED_ITEMS, MAX_UNRESOLVED_TEXT_CHARS) || !Array.isArray(topics) || topics.length > MAX_TOPICS) fail()
+  const ids = [...selection.selectedIds]
+  const selected = new Set(ids)
+  if (ids.some(id => typeof id !== 'string' || !EVIDENCE_ID.test(id)) || selected.size !== ids.length) fail('unknown-evidence')
+  const bundles: Array<{ id: string; evidenceIds: string[] }> = []
+  for (const bundle of selection.requiredBundles) {
+    if (!bundle || !boundedText(bundle.id, MAX_TOPIC_ID_CHARS) || !Array.isArray(bundle.evidenceIds) || bundle.evidenceIds.length < 1 || bundle.evidenceIds.length > MAX_BUNDLE_EVIDENCE_IDS || bundle.evidenceIds.some((id: unknown) => typeof id !== 'string' || !selected.has(id))) fail('unknown-evidence')
+    bundles.push({ id: bundle.id, evidenceIds: [...new Set(bundle.evidenceIds as readonly string[])] })
+  }
+  const safeTopics: TopicCard[] = []
+  for (const topic of topics) {
+    if (!topic || typeof topic !== 'object' || !boundedText(topic.id, MAX_TOPIC_ID_CHARS) || !boundedText(topic.title, MAX_TOPIC_TITLE_CHARS) || !boundedText(topic.mechanism, MAX_TOPIC_DETAIL_CHARS) || !boundedText(topic.valueRationale, MAX_TOPIC_DETAIL_CHARS) || !['basic', 'intermediate', 'advanced'].includes(topic.difficulty) || !Array.isArray(topic.evidenceIds) || topic.evidenceIds.length < 1 || topic.evidenceIds.length > MAX_TOPIC_REFS || topic.evidenceIds.some((id: unknown) => typeof id !== 'string' || !selected.has(id)) || !boundedTextList(topic.evidenceNeeds, MAX_TOPIC_LIST_ITEMS, MAX_TOPIC_LIST_TEXT_CHARS) || !boundedTextList(topic.unconfirmed, MAX_TOPIC_LIST_ITEMS, MAX_TOPIC_LIST_TEXT_CHARS)) fail('unknown-evidence')
+    safeTopics.push(deepFreeze({ ...topic, evidenceIds: [...new Set(topic.evidenceIds as readonly string[])], evidenceNeeds: [...topic.evidenceNeeds as readonly string[]], unconfirmed: [...topic.unconfirmed as readonly string[]] }))
+  }
+  return { ids, bundles, topics: safeTopics, unresolved: [...selection.unresolved] }
+}
+
+
+function manifestSelection(packet: PackedContext, records: readonly EvidenceRecord[]): RenderedSelection {
+  const byId = new Map(records.map(record => [record.id, record]))
+  const packed = packet.manifest.packedIds.map(id => byId.get(id)).filter((item): item is EvidenceRecord => Boolean(item))
+  if (packed.length !== packet.manifest.packedIds.length) fail('unknown-evidence')
+  const sources = packet.manifest.sources
+  const paths = [...new Set(sources.map(source => source.relPath))]
+  return Object.freeze({
+    filePaths: Object.freeze(paths),
+    selectedRegions: sources.length,
+    providedChars: packed.reduce((sum, record) => sum + record.text.length, 0),
+    sourceSelections: Object.freeze(sources.map(source => Object.freeze({
+      relPath: source.relPath,
+      wholeFile: false,
+      regions: Object.freeze([Object.freeze({
+        start: source.originalRange?.startLine ?? source.displayRange.startLine,
+        end: source.originalRange?.endLine ?? source.displayRange.endLine,
+        complete: source.originalRange !== null
+      })])
+    })))
+  }) as unknown as RenderedSelection
+}
+
+function appendedPrompt(messages: readonly { role: 'system' | 'user' | 'assistant'; content: string }[], contextText: string, topics: readonly TopicCard[], unresolved: readonly string[], writerVariant: EvidenceGenerationWriterVariant, batchOrdinal: number, batchCount: number, priorQuestionTexts: readonly string[], quota: number): readonly { role: 'system' | 'user' | 'assistant'; content: string }[] {
+  const instruction = `\n\n## 简洁写作指导\n每道新问题的主答案控制在 150–220 字，并提供 2 个追问，每个追问答案控制在 50–80 字；追问内部的 followUps 默认输出空数组。保持 JSON 完整，不得截断内容；精简时仍须保留实际机制、适用条件与异常情况。question、answer 和追问文本中的专业术语继续用 [[术语]] 标记，根级 glossary 必须覆盖所有标记术语。\n\n## 引用协议\n本次只生成 ${quota} 道新主问题；quota 为 0 时不要生成主问题。每个新主问题对象都必须包含非空的 evidenceIds 字符串数组，最多 16 个 ID；root、section 或追问上的引用字段不能替代主问题的 evidenceIds。ID 必须从本次提供的证据行 ids 元数据中逐字复制，不得改写、缩写或虚构；不要在证据未充分支持时编造问题。引用 ID 只表示来源绑定，不代表事实已核实。\n\n## 源码范围\n只把本次实际提供的源码片段当作观察依据；被省略、截断或未提供的代码不等于不存在。核对已提供的绑定、类型、完整守卫与调用路径；若所需定义或方法未提供，替代方案只能作为条件假设。明确区分源码观察与建议、假设，追问也遵守这些限定。ID、公开目标和选题卡都不是事实核验。`
+  const cards = writerVariant === 'topic-cards'
+    ? `\n\n## 选题卡（不可信规划提示，必须以本请求证据重新核验）\n${topics.length ? json(topics.map(topic => ({ id: topic.id, title: topic.title, mechanism: topic.mechanism, valueRationale: topic.valueRationale, difficulty: topic.difficulty, evidenceIds: topic.evidenceIds, evidenceNeeds: topic.evidenceNeeds, unconfirmed: topic.unconfirmed }))) : '[]'}`
+    : ''
+  const unresolvedPrompt = `\n\n## 未解决事项（不可信调查记录，不是源码证据）\n以下内容只记录调查阶段的缺口，不能作为实现行为或已验证事实的证明。结论仍须由本请求引用的源码证据支持；证据不足时明确说明不确定性。\n${json(unresolved)}`
+  const batch = `\n\n## 批次提示\n本次证据批次为 ${batchOrdinal}/${batchCount}。以下只列出先前已接受的问题文字，不含答案或推理，属于不可信去重提示；请避免重复，并仅依据本次证据重新判断。\n${json(priorQuestionTexts)}`
+  const suffix = `${instruction}${cards}${unresolvedPrompt}${batch}`
+  let sourceFound = false
+  let lastUserIndex = -1
+  messages.forEach((message, index) => { if (message.role === 'user') lastUserIndex = index })
+  if (lastUserIndex < 0) fail()
+  const next = messages.map(message => {
+    if (message.role === 'user' && message.content.includes(contextText)) sourceFound = true
+    return Object.freeze({ role: message.role, content: message.content })
+  })
+  if (!sourceFound) fail()
+  const updated = next.map((message, index) => {
+    if (index === lastUserIndex) {
+      return Object.freeze({ role: message.role, content: `${message.content}${suffix}` })
+    }
+    return Object.freeze({ role: message.role, content: message.content })
+  })
+  return Object.freeze(updated)
+}
+
+export async function createEvidenceGenerationAdapter(input: EvidenceGenerationAdapterInput): Promise<EvidenceGenerationAdapter> {
+  if (!input || typeof input !== 'object') fail('invalid-argument')
+  const writerVariant = input.writerVariant === undefined ? EVIDENCE_GENERATION_WRITER_VARIANTS.topicCards : input.writerVariant
+  if (!Object.values(EVIDENCE_GENERATION_WRITER_VARIANTS).includes(writerVariant)) fail('invalid-argument')
+  const { spec, scan, snapshot, store, ledger, profile, signal } = input
+  if (!spec || spec.version !== 1 || !scan || !snapshot || !store || !ledger || !signal || !snapshotMatchesScan(snapshot, scan) || snapshot.projectId !== spec.projectId || snapshot.snapshotId !== spec.snapshotId) fail('stale-snapshot')
+  assertProfile(spec, profile)
+  const privateProfile = freezeProfile(profile)
+  assertHealthyLedger(ledger)
+  const selected = validateSelection(input.selection, input.topics)
+  const resolved = await store.resolve(selected.ids, spec.snapshotId, signal)
+  await snapshot.assertCurrent(signal)
+  if (resolved.length !== selected.ids.length || resolved.some(record => !selected.ids.includes(record.id) || record.snapshotId !== spec.snapshotId)) fail('unknown-evidence')
+  const desired = spec.granularity === 'coarse' ? 1 : spec.granularity === 'medium' ? 2 : 4
+  const remainingCalls = ledger.snapshot().remaining.modelRequests
+  if (remainingCalls < 1) fail('budget-exhausted')
+  const groups = makeEvidenceGenerationGroups(selected.ids, resolved, selected.bundles, selected.topics, Math.min(desired, remainingCalls), spec.granularity === 'fine')
+  if (!groups.length) fail('budget-exhausted')
+  const registry = createQuestionEvidenceRegistry(spec)
+  const sourceInput = Object.freeze({ spec, ledger, snapshot, store, signal })
+  const sourceOwner = Object.freeze({})
+  sourceRecorderOwners.set(sourceOwner, sourceInput)
+  const sourceRecorder = createGenerationQuestionSourceRecorder(sourceInput, sourceOwner)
+  const preparedStates = new WeakMap<object, PreparedState>()
+  const priorQuestionTexts: string[] = []
+  const dispatchMetadata = new Map<string, { readonly stage: GenerationRequestPreparationInput['stage']; readonly manifest: PackedManifest; completion: EvidenceGenerationRequestMetadata['completion'] }>()
+  let meteringFailed = false
+  let finalized = false
+  let builtContext: BuiltContext | undefined
+
+  const contextProvider: ContextProvider = Object.freeze({
+    id: 'evidence-source-bound-v1',
+    async build(requestScan: ScanResult, granularity: Granularity, options: { maxChars?: number; roleFocus?: RoleFocus; signal?: AbortSignal } = {}): Promise<BuiltContext> {
+      if (requestScan !== scan || granularity !== spec.granularity || options.roleFocus !== spec.roleFocus || options.signal !== signal) fail('invalid-argument')
+      if (signal.aborted) fail('cancelled')
+      if (!snapshotMatchesScan(snapshot, requestScan)) fail('stale-snapshot')
+      await snapshot.assertCurrent(signal)
+      builtContext = buildLegacyEvidenceContext(scan, snapshot.files.map(file => file.relPath), resolved, groups)
+      return builtContext
+    }
+  })
+
+  const requestAdapter: GenerationRequestAdapter = Object.freeze({
+    id: 'evidence-source-bound-v1',
+
+    async prepare(request: GenerationRequestPreparationInput): Promise<PreparedGenerationRequest> {
+      if (meteringFailed) fail('budget-exhausted')
+      if (finalized) fail()
+      if (!request || request.signal !== signal) fail('invalid-argument')
+      if (signal.aborted) fail('cancelled')
+      if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
+      if (!builtContext) fail('invalid-argument')
+      await snapshot.assertCurrent(signal)
+      ledger.assertCanContinue(request.stage)
+      assertHealthyLedger(ledger)
+      const group = groups[request.batchIndex]
+      if (!group || !Number.isSafeInteger(request.quota) || request.quota < 0 || request.quota > spec.questionBudget.max || typeof request.buildMessages !== 'function' || typeof request.requestId !== 'string' || !ID.test(request.requestId)) fail()
+      const maxChars = Math.min(request.maxChars, CONTEXT_CHAR_BUDGETS[spec.granularity])
+      const maxInputTokens = Math.min(request.maxInputTokens, spec.generationInputTokens)
+      if (!Number.isSafeInteger(maxChars) || maxChars < 1 || !Number.isSafeInteger(maxInputTokens) || maxInputTokens < 1) fail('budget-exhausted')
+      const packed = await packEvidence({
+        spec,
+        store,
+        // M07's unresolved field is not rendered and has a tighter item-size limit; preserve M06 gaps in the shared bounded prompt below.
+        selection: { selectedIds: group.ids, requiredBundles: group.bundles, unresolved: [] },
+        buildMessages: contextText => appendedPrompt(request.buildMessages(contextText), contextText, group.topics, selected.unresolved, writerVariant, request.batchIndex + 1, groups.length, priorQuestionTexts, request.quota),
+        maxChars,
+        maxInputTokens,
+        signal
+      })
+      if (packed.status !== 'packed') fail('budget-exhausted')
+      if (packed.context.manifest.omitted.length && builtContext) builtContext.contextTruncation.contentTruncated = true
+      await snapshot.assertCurrent(signal)
+      const renderedSelection = manifestSelection(packed.context, resolved)
+      const dispatchToken = Object.freeze({})
+      const prepared = Object.freeze({
+        requestId: request.requestId,
+        stage: request.stage,
+        messages: packed.context.messages,
+        dispatch: dispatchToken,
+        selection: renderedSelection
+      }) as PreparedGenerationRequest
+      preparedStates.set(prepared as object, { requestId: request.requestId, stage: request.stage, packet: packed.context, signal, registered: false, consumed: false })
+      return prepared
+    },
+
+    async complete(prepared: PreparedGenerationRequest, onDelta: (delta: string) => unknown, options: import('../llm.ts').CallOptions): Promise<string> {
+      const state = prepared && typeof prepared === 'object' ? preparedStates.get(prepared as object) : undefined
+      if (meteringFailed) fail('budget-exhausted')
+      if (!state || state.consumed || finalized || prepared.requestId !== state.requestId || prepared.stage !== state.stage) fail()
+      state.consumed = true
+      if (!options || typeof options !== 'object' || options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) || options.maxOutputTokens !== undefined && (!Number.isSafeInteger(options.maxOutputTokens) || options.maxOutputTokens < 1) || options.beforeRequest !== undefined && typeof options.beforeRequest !== 'function' || options.onRequest !== undefined && typeof options.onRequest !== 'function' || options.onUsage !== undefined && typeof options.onUsage !== 'function') fail()
+      if (options.signal !== undefined && options.signal !== state.signal) fail('invalid-argument')
+      if (state.signal.aborted) fail('cancelled')
+      if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
+      await snapshot.assertCurrent(signal)
+      ledger.assertCanContinue(state.stage)
+      assertHealthyLedger(ledger)
+      const remainingOutputTokens = ledger.snapshot().remaining.outputTokens
+      const effectiveOutputTokens = Math.min(
+        options.maxOutputTokens ?? spec.generationOutputTokens,
+        spec.generationOutputTokens,
+        privateProfile.maxOutputTokens ?? spec.generationOutputTokens,
+        remainingOutputTokens
+      )
+      if (!Number.isSafeInteger(effectiveOutputTokens) || effectiveOutputTokens < 1) fail('budget-exhausted')
+      const guard = makeDispatchGuard(state.packet)
+      const assertDispatchCurrent = (messages: readonly import('../llm.ts').ChatMessage[]): void => {
+        if (state.signal.aborted) fail('cancelled')
+        if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
+        guard(messages)
+      }
+      const registerDispatch = (messages: readonly import('../llm.ts').ChatMessage[]): void => {
+        if (state.registered) fail()
+        assertDispatchCurrent(messages)
+        registry.registerRequest(state.requestId, state.packet)
+        sourceRecorder.recordDispatch(state.requestId, state.packet, state.stage)
+        dispatchMetadata.set(state.requestId, { stage: state.stage, manifest: state.packet.manifest, completion: 'pending' })
+        state.registered = true
+      }
+      // M07's guard is deliberately synchronous and repeatable at admission, intent and receipt fences.
+      const dispatchGuard = assertDispatchCurrent
+      const actualTransport = input.transport ?? chatCompletionStream
+      const transport: ModelTransport = async (activeProfile, messages, emit, gatewayOptions) => {
+        const timeoutMs = options.timeoutMs === undefined ? gatewayOptions.timeoutMs : Math.min(options.timeoutMs, gatewayOptions.timeoutMs ?? options.timeoutMs)
+        const maxOutputTokens = options.maxOutputTokens === undefined ? gatewayOptions.maxOutputTokens : Math.min(options.maxOutputTokens, gatewayOptions.maxOutputTokens ?? options.maxOutputTokens)
+        let active = true
+        let prefetchStarted = false
+        let prefetchViolation = false
+        type FinalFenceOptions = import('../llm.ts').CallOptions & { readonly beforeFetch?: () => void }
+        const callerFinalFence = (options as FinalFenceOptions).beforeFetch
+        const gatewayFinalFence = (gatewayOptions as FinalFenceOptions).beforeFetch
+        const assertPrefetchCurrent = (): void => {
+          if (!active || prefetchViolation) fail('model-failed')
+          assertDispatchCurrent(messages)
+        }
+        const afterAwait = async (): Promise<void> => {
+          assertPrefetchCurrent()
+          await snapshot.assertCurrent(signal)
+          assertPrefetchCurrent()
+        }
+        const registerAndNotify = (): void => {
+          assertPrefetchCurrent()
+          beforeFetch()
+          registerDispatch(messages)
+          try { options.onRequest?.() } catch { /* request observers cannot replace the gateway outcome */ }
+          beforeFetch()
+        }
+        const beforeFetch = (): void => {
+          assertPrefetchCurrent()
+          for (const fence of [callerFinalFence, gatewayFinalFence]) {
+            if (!fence) continue
+            const result: unknown = fence()
+            if (result !== undefined) {
+              void Promise.resolve(result).catch(() => {})
+              fail('model-failed')
+            }
+            assertPrefetchCurrent()
+          }
+        }
+        const admitGateway = (): void | Promise<void> => {
+          assertPrefetchCurrent()
+          const pending: unknown = gatewayOptions.beforeRequest?.()
+          if (pending && typeof (pending as PromiseLike<void>).then === 'function') {
+            return Promise.resolve(pending).then(async () => {
+              await afterAwait()
+              registerAndNotify()
+            })
+          }
+          registerAndNotify()
+        }
+        const beforeRequest = (): void | Promise<void> => {
+          if (prefetchStarted) { prefetchViolation = true; fail('model-failed') }
+          prefetchStarted = true
+          assertPrefetchCurrent()
+          const pending: unknown = options.beforeRequest?.()
+          const admitted = pending && typeof (pending as PromiseLike<void>).then === 'function'
+            ? Promise.resolve(pending).then(async () => { await afterAwait(); return admitGateway() })
+            : admitGateway()
+          // A broken custom transport may discard the returned Promise. It still fails closed without an unhandled rejection.
+          if (admitted) void admitted.catch(() => {})
+          return admitted
+        }
+        try {
+          return await actualTransport(activeProfile, messages, emit, {
+            signal: state.signal,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+            ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+            ...(gatewayOptions.maxStreamBodyBytes !== undefined ? { maxStreamBodyBytes: gatewayOptions.maxStreamBodyBytes } : {}),
+            includeUsage: true,
+            beforeRequest,
+            beforeFetch,
+            onUsage: usage => { gatewayOptions.onUsage?.(usage) }
+          } as FinalFenceOptions)
+        } finally { active = false }
+      }
+      const gateway = createModelGateway(spec, privateProfile, ledger, { transport })
+      const forwardSettledUsage = (): void => {
+        try {
+          const usage = ledger.snapshot().reservations.find(item => item.id === state.requestId)?.usage
+          if (usage) options.onUsage?.(Object.freeze({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }))
+        } catch { /* A diagnostic observer cannot replace the gateway outcome. */ }
+      }
+      let completion: ModelCompletion
+      try {
+        completion = await gateway.complete({ id: state.requestId, stage: state.stage as ModelStage, messages: state.packet.messages, signal: state.signal, onDelta, dispatchGuard, maxOutputTokens: effectiveOutputTokens })
+      } catch (error) {
+        const meta = dispatchMetadata.get(state.requestId)
+        if (meta) meta.completion = 'failed'
+        sourceRecorder.failDispatch(state.requestId)
+        forwardSettledUsage()
+        try {
+          const failedMeter = ledger.snapshot()
+          if (!failedMeter.usageComplete || failedMeter.blocked || failedMeter.overspend.inputTokens || failedMeter.overspend.outputTokens || failedMeter.overspend.readBytes) meteringFailed = true
+        } catch { meteringFailed = true }
+        throw error
+      }
+      const completedMeta = dispatchMetadata.get(state.requestId)
+      if (completedMeta) completedMeta.completion = 'completed'
+      forwardSettledUsage()
+      await snapshot.assertCurrent(signal)
+      const meter = ledger.snapshot()
+      if (!completion.usage || !meter.usageComplete || meter.blocked || meter.overspend.inputTokens || meter.overspend.outputTokens || meter.overspend.readBytes || meter.reservations.some(item => item.state !== 'settled')) {
+        if (completedMeta) completedMeta.completion = 'failed'
+        sourceRecorder.failDispatch(state.requestId)
+        meteringFailed = true
+        fail('budget-exhausted')
+      }
+      sourceRecorder.completeDispatch(state.requestId)
+      return completion.content
+    },
+
+    acceptQuestion(input: AcceptedGenerationQuestion): void {
+      if (meteringFailed) fail('budget-exhausted')
+      if (finalized || !input || typeof input.requestId !== 'string') fail()
+      if (signal.aborted) fail('cancelled')
+      if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
+      try { registry.capture({ requestId: input.requestId, rawQuestion: input.rawQuestion, question: input.question as QuestionItem }) }
+      catch (error) {
+        if (error instanceof WorkflowError && (error.code === 'unknown-evidence' || error.code === 'invalid-argument')) throw new CitationValidationError()
+        throw error
+      }
+      sourceRecorder.capture(input.requestId, input.question as QuestionItem, (input.rawQuestion as { evidenceIds: string[] }).evidenceIds)
+      const text = safeClipText(input.question.question.replace(/\s+/g, ' ').trim(), MAX_PRIOR_QUESTION_CHARS)
+      if (text && !priorQuestionTexts.includes(text)) {
+        priorQuestionTexts.push(text)
+        if (priorQuestionTexts.length > MAX_PRIOR_QUESTIONS) priorQuestionTexts.shift()
+      }
+    }
+  })
+
+  return Object.freeze({
+    writerVersion: EVIDENCE_GENERATION_WRITER_VERSION,
+    writerVariant,
+    requestAdapter,
+    contextProvider,
+    sourceAuthority: sourceRecorder.authority,
+    sourceFor: sourceRecorder.sourceFor,
+    metadata(): readonly EvidenceGenerationRequestMetadata[] {
+      const reservations = new Map(ledger.snapshot().reservations.map(item => [item.id, item]))
+      const rows: EvidenceGenerationRequestMetadata[] = []
+      let metadataBytes = 0
+      for (const [requestId, item] of dispatchMetadata) {
+        const reservation = reservations.get(requestId)
+        if (!reservation || !['dispatched', 'settled', 'unknown'].includes(reservation.state)) continue
+        const manifestJson = json(item.manifest)
+        metadataBytes += Buffer.byteLength(manifestJson, 'utf8')
+        if (metadataBytes > MAX_METADATA_BYTES || rows.length >= spec.budget.total.maxModelRequests) fail('capacity-exhausted')
+        const manifest = deepFreeze(JSON.parse(manifestJson) as PackedManifest)
+        const usage = reservation.state === 'settled' && reservation.usage
+          ? Object.freeze({ inputTokens: reservation.usage.inputTokens, outputTokens: reservation.usage.outputTokens, totalTokens: reservation.usage.totalTokens })
+          : null
+        rows.push(Object.freeze({ requestId, stage: item.stage, manifest, usage, completion: item.completion }))
+      }
+      return Object.freeze(rows)
+    },
+    async finalize(result: InterviewResult): Promise<QuestionEvidenceSidecar> {
+      if (meteringFailed) fail('budget-exhausted')
+      if (finalized) fail()
+      if (signal.aborted) fail('cancelled')
+      if (!snapshotMatchesScan(snapshot, scan)) fail('stale-snapshot')
+      await snapshot.assertCurrent(signal)
+      assertHealthyLedger(ledger)
+      if (!result || result.projectName !== scan.name || result.projectPath !== scan.root || result.granularity !== spec.granularity || result.roleFocus !== spec.roleFocus || result.profileId !== spec.model.profileId || result.modelUsed !== `${privateProfile.name} / ${privateProfile.model}`) fail('invalid-argument')
+      try { assertInterviewResultContract(result) } catch { fail('invalid-argument') }
+      const questionCount = result.sections.reduce((sum, section) => sum + section.questions.length, 0)
+      if (questionCount < spec.questionBudget.min || questionCount > spec.questionBudget.max) fail('invalid-argument')
+      finalized = true
+      const sidecar = registry.finalize(result)
+      sourceRecorder.finalize(sidecar)
+      return sidecar
+    }
+  })
+}

@@ -16,14 +16,23 @@ import { GRANULARITY_META, GRANULARITY_QUESTION_BUDGET, ROLE_META } from '@share
 import { assertInterviewResultContract, assertProjectIdentityContract, RESULT_CONTRACT_MESSAGES, RESULT_LIMITS } from '@shared/result-contract'
 import { CONTEXT_CHAR_BUDGETS, CONTEXT_TRUNCATION_WARNING, formatContextTruncationWarning, hasContextTruncation, safeClipText, validateMessageCharBudget } from '@shared/context-budget'
 import { contentReadWarning } from '@shared/content-read'
-import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage } from './llm'
+import { chatCompletionStream, isLlmTimeoutError, LlmRequestError, type ChatMessage, type CallOptions } from './llm'
 import { InterviewJsonStream, type InterviewJsonPreview, type StreamedInterviewQuestion } from './interview-json-stream'
-import { buildContext, renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
-import { MAX_QUESTIONS_PER_BATCH, planQuestionQuotas, type QuestionPlan } from './question-budget'
-import { buildCompensationInstruction, normalizeQuestionKey, selectUniqueQuestions } from './question-dedupe'
+import { renderBatch, renderBatchWithinBudget, type RenderedSelection } from './context-builder'
+import { staticContextProvider, type ContextProvider } from './workflow/context-provider'
+import type { WorkflowTrace, WorkflowTraceInput } from './workflow/trace'
+import { planQuestionQuotas, type QuestionPlan } from './question-budget'
+import { normalizeQuestionKey } from './question-dedupe'
+import { absorbGenerationBatch, capSectionsToMax, collectReferencedTerms, createGenerationMergeState, nextGenerationCompensation, pruneGlossary } from './generation-merge-policy'
+export { capSectionsToMax, collectReferencedTerms, pruneGlossary } from './generation-merge-policy'
 import type { ScanResult } from './scanner'
 import type { GenerationCheckpoint } from '@shared/generation-checkpoint'
 import { GENERATION_CHECKPOINT_VERSION, GENERATION_DRAFT_MESSAGES } from '@shared/generation-checkpoint'
+import { CitationValidationError, type GenerationRequestAcceptanceMode, type GenerationRequestAdapter, type GenerationRequestStage, type PreparedGenerationRequest } from './workflow/generation-request'
+import { WorkflowError } from './workflow/project-contract'
+import { GenerationOutputError, type GenerationOutputFailureReason, type GenerationOutputRejection } from './generation-output-error'
+import { inspectGenerationOutputText, normalizeParsed, validateCheckpointBatch, type ParsedGenerationBatch } from './generation-output-policy'
+export { normalizeParsed } from './generation-output-policy'
 // @ts-ignore TS5097 -- direct Node tests need explicit TypeScript extensions.
 import { estimateMessageTokens, resolveGenerationBudget, TOKEN_ESTIMATE_METHOD } from '../../shared/token-budget.ts'
 
@@ -37,6 +46,12 @@ export interface GenerateParams {
   onDiagnostics?: (diagnostics: GenerationDiagnostics) => void
   /** Optional metadata-only observation of the final source spans sent in each request. */
   onContextDispatch?: (selection: RenderedSelection) => void
+  /** Main-process strategy boundary; omitted keeps the existing static behavior. */
+  contextProvider?: ContextProvider
+  /** Optional main-process request boundary; omitted preserves static generation. */
+  requestAdapter?: GenerationRequestAdapter
+  /** Opt-in, metadata-only observation. Does not change persisted result formats. */
+  workflowTrace?: WorkflowTrace
   checkpoint?: { state?: GenerationCheckpoint | null; save: (state: GenerationCheckpoint) => void | Promise<void> }
 }
 
@@ -66,6 +81,14 @@ function cloneRenderedSelection(selection: RenderedSelection): RenderedSelection
 }
 
 const CHECKPOINT_PROMPT_VERSION = 'generation-prompt-stream-v3'
+function observeTrace(trace: WorkflowTrace | undefined, input: WorkflowTraceInput): void {
+  try { trace?.emit(input) } catch { /* Diagnostics must not affect generation or task cleanup. */ }
+}
+
+function finishTrace(trace: WorkflowTrace | undefined, status: 'succeeded' | 'failed' | 'cancelled'): void {
+  try { trace?.finish(status) } catch { /* The generation lifecycle owns its outcome. */ }
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   if (value && typeof value === 'object') {
@@ -77,20 +100,7 @@ function sha256(value: unknown): string { return createHash('sha256').update(sta
 function cloneBatch(batch: ParsedBatch): GenerationCheckpoint['entries'][number]['batch'] {
   return JSON.parse(JSON.stringify(batch)) as GenerationCheckpoint['entries'][number]['batch']
 }
-function validateCheckpointBatch(batch: unknown): ParsedBatch {
-  if (!batch || typeof batch !== 'object') throw new Error(GENERATION_DRAFT_MESSAGES.changed)
-  const keys = Object.keys(batch as object).sort()
-  if (keys.join(',') !== 'glossary,projectSummary,sections') throw new Error(GENERATION_DRAFT_MESSAGES.changed)
-  const candidate = batch as ParsedBatch
-  try {
-    assertInterviewResultContract({
-      version: 1, createdAt: '2026-01-01T00:00:00.000Z', projectName: 'checkpoint', projectPath: '/checkpoint',
-      granularity: 'coarse', roleFocus: 'general', profileId: 'checkpoint', modelUsed: 'checkpoint',
-      projectSummary: candidate.projectSummary, sections: candidate.sections, glossary: candidate.glossary
-    }, () => true)
-  } catch { throw new Error(GENERATION_DRAFT_MESSAGES.changed) }
-  return JSON.parse(JSON.stringify(candidate)) as ParsedBatch
-}
+
 
 const SYSTEM_PROMPT = `你是一位经验丰富的资深技术面试官，擅长通读候选人的项目代码与文档，围绕真实项目出有深度的面试题。
 判断当前实现时，以提供的源码为主要证据；文档承诺不证明实现已经落实。未提供的代码要明确说明无法从当前上下文确认，不要仅凭依赖、函数名或模块名推断内部保证。
@@ -148,6 +158,8 @@ export function buildUserPrompt(opts: {
   moduleLabel?: string
   /** 本批次被分配的题量（由 question-budget.ts 统一规划），提示词与后置裁剪都以此为准 */
   quota: number
+  /** Evidence groups can cover implementation directly, without legacy module batches. */
+  evidenceAware?: boolean
   /** 补偿轮追加的说明（要求模型补充此前未覆盖的考察点、不要重复） */
   extraInstruction?: string
 }): string {
@@ -155,9 +167,11 @@ export function buildUserPrompt(opts: {
   const g = GRANULARITY_META[granularity]
   const questionCount = isModuleBatch
     ? `严格 ${quota} 题（只针对本模块，不要多出）`
-    : granularity === 'fine'
+    : granularity === 'fine' && !opts.evidenceAware
       ? `严格 ${quota} 题（全局架构层面，实现细节由其他批次负责，不要多出）`
-      : `约 ${quota} 题`
+      : granularity === 'fine'
+        ? `严格 ${quota} 题（围绕当前提供的机制与实现证据，不要多出）`
+        : `约 ${quota} 题`
 
   const taskLine = isModuleBatch
     ? `本次只分析项目的单个模块「${moduleLabel}」，请只针对该模块的代码生成实现细节级的面试题，section 的 title 以模块名开头（如「模块xxx：子主题」）。projectSummary 固定返回空字符串。`
@@ -182,42 +196,7 @@ ${quota === 0 ? `## 输出 JSON 结构
 
 // ---------- JSON 规范化 ----------
 
-interface RawQuestion {
-  title?: unknown
-  question?: unknown
-  answer?: unknown
-  followUps?: unknown
-}
-interface RawSection {
-  title?: unknown
-  summary?: unknown
-  questions?: unknown
-}
-interface RawResult {
-  projectSummary?: unknown
-  sections?: unknown
-  glossary?: unknown
-}
-
-function normalizeFollowUps(raw: unknown, depth: number): FollowUp[] {
-  if (!Array.isArray(raw) || depth > 2) return []
-  return raw
-    .map((item): FollowUp | null => {
-      if (!item || typeof item !== 'object') return null
-      const q = item as RawQuestion
-      const question = typeof q.question === 'string' ? q.question.trim() : ''
-      const answer = typeof q.answer === 'string' ? q.answer.trim() : ''
-      if (!question || !answer) return null
-      return { question, answer, followUps: normalizeFollowUps(q.followUps, depth + 1) }
-    })
-    .filter((f): f is FollowUp => f !== null)
-}
-
-type ParsedBatch = {
-  projectSummary: string
-  sections: Section[]
-  glossary: Record<string, string>
-}
+type ParsedBatch = ParsedGenerationBatch
 
 const PREVIEW_TOTAL_CHARS = RESULT_LIMITS.totalChars - 250_000
 
@@ -316,57 +295,6 @@ function makeGenerationPreview(
   return preview
 }
 
-export function normalizeParsed(raw: unknown, allowEmpty = false): ParsedBatch {
-  if (!raw || typeof raw !== 'object') throw new Error('模型输出不是 JSON 对象')
-  const obj = raw as RawResult
-  const projectSummary = typeof obj.projectSummary === 'string' ? obj.projectSummary.trim() : ''
-
-  const sections: Section[] = []
-  if (Array.isArray(obj.sections)) {
-    for (const s of obj.sections) {
-      if (!s || typeof s !== 'object') continue
-      const sec = s as RawSection
-      const title = typeof sec.title === 'string' && sec.title.trim() ? sec.title.trim() : '未命名主题'
-      const questions: QuestionItem[] = []
-      if (Array.isArray(sec.questions)) {
-        for (const q of sec.questions) {
-          if (!q || typeof q !== 'object') continue
-          const qo = q as RawQuestion
-          const question = typeof qo.question === 'string' ? qo.question.trim() : ''
-          const answer = typeof qo.answer === 'string' ? qo.answer.trim() : ''
-          if (!question || !answer) continue
-          const title = typeof qo.title === 'string'
-            ? qo.title.trim().replace(/[\r\n]+/g, ' ')
-            : ''
-          questions.push({
-            id: randomUUID(),
-            ...(title && title.length <= RESULT_LIMITS.questionTitle ? { title } : {}),
-            question,
-            answer,
-            followUps: normalizeFollowUps(qo.followUps, 1)
-          })
-        }
-      }
-      if (questions.length) {
-        sections.push({
-          id: randomUUID(),
-          title,
-          summary: typeof sec.summary === 'string' ? sec.summary.trim() : undefined,
-          questions
-        })
-      }
-    }
-  }
-  if (!sections.length && !allowEmpty) throw new Error('模型输出中没有有效的问题（sections 为空）')
-
-  const glossary: Record<string, string> = {}
-  if (obj.glossary && typeof obj.glossary === 'object') {
-    for (const [k, v] of Object.entries(obj.glossary as Record<string, unknown>)) {
-      if (typeof v === 'string' && v.trim()) Object.defineProperty(glossary, k, { value: v.trim(), enumerable: true, writable: true, configurable: true })
-    }
-  }
-  return { projectSummary, sections, glossary }
-}
 
 function batchQuestionCount(batch: ParsedBatch): number {
   return batch.sections.reduce((count, section) => count + section.questions.length, 0)
@@ -413,14 +341,20 @@ interface StreamingBatchState {
 /** 调用大模型并解析出结构化结果，失败自动带错误重试一次 */
 async function callForJson(
   profile: LlmProfile,
-  buildMessages: (contextLimit: number, repair?: { reply: string; error: string }) => ChatMessage[],
+  buildMessages: (contextLimit: number, repair?: { reply: string; error: string }, contextTextOverride?: string) => ChatMessage[],
   contextChars: number,
   minimumContextChars: number,
   budget: number,
   signal: AbortSignal,
   onRequestTruncation: () => void,
   inputTokenBudget: number,
+  requestAdapter: GenerationRequestAdapter | undefined,
+  acceptanceMode: GenerationRequestAcceptanceMode,
+  requestStage: GenerationRequestStage,
+  batchIndex: number,
+  batchLabel: string,
   onContextDispatch: GenerateParams['onContextDispatch'],
+  trace: GenerateParams['workflowTrace'],
   counters: {
     estimated: number; requests: number; repairs: number; compensationRequests: number; compensationPending: number
     usage: LlmUsage | null; usageCount: number; modelMs: number
@@ -429,21 +363,50 @@ async function callForJson(
   },
   streaming: StreamingBatchState
 ): Promise<ParsedBatch> {
+  const completeResponseMode = Boolean(requestAdapter && acceptanceMode === 'complete-response')
   let lastError = ''
   let previousReply = ''
+  const rejections: GenerationOutputRejection[] = []
   for (let attempt = 0; attempt < 2; attempt++) {
     if (signal.aborted) throw new Error('生成已取消。')
     const repair = attempt ? { reply: safeClipText(previousReply, 20_000), error: lastError } : undefined
     const fitted = fitMessages(buildMessages, contextChars, minimumContextChars, budget, repair, inputTokenBudget)
     if (fitted.contextLimit < contextChars) onRequestTruncation()
-    if (!validateMessageCharBudget(fitted.messages, budget)) throw new Error('模型请求内容超出支持范围。')
-    const estimated = estimateMessageTokens(fitted.messages)
+    let prepared: PreparedGenerationRequest | undefined
+    let messages = fitted.messages
+    let requestId: string | undefined
+    if (requestAdapter) {
+      requestId = randomUUID()
+      prepared = await requestAdapter.prepare({
+        requestId,
+        stage: attempt ? 'repair' : requestStage,
+        batchIndex,
+        label: batchLabel,
+        quota: Math.max(0, streaming.quota - batchQuestionCount(streaming.current)),
+        maxChars: budget,
+        maxInputTokens: inputTokenBudget,
+        signal,
+        buildMessages: (contextText) => buildMessages(fitted.contextLimit, repair, contextText)
+      })
+      if (!prepared || prepared.requestId !== requestId || prepared.stage !== (attempt ? 'repair' : requestStage) || !Array.isArray(prepared.messages)) {
+        throw new Error('模型请求准备失败。')
+      }
+      messages = [...prepared.messages]
+      if (!validateMessageCharBudget(messages, budget) || estimateMessageTokens(messages) > inputTokenBudget) {
+        throw new Error('模型请求内容超出支持范围。')
+      }
+      counters.pendingSelection = prepared.selection ? cloneRenderedSelection(prepared.selection) : null
+      // The prepared packet is final: never fit or mutate it after this point.
+    } else if (!validateMessageCharBudget(messages, budget)) throw new Error('模型请求内容超出支持范围。')
+    const estimated = estimateMessageTokens(messages)
     const requestStarted = Date.now()
     const parser = new InterviewJsonStream()
     streaming.preview(parser.preview())
     let formatFailure: unknown
+    let formatFailureReason: GenerationOutputFailureReason | undefined
     let receivedChars = 0
     let lastPreviewSent = 0
+    let deltaPreviewFailed = false
     const emitPreview = (force = false): void => {
       if (signal.aborted) return
       const now = Date.now()
@@ -451,11 +414,14 @@ async function callForJson(
       lastPreviewSent = now
       streaming.preview(parser.preview())
     }
-    const accept = async (fragment: StreamedInterviewQuestion): Promise<void> => {
+    const accept = async (
+      fragment: StreamedInterviewQuestion,
+      metadata: Pick<ParsedBatch, 'projectSummary' | 'glossary'> = parser.metadata()
+    ): Promise<void> => {
       if (signal.aborted) throw new LlmRequestError('cancelled')
       let normalized: ParsedBatch
       try {
-        normalized = normalizeParsed({ ...parser.metadata(), sections: [{ ...fragment.section, questions: [fragment.question] }] })
+        normalized = normalizeParsed({ ...metadata, sections: [{ ...fragment.section, questions: [fragment.question] }] })
       } catch { return } // Invalid objects do not become completed questions.
       const section = normalized.sections[0]
       const question = section.questions[0]
@@ -463,6 +429,10 @@ async function callForJson(
       if (streaming.excluded.has(key) || batchQuestionCount(streaming.current) >= streaming.quota) return
       const candidate = appendBatchQuestion(supplementMetadata(streaming.current, normalized), section, question)
       try { validateCheckpointBatch(candidate) } catch { throw new Error(RESULT_CONTRACT_MESSAGES.generated) }
+      if (requestAdapter && requestId) {
+        await requestAdapter.acceptQuestion({ requestId, rawQuestion: fragment.question, question })
+        if (signal.aborted) throw new LlmRequestError('cancelled')
+      }
       await streaming.save(candidate)
       if (signal.aborted) throw new LlmRequestError('cancelled')
       streaming.current = candidate
@@ -473,34 +443,78 @@ async function callForJson(
       if (!signal.aborted) streaming.activity(receivedChars, Date.now() - requestStarted)
     }, 5000)
     let reply: string
+    let requestSpanId: string | undefined
+    let requestCompleted = false
+    let requestUsage: LlmUsage | undefined
     try {
-      reply = await chatCompletionStream(profile, fitted.messages, async (delta) => {
+      const onDelta = async (delta: string): Promise<void> => {
         if (signal.aborted) throw new LlmRequestError('cancelled')
         receivedChars += delta.length
         let fragments: StreamedInterviewQuestion[] = []
-        if (formatFailure === undefined) {
+        let citationFailureThisChunk = false
+        if (completeResponseMode) {
+          if (!deltaPreviewFailed) {
+            try { fragments = parser.push(delta) }
+            catch { deltaPreviewFailed = true; parser.drain(); streaming.preview(undefined) }
+          }
+        } else if (formatFailure === undefined) {
           try { fragments = parser.push(delta) }
-          catch (error) { formatFailure = error; fragments = parser.drain(); streaming.preview(undefined) }
+          catch (error) { formatFailure = error; formatFailureReason = 'json-syntax'; fragments = parser.drain(); streaming.preview(undefined) }
         }
-        for (const fragment of fragments) await accept(fragment)
+        for (const fragment of completeResponseMode ? [] : fragments) {
+          if (citationFailureThisChunk) break
+          try { await accept(fragment) }
+          catch (error) {
+            if (error instanceof CitationValidationError) {
+              formatFailure = error
+              formatFailureReason = 'citation-invalid'
+              citationFailureThisChunk = true
+              streaming.preview(undefined)
+              break
+            }
+            throw error
+          }
+        }
         emitPreview(fragments.length > 0)
         streaming.activity(receivedChars, Date.now() - requestStarted)
-      }, {
+      }
+      const options: CallOptions = {
         signal, timeoutMs: 600_000,
         maxOutputTokens: profile.maxOutputTokens,
         includeUsage: true,
         onRequest: () => {
           counters.estimated += estimated; counters.requests++
+          if (trace) {
+            requestSpanId = `model-${counters.requests}`
+            observeTrace(trace, {
+              span: 'model', spanId: requestSpanId, parentSpanId: 'run-1',
+              component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started',
+              inputHashes: [sha256(messages)], budget: { inputTokens: estimated, requestNumber: counters.requests }
+            })
+          }
           if (attempt) counters.repairs++
           else if (counters.compensationPending > 0) { counters.compensationRequests++; counters.compensationPending-- }
           const selection = counters.pendingSelection
           if (selection) {
+            if (trace) {
+              observeTrace(trace, {
+                span: 'dispatch', spanId: `dispatch-${counters.requests}`, parentSpanId: requestSpanId,
+                component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started'
+              })
+              observeTrace(trace, {
+                span: 'dispatch', spanId: `dispatch-${counters.requests}`, parentSpanId: requestSpanId,
+                component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'succeeded',
+                inputHashes: [sha256(messages)], outputHashes: [sha256(selection)],
+                budget: { inputTokens: estimated, requestNumber: counters.requests }
+              })
+            }
             for (const filePath of selection.filePaths) counters.dispatchedFiles.add(filePath)
             counters.dispatchedRegions += selection.selectedRegions
             try { onContextDispatch?.(cloneRenderedSelection(selection)) } catch { /* Context observation cannot affect generation. */ }
           }
         },
         onUsage: (usage) => {
+          requestUsage = { ...usage }
           counters.usage = {
             inputTokens: (counters.usage?.inputTokens ?? 0) + usage.inputTokens,
             outputTokens: (counters.usage?.outputTokens ?? 0) + usage.outputTokens,
@@ -508,23 +522,72 @@ async function callForJson(
           }
           counters.usageCount++
         }
-      })
+      }
+      reply = requestAdapter && prepared
+        ? await requestAdapter.complete(prepared, onDelta, options)
+        : await chatCompletionStream(profile, messages, onDelta, options)
+      requestCompleted = true
     } catch (error) {
       streaming.preview(undefined)
       throw error
     } finally {
       clearInterval(timer)
       counters.modelMs += Date.now() - requestStarted
+      if (requestSpanId) observeTrace(trace, {
+        span: 'model', spanId: requestSpanId, parentSpanId: 'run-1',
+        component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION,
+        status: requestCompleted ? 'succeeded' : signal.aborted ? 'cancelled' : 'interrupted',
+        usage: requestUsage ? { ...requestUsage, complete: true } : {
+          complete: false, reason: requestCompleted ? 'provider-omitted' : 'stream-interrupted'
+        }
+      })
     }
     let parsed: ParsedBatch
     try {
-      if (formatFailure !== undefined) throw formatFailure
-      parsed = normalizeParsed(parser.finish(), true)
-      validateCheckpointBatch(parsed)
-      if (!batchQuestionCount(parsed) && !batchQuestionCount(streaming.current)) throw new Error('模型输出中没有有效的问题')
+      if (completeResponseMode) {
+        const inspection = inspectGenerationOutputText(reply)
+        if (inspection.kind === 'format-failure') {
+          formatFailureReason = inspection.reason
+          throw new Error('模型完整输出格式无效。')
+        }
+        parsed = inspection.batch
+        const metadata = { projectSummary: parsed.projectSummary, glossary: parsed.glossary }
+        for (const candidate of inspection.closed) {
+          try {
+            await accept({
+              sectionIndex: candidate.sectionIndex,
+              questionIndex: candidate.questionIndex,
+              section: candidate.section,
+              question: candidate.rawQuestion
+            }, metadata)
+          } catch (error) {
+            if (error instanceof CitationValidationError) {
+              formatFailure = error
+              formatFailureReason = 'citation-invalid'
+              break
+            }
+            throw error
+          }
+        }
+        if (formatFailure !== undefined) throw formatFailure
+      } else {
+        if (formatFailure !== undefined) throw formatFailure
+        let raw: unknown
+        try { raw = parser.finish() }
+        catch (error) { formatFailureReason = 'json-syntax'; throw error }
+        try { parsed = normalizeParsed(raw, true) }
+        catch (error) { formatFailureReason = 'normalized-structure-invalid'; throw error }
+        try { validateCheckpointBatch(parsed) }
+        catch (error) { formatFailureReason = 'checkpoint-invalid'; throw error }
+      }
+      if (!batchQuestionCount(parsed) && !batchQuestionCount(streaming.current)) {
+        formatFailureReason = 'empty-output'
+        throw new Error('模型输出中没有有效的问题')
+      }
     } catch (error) {
       lastError = error instanceof Error ? error.message : '结果格式无效'
       previousReply = reply
+      rejections.push({ reason: formatFailureReason ?? 'normalized-structure-invalid', attempt: (attempt + 1) as 1 | 2, stage: attempt ? 'repair' : requestStage, batchIndex, ...(requestId ? { requestId } : {}) })
       streaming.preview(undefined)
       continue
     }
@@ -538,7 +601,7 @@ async function callForJson(
     }
     return streaming.current
   }
-  throw new Error(`模型两次均未返回合法 JSON：${lastError}`)
+  throw new GenerationOutputError(`模型两次均未返回合法 JSON：${lastError}`, rejections)
 }
 
 const REQUEST_TRUNCATION_MARKER = `\n\n⚠️ ${CONTEXT_TRUNCATION_WARNING} 请只依据实际提供的上下文作答，不要假设已看到省略内容。`
@@ -576,6 +639,11 @@ function fitMessages(
 
 export async function generateInterview(params: GenerateParams): Promise<InterviewResult> {
   const { scan, granularity, roleFocus, profile, signal, onProgress } = params
+  const acceptanceModeValue: unknown = params.requestAdapter?.acceptanceMode
+  if (acceptanceModeValue !== undefined && acceptanceModeValue !== 'streaming' && acceptanceModeValue !== 'complete-response') {
+    throw new Error('生成请求策略无效。')
+  }
+  const acceptanceMode: GenerationRequestAcceptanceMode = acceptanceModeValue === 'complete-response' ? acceptanceModeValue : 'streaming'
   const startedAt = Date.now()
   const counters = {
     estimated: 0, requests: 0, repairs: 0, compensationRequests: 0, compensationPending: 0,
@@ -622,6 +690,9 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   let contextBuildMs = 0
 
   try {
+  observeTrace(params.workflowTrace, {
+    span: 'run', spanId: 'run-1', component: 'generator', componentVersion: CHECKPOINT_PROMPT_VERSION, status: 'started'
+  })
   try {
     assertProjectIdentityContract(scan.name, scan.root)
   } catch {
@@ -631,10 +702,25 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   reportProgress('构建项目上下文', `颗粒度：${GRANULARITY_META[granularity].label}`, 8)
   failedStage = 'context'
   const contextStarted = Date.now()
+  const contextProvider = params.contextProvider ?? staticContextProvider
+  observeTrace(params.workflowTrace, {
+    span: 'context', spanId: 'context-1', parentSpanId: 'run-1',
+    component: 'context-provider', componentVersion: contextProvider.id, status: 'started'
+  })
   const contextMaxChars = Math.min(CONTEXT_CHAR_BUDGETS[granularity], tokenBudget.inputTokens * 4)
-  let built: Awaited<ReturnType<typeof buildContext>>
+  let built: Awaited<ReturnType<ContextProvider['build']>>
   try {
-    built = await buildContext(scan, granularity, { maxChars: contextMaxChars, roleFocus, signal })
+    built = await contextProvider.build(scan, granularity, { maxChars: contextMaxChars, roleFocus, signal })
+    observeTrace(params.workflowTrace, {
+      span: 'context', spanId: 'context-1', parentSpanId: 'run-1',
+      component: 'context-provider', componentVersion: contextProvider.id, status: 'succeeded'
+    })
+  } catch (error) {
+    observeTrace(params.workflowTrace, {
+      span: 'context', spanId: 'context-1', parentSpanId: 'run-1',
+      component: 'context-provider', componentVersion: contextProvider.id, status: signal.aborted ? 'cancelled' : 'failed'
+    })
+    throw error
   } finally { contextBuildMs = Date.now() - contextStarted }
   if (signal.aborted) throw new Error('生成已取消。')
   for (const filePath of built.eligibleFilePaths ?? []) counters.eligibleFiles.add(filePath)
@@ -685,6 +771,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   )
 
   const checkpoint = params.checkpoint
+  if (params.requestAdapter && checkpoint) throw new Error('证据感知生成暂不支持旧版生成检查点。')
   const resumed = Boolean(checkpoint)
   let checkpointState: GenerationCheckpoint | undefined
   let checkpointEntries: GenerationCheckpoint['entries'] = []
@@ -791,14 +878,14 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         { ...built.batches[index], files: [] }
       ).length + REQUEST_TRUNCATION_MARKER.length
       let activeStream: StreamingBatchState | undefined
-      const makePrompt = (contextLimit: number, repair?: { reply: string; error: string }): ChatMessage[] => {
+      const makePrompt = (contextLimit: number, repair?: { reply: string; error: string }, contextTextOverride?: string): ChatMessage[] => {
         const bounded = renderBatchWithinBudget(
           built.headerText,
           built.treeText,
           built.batches[index],
           contextLimit,
           REQUEST_TRUNCATION_MARKER,
-          Boolean(params.onContextDispatch)
+          Boolean(params.onContextDispatch || params.workflowTrace)
         )
         counters.pendingSelection = bounded.selection ?? {
           filePaths: built.batches[index].files.map((file) => file.relPath),
@@ -808,7 +895,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
         const remaining = Math.max(0, quota - (activeStream ? batchQuestionCount(activeStream.current) : 0))
         const continuation = activeStream ? continuationInstruction(activeStream.current, remaining) : ''
         const userPrompt = buildUserPrompt({
-          contextText: bounded.text,
+          contextText: contextTextOverride ?? bounded.text,
           granularity,
           roleFocus,
           isModuleBatch: built.batches[index].kind === 'module',
@@ -817,6 +904,7 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
               ? built.batches[index].label.replace(/^模块「|」$/g, '')
               : undefined,
           quota: remaining,
+          evidenceAware: Boolean(params.requestAdapter),
           extraInstruction: [extraInstruction, continuation].filter(Boolean).join('\n') || undefined
         })
         const messages: ChatMessage[] = [
@@ -915,7 +1003,13 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
           signal,
           markRequestTruncation,
           tokenBudget.inputTokens,
+          params.requestAdapter,
+          acceptanceMode,
+          extraInstruction ? 'compensation' : 'generation',
+          index,
+          built.batches[index].label,
           params.onContextDispatch,
+          params.workflowTrace,
           counters,
           streaming
         )
@@ -984,16 +1078,32 @@ export async function generateInterview(params: GenerateParams): Promise<Intervi
   if (signal.aborted) throw new Error('生成已取消。')
   const diagnostics = makeDiagnostics('succeeded', undefined, contextBuildMs)
   result.generationDiagnostics = diagnostics
-  try { assertInterviewResultContract(result) } catch { throw new Error(RESULT_CONTRACT_MESSAGES.generated) }
+  observeTrace(params.workflowTrace, {
+    span: 'validation', spanId: 'validation-1', parentSpanId: 'run-1',
+    component: 'result-contract', componentVersion: '1', status: 'started'
+  })
+  try { assertInterviewResultContract(result) } catch {
+    observeTrace(params.workflowTrace, {
+      span: 'validation', spanId: 'validation-1', parentSpanId: 'run-1',
+      component: 'result-contract', componentVersion: '1', status: 'failed'
+    })
+    throw new Error(RESULT_CONTRACT_MESSAGES.generated)
+  }
+  observeTrace(params.workflowTrace, {
+    span: 'validation', spanId: 'validation-1', parentSpanId: 'run-1',
+    component: 'result-contract', componentVersion: '1', status: 'succeeded'
+  })
   reportProgress('完成', undefined, 100)
   if (signal.aborted) throw new Error('生成已取消。')
   notifyDiagnostics(diagnostics)
+  finishTrace(params.workflowTrace, 'succeeded')
   return result
   } catch (error) {
     const status = signal.aborted || (error instanceof Error && error.name === 'LlmRequestError' && error.message === '请求已取消。')
       ? 'cancelled'
       : 'failed'
     notifyDiagnostics(makeDiagnostics(status, failedStage, contextBuildMs))
+    finishTrace(params.workflowTrace, status)
     if (error instanceof Error && [
       '模型请求固定上下文超出支持范围。',
       '模型请求固定指令超出支持范围。',
@@ -1055,38 +1165,7 @@ export async function mergeWithCompensation(
   maxCompensationRounds = 2
 ): Promise<MergeResult> {
   const { budget, batches, quotas, total, requestBatch, onBatch, onCompensate, signal } = input
-  const merged: MergeResult = {
-    projectSummary: '',
-    sections: [],
-    glossary: {},
-    droppedByQuota: 0,
-    compensated: 0,
-    compensationRounds: 0,
-    collected: 0,
-    duplicates: 0,
-  }
-  /** 每批实际贡献的题量，用于挑出"给得最少"的批次做补偿 */
-  const delivered = quotas.map(() => 0)
-  const seen = new Set<string>()
-  const retainedByBatch: Section[][] = quotas.map(() => [])
-
-  const absorb = (parsed: ParsedBatch, quota: number, index: number): number => {
-    const unique = selectUniqueQuestions(parsed.sections, quota, seen)
-    merged.droppedByQuota += unique.dropped
-    merged.duplicates += unique.duplicates
-    if (unique.kept > 0) {
-      if (!merged.projectSummary && parsed.projectSummary) merged.projectSummary = parsed.projectSummary
-      merged.sections.push(...unique.sections)
-      retainedByBatch[index].push(...unique.sections)
-      const retainedGlossary = pruneGlossary(parsed.glossary, unique.sections)
-      for (const [term, definition] of Object.entries(retainedGlossary)) {
-        if (!Object.hasOwn(merged.glossary, term)) merged.glossary[term] = definition
-      }
-    }
-    delivered[index] += unique.kept
-    merged.collected += unique.kept
-    return unique.kept
-  }
+  let state = createGenerationMergeState(quotas.length)
 
   for (let i = 0; i < batches.length; i++) {
     if (signal?.aborted) throw new LlmRequestError('cancelled')
@@ -1094,126 +1173,54 @@ export async function mergeWithCompensation(
     const span = 1 / Math.max(1, batches.length)
     onBatch?.(
       i,
-      `本批目标 ${quota} 题，累计 ${merged.collected}/${total} 题（预算 ${budget.min}–${budget.max}）`,
+      `本批目标 ${quota} 题，累计 ${state.collected}/${total} 题（预算 ${budget.min}–${budget.max}）`,
       i * span
     )
     const parsed = await requestBatch(i, quota)
-    const kept = absorb(parsed, quota, i)
+    const absorbed = absorbGenerationBatch({ state, slotIndex: i, quota, batch: parsed, role: 'initial' })
+    state = absorbed.state
+    const kept = absorbed.kept
     onBatch?.(
       i,
-      `本批 ${kept}/${quota} 题${kept < quota ? `（少 ${quota - kept} 题）` : ''}，累计 ${merged.collected} 题`,
+      `本批 ${kept}/${quota} 题${kept < quota ? `（少 ${quota - kept} 题）` : ''}，累计 ${state.collected} 题`,
       (i + 1) * span
     )
   }
 
-  // 补偿：总量低于下限时，挑贡献最少的批次补一次，只要求补足缺口。
+  // Keep the cancellation fence on every legacy iteration, even when the
+  // previous request filled the gap and this iteration will make no request.
   for (let round = 0; round < maxCompensationRounds; round++) {
     if (signal?.aborted) throw new LlmRequestError('cancelled')
-    const gap = budget.min - merged.collected
-    if (gap <= 0) break
-    let target = 0
-    for (let i = 1; i < delivered.length; i++) {
-      if (delivered[i] < delivered[target]) target = i
-    }
-    if (!batches.length) break
-    const ask = Math.min(gap, MAX_QUESTIONS_PER_BATCH)
+    const next = nextGenerationCompensation({ state, minimum: budget.min, maxRounds: maxCompensationRounds })
+    if (!next || !batches.length) break
     onCompensate?.(
-      `第 ${round + 1} 轮：累计 ${merged.collected} 题，比下限少 ${gap} 题，向「${batches[target].label}」补充请求 ${ask} 题`
+      `第 ${next.round} 轮：累计 ${state.collected} 题，比下限少 ${next.gap} 题，向「${batches[next.slotIndex].label}」补充请求 ${next.ask} 题`
     )
-    merged.compensationRounds++
+    state = next.startedState
     try {
-      const parsed = await requestBatch(
-        target,
-        ask,
-        buildCompensationInstruction({
-          delivered: delivered[target],
-          gap,
-          ask,
-          sections: [...retainedByBatch[target], ...retainedByBatch.flatMap((sections, index) =>
-            index === target ? [] : sections
-          )]
-        })
-      )
-      merged.compensated += absorb(parsed, ask, target)
+      const parsed = await requestBatch(next.slotIndex, next.ask, next.instruction)
+      state = absorbGenerationBatch({ state, slotIndex: next.slotIndex, quota: next.ask, batch: parsed, role: 'compensation' }).state
     } catch (error) {
       if (signal?.aborted) throw error
       if (input.checkpointResume) throw error
       // Timeouts need to reach the main IPC layer so it can surface the explicit
       // timeout state; ordinary compensation failures remain best-effort.
-      if (isLlmTimeoutError(error)) throw error
+      if (isLlmTimeoutError(error) || error instanceof WorkflowError && error.code === 'timeout') throw error
       // 补偿属于尽力而为：失败不应让整个生成流程失败，已有结果照常返回
       break
     }
   }
 
-  return merged
-}
-
-/**
- * 只保留被最终结果真正引用的名词解释。
- *
- * 裁剪题量后，被丢弃的题里标记过的名词会变成"有解释但没人引用"的孤儿词条；
- * 提示词要求 glossary 覆盖所有 [[ ]] 标记，因此模型每批都会带上自己的词条，
- * 多批合并后会明显膨胀（旧行为下 115 题可产出上千词条，而 IPC 校验对对象键数
- * 有 256 的上限，会导致导出被拒）。这里按最终 sections 里实际出现的标记收敛。
- *
- * 只做删减、不做补全：渲染层对缺失词条有 AI 现取作为兜底。
- */
-export function collectReferencedTerms(sections: Section[]): Set<string> {
-  const terms = new Set<string>()
-  const fromText = (text: string): void => {
-    for (const match of text.matchAll(/\[\[([^\[\]]+)\]\]/g)) terms.add(match[1])
+  return {
+    projectSummary: state.projectSummary,
+    sections: [...state.sections],
+    glossary: { ...state.glossary },
+    droppedByQuota: state.droppedByQuota,
+    compensated: state.compensated,
+    compensationRounds: state.compensationRounds,
+    collected: state.collected,
+    duplicates: state.duplicates
   }
-  const walkFollowUps = (list: FollowUp[]): void => {
-    for (const f of list) {
-      fromText(f.question)
-      fromText(f.answer)
-      if (f.followUps?.length) walkFollowUps(f.followUps)
-    }
-  }
-  for (const section of sections) {
-    for (const q of section.questions) {
-      fromText(q.question)
-      fromText(q.answer)
-      walkFollowUps(q.followUps)
-    }
-  }
-  return terms
-}
-
-export function pruneGlossary(glossary: Record<string, string>, sections: Section[]): Record<string, string> {
-  const referenced = collectReferencedTerms(sections)
-  const pruned: Record<string, string> = {}
-  for (const [term, definition] of Object.entries(glossary)) {
-    if (referenced.has(term)) pruned[term] = definition
-  }
-  return pruned
-}
-
-/**
- * 把总题量压到上限以内：从题量最少的 section 开始整段移除。
- * 整段移除而不是删单题，是为了不留下"半截"主题；同题量时按原顺序靠后者先移除，保证确定性。
- */
-export function capSectionsToMax(sections: Section[], max: number): { sections: Section[]; dropped: number } {
-  let total = sections.reduce((a, s) => a + s.questions.length, 0)
-  if (total <= max) return { sections, dropped: 0 }
-
-  const indexed = sections.map((section, index) => ({ section, index }))
-  indexed.sort((a, b) => {
-    const bySize = a.section.questions.length - b.section.questions.length
-    return bySize !== 0 ? bySize : b.index - a.index
-  })
-
-  const removed = new Set<number>()
-  let dropped = 0
-  for (const { section, index } of indexed) {
-    if (total <= max) break
-    removed.add(index)
-    total -= section.questions.length
-    dropped += section.questions.length
-  }
-
-  return { sections: sections.filter((_s, i) => !removed.has(i)), dropped }
 }
 
 /** 仅用于点词弹卡的详细解释，不改变报告问题、答案或术语表。 */

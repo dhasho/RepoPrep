@@ -36,6 +36,32 @@ function assertKind(error: unknown, kind: LlmRequestError['kind']): void {
   assert.equal(error.kind, kind)
 }
 
+test('a blocking admission guard prevents fetch and preserves its safe failure', async () => {
+  let fetched = 0
+  let observed = 0
+  const guardFailure = new Error('Request admission rejected.')
+  await withFetch(async () => { fetched++; return jsonResponse() }, async () => {
+    await assert.rejects(chatCompletionStream(profile, messages, () => {}, {
+      beforeRequest: () => { throw guardFailure },
+      onRequest: () => { observed++ }
+    }), error => error === guardFailure)
+  })
+  assert.equal(fetched, 0)
+  assert.equal(observed, 0)
+})
+
+test('cancellation inside the admission guard prevents fetch', async () => {
+  let fetched = 0
+  const controller = new AbortController()
+  await withFetch(async () => { fetched++; return jsonResponse() }, async () => {
+    await assert.rejects(chatCompletion(profile, messages, {
+      signal: controller.signal,
+      beforeRequest: () => controller.abort()
+    }), error => { assertKind(error, 'cancelled'); return true })
+  })
+  assert.equal(fetched, 0)
+})
+
 type FakeTimer = { callback: () => void; delay: number; cleared: boolean }
 async function withFakeTimers(run: (timers: FakeTimer[]) => Promise<void>): Promise<void> {
   const originalSetTimeout = globalThis.setTimeout
@@ -91,6 +117,7 @@ test('success and HTTP failures release response readers and never expose provid
   }, async () => {
     await assert.rejects(chatCompletion(profile, messages), (error: unknown) => {
       assertKind(error, 'http')
+      assert.deepEqual((error as LlmRequestError).modelFailure, { kind: 'http', httpStatus: 401 })
       assert.doesNotMatch((error as Error).message, /UPSTREAM_SECRET|private\.example|secret-key/)
       assert.match((error as Error).message, /401/)
       return true
@@ -107,6 +134,7 @@ test('unrelated AbortError is a network failure, while an already-aborted caller
   }, async () => {
     await assert.rejects(chatCompletion(profile, messages), (error: unknown) => {
       assertKind(error, 'network')
+      assert.deepEqual((error as LlmRequestError).modelFailure, { kind: 'network' })
       assert.doesNotMatch((error as Error).message, /upstream/)
       return true
     })
@@ -118,6 +146,7 @@ test('unrelated AbortError is a network failure, while an already-aborted caller
   await withFetch(async () => { fetchCalls++; return jsonResponse() }, async () => {
     await assert.rejects(chatCompletion(profile, messages, { signal: controller.signal }), (error: unknown) => {
       assertKind(error, 'cancelled')
+      assert.deepEqual((error as LlmRequestError).modelFailure, { kind: 'cancelled' })
       return true
     })
   })
@@ -237,6 +266,7 @@ test('timeout and user cancellation race are first-wins even if fetch ignores ab
       pendingFetch.resolve(jsonResponse('late success'))
       await assert.rejects(pending, (error: unknown) => {
         assertKind(error, 'timeout')
+        assert.deepEqual((error as LlmRequestError).modelFailure, { kind: 'timeout' })
         assert.equal(isLlmTimeoutError(error), true)
         return true
       })

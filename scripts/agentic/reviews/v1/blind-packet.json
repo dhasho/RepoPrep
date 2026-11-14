@@ -1,0 +1,2062 @@
+{
+  "schemaVersion": 1,
+  "protocol": "agent-review-v1",
+  "projects": [
+    {
+      "id": "py-cache",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Fast cache\nThe cache uses a fixed 60 second timeout.\n",
+          "sha256": "701bc62c267fd86ac467db654cf252d558f7f35a6a0b966e0020933be1b025ff"
+        },
+        {
+          "path": "settings.py",
+          "content": "TTL_SECONDS = 60\nMAX_ENTRIES = 3\n",
+          "sha256": "faae65212c66b82a65bc71d256f53602d48835a0f74692870f87a5480a6c67ef"
+        },
+        {
+          "path": "cache.py",
+          "content": "from time import monotonic\nfrom settings import TTL_SECONDS, MAX_ENTRIES\n\nclass Cache:\n    def __init__(self):\n        self.items = {}\n\n    def put(self, key, value):\n        self.items[key] = (value, monotonic())\n        if len(self.items) > MAX_ENTRIES:\n            oldest = min(self.items, key=lambda item: self.items[item][1])\n            del self.items[oldest]\n\n    def get(self, key):\n        entry = self.items.get(key)\n        if entry is None:\n            return None\n        value, created = entry\n        if monotonic() - created >= TTL_SECONDS:\n            del self.items[key]\n            return None\n        return value\n",
+          "sha256": "bdd9658b59f734411be02a75742f40a20c2433e29422cd292e2b4b3a141f5f2f"
+        },
+        {
+          "path": "service.py",
+          "content": "from cache import Cache\n\n_cache = Cache()\n\ndef load(key, fetch):\n    cached = _cache.get(key)\n    if cached is not None:\n        return cached\n    value = fetch(key)\n    _cache.put(key, value)\n    return value\n",
+          "sha256": "5f69473a202b507964cf1e1ddf9bec93b828a80e22efed0657e68aaa7fe48c7f"
+        }
+      ],
+      "contentSha256": "3573a045a2f465a5a9f2351613ed97f672b6a20af3eb3ecb63bca37de8b5a263"
+    },
+    {
+      "id": "py-retry",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Retry client\nNetwork retries wait a constant interval.\n",
+          "sha256": "b6609ab38402706ea9941b205e28324d417a6d84bef8627a26bbdbd9166c81e1"
+        },
+        {
+          "path": "config.py",
+          "content": "ATTEMPTS = 4\nBASE_DELAY = 0.05\n",
+          "sha256": "9e410f6ee647764a42e2aadc5bb2aeab21fe040f642d4e4e45f5ad29f06c9c42"
+        },
+        {
+          "path": "transport.py",
+          "content": "class TemporaryFailure(Exception):\n    pass\n\nclass PermanentFailure(Exception):\n    pass\n\ndef send(request):\n    if request.get(\"broken\"):\n        raise PermanentFailure(\"invalid request\")\n    if request.get(\"busy\"):\n        raise TemporaryFailure(\"busy\")\n    return {\"ok\": True}\n",
+          "sha256": "3ac6cf144f2913e19689ad36da772b7b82cd9be35035c31eb364a01b2c0e2775"
+        },
+        {
+          "path": "client.py",
+          "content": "from time import sleep\nfrom config import ATTEMPTS, BASE_DELAY\nfrom transport import TemporaryFailure, send\n\ndef request(payload):\n    for attempt in range(ATTEMPTS):\n        try:\n            return send(payload)\n        except TemporaryFailure:\n            if attempt + 1 == ATTEMPTS:\n                raise\n            sleep(BASE_DELAY * (2 ** attempt))\n",
+          "sha256": "6bad950901b4c51d5f1eceeee4f3bba8f72e3b6719b651c46dd4faac2fdab70d"
+        }
+      ],
+      "contentSha256": "2badd6bca34412644a8089434245a84d4106a6bc71accd80b62b5029658c6546"
+    },
+    {
+      "id": "py-permissions",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Permission helper\nAdmins always inherit access to every resource.\n",
+          "sha256": "7f0ac322cb201f009ea72ad5dc942dc45cfcb2fb475b74c6e55b30e47a0df07a"
+        },
+        {
+          "path": "policy.py",
+          "content": "DEFAULT_ROLE = \"reader\"\n",
+          "sha256": "49139c64c656b2050734e80fb59da248714f68ff68b9980f9289d23c9fc700a6"
+        },
+        {
+          "path": "roles.py",
+          "content": "from policy import DEFAULT_ROLE\n\nclass Principal:\n    def __init__(self, name, role=None):\n        self.name = name\n        self.role = role or DEFAULT_ROLE\n\nclass Admin(Principal):\n    def __init__(self, name):\n        super().__init__(name, \"admin\")\n\nclass Resource:\n    def __init__(self, owner):\n        self.owner = owner\n",
+          "sha256": "04c839af54ad6c380c54f1b4031b8698960b27fc2d7370128b8e4bc30bf841e8"
+        },
+        {
+          "path": "access.py",
+          "content": "from roles import Admin\n\ndef can_write(principal, resource):\n    if principal.name == resource.owner:\n        return True\n    return isinstance(principal, Admin)\n\ndef can_read(principal, resource):\n    return principal.name == resource.owner or principal.role in {\"reader\", \"admin\"}\n",
+          "sha256": "f2fcebe13d79b35ef2296be35693b2b145d4b2f2ab993e54e1576c949f3d063d"
+        }
+      ],
+      "contentSha256": "d45c89c39543f9671318576b062e9b638d5ed66e8d52bad16610ac00c04e6ee2"
+    },
+    {
+      "id": "py-importer",
+      "language": "Python",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Import worker\nMalformed records stop the import.\n",
+          "sha256": "a1b2a24a047d5e999b5dc62212322ee1c747ac584301c0d20a4fb672b087bda6"
+        },
+        {
+          "path": "config.py",
+          "content": "STRICT = True\n",
+          "sha256": "70eb8e364442289ae44f6e7e9ef9741647cc9f4a89c30aa19cd27d96561d8664"
+        },
+        {
+          "path": "parser.py",
+          "content": "def parse(line):\n    name, raw = line.split(\":\")\n    return name, int(raw)\n",
+          "sha256": "cab57cfd377dde27e9b67d8f153254a9f3a449e9ad91ae533014a07481b8ab39"
+        },
+        {
+          "path": "worker.py",
+          "content": "from parser import parse\n\ndef import_lines(lines, on_error):\n    accepted = []\n    rejected = 0\n    for line in lines:\n        try:\n            name, amount = parse(line)\n        except (ValueError, TypeError) as error:\n            rejected += 1\n            on_error(line, error)\n            continue\n        accepted.append({\"name\": name, \"amount\": amount})\n    return accepted, rejected\n",
+          "sha256": "168458774a4e472009e3800c48433e680d18cc4a1b59d1fe0252d165c6e5cd6d"
+        }
+      ],
+      "contentSha256": "dd5517c5424e32f517377dce9f562cb48f57c0e8a9320718c35dd18ce72ddeda"
+    },
+    {
+      "id": "js-queue",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Work queue\nThe queue retries every failed job three times.\n",
+          "sha256": "559207c1af3551878d233866205f970f304b62b68f7cba38920e2cce5733121a"
+        },
+        {
+          "path": "config.js",
+          "content": "export const maxPending = 2\n",
+          "sha256": "deb7c4e801c219a4dcdc0d4f6a967cb941ba0292226b2041af2a47ae1ed6bbf9"
+        },
+        {
+          "path": "queue.js",
+          "content": "import { maxPending } from './config.js'\n\nexport class Queue {\n  constructor() { this.pending = []; this.running = false }\n  add(job) {\n    if (this.pending.length >= maxPending) return false\n    this.pending.push(job)\n    return true\n  }\n  async drain(run, onDone) {\n    if (this.running) return\n    this.running = true\n    try {\n      while (this.pending.length) {\n        const job = this.pending.shift()\n        try { onDone(job, await run(job), null) }\n        catch (error) { onDone(job, null, error) }\n      }\n    } finally { this.running = false }\n  }\n}\n",
+          "sha256": "69c0d78f17219a83f2791d62c72c57e96e4b9457835baf2dd16b271dba6bb0f8"
+        },
+        {
+          "path": "service.js",
+          "content": "import { Queue } from './queue.js'\nexport const queue = new Queue()\nexport const submit = (job, run, done) => {\n  if (!queue.add(job)) return Promise.resolve(false)\n  return queue.drain(run, done).then(() => true)\n}\n",
+          "sha256": "8d86f99d9b406e01e927a8d9b6db285c965c82743a81a16cf2b565cade971e9a"
+        }
+      ],
+      "contentSha256": "974ae166e72bcdeaa66401cf985bcdb71766a3982be319a6132dbb12b6f5e425"
+    },
+    {
+      "id": "js-pricing",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Price calculator\nAll discounts are applied before tax.\n",
+          "sha256": "0b62cd3ea35c9128f0447040cd3108908eba5d3eefe100c6655a801f9132ace3"
+        },
+        {
+          "path": "config.js",
+          "content": "export const taxRate = 0.1\nexport const memberRate = 0.2\n",
+          "sha256": "7db88df8f09a9562f0218a971e301a8764e73f696b033cb4fdead37e05de8c66"
+        },
+        {
+          "path": "discount.js",
+          "content": "export function discount(subtotal, member) {\n  if (!member || subtotal < 100) return 0\n  return Math.min(subtotal * 0.2, 30)\n}\n",
+          "sha256": "fce8b84f093a89e9e405f84828ab14d8d86ef8285dfc89691da5f573140279ae"
+        },
+        {
+          "path": "checkout.js",
+          "content": "import { taxRate } from './config.js'\nimport { discount } from './discount.js'\nexport function total(subtotal, member) {\n  const afterDiscount = subtotal - discount(subtotal, member)\n  return Number((afterDiscount * (1 + taxRate)).toFixed(2))\n}\n",
+          "sha256": "cec0b395ef59a05de79ee4f2700a30a2479d075901385c845a5787d02986b8ba"
+        }
+      ],
+      "contentSha256": "8f568ac3c56731fe3521aa06a422dd8f97b718b3c728d75b25724b9ac575b10e"
+    },
+    {
+      "id": "js-router",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Request router\nA missing route returns a 404 response.\n",
+          "sha256": "1fd06703ca499549e063cbfdad87b5d9931f153421fb862f990ffe00a9d213a1"
+        },
+        {
+          "path": "routes.js",
+          "content": "export const routes = new Map([\n  ['/health', () => ({ status: 200, body: 'ok' })],\n  ['/items', () => ({ status: 200, body: 'items' })]\n])\n",
+          "sha256": "c65654d2008d4064616999df4085f8e747ca0cb7b0e30b3d7b9aff5213024904"
+        },
+        {
+          "path": "router.js",
+          "content": "import { routes } from './routes.js'\nexport function dispatch(path, send) {\n  const handler = routes.get(path)\n  if (!handler) return send({ status: 404, body: 'missing' })\n  try { return send(handler()) }\n  catch (error) { return send({ status: 500, body: 'failed' }) }\n}\n",
+          "sha256": "4c7cd17b9336ca317f47aec38069375a0ec538c1078f8b2197127f5a11f5775e"
+        },
+        {
+          "path": "server.js",
+          "content": "import { dispatch } from './router.js'\nexport const handle = (request, send) => dispatch(request.path, send)\n",
+          "sha256": "bc181e2077e8297a0c923da2431a3c60d9f2a5103d71176b376c918c37a3f228"
+        }
+      ],
+      "contentSha256": "eb98cfa022ad8705d3bc85aca1979d692efbc7c7443d1ba0c3e59d4323c404a3"
+    },
+    {
+      "id": "js-config",
+      "language": "JavaScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Feature switch\nThe production flag defaults to false.\n",
+          "sha256": "83eeecfe6326cdf985f3ec92f3d3390a91464e06a5f98a9e86b46f4d7295fad4"
+        },
+        {
+          "path": "settings.json",
+          "content": "{\"enabled\":false,\"rollout\":25}\n",
+          "sha256": "d45573ab418a4eb7c067c2f70dcaa0b6875a6de550bd38cb54fc924721c89dc5"
+        },
+        {
+          "path": "feature.js",
+          "content": "export function isEnabled(settings, userId) {\n  if (settings.enabled !== true) return false\n  if (settings.rollout >= 100) return true\n  if (settings.rollout <= 0) return false\n  const bucket = [...userId].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 100\n  return bucket < settings.rollout\n}\n",
+          "sha256": "3ad43b2d452976839a285c0bb57aa42f4e59ddb423471a5b2f45bdc12578cd86"
+        },
+        {
+          "path": "controller.js",
+          "content": "import { isEnabled } from './feature.js'\nexport function response(settings, userId) {\n  return isEnabled(settings, userId) ? 'new' : 'old'\n}\n",
+          "sha256": "7724c9c4655a4a954eb651718da875788626cea9e22150835f623f4aabcddf18"
+        }
+      ],
+      "contentSha256": "d0a36b330281d3f3f09a6dff5e14bec08d981f3e189d55a5e42b9a5c646ac146"
+    },
+    {
+      "id": "ts-events",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Event dispatcher\nListener exceptions are swallowed and delivery continues.\n",
+          "sha256": "67eebbb77d7ac4e1dae38c733596e14c8f048fcb2681a8d6d3aacbd912ddfeb0"
+        },
+        {
+          "path": "types.ts",
+          "content": "export type Listener<T> = (event: T) => void\n",
+          "sha256": "4a8106681c60ad8be5e0878547944f0e5c13773e7ed96773aa60a310f8c7bf03"
+        },
+        {
+          "path": "emitter.ts",
+          "content": "import type { Listener } from './types.js'\nexport class Emitter<T> {\n  private listeners = new Set<Listener<T>>()\n  subscribe(listener: Listener<T>): () => void {\n    this.listeners.add(listener)\n    return () => this.listeners.delete(listener)\n  }\n  emit(event: T): number {\n    let failures = 0\n    for (const listener of [...this.listeners]) {\n      try { listener(event) }\n      catch { failures += 1 }\n    }\n    return failures\n  }\n}\n",
+          "sha256": "7d43bd2044937fc1daedd9e3ccfbd5f7e87d04ad27b20734057fde33560b31d3"
+        },
+        {
+          "path": "app.ts",
+          "content": "import { Emitter } from './emitter.js'\nexport const events = new Emitter<string>()\n",
+          "sha256": "2643b88a9b8da802fbbc3d7ac0f2978f8fb9caf77ecb6eeaa5d7a4ce84d25884"
+        }
+      ],
+      "contentSha256": "836e4c13bf154a9e100b1f7da7ad438b54707490fe559b659058d1d848638739"
+    },
+    {
+      "id": "ts-inventory",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Inventory\nAvailable stock can never be negative.\n",
+          "sha256": "154f331ccfe357080c8e92ee4d9e969d8a1d8a7e97edfc4a12a61c05d5736693"
+        },
+        {
+          "path": "config.ts",
+          "content": "export const warningThreshold = 5\n",
+          "sha256": "3c3f883136ff38074db8dd36ec5857d1d3ca577468e9a0b047db7d8a1055e1f0"
+        },
+        {
+          "path": "base.ts",
+          "content": "export class StockRecord {\n  constructor(public readonly sku: string, protected quantity: number) {}\n  available(): number { return this.quantity }\n}\n",
+          "sha256": "8b826e3ad55ab86fc9aff1d6cca3934794f53858a974ec800221319893f7648e"
+        },
+        {
+          "path": "warehouse.ts",
+          "content": "import { StockRecord } from './base.js'\nimport { warningThreshold } from './config.js'\nexport class WarehouseStock extends StockRecord {\n  reserve(count: number): boolean {\n    if (!Number.isInteger(count) || count <= 0 || count > this.quantity) return false\n    this.quantity -= count\n    return true\n  }\n  needsRestock(): boolean { return this.quantity < warningThreshold }\n}\n",
+          "sha256": "9845c93fd7cca86e4fc1a8d2736cbb44fba8dc6fe224fba8d5e8ca482b28551a"
+        }
+      ],
+      "contentSha256": "8ee8031163cc9a180c0b675e8ecab953352444afa6fb13e24ecab981808e12b1"
+    },
+    {
+      "id": "ts-session",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Session tokens\nExpired sessions are refreshed automatically.\n",
+          "sha256": "3b25ce41f45d34dbce102a045a4bf09a4add01498a0cd90833225ffe66b10b3a"
+        },
+        {
+          "path": "config.ts",
+          "content": "export const lifetimeMs = 1000\n",
+          "sha256": "61e89c105b1582851bbb420865ab3ad0b4e1e82d0134e9fe22337eb6cf288208"
+        },
+        {
+          "path": "session.ts",
+          "content": "import { lifetimeMs } from './config.js'\nexport type Session = { token: string; expiresAt: number }\nexport function valid(session: Session, now: number): boolean {\n  return Boolean(session.token) && session.expiresAt > now\n}\nexport function issue(token: string, now: number): Session {\n  return { token, expiresAt: now + lifetimeMs }\n}\n",
+          "sha256": "d28ec124791135e50c0a997e0c6bce869f408f3362e9defbc354172d126ac951"
+        },
+        {
+          "path": "guard.ts",
+          "content": "import { valid, type Session } from './session.js'\nexport function authorize(session: Session, now: number, next: () => void): boolean {\n  if (!valid(session, now)) return false\n  next()\n  return true\n}\n",
+          "sha256": "a42100afea70708a8a7433de3d8ee21fab1ccc1fcf96e0bcc9a02fe28a0def3d"
+        }
+      ],
+      "contentSha256": "1ad1c3fdbee5406c90151a930ec9a3c375d32633c77c8b55416f7a7cb3a629bb"
+    },
+    {
+      "id": "ts-parser",
+      "language": "TypeScript",
+      "sourceKind": "authored-fixture",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# CSV parser\nRows with missing columns are rejected.\n",
+          "sha256": "112ecf280b9932b6f702d0eda3f87255c4f95e7c4ec970550795d99185f817b4"
+        },
+        {
+          "path": "schema.ts",
+          "content": "export const columns = ['id', 'amount'] as const\n",
+          "sha256": "2bb05a4924d06557c54b963774500c4c703bb2bb86663aa1490e7b98318bdca3"
+        },
+        {
+          "path": "parse.ts",
+          "content": "import { columns } from './schema.js'\nexport type Row = { id: string; amount: number }\nexport function parseRow(cells: string[]): Row | null {\n  if (cells.length !== columns.length) return null\n  const amount = Number(cells[1])\n  if (!Number.isFinite(amount)) return null\n  return { id: cells[0].trim(), amount }\n}\n",
+          "sha256": "4596cc9ee88fff6533066ea7ba2725dc20b2fe768ef3b18d04712601baa23959"
+        },
+        {
+          "path": "import.ts",
+          "content": "import { parseRow, type Row } from './parse.js'\nexport function importRows(lines: string[], onInvalid: (line: string) => void): Row[] {\n  const rows: Row[] = []\n  for (const line of lines) {\n    const row = parseRow(line.split(','))\n    if (row) rows.push(row)\n    else onInvalid(line)\n  }\n  return rows\n}\n",
+          "sha256": "99a545eefb223841057de32991d115c5e7caa2736ce99b42dee21ec023c8e4d9"
+        }
+      ],
+      "contentSha256": "c6b5b59c55151e0216dd89ea58bc7bdd6f061f08e2a250319f956addbbd28c66"
+    }
+  ],
+  "samples": [
+    {
+      "id": "sample-73a8d0aaf19d",
+      "projectId": "js-queue",
+      "question": "Does queue drain stop after a job rejects? (case 2)",
+      "answer": "The catch calls onDone with the error, then the while loop continues to pending jobs.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in queue.js lines 10-19."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 10,
+          "endLine": 19,
+          "sha256": "762eedd082c6a56e4d07caca5d7dc4e1e50cae305aa67bd36d9026ff9571158e"
+        }
+      ],
+      "answerFingerprint": "f0e4a51fe4c60ecbbeea56f2c789dc65ed05993e6e8431cf0b77064cec4550f7"
+    },
+    {
+      "id": "sample-41257ce68bf4",
+      "projectId": "ts-session",
+      "question": "How is the expiry timestamp created?",
+      "answer": "issue adds lifetimeMs to now and returns that as expiresAt.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in session.ts lines 6-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 6,
+          "endLine": 8,
+          "sha256": "d15fad2cb11566f84fa01632491892afddc94a840d0920f44bdc8b418c01eb67"
+        }
+      ],
+      "answerFingerprint": "2bed95e51c5c50565723c2cfbbf651e4ba0fdef200cd5d9a20f93de67ca5b036"
+    },
+    {
+      "id": "sample-6aec8fc7dd6a",
+      "projectId": "ts-parser",
+      "question": "What row shape does parseRow accept? (case 2)",
+      "answer": "It accepts any number of cells and parses the first cell as the amount.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in parse.ts lines 3-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8,
+          "sha256": "663a61094a890393803b0411bb73f61a21599d6f21e5227f5082cd8e396cc7b9"
+        }
+      ],
+      "answerFingerprint": "2bf43e094a702c814e8c7b3710d9fb5f6b54af96a36808aca90e436fa19afd54"
+    },
+    {
+      "id": "sample-25122607a461",
+      "projectId": "py-retry",
+      "question": "What condition makes send raise PermanentFailure? (case 2)",
+      "answer": "A busy field raises PermanentFailure.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in transport.py lines 7-12."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12,
+          "sha256": "d4a52384faf3991c3c7d198eeac8ec9f2f3647b5c545a0d200153ab394e18d0d"
+        }
+      ],
+      "answerFingerprint": "d7bdee77c7e3ee53dee33fb7a907f3fc0c0a2983dad3574a408e60c0c16a59a7"
+    },
+    {
+      "id": "sample-06281f54b083",
+      "projectId": "js-router",
+      "question": "How does dispatch handle an unknown path?",
+      "answer": "It sends a 404 response with body missing when no route handler exists.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in router.js lines 2-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8,
+          "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+        }
+      ],
+      "answerFingerprint": "ca7f0784baf090a707fe4317858cfb9c7f24680e1564b700c7dba82837048d89"
+    },
+    {
+      "id": "sample-e978f0e39638",
+      "projectId": "ts-parser",
+      "question": "What row shape does parseRow accept?",
+      "answer": "It accepts any number of cells and parses the first cell as the amount.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in parse.ts lines 3-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8,
+          "sha256": "663a61094a890393803b0411bb73f61a21599d6f21e5227f5082cd8e396cc7b9"
+        }
+      ],
+      "answerFingerprint": "26e5b7b82aa76a6155382ffcef4cc283532d9a0106acb845dd1ae3e61d09c2a0"
+    },
+    {
+      "id": "sample-767d811de118",
+      "projectId": "py-permissions",
+      "question": "Does Admin inherit Principal? (case 3)",
+      "answer": "Admin is independent of Principal and only stores a name.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in roles.py lines 4-11."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "roles.py",
+          "startLine": 4,
+          "endLine": 11,
+          "sha256": "9bb9dbff611b2aed1da03a4c9009dad52d915d7b8a4d0287ea012ddb6da428cb"
+        }
+      ],
+      "answerFingerprint": "988cef336682fec54af68b16c114d6ea715b287d3dba81c2010070ad6c6a6c49"
+    },
+    {
+      "id": "sample-029ed71dcb54",
+      "projectId": "py-retry",
+      "question": "How does retry delay change? (case 2)",
+      "answer": "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in client.py lines 5-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        }
+      ],
+      "answerFingerprint": "59ccaf42688c638238220233ab61be054544c5dd43ee4463bc8faae3b9779012"
+    },
+    {
+      "id": "sample-ca765822d2fc",
+      "projectId": "js-pricing",
+      "question": "Does memberRate configure the discount function?",
+      "answer": "Yes. discount imports memberRate and always uses its configured value.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in config.js lines 1-2."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "config.js",
+          "startLine": 1,
+          "endLine": 2,
+          "sha256": "326199b9729690cf2e198eb441bf00f7c89d7c48446061510d13c7fb72c4884b"
+        }
+      ],
+      "answerFingerprint": "de1a8e6d41fce4f7539eef246d5f8b5c86ad5edaf2224209219bd76ae1c7c265"
+    },
+    {
+      "id": "sample-2501d58403ef",
+      "projectId": "py-permissions",
+      "question": "Can an Admin write to a resource owned by someone else? (case 3)",
+      "answer": "Yes. can_write returns true for an Admin instance after the owner check fails.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in access.py lines 3-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "02ca6f49a70d8e38a88870482d999c94dfbe4fb24dc3ee4f81fc367d1b923acc"
+        }
+      ],
+      "answerFingerprint": "8f6ec7e2bd95b269a38670e0801bd192ca52ec7e7960679103f151285d68cce8"
+    },
+    {
+      "id": "sample-5bed220c5fbd",
+      "projectId": "ts-events",
+      "question": "What does the unsubscribe function do?",
+      "answer": "The returned closure deletes that listener from the Set.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in emitter.ts lines 3-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "6af78ad60d6fdef04e6833e96e65c6b460d64e5b78bae8dbcbf4a9bdca939178"
+        }
+      ],
+      "answerFingerprint": "eb0f676dadc30da13d3993ec5805ae88e9eb5428551a1ef0f655601d0155429f"
+    },
+    {
+      "id": "sample-000a58269d59",
+      "projectId": "py-retry",
+      "question": "Which transport exception is retried by request?",
+      "answer": "request retries PermanentFailure and immediately returns on TemporaryFailure.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in client.py lines 5-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        }
+      ],
+      "answerFingerprint": "9b43d47bb5688ace7fdc2a4d4e67ebc12eb362e770ced3172428b450d75ca4ef"
+    },
+    {
+      "id": "sample-5b13c9572f64",
+      "projectId": "ts-parser",
+      "question": "How are invalid import rows handled? (case 2)",
+      "answer": "importRows calls onInvalid for rows where parseRow returns null and continues.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in import.ts lines 2-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "import.ts",
+          "startLine": 2,
+          "endLine": 10,
+          "sha256": "e58373f7c06ee793c81edac7606f09e9faf0ba98323db866f3566439b2e8327c"
+        }
+      ],
+      "answerFingerprint": "256b752f5aafd8aba6b5235815dccbbe0e922c291f1ef9283e2a59d8cadec4d0"
+    },
+    {
+      "id": "sample-02bd5fe8c458",
+      "projectId": "py-importer",
+      "question": "What happens after a malformed line is parsed? (case 2)",
+      "answer": "A malformed line propagates the parsing exception and stops the loop.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in worker.py lines 4-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 4,
+          "endLine": 13,
+          "sha256": "c2fbe8f10595d6061f567f48e755adea910b08f3b6a12a48a2f1023d0bf898bb"
+        }
+      ],
+      "answerFingerprint": "4edecb6e719094e3a554487ad50369cc27e6b79281f80479481b3ea7ac521596"
+    },
+    {
+      "id": "sample-852f24713ee6",
+      "projectId": "ts-session",
+      "question": "Does authorize refresh an expired session?",
+      "answer": "No. invalid sessions return false before next is called; there is no refresh path.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in guard.ts lines 2-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "guard.ts",
+          "startLine": 2,
+          "endLine": 6,
+          "sha256": "d9b755835f786ece1efc9fbec735bef24377de5160247891bbd52dd02d25a74b"
+        }
+      ],
+      "answerFingerprint": "a86a7d3f8ff7fd4670af785230013f0d43f9a2aa8ea83895bcea2b8e1a924f1f"
+    },
+    {
+      "id": "sample-1d795ba0b258",
+      "projectId": "py-cache",
+      "question": "What does load do after a cache miss?",
+      "answer": "load calls fetch(key), stores the returned value, then returns it.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in service.py lines 5-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 10,
+          "sha256": "2ca412fd1a79ca00d9abcea466fd96a4f3cbdd137748d362211102ae7438ef7d"
+        }
+      ],
+      "answerFingerprint": "bd37dcf5de899e4bbbfd83bde73325a82467f5ffb129927d35ad1ef35bc62277"
+    },
+    {
+      "id": "sample-929ceed01958",
+      "projectId": "js-queue",
+      "question": "What is the queue capacity?",
+      "answer": "The queue accepts unlimited jobs because maxPending is not checked.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in config.js lines 1-1."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "config.js",
+          "startLine": 1,
+          "endLine": 1,
+          "sha256": "d3a3cc2d5f6bf9074af2738d065f6fb3254293a4f8dc66c731b793db4be83612"
+        }
+      ],
+      "answerFingerprint": "203496986da04b550b55622d092ef274cff44edd10734538fb6138075e850097"
+    },
+    {
+      "id": "sample-58e358d54cef",
+      "projectId": "ts-inventory",
+      "question": "When does needsRestock return true? (case 2)",
+      "answer": "It returns true when quantity is below warningThreshold, which is 5.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in warehouse.ts lines 8-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 8,
+          "endLine": 10,
+          "sha256": "93486470b0083dcbee3a8fd0ffdfd90c7486ae2458ee6d987215a57b2bab7138"
+        }
+      ],
+      "answerFingerprint": "e0c83ef240279d041cc3f90968c8e376a6d6cf91c618fdb90a0cb2144ac56381"
+    },
+    {
+      "id": "sample-9cf94eb2fd9d",
+      "projectId": "js-router",
+      "question": "Which route paths are registered?",
+      "answer": "The route map contains /health and /items.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in routes.js lines 1-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "routes.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "026fcf6f50c6a35d6150635ee7e0615792852d81248c410fc1620864a8511aab"
+        }
+      ],
+      "answerFingerprint": "9732d4ecd88893240e712503713810cd27eaf006b1e3d9b04c98465ae83b8da8"
+    },
+    {
+      "id": "sample-74e1f36ac88e",
+      "projectId": "ts-inventory",
+      "question": "How is quantity state inherited? (case 2)",
+      "answer": "WarehouseStock copies quantity into an unrelated public field.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in base.ts lines 1-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "base.ts",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "87abc15683cafeae446a8dbba526a706373257c86dbdaca2afaa23546367b367"
+        }
+      ],
+      "answerFingerprint": "f1fd2ce0aa06e225a05242cc1bc35b3af7b9bfd1d1661b7ea17a3e318ca47d91"
+    },
+    {
+      "id": "sample-73007837976f",
+      "projectId": "ts-parser",
+      "question": "How are invalid import rows handled?",
+      "answer": "importRows calls onInvalid for rows where parseRow returns null and continues.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in import.ts lines 2-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "import.ts",
+          "startLine": 2,
+          "endLine": 10,
+          "sha256": "e58373f7c06ee793c81edac7606f09e9faf0ba98323db866f3566439b2e8327c"
+        }
+      ],
+      "answerFingerprint": "36834ea979e2abfa977440d6aeb55214cac5caf8dda73e464f8d7e2bd219cbb3"
+    },
+    {
+      "id": "sample-a55738d197eb",
+      "projectId": "js-router",
+      "question": "How does dispatch handle an unknown path? (case 2)",
+      "answer": "It sends a 404 response with body missing when no route handler exists.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in router.js lines 2-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8,
+          "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+        }
+      ],
+      "answerFingerprint": "9e017e6bceda65e616235fba388d074d0e5bb835d65c6279946ab482334c231a"
+    },
+    {
+      "id": "sample-72bbeb75306e",
+      "projectId": "py-cache",
+      "question": "What happens when insertion exceeds the configured cache capacity?",
+      "answer": "Cache.put removes the most recently inserted key whenever the cache reaches capacity.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in cache.py lines 8-12."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 12,
+          "sha256": "c0492881ebb3ee75c3f2e88ce1424a3ba4942f304f952907de7e5e94451884cf"
+        }
+      ],
+      "answerFingerprint": "a98dc52cfff2e722a80ef32b20802842c6d62e3588ac56d49d03de2df96c82ea"
+    },
+    {
+      "id": "sample-cfb4aadfdd10",
+      "projectId": "ts-inventory",
+      "question": "When does needsRestock return true?",
+      "answer": "It returns true when quantity is below warningThreshold, which is 5.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in warehouse.ts lines 8-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 8,
+          "endLine": 10,
+          "sha256": "93486470b0083dcbee3a8fd0ffdfd90c7486ae2458ee6d987215a57b2bab7138"
+        }
+      ],
+      "answerFingerprint": "768648b36c406beeed11ce4767e93cca9f6be39f46718ccc99cdc17f49b7f8df"
+    },
+    {
+      "id": "sample-c99bd8066b06",
+      "projectId": "js-config",
+      "question": "How is the user bucket computed?",
+      "answer": "The code sums userId character codes and takes the result modulo 100.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in feature.js lines 4-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 4,
+          "endLine": 7,
+          "sha256": "0c2bca6b7874fb4b78dbd6a559bdf48f1fff4efac72ac11ca65e22ea8d403870"
+        }
+      ],
+      "answerFingerprint": "9199c43ee0b2d4e0cde74c91014b06a61fe0d909358302c4babed881fe151b8a"
+    },
+    {
+      "id": "sample-787522d34468",
+      "projectId": "py-cache",
+      "question": "What happens when insertion exceeds the configured cache capacity? (case 3)",
+      "answer": "Cache.put removes the most recently inserted key whenever the cache reaches capacity.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in cache.py lines 8-12."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 12,
+          "sha256": "c0492881ebb3ee75c3f2e88ce1424a3ba4942f304f952907de7e5e94451884cf"
+        }
+      ],
+      "answerFingerprint": "ad0472aaee213374bbcb9c11e66b5abb5d379e80395a936bcd2326ddf46b7ec9"
+    },
+    {
+      "id": "sample-974d4c8f8ff0",
+      "projectId": "js-config",
+      "question": "How is the user bucket computed? (case 2)",
+      "answer": "The code sums userId character codes and takes the result modulo 100.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in feature.js lines 4-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 4,
+          "endLine": 7,
+          "sha256": "0c2bca6b7874fb4b78dbd6a559bdf48f1fff4efac72ac11ca65e22ea8d403870"
+        }
+      ],
+      "answerFingerprint": "9fa170f76cc718ade9ec8d2af341ad4baa6abf31e1615011ee05fffbd607754e"
+    },
+    {
+      "id": "sample-64dbab382fbe",
+      "projectId": "py-retry",
+      "question": "How does retry delay change?",
+      "answer": "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in client.py lines 5-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        }
+      ],
+      "answerFingerprint": "21c5f4645af57a49bbc4ddfcece5447f2f16acebe8523882b6be9b637d31300d"
+    },
+    {
+      "id": "sample-ffe75e009ac5",
+      "projectId": "py-retry",
+      "question": "Which transport exception is retried by request? (case 2)",
+      "answer": "request retries PermanentFailure and immediately returns on TemporaryFailure.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in client.py lines 5-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        }
+      ],
+      "answerFingerprint": "f9be9301f03c780106e3b00fc397195a3d03982d63d6d5cf66877c07f4318741"
+    },
+    {
+      "id": "sample-b5b4f9fee8f6",
+      "projectId": "ts-inventory",
+      "question": "How is quantity state inherited?",
+      "answer": "WarehouseStock copies quantity into an unrelated public field.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in base.ts lines 1-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "base.ts",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "87abc15683cafeae446a8dbba526a706373257c86dbdaca2afaa23546367b367"
+        }
+      ],
+      "answerFingerprint": "843bc40cf9e6a3ab08553f6f0622e06dbb439b4a7deff1fab9fe0482c514a2af"
+    },
+    {
+      "id": "sample-ce150323e261",
+      "projectId": "py-permissions",
+      "question": "How does read access differ from write access? (case 2)",
+      "answer": "Read allows the owner or a principal whose role is reader/admin; write allows owner or Admin instance.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in access.py lines 3-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 10,
+          "sha256": "094ee9564de60e24ff3ab9a57e8b17d443d68441056714bd87c937809278e18f"
+        }
+      ],
+      "answerFingerprint": "c771c0e006b9b4add684096f4345646aa86f97e6b38697ba4225eef5a15eccaf"
+    },
+    {
+      "id": "sample-124336236368",
+      "projectId": "ts-session",
+      "question": "Does authorize refresh an expired session? (case 2)",
+      "answer": "No. invalid sessions return false before next is called; there is no refresh path.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in guard.ts lines 2-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "guard.ts",
+          "startLine": 2,
+          "endLine": 6,
+          "sha256": "d9b755835f786ece1efc9fbec735bef24377de5160247891bbd52dd02d25a74b"
+        }
+      ],
+      "answerFingerprint": "5ce9f4fa1e100ca1ddeb337e1f8266f49a3add5faa7c75802cb49670de73b4a0"
+    },
+    {
+      "id": "sample-859d1fa81456",
+      "projectId": "ts-events",
+      "question": "Does one listener failure prevent delivery to later listeners? (case 2)",
+      "answer": "Yes. emit rethrows the first listener exception.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in emitter.ts lines 8-16."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16,
+          "sha256": "5c8f95b829c8059e6a88755bea5f1d593ce7944923c13977ea7bad99ed3c7d5f"
+        }
+      ],
+      "answerFingerprint": "fb691cf8142625952cac4cfa23348d5a81eda9c6b63c77445d246c22fe49bfa8"
+    },
+    {
+      "id": "sample-cac6ce23622d",
+      "projectId": "py-retry",
+      "question": "What condition makes send raise PermanentFailure? (case 3)",
+      "answer": "A busy field raises PermanentFailure.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in transport.py lines 7-12."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12,
+          "sha256": "d4a52384faf3991c3c7d198eeac8ec9f2f3647b5c545a0d200153ab394e18d0d"
+        }
+      ],
+      "answerFingerprint": "a8897e289cf5a41acc25c86666b9ab6726f1f3ab32cd21175d203d24bc5f4ce5"
+    },
+    {
+      "id": "sample-a54fc9c7710e",
+      "projectId": "py-importer",
+      "question": "What input format does parse expect?",
+      "answer": "parse splits the line on a colon and converts the second part to int.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in parser.py lines 1-3."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "parser.py",
+          "startLine": 1,
+          "endLine": 3,
+          "sha256": "3b0025067409fb0bde00ce8eaa058a3a1d76d160b6a9aba301bdc5e2e1783838"
+        }
+      ],
+      "answerFingerprint": "e4c536ab85257b2edea0cde066e0b1412484397aa51c4fa6c430a84ec8dc2c85"
+    },
+    {
+      "id": "sample-c3f32e4fbacb",
+      "projectId": "py-cache",
+      "question": "Why does a cache lookup return no value for an expired entry? (case 2)",
+      "answer": "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in cache.py lines 14-22."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 14,
+          "endLine": 22,
+          "sha256": "f600f9ca0241003eaea035eda96ec072db743339e536f65343e678b70eed8d20"
+        }
+      ],
+      "answerFingerprint": "d8778319079a5973af3cd843666f584dd3735232f373067b14f569b55760d6d2"
+    },
+    {
+      "id": "sample-8ccee7ad2efa",
+      "projectId": "ts-events",
+      "question": "What does emit return?",
+      "answer": "emit returns the number of listener callbacks that threw.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in emitter.ts lines 8-16."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16,
+          "sha256": "5c8f95b829c8059e6a88755bea5f1d593ce7944923c13977ea7bad99ed3c7d5f"
+        }
+      ],
+      "answerFingerprint": "403246e8356e757515f7a3f6333841e21ed1402d2dbf6d7b2cd36912af8b1fa8"
+    },
+    {
+      "id": "sample-16ecfc5c705e",
+      "projectId": "py-retry",
+      "question": "Which transport exception is retried by request? (case 3)",
+      "answer": "request retries PermanentFailure and immediately returns on TemporaryFailure.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in client.py lines 5-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        }
+      ],
+      "answerFingerprint": "a4eedb88f144f2e025d411996db5d17780e62d20ca50505ad487518994d2b836"
+    },
+    {
+      "id": "sample-b65c5893b2cb",
+      "projectId": "ts-events",
+      "question": "What does emit return? (case 2)",
+      "answer": "emit returns the number of listener callbacks that threw.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in emitter.ts lines 8-16."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16,
+          "sha256": "5c8f95b829c8059e6a88755bea5f1d593ce7944923c13977ea7bad99ed3c7d5f"
+        }
+      ],
+      "answerFingerprint": "ea18a1475e577c0d72ebf30e60502f25fb181248bbf386517cd6441a8c0d0f9b"
+    },
+    {
+      "id": "sample-9bf08c353449",
+      "projectId": "js-config",
+      "question": "What response does the controller choose?",
+      "answer": "response always returns new when rollout is greater than zero.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in controller.js lines 2-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "controller.js",
+          "startLine": 2,
+          "endLine": 4,
+          "sha256": "2020750821360c1d0305c28e782b4634b197debd4322b91bc22227dc2f45bd9e"
+        }
+      ],
+      "answerFingerprint": "bd0076243cec53aaecea6bba2b9b96cd6502e9a8b89d2cbc6bb71c708c6ad944"
+    },
+    {
+      "id": "sample-fd99b134858e",
+      "projectId": "js-router",
+      "question": "What happens if a route handler throws? (case 2)",
+      "answer": "The exception escapes dispatch without calling send.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in router.js lines 2-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8,
+          "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+        }
+      ],
+      "answerFingerprint": "ebb14c352fef67e8eee17eb396b30f08ebcd66b71756d74736ce92eb4c1f6b92"
+    },
+    {
+      "id": "sample-def18eaa1e28",
+      "projectId": "js-config",
+      "question": "What response does the controller choose? (case 2)",
+      "answer": "response always returns new when rollout is greater than zero.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in controller.js lines 2-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "controller.js",
+          "startLine": 2,
+          "endLine": 4,
+          "sha256": "2020750821360c1d0305c28e782b4634b197debd4322b91bc22227dc2f45bd9e"
+        }
+      ],
+      "answerFingerprint": "c0d2781865e5392e1be687913df335af048c9e9abb77a666cd8f6b405ee53480"
+    },
+    {
+      "id": "sample-d0d48fcca154",
+      "projectId": "py-permissions",
+      "question": "How does read access differ from write access?",
+      "answer": "Read allows the owner or a principal whose role is reader/admin; write allows owner or Admin instance.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in access.py lines 3-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 10,
+          "sha256": "094ee9564de60e24ff3ab9a57e8b17d443d68441056714bd87c937809278e18f"
+        }
+      ],
+      "answerFingerprint": "b137e49b53764607b0c6b86b7e51a4d0609083c229005dea552d73a365bd9ab1"
+    },
+    {
+      "id": "sample-9948a6b36eaa",
+      "projectId": "js-pricing",
+      "question": "When is a member discount applied? (case 2)",
+      "answer": "Every member receives a 30 discount regardless of subtotal.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in discount.js lines 1-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "18e43fc30019fedba53bbfc36403bb23493d8b042a0a0efe930a06b93740dbc4"
+        }
+      ],
+      "answerFingerprint": "757a8eeb37bc290b2e8c908cbc8f05bd36d2617251e306458c838eabfb2ff7b9"
+    },
+    {
+      "id": "sample-6c563c6d7c59",
+      "projectId": "ts-events",
+      "question": "Does one listener failure prevent delivery to later listeners?",
+      "answer": "Yes. emit rethrows the first listener exception.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in emitter.ts lines 8-16."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 8,
+          "endLine": 16,
+          "sha256": "5c8f95b829c8059e6a88755bea5f1d593ce7944923c13977ea7bad99ed3c7d5f"
+        }
+      ],
+      "answerFingerprint": "5a3928e795619874ace6959001373c69cbef874bc0973c0e26c403b5e368354b"
+    },
+    {
+      "id": "sample-c21cbcb82e42",
+      "projectId": "js-config",
+      "question": "What is required for feature rollout to be enabled? (case 2)",
+      "answer": "A positive rollout value enables the feature even when enabled is false.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in feature.js lines 1-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 1,
+          "endLine": 8,
+          "sha256": "3ad43b2d452976839a285c0bb57aa42f4e59ddb423471a5b2f45bdc12578cd86"
+        }
+      ],
+      "answerFingerprint": "7276482bfad5db55ba7d4459985df04e9bfd4518fe245f3879429ba51468fab1"
+    },
+    {
+      "id": "sample-17b9642caa7f",
+      "projectId": "ts-session",
+      "question": "At the exact expiry timestamp, is a session valid?",
+      "answer": "Yes. valid accepts expiresAt equal to now.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in session.ts lines 3-5."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 3,
+          "endLine": 5,
+          "sha256": "577447e309725a19d58d3ec6a7f791a0e3693a62ef8836ff8343e56c0ab2ec65"
+        }
+      ],
+      "answerFingerprint": "323de947a15df21254867b0019bfba3e7606a90509fd170871205ad85f4d58b8"
+    },
+    {
+      "id": "sample-c961aafe1464",
+      "projectId": "js-queue",
+      "question": "Does queue drain stop after a job rejects?",
+      "answer": "The catch calls onDone with the error, then the while loop continues to pending jobs.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in queue.js lines 10-19."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "queue.js",
+          "startLine": 10,
+          "endLine": 19,
+          "sha256": "762eedd082c6a56e4d07caca5d7dc4e1e50cae305aa67bd36d9026ff9571158e"
+        }
+      ],
+      "answerFingerprint": "7537155748aabafaac95e4124ee00759efd0fce83e840a3ad030c75a6f9a1fef"
+    },
+    {
+      "id": "sample-adc14109ba00",
+      "projectId": "js-router",
+      "question": "Which route paths are registered? (case 2)",
+      "answer": "The route map contains /health and /items.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in routes.js lines 1-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "routes.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "026fcf6f50c6a35d6150635ee7e0615792852d81248c410fc1620864a8511aab"
+        }
+      ],
+      "answerFingerprint": "7ae3961fb34c49d7b63b4fde00131278170e5b31fdb390bad85394a4f5bbcc38"
+    },
+    {
+      "id": "sample-1da47ae03693",
+      "projectId": "py-permissions",
+      "question": "Can an Admin write to a resource owned by someone else?",
+      "answer": "Yes. can_write returns true for an Admin instance after the owner check fails.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in access.py lines 3-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "02ca6f49a70d8e38a88870482d999c94dfbe4fb24dc3ee4f81fc367d1b923acc"
+        }
+      ],
+      "answerFingerprint": "16fcfcf57e1788fbf1975682b5b2eab90c89a3e68fe2d90a830b735c1c60028a"
+    },
+    {
+      "id": "sample-066a92b3e90a",
+      "projectId": "py-cache",
+      "question": "What does load do after a cache miss? (case 3)",
+      "answer": "load calls fetch(key), stores the returned value, then returns it.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in service.py lines 5-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 10,
+          "sha256": "2ca412fd1a79ca00d9abcea466fd96a4f3cbdd137748d362211102ae7438ef7d"
+        }
+      ],
+      "answerFingerprint": "a73d643b8bb0eba394f32162cb1ea161b1d7b28064e740d57274974f894f8cc9"
+    },
+    {
+      "id": "sample-17bb2f9f756d",
+      "projectId": "js-router",
+      "question": "What happens if a route handler throws?",
+      "answer": "The exception escapes dispatch without calling send.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in router.js lines 2-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "router.js",
+          "startLine": 2,
+          "endLine": 8,
+          "sha256": "7ce027756d21d734d6822ad8d5efa19bacdefff816a53f033653784d0330314c"
+        }
+      ],
+      "answerFingerprint": "308896b5e948e1c864498bbd6d47e03038a63473fc974bb11fdaa2c2c1ed6fda"
+    },
+    {
+      "id": "sample-a1ebfc75f519",
+      "projectId": "py-cache",
+      "question": "What happens when insertion exceeds the configured cache capacity? (case 2)",
+      "answer": "Cache.put removes the most recently inserted key whenever the cache reaches capacity.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in cache.py lines 8-12."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 8,
+          "endLine": 12,
+          "sha256": "c0492881ebb3ee75c3f2e88ce1424a3ba4942f304f952907de7e5e94451884cf"
+        }
+      ],
+      "answerFingerprint": "ab074d331a1c40752619eef02d85ce8348fedda2a3bee2aaafd00eac09f2cf0d"
+    },
+    {
+      "id": "sample-3be777ffd049",
+      "projectId": "ts-inventory",
+      "question": "What makes reserve reject a request?",
+      "answer": "It rejects only counts greater than the warning threshold.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in warehouse.ts lines 3-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "fec23af99ba4b2a25ca9510eec03f3fa46beea4e48286a2a6d3ff7ee96d00102"
+        }
+      ],
+      "answerFingerprint": "83211ef5f6032a26019f52a650bb87cc6dd4102075c00397e80b667bd1c02ca9"
+    },
+    {
+      "id": "sample-608decc5f4a8",
+      "projectId": "ts-events",
+      "question": "What does the unsubscribe function do? (case 2)",
+      "answer": "The returned closure deletes that listener from the Set.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in emitter.ts lines 3-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "emitter.ts",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "6af78ad60d6fdef04e6833e96e65c6b460d64e5b78bae8dbcbf4a9bdca939178"
+        }
+      ],
+      "answerFingerprint": "849899dc49960e7eacaca65655e43197804c4b7e5160cde9f0885d7d8f091bd1"
+    },
+    {
+      "id": "sample-19f365a95185",
+      "projectId": "py-cache",
+      "question": "Why does a cache lookup return no value for an expired entry?",
+      "answer": "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in cache.py lines 14-22."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 14,
+          "endLine": 22,
+          "sha256": "f600f9ca0241003eaea035eda96ec072db743339e536f65343e678b70eed8d20"
+        }
+      ],
+      "answerFingerprint": "e20680d44f35a080d11bfbe540ebb4f3171264b57aeb1d5bed4fdcb5165f7f23"
+    },
+    {
+      "id": "sample-b07aeccda1b9",
+      "projectId": "js-pricing",
+      "question": "What is the calculation order in total?",
+      "answer": "total subtracts the discount, applies tax to the remainder, and rounds to two decimals.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in checkout.js lines 3-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "checkout.js",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "96438295befc2e5aa115b99d81d7ca52edf9c5b11f9ad2acaca12909a68121d1"
+        }
+      ],
+      "answerFingerprint": "e3f080613dd7f1bce6ea649b43dac1fdcea51d8292d70d3d82b01498eab59168"
+    },
+    {
+      "id": "sample-e52678e8433d",
+      "projectId": "py-cache",
+      "question": "Why does a cache lookup return no value for an expired entry? (case 3)",
+      "answer": "Cache.get compares elapsed monotonic time with TTL_SECONDS, deletes an expired key, and returns None.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in cache.py lines 14-22."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "cache.py",
+          "startLine": 14,
+          "endLine": 22,
+          "sha256": "f600f9ca0241003eaea035eda96ec072db743339e536f65343e678b70eed8d20"
+        }
+      ],
+      "answerFingerprint": "edcf1bfed021a8f43dce3bdccbeb886490e668e49614d9c79594200971b6cea5"
+    },
+    {
+      "id": "sample-246f11083f55",
+      "projectId": "py-importer",
+      "question": "What does import_lines return? (case 2)",
+      "answer": "It returns only the number of accepted records.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in worker.py lines 2-14."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 2,
+          "endLine": 14,
+          "sha256": "cf5b622448c639d383ba6805ed2db5e2f00673793123a3be91fd6003235d11c6"
+        }
+      ],
+      "answerFingerprint": "da97ff99cf9e4e0bcbefa1e59fd8f4a72dcc4e260ce019fb06de252f1dafc418"
+    },
+    {
+      "id": "sample-b63ec7a63470",
+      "projectId": "py-retry",
+      "question": "What condition makes send raise PermanentFailure?",
+      "answer": "A busy field raises PermanentFailure.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in transport.py lines 7-12."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "transport.py",
+          "startLine": 7,
+          "endLine": 12,
+          "sha256": "d4a52384faf3991c3c7d198eeac8ec9f2f3647b5c545a0d200153ab394e18d0d"
+        }
+      ],
+      "answerFingerprint": "870a4f06ee944e046e0da310f811744385310f7c64d57912f11326348a347b58"
+    },
+    {
+      "id": "sample-439d1a6d10ee",
+      "projectId": "py-importer",
+      "question": "What happens after a malformed line is parsed?",
+      "answer": "A malformed line propagates the parsing exception and stops the loop.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in worker.py lines 4-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 4,
+          "endLine": 13,
+          "sha256": "c2fbe8f10595d6061f567f48e755adea910b08f3b6a12a48a2f1023d0bf898bb"
+        }
+      ],
+      "answerFingerprint": "deaba45497c36352d81ad9c797f6a8e7bb13dd63fb9feea50e183dd66ece133d"
+    },
+    {
+      "id": "sample-2429377c1505",
+      "projectId": "js-pricing",
+      "question": "What is the calculation order in total? (case 2)",
+      "answer": "total subtracts the discount, applies tax to the remainder, and rounds to two decimals.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in checkout.js lines 3-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "checkout.js",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "96438295befc2e5aa115b99d81d7ca52edf9c5b11f9ad2acaca12909a68121d1"
+        }
+      ],
+      "answerFingerprint": "adb3a9d5a8de4c877d9e3fdf2ad8755d5739ec0b3016137a4470cb14587a7fba"
+    },
+    {
+      "id": "sample-a3ddb7d8abf6",
+      "projectId": "py-permissions",
+      "question": "Does Admin inherit Principal? (case 2)",
+      "answer": "Admin is independent of Principal and only stores a name.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in roles.py lines 4-11."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "roles.py",
+          "startLine": 4,
+          "endLine": 11,
+          "sha256": "9bb9dbff611b2aed1da03a4c9009dad52d915d7b8a4d0287ea012ddb6da428cb"
+        }
+      ],
+      "answerFingerprint": "06526b1e38e8f27be14f682b78c525ab6bf57716e916e7c1a7cd90834e62e656"
+    },
+    {
+      "id": "sample-fbcbd01ead87",
+      "projectId": "ts-parser",
+      "question": "What happens when amount conversion is non-finite?",
+      "answer": "parseRow substitutes zero for every invalid amount.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in parse.ts lines 3-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8,
+          "sha256": "663a61094a890393803b0411bb73f61a21599d6f21e5227f5082cd8e396cc7b9"
+        }
+      ],
+      "answerFingerprint": "2e1ee3590a9910cb98424d7833f7ad5957387db9b09161871fa711bc2f25465b"
+    },
+    {
+      "id": "sample-74de702662d8",
+      "projectId": "ts-inventory",
+      "question": "What makes reserve reject a request? (case 2)",
+      "answer": "It rejects only counts greater than the warning threshold.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in warehouse.ts lines 3-7."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "warehouse.ts",
+          "startLine": 3,
+          "endLine": 7,
+          "sha256": "fec23af99ba4b2a25ca9510eec03f3fa46beea4e48286a2a6d3ff7ee96d00102"
+        }
+      ],
+      "answerFingerprint": "142122577a8bac1ffb6af731bdbe67f6777f042d819ff667926cbec5454e030c"
+    },
+    {
+      "id": "sample-b50df2dbe0ed",
+      "projectId": "js-pricing",
+      "question": "When is a member discount applied?",
+      "answer": "Every member receives a 30 discount regardless of subtotal.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in discount.js lines 1-4."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "discount.js",
+          "startLine": 1,
+          "endLine": 4,
+          "sha256": "18e43fc30019fedba53bbfc36403bb23493d8b042a0a0efe930a06b93740dbc4"
+        }
+      ],
+      "answerFingerprint": "aa83b9980a3f936cf4abe847ece8ee668eb8f510d723f1033cc4e544313280ab"
+    },
+    {
+      "id": "sample-7de372865000",
+      "projectId": "js-pricing",
+      "question": "Does memberRate configure the discount function? (case 2)",
+      "answer": "Yes. discount imports memberRate and always uses its configured value.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in config.js lines 1-2."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "config.js",
+          "startLine": 1,
+          "endLine": 2,
+          "sha256": "326199b9729690cf2e198eb441bf00f7c89d7c48446061510d13c7fb72c4884b"
+        }
+      ],
+      "answerFingerprint": "49c99eef8aa7cc6e0144f4abc617bf80a8f3d2cb5d1d81493b422c94731fa6f8"
+    },
+    {
+      "id": "sample-690f0f7980f7",
+      "projectId": "py-permissions",
+      "question": "Does Admin inherit Principal?",
+      "answer": "Admin is independent of Principal and only stores a name.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in roles.py lines 4-11."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "roles.py",
+          "startLine": 4,
+          "endLine": 11,
+          "sha256": "9bb9dbff611b2aed1da03a4c9009dad52d915d7b8a4d0287ea012ddb6da428cb"
+        }
+      ],
+      "answerFingerprint": "ef03a43689b2647ad7c4329b95c4a3aa11fd2ddcfc4d8cc75d36b16598945ca6"
+    },
+    {
+      "id": "sample-680bb8470544",
+      "projectId": "py-retry",
+      "question": "How does retry delay change? (case 3)",
+      "answer": "The sleep delay is BASE_DELAY multiplied by 2 to the zero-based attempt index.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in client.py lines 5-13."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "client.py",
+          "startLine": 5,
+          "endLine": 13,
+          "sha256": "fad452ff52d59ef9df807947c3463ff4055a0ce3eec1112d2c44ebeae3d64d95"
+        }
+      ],
+      "answerFingerprint": "7848056e0ad3c54f7de754d2096f2e4a7ed1dfeefb36d7210e9d880edffb3051"
+    },
+    {
+      "id": "sample-94b7021c3434",
+      "projectId": "py-permissions",
+      "question": "Can an Admin write to a resource owned by someone else? (case 2)",
+      "answer": "Yes. can_write returns true for an Admin instance after the owner check fails.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in access.py lines 3-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "access.py",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "02ca6f49a70d8e38a88870482d999c94dfbe4fb24dc3ee4f81fc367d1b923acc"
+        }
+      ],
+      "answerFingerprint": "52c20dce8664d515226b85bcb96a426c8ffdfbf00ccf77b4d7285a64a8884593"
+    },
+    {
+      "id": "sample-b6a08e5da9c1",
+      "projectId": "ts-session",
+      "question": "At the exact expiry timestamp, is a session valid? (case 2)",
+      "answer": "Yes. valid accepts expiresAt equal to now.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in session.ts lines 3-5."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 3,
+          "endLine": 5,
+          "sha256": "577447e309725a19d58d3ec6a7f791a0e3693a62ef8836ff8343e56c0ab2ec65"
+        }
+      ],
+      "answerFingerprint": "a6c226c982b4dd602e91fbe4bc511900b9ae17ce031a940d22e7d308d3e6e0dc"
+    },
+    {
+      "id": "sample-1913bfb51114",
+      "projectId": "py-importer",
+      "question": "What does import_lines return?",
+      "answer": "It returns only the number of accepted records.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in worker.py lines 2-14."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "worker.py",
+          "startLine": 2,
+          "endLine": 14,
+          "sha256": "cf5b622448c639d383ba6805ed2db5e2f00673793123a3be91fd6003235d11c6"
+        }
+      ],
+      "answerFingerprint": "b9e489a1553e36ae3f167e07122e2cafa56563b3bf25769bcd6e69dc3b53d825"
+    },
+    {
+      "id": "sample-3fd3d50bf592",
+      "projectId": "py-importer",
+      "question": "What input format does parse expect? (case 2)",
+      "answer": "parse splits the line on a colon and converts the second part to int.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in parser.py lines 1-3."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "parser.py",
+          "startLine": 1,
+          "endLine": 3,
+          "sha256": "3b0025067409fb0bde00ce8eaa058a3a1d76d160b6a9aba301bdc5e2e1783838"
+        }
+      ],
+      "answerFingerprint": "391bd790b6d93748a35c6cc1102767b4fde31ec891200a200240b8290da993d5"
+    },
+    {
+      "id": "sample-76267c74474a",
+      "projectId": "js-config",
+      "question": "What is required for feature rollout to be enabled?",
+      "answer": "A positive rollout value enables the feature even when enabled is false.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in feature.js lines 1-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "feature.js",
+          "startLine": 1,
+          "endLine": 8,
+          "sha256": "3ad43b2d452976839a285c0bb57aa42f4e59ddb423471a5b2f45bdc12578cd86"
+        }
+      ],
+      "answerFingerprint": "ab92c2f86cf4745df3c8f9502d4df6c783742bcdd10efea2245a7402659fdf3e"
+    },
+    {
+      "id": "sample-1c23766663d8",
+      "projectId": "js-queue",
+      "question": "What is the queue capacity? (case 2)",
+      "answer": "The queue accepts unlimited jobs because maxPending is not checked.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in config.js lines 1-1."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "config.js",
+          "startLine": 1,
+          "endLine": 1,
+          "sha256": "d3a3cc2d5f6bf9074af2738d065f6fb3254293a4f8dc66c731b793db4be83612"
+        }
+      ],
+      "answerFingerprint": "351e739c3f848d698ff63141f69b3da7ad5f3ef7ae1321dc6afbbc64fcbd4ed7"
+    },
+    {
+      "id": "sample-4f517501eca8",
+      "projectId": "js-queue",
+      "question": "What does submit return when add rejects a job?",
+      "answer": "submit returns a resolved Promise with false when queue.add returns false.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in service.js lines 3-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "service.js",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "93d53966106a8acf612d2e4f1a43dec41032814b8a0e66a958ecd58c43216883"
+        }
+      ],
+      "answerFingerprint": "04ca7b578c40d6aebb765757c68cb5be048da1b493402ab88580803b70dbb8c6"
+    },
+    {
+      "id": "sample-ee1b534bf84b",
+      "projectId": "py-cache",
+      "question": "What does load do after a cache miss? (case 2)",
+      "answer": "load calls fetch(key), stores the returned value, then returns it.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in service.py lines 5-10."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "service.py",
+          "startLine": 5,
+          "endLine": 10,
+          "sha256": "2ca412fd1a79ca00d9abcea466fd96a4f3cbdd137748d362211102ae7438ef7d"
+        }
+      ],
+      "answerFingerprint": "b4ebd53b58de244522fa55c8d024823fdfc0f0ecc10af078ce8deea629bb9c3c"
+    },
+    {
+      "id": "sample-b49a5a6a3001",
+      "projectId": "js-queue",
+      "question": "What does submit return when add rejects a job? (case 2)",
+      "answer": "submit returns a resolved Promise with false when queue.add returns false.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in service.js lines 3-6."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "service.js",
+          "startLine": 3,
+          "endLine": 6,
+          "sha256": "93d53966106a8acf612d2e4f1a43dec41032814b8a0e66a958ecd58c43216883"
+        }
+      ],
+      "answerFingerprint": "50c6716885add3b4d058a4598570d0cdfc2f4ac307979976e2b35e1c6f585afb"
+    },
+    {
+      "id": "sample-e4b8cfc053b4",
+      "projectId": "ts-session",
+      "question": "How is the expiry timestamp created? (case 2)",
+      "answer": "issue adds lifetimeMs to now and returns that as expiresAt.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in session.ts lines 6-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "session.ts",
+          "startLine": 6,
+          "endLine": 8,
+          "sha256": "d15fad2cb11566f84fa01632491892afddc94a840d0920f44bdc8b418c01eb67"
+        }
+      ],
+      "answerFingerprint": "e47ecf9e075829d200f85c2d800406c92101a7c5660bc5330c92dc3a439f39ea"
+    },
+    {
+      "id": "sample-97714782fe69",
+      "projectId": "ts-parser",
+      "question": "What happens when amount conversion is non-finite? (case 2)",
+      "answer": "parseRow substitutes zero for every invalid amount.",
+      "followUps": [
+        {
+          "question": "Which implementation path controls this behavior?",
+          "answer": "The branch and returned value are determined in parse.ts lines 3-8."
+        }
+      ],
+      "evidence": [
+        {
+          "path": "parse.ts",
+          "startLine": 3,
+          "endLine": 8,
+          "sha256": "663a61094a890393803b0411bb73f61a21599d6f21e5227f5082cd8e396cc7b9"
+        }
+      ],
+      "answerFingerprint": "db774f26d507588eb2d50c747da8168f2db1c91c8437fcc1ea43e9b932e140b6"
+    }
+  ],
+  "rubric": {
+    "materialError": {
+      "unit": "answer",
+      "positiveWhen": "At least one factual claim materially contradicts the supplied source evidence, invents unsupported project behavior, or omits a condition in a way that makes the answer misleading.",
+      "rate": "answers with one or more material errors / all reviewed answers",
+      "countErrorCategoriesSeparately": true
+    },
+    "topicValue": {
+      "scale": {
+        "minimum": 1,
+        "maximum": 5,
+        "anchors": {
+          "1": "poor",
+          "3": "adequate",
+          "5": "excellent"
+        }
+      },
+      "dimensions": [
+        {
+          "id": "relevance",
+          "definition": "How directly the question serves the frozen interview objective."
+        },
+        {
+          "id": "mechanism-depth",
+          "definition": "How well it tests mechanisms and tradeoffs instead of recall alone."
+        },
+        {
+          "id": "evidence-specificity",
+          "definition": "How specifically the question is grounded in the frozen repository evidence."
+        },
+        {
+          "id": "follow-up-progression",
+          "definition": "How naturally follow-up questions deepen or qualify the primary question."
+        }
+      ],
+      "mean": "Arithmetic mean of all four dimension scores across reviewed question sets"
+    }
+  }
+}
