@@ -26,9 +26,9 @@
       "scripts/evaluation/m09-semantic-io.cjs": "a64c2a9ded7b669e0d6c0dd9e05b9b00d23867ebffebcf76c19490333a208deb",
       "scripts/evaluation/m09-semantic-native.cjs": "316dabdc7fb61e334d419d6c9dfce2844f8c498aec74b96dd40e0172cd448f8a",
       "scripts/evaluation/run-semantic-profile-entry.cjs": "db1fad4b5f7a6d19c50989f9ab351027610b29f5351203fc6574b4d7a34eea09",
-      "scripts/evaluation/run-semantic-profile.cjs": "15e06ea0b58ec4f3f5030555dcedfd4f5b89001bec39bc392e0cb733a32d607b"
+      "scripts/evaluation/run-semantic-profile.cjs": "e1a5f8af8e6dc75dacebcdb6e220fe7a07697b92d322aecc56168640cc7308a8"
     },
-    "sourceSha256": "ec66aa2a7d7e8541e3fcfc064011b01927bca4be750eebd26b2d7e15a74ae99c",
+    "sourceSha256": "d27d4d64b344653c010f36b19b9302edfdcf80f3356d815d6d112cd24bedb532",
     "protocolSha256": "0f6f686fd98221d136fb095fe4bc9005a5363150fe40a3a6a934591ecca138c3",
     "assetDescriptorsSha256": "a78d42a3556756311c7f1c2b8efd3f93818496db2199aaf67842b79db916c87b"
   }

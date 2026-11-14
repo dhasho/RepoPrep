@@ -251,6 +251,96 @@ test('even a clean real source refuses ordinary caller profile/currentProfile be
   await assert.rejects(claimSemanticExecution({ mode: 'real', repoRoot: f.root, dataDirectory: f.data, profile, currentProfile: () => { reads++; return profile }, plan: f.plan, executionMap: f.executionMap, authorization, claimDirectory: path.join(f.root, 'claims'), context: { kind: 'm09-native-semantic-context' } }), /semantic-native-context-required/u)
   assert.equal(reads, 0); assert.equal(fs.readdirSync(path.join(f.root, 'claims')).length, 0)
 })
+function stagedRuntimeFixture() {
+  const runtime = launcher.createSemanticRuntime()
+  const stage = path.join(runtime.root, 'm09-profile-' + 'a'.repeat(48)); io.mkdir(stage)
+  const names = { userData: 'user-data', sessionData: 'session-data', cache: 'cache', crashDumps: 'crash-dumps' }
+  const paths = {}
+  for (const [key, leaf] of Object.entries(names)) { const target = path.join(stage, leaf); fs.mkdirSync(target); paths[key] = { path: target, identity: io.directory(target) } }
+  const settings = path.join(paths.userData.path, 'settings.json')
+  const localState = path.join(paths.sessionData.path, 'Local State')
+  fs.writeFileSync(settings, 'synthetic-encrypted-settings', { flag: 'wx' })
+  fs.writeFileSync(localState, 'synthetic-local-state', { flag: 'wx' })
+  const files = [settings, localState].map(filename => ({ relative: path.relative(stage, filename).split(path.sep).join('/'), identity: io.file(filename).identity }))
+  io.write(path.join(runtime.root, 'bootstrap.json'), io.bytes({ schemaVersion: 1, parentNonce: 'b'.repeat(64), runtimeRoot: stage, runtimeIdentity: io.directory(stage), paths, files }))
+  return { runtime, stage, paths, settings, localState }
+}
+
+function atomicReplace(filename, bytes) {
+  const temporary = path.join(path.dirname(filename), '.replacement-' + randomUUID())
+  fs.writeFileSync(temporary, bytes, { flag: 'wx' })
+  fs.renameSync(temporary, filename)
+}
+
+test('staged runtime cleanup permits atomic Local State replacement under the captured session-data directory', () => {
+  const f = stagedRuntimeFixture()
+  const before = io.file(f.localState).identity
+  const parent = io.directory(path.dirname(f.localState))
+  atomicReplace(f.localState, Buffer.from('synthetic-local-state-after-atomic-replacement'))
+  assert.notDeepEqual(io.file(f.localState).identity, before)
+  assert.deepEqual(io.directory(path.dirname(f.localState)), parent)
+  const cleaned = launcher.cleanupSemanticRuntime(f.runtime.token)
+  assert.equal(cleaned.removed, true); assert.ok(cleaned.freedBytes > 50); assert.equal(fs.existsSync(f.runtime.root), false)
+})
+
+test('staged runtime cleanup preserves settings replacement and can clean after original identity is restored', () => {
+  const f = stagedRuntimeFixture()
+  const backup = path.join(path.dirname(f.runtime.root), path.basename(f.runtime.root) + '-settings-original')
+  fs.renameSync(f.settings, backup)
+  fs.writeFileSync(f.settings, 'synthetic-replaced-settings', { flag: 'wx' })
+  assert.throws(() => launcher.cleanupSemanticRuntime(f.runtime.token), /semantic-native-cleanup-preserved/u)
+  assert.equal(fs.existsSync(f.runtime.root), true); assert.equal(fs.existsSync(f.localState), true)
+  fs.unlinkSync(f.settings); fs.renameSync(backup, f.settings)
+  assert.equal(launcher.cleanupSemanticRuntime(f.runtime.token).removed, true)
+})
+
+test('staged runtime cleanup preserves a directory junction replacing the fixed session-data path', () => {
+  const f = stagedRuntimeFixture()
+  const sessionData = f.paths.sessionData.path
+  const backup = path.join(path.dirname(f.runtime.root), path.basename(f.runtime.root) + '-session-data-original')
+  fs.renameSync(sessionData, backup)
+  fs.symlinkSync(backup, sessionData, 'junction')
+  assert.throws(() => launcher.cleanupSemanticRuntime(f.runtime.token), /semantic-native-runtime-unsafe/u)
+  assert.equal(fs.lstatSync(sessionData).isSymbolicLink(), true); assert.equal(fs.existsSync(f.runtime.root), true)
+  fs.rmdirSync(sessionData); fs.renameSync(backup, sessionData)
+  assert.equal(launcher.cleanupSemanticRuntime(f.runtime.token).removed, true)
+})
+
+test('staged runtime cleanup preserves hard-linked settings and unknown entries', () => {
+  const f = stagedRuntimeFixture()
+  const hardLink = path.join(path.dirname(f.runtime.root), path.basename(f.runtime.root) + '-settings-link')
+  fs.linkSync(f.settings, hardLink)
+  assert.throws(() => launcher.cleanupSemanticRuntime(f.runtime.token), /semantic-native-runtime-unsafe/u)
+  assert.equal(fs.existsSync(f.runtime.root), true); assert.equal(fs.existsSync(f.settings), true)
+  fs.unlinkSync(hardLink)
+  const unexpected = path.join(f.paths.cache.path, 'unknown-synthetic.txt')
+  fs.writeFileSync(unexpected, 'preserve-synthetic-diagnostic', { flag: 'wx' })
+  assert.throws(() => launcher.cleanupSemanticRuntime(f.runtime.token), /semantic-native-cleanup-preserved/u)
+  assert.equal(fs.readFileSync(unexpected, 'utf8'), 'preserve-synthetic-diagnostic')
+  fs.unlinkSync(unexpected)
+  assert.equal(launcher.cleanupSemanticRuntime(f.runtime.token).removed, true)
+})
+
+test('staged runtime cleanup refuses active runtime owners', () => {
+  let capturedOwner
+  const originalSet = WeakMap.prototype.set
+  WeakMap.prototype.set = function (key, value) {
+    if (key?.kind === 'm09-owned-semantic-runtime') capturedOwner = value
+    return Reflect.apply(originalSet, this, [key, value])
+  }
+  let runtime
+  try { runtime = launcher.createSemanticRuntime() } finally { WeakMap.prototype.set = originalSet }
+  assert.ok(capturedOwner)
+  capturedOwner.active = true; capturedOwner.closed = false
+  assert.throws(() => launcher.cleanupSemanticRuntime(runtime.token), /semantic-native-cleanup-preserved/u)
+  capturedOwner.active = true; capturedOwner.closed = true
+  assert.throws(() => launcher.cleanupSemanticRuntime(runtime.token), /semantic-native-cleanup-preserved/u)
+  capturedOwner.active = false; capturedOwner.closed = false
+  assert.throws(() => launcher.cleanupSemanticRuntime(runtime.token), /semantic-native-cleanup-preserved/u)
+  capturedOwner.active = false; capturedOwner.closed = true
+  assert.equal(launcher.cleanupSemanticRuntime(runtime.token).removed, true)
+})
+
 test('staged runtime cleanup preserves unknown nested files and removes only the captured safe inventory', async () => {
   const runtime = launcher.createSemanticRuntime()
   const stage = path.join(runtime.root, 'm09-profile-' + 'a'.repeat(48)); io.mkdir(stage)
