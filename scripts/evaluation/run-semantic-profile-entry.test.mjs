@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const base = path.dirname(fileURLToPath(import.meta.url)), require2 = createRequire(import.meta.url);
@@ -16,14 +17,32 @@ const filename = path.resolve("synthetic-owned", "entry.cjs");
 const runtime = path.resolve("synthetic-owned", "runtime");
 function run(options = {}, text = source) {
   const events = [], reports = [], exits = [];
-  let bootstrapCalls = 0, prepareCalls = 0, electronImports = 0;
+  let bootstrapCalls = 0, prepareCalls = 0, electronImports = 0, inputCreates = 0, acceptCalls = 0;
+  const input = options.input ?? new PassThrough({ autoDestroy: false }), parsedGrants = [], parserInputs = [];
+  let destroys = 0;
+  const originalDestroy = input.destroy;
+  input.destroy = function (...values) { destroys++; events.push("input-destroy"); return Reflect.apply(originalDestroy, this, values); };
   const token = Object.freeze({ kind: "synthetic-no-native-authority" }), module = { exports: {} };
   const proc = { platform: "win32", type: "browser", versions: { electron: "42.11.10" }, env: {}, stdout: { write() {
+    if (options.readyReportError && reports.at(-1)?.type === "semantic-ready") throw Error("synthetic-report-error");
   } }, argv: ["electron.exe", filename, "--runtime-root", runtime], ...options.process };
+  Object.defineProperty(proc, "stdin", { get() { throw Error("process-stdin-must-not-be-read"); } });
   function fakeRequire(name) {
+    if (name === "node:fs") return { createReadStream(file, settings) {
+      inputCreates++; events.push("create-input");
+      assert.equal(file, null); assert.equal(settings.fd, 0); assert.equal(settings.autoClose, false);
+      assert.deepEqual(Object.keys(settings).sort(), ["autoClose", "fd"]);
+      if (options.inputCreateError) throw Error("synthetic-create-error");
+      return input;
+    } };
     if (name === "node:path") return path;
     if (name === "node:worker_threads") return { isMainThread: options.isMainThread ?? true };
-    if (name === "./m09-semantic-io.cjs") return { ...io, bytes(value) {
+    if (name === "./m09-semantic-io.cjs") return { ...io, oneMessage(stream, settings) {
+      events.push("one-message"); parserInputs.push(stream);
+      assert.equal(settings.timeoutMs, 60000);
+      assert.deepEqual(Object.keys(settings), ["timeoutMs"]);
+      return io.oneMessage(stream, settings).then(value => { parsedGrants.push(value); return value; });
+    }, bytes(value) {
       reports.push(value);
       return io.bytes(value);
     } };
@@ -38,8 +57,16 @@ function run(options = {}, text = source) {
       assert.equal(value, token);
       prepareCalls++;
       events.push("prepare-first-await");
-      return new Promise(() => {
-      });
+      if (options.prepareError) return Promise.reject(Object.assign(Error("synthetic"), { code: "semantic-native-prepare-failed" }));
+      if (options.preparePromise) return options.preparePromise;
+      if (options.prepareReady) return Promise.resolve({ type: "semantic-ready", synthetic: true });
+      return new Promise(() => {});
+    }, acceptNativeSemanticGrant(value, grant) {
+      assert.equal(value, token);
+      acceptCalls++;
+      events.push("accept-grant");
+      if (options.acceptError) throw Object.assign(Error("synthetic"), { code: "semantic-native-grant-invalid" });
+      assert.equal(io.canonical(grant), io.canonical(grantFixture));
     } };
     if (name === "electron") {
       electronImports++;
@@ -53,7 +80,8 @@ function run(options = {}, text = source) {
   vm.runInNewContext(text, { module, exports: module.exports, __filename: filename, process: proc, Buffer, require: fakeRequire }, { timeout: 1e3, importModuleDynamically() {
     throw Error("no-store-or-provider-import-allowed");
   } });
-  return { module, events, reports, exits, bootstrapCalls, prepareCalls, electronImports, proc };
+  return { module, events, reports, exits, bootstrapCalls, prepareCalls, electronImports, proc, input, parsedGrants, parserInputs,
+    get inputCreates() { return inputCreates; }, get acceptCalls() { return acceptCalls; }, get destroys() { return destroys; } };
 }
 for (const main of [void 0, "other"]) test("former main guard skips dynamic-import shape with require.main " + String(main), () => {
   const f = run({ main }, legacyFixture);
@@ -127,4 +155,72 @@ test("args export remains safe for helper callers without starting native", () =
   assert.throws(() => f.module.exports.args(["--wrong", runtime]));
   assert.equal(f.bootstrapCalls, 0);
   assert.equal(f.electronImports, 0);
+});
+
+const turn = () => new Promise(resolve => setImmediate(resolve));
+const grantFixture = { type: "synthetic-grant", schemaVersion: 1 };
+test("input remains absent until successful prepare, then exact fd0 receiver precedes ready", async () => {
+  let release;
+  const f = run({ preparePromise: new Promise(resolve => { release = resolve; }) });
+  assert.equal(f.inputCreates, 0); assert.equal(f.reports.length, 0);
+  release({ type: "semantic-ready", synthetic: true }); await turn();
+  assert.equal(f.inputCreates, 1); assert.equal(f.parserInputs[0], f.input);
+  assert.deepEqual(f.events, ["bootstrap", "electron-import", "prepare-first-await", "create-input", "one-message"]);
+  assert.equal(f.reports[0].type, "semantic-ready");
+  f.input.end(io.bytes(grantFixture)); await turn();
+  assert.equal(f.acceptCalls, 1); assert.equal(f.destroys, 1);
+  assert.ok(f.events.indexOf("input-destroy") < f.events.indexOf("accept-grant"));
+});
+test("prepare failure never creates fd0 input or publishes ready", async () => {
+  const f = run({ prepareError: true }); await turn();
+  assert.equal(f.inputCreates, 0); assert.equal(f.acceptCalls, 0);
+  assert.equal(f.reports[0].code, "semantic-native-prepare-failed"); assert.deepEqual(f.exits, [1]);
+});
+test("fd0 creation failure publishes only a safe failure", async () => {
+  const f = run({ prepareReady: true, inputCreateError: true }); await turn();
+  assert.equal(f.inputCreates, 1); assert.equal(f.acceptCalls, 0);
+  assert.equal(f.reports.length, 1); assert.equal(f.reports[0].code, "semantic-native-execution-failed"); assert.deepEqual(f.exits, [1]);
+});
+test("strict parser waits for EOF and releases input before grant authority check", async () => {
+  const f = run({ prepareReady: true }); await turn();
+  f.input.write(io.bytes(grantFixture)); await turn();
+  assert.equal(f.acceptCalls, 0); assert.equal(f.destroys, 0);
+  f.input.end(); await turn();
+  assert.equal(f.acceptCalls, 1); assert.deepEqual(f.parsedGrants, [grantFixture]); assert.equal(f.destroys, 1);
+  assert.deepEqual(f.exits, [1]);
+  assert.equal(f.reports[1].code, "semantic-native-execution-failed");
+  assert.doesNotThrow(() => f.input.emit("error", Error("late-private-error")));
+});
+for (const [name, raw] of [
+  ["empty EOF", Buffer.alloc(0)],
+  ["CRLF", Buffer.from(JSON.stringify(grantFixture) + "\r\n")],
+  ["extra line", Buffer.concat([io.bytes(grantFixture), io.bytes(grantFixture)])],
+  ["blank extra line", Buffer.concat([io.bytes(grantFixture), Buffer.from("\n")])],
+  ["noncanonical JSON", Buffer.from('{"z":1,"a":2}\n')],
+  ["invalid UTF8", Buffer.from([0xff, 10])],
+  ["missing LF", io.bytes(grantFixture).subarray(0, -1)],
+  ["over original 2MiB limit", Buffer.alloc(io.MAX_CONTROL_BYTES + 1, 120)]
+]) test("explicit fd0 input preserves production rejection: " + name, async () => {
+  const f = run({ prepareReady: true }); await turn(); f.input.end(raw); await turn();
+  assert.equal(f.acceptCalls, 0); assert.equal(f.destroys, 1);
+  assert.equal(f.reports[1].code, "semantic-native-handshake-invalid"); assert.deepEqual(f.exits, [1]);
+  assert.doesNotThrow(() => f.input.emit("error", Error("late-private-error")));
+});
+test("pending input read error remains a handshake failure and late errors stay handled", async () => {
+  const f = run({ prepareReady: true }); await turn(); f.input.emit("error", Object.assign(Error("private-os-text"), { code: "EIO" })); await turn();
+  assert.equal(f.acceptCalls, 0); assert.equal(f.destroys, 1); assert.equal(f.reports[1].code, "semantic-native-handshake-invalid");
+  assert.deepEqual(f.exits, [1]); assert.doesNotThrow(() => f.input.emit("error", Error("late-private-text")));
+});
+test("input close before EOF stays a child-closed failure", async () => {
+  const f = run({ prepareReady: true }); await turn(); f.input.destroy(); await turn();
+  assert.equal(f.acceptCalls, 0); assert.equal(f.reports[1].code, "semantic-native-child-closed"); assert.deepEqual(f.exits, [1]);
+});
+test("ready publication failure destroys pending receiver without unhandled rejection", async () => {
+  const f = run({ prepareReady: true, readyReportError: true }); await turn(); await turn();
+  assert.equal(f.acceptCalls, 0); assert.equal(f.destroys, 1); assert.equal(f.reports[1].code, "semantic-native-execution-failed"); assert.deepEqual(f.exits, [1]);
+  assert.doesNotThrow(() => f.input.emit("error", Error("late-private-text")));
+});
+test("input replacement confers no grant authority", async () => {
+  const f = run({ prepareReady: true, acceptError: true }); await turn(); f.input.end(io.bytes(grantFixture)); await turn();
+  assert.equal(f.acceptCalls, 1); assert.equal(f.destroys, 1); assert.equal(f.reports[1].code, "semantic-native-grant-invalid"); assert.deepEqual(f.exits, [1]);
 });
